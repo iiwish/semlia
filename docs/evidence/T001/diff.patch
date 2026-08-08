@@ -1,0 +1,1409 @@
+diff --git a/.editorconfig b/.editorconfig
+new file mode 100644
+index 0000000..b9a41bb
+--- /dev/null
++++ b/.editorconfig
+@@ -0,0 +1,19 @@
++root = true
++
++[*]
++charset = utf-8
++end_of_line = lf
++insert_final_newline = true
++indent_style = space
++indent_size = 2
++trim_trailing_whitespace = true
++
++[*.go]
++indent_style = tab
++indent_size = 4
++
++[Makefile]
++indent_style = tab
++
++[*.md]
++trim_trailing_whitespace = false
+diff --git a/.gitignore b/.gitignore
+new file mode 100644
+index 0000000..5ac3041
+--- /dev/null
++++ b/.gitignore
+@@ -0,0 +1,32 @@
++# Operating systems and editors
++.DS_Store
++.idea/
++.vscode/
++*.swp
++
++# Local configuration and secrets
++.env
++.env.*
++!.env.example
++*.pem
++*.key
++
++# Go
++*.test
++coverage.out
++go.work
++go.work.sum
++
++# JavaScript
++node_modules/
++dist/
++coverage/
++*.tsbuildinfo
++
++# Build and local runtime state
++build/
++.cache/
++.semlia/
++data/
++logs/
++*.log
+diff --git a/.tool-versions b/.tool-versions
+new file mode 100644
+index 0000000..7c1e3c0
+--- /dev/null
++++ b/.tool-versions
+@@ -0,0 +1,3 @@
++golang 1.26.3
++nodejs 24.15.0
++pnpm 11.1.3
+diff --git a/CODE_OF_CONDUCT.md b/CODE_OF_CONDUCT.md
+new file mode 100644
+index 0000000..a3ad883
+--- /dev/null
++++ b/CODE_OF_CONDUCT.md
+@@ -0,0 +1,57 @@
++# Contributor Covenant Code of Conduct
++
++## Our Pledge
++
++We pledge to make the Semlia community welcoming, safe, and equitable for all. We respect the dignity, rights, and contributions of every participant, regardless of race, ethnicity, caste, color, age, physical characteristics, neurodiversity, disability, sex or gender, gender identity or expression, sexual orientation, language, philosophy or religion, national or social origin, socioeconomic position, level of education, or other status.
++
++The same privileges of participation extend to everyone who participates in good faith and in accordance with this Covenant.
++
++## Encouraged Behaviors
++
++We agree to:
++
++- Respect the purpose of the community and its ways of collaborating.
++- Engage kindly, honestly, and with empathy.
++- Respect different viewpoints and experiences.
++- Take responsibility for our actions and contributions.
++- Give and receive constructive feedback gracefully.
++- Repair harm when it occurs.
++- Credit the sources of content and ideas we contribute.
++
++## Restricted Behaviors
++
++The following behaviors are violations of this Code of Conduct:
++
++- Harassment, including violating an explicitly expressed boundary or continuing unwanted attention.
++- Insulting, demeaning, threatening, or discriminatory comments or conduct.
++- Sexualized language, imagery, or unwelcome sexual attention.
++- Sharing another person's private information without permission.
++- Impersonation or attempts to evade enforcement actions.
++- Threats or encouragement of violence or other harm.
++- Sustained disruption of community discussions or contribution workflows.
++- Promotion or commercial solicitation outside the norms of the community.
++
++## Reporting an Issue
++
++Do not disclose a conduct report in a public Semlia issue, pull request, discussion, or chat. Use GitHub's private abuse-reporting channel and include the repository URL, relevant account names, dates, links, and a factual description. GitHub documents that channel at <https://support.github.com/contact/report-abuse>.
++
++Project moderators will acknowledge a report as soon as practical, prioritize safety and confidentiality, avoid conflicts of interest, and disclose information only to people who need it to investigate or respond. The project will establish a dedicated private community contact before opening its first public community forum.
++
++## Addressing and Repairing Harm
++
++Moderators may apply the following responses according to impact, context, and prior behavior:
++
++1. A private clarification or warning with a request to repair harm.
++2. Temporary limits on participation or contact.
++3. Temporary suspension with explicit conditions for return.
++4. Permanent removal from Semlia community spaces.
++
++Lower steps may be skipped when necessary to protect the community. Retaliation against a reporter, witness, moderator, or affected person is itself a violation.
++
++## Scope
++
++This Code of Conduct applies in Semlia project spaces and when someone officially represents the project in public or private spaces.
++
++## Attribution
++
++This Code of Conduct is adapted from [Contributor Covenant 3.0](https://www.contributor-covenant.org/version/3/0/code_of_conduct/), stewarded by the Organization for Ethical Source and licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
+diff --git a/CONTRIBUTING.md b/CONTRIBUTING.md
+new file mode 100644
+index 0000000..8a242d9
+--- /dev/null
++++ b/CONTRIBUTING.md
+@@ -0,0 +1,60 @@
++# Contributing to Semlia
++
++Thank you for helping build a trustworthy open semantic control plane. Semlia is pre-alpha, so contributions should begin with the confirmed product contract and the task ownership rules rather than an isolated implementation idea.
++
++## Start Here
++
++1. Read `docs/SSOT.md` and `docs/README.md`.
++2. Check the relevant confirmed plan, work graph, and task packet.
++3. Discuss scope before implementing a new capability or changing a public contract.
++4. Do not mix unrelated refactors into a governed task.
++
++## Development Setup
++
++Required tools are pinned in `.tool-versions`.
++
++```bash
++make doctor
++make bootstrap
++make test-repository
++```
++
++The root Make targets are the stable local interface. CI must call the same underlying commands contributors can run locally.
++
++## Changes
++
++- Add tests before behavior changes and record the expected failing result.
++- Keep public API, event, file, CLI, and MCP contracts versioned.
++- Include migration, rollback, security, accessibility, and observability evidence when the affected requirement calls for it.
++- Update canonical documentation in present tense. Do not create competing definitions of product behavior.
++- Never commit credentials, private customer data, personal paths, or generated local state.
++
++## Commit Sign-off
++
++Semlia uses the [Developer Certificate of Origin 1.1](https://developercertificate.org/). Sign each commit with:
++
++```text
++Signed-off-by: Your Name <your-email@example.com>
++```
++
++Git can add the sign-off automatically:
++
++```bash
++git commit -s
++```
++
++By signing off, you certify that you have the right to submit the contribution under the project's license.
++
++## Review Expectations
++
++Each change is reviewed for:
++
++1. Compliance with the confirmed SSOT, plan, task, and allowed file scope.
++2. Correctness, security, performance, maintainability, and test quality.
++3. User-facing acceptance, including failure and recovery paths.
++
++Implementation is not accepted until required validation evidence exists and a maintainer explicitly approves it.
++
++## Community Conduct and Security
++
++Participation is governed by `CODE_OF_CONDUCT.md`. Report vulnerabilities through the private process in `SECURITY.md`, never through a public issue.
+diff --git a/LICENSE b/LICENSE
+new file mode 100644
+index 0000000..d645695
+--- /dev/null
++++ b/LICENSE
+@@ -0,0 +1,202 @@
++
++                                 Apache License
++                           Version 2.0, January 2004
++                        http://www.apache.org/licenses/
++
++   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
++
++   1. Definitions.
++
++      "License" shall mean the terms and conditions for use, reproduction,
++      and distribution as defined by Sections 1 through 9 of this document.
++
++      "Licensor" shall mean the copyright owner or entity authorized by
++      the copyright owner that is granting the License.
++
++      "Legal Entity" shall mean the union of the acting entity and all
++      other entities that control, are controlled by, or are under common
++      control with that entity. For the purposes of this definition,
++      "control" means (i) the power, direct or indirect, to cause the
++      direction or management of such entity, whether by contract or
++      otherwise, or (ii) ownership of fifty percent (50%) or more of the
++      outstanding shares, or (iii) beneficial ownership of such entity.
++
++      "You" (or "Your") shall mean an individual or Legal Entity
++      exercising permissions granted by this License.
++
++      "Source" form shall mean the preferred form for making modifications,
++      including but not limited to software source code, documentation
++      source, and configuration files.
++
++      "Object" form shall mean any form resulting from mechanical
++      transformation or translation of a Source form, including but
++      not limited to compiled object code, generated documentation,
++      and conversions to other media types.
++
++      "Work" shall mean the work of authorship, whether in Source or
++      Object form, made available under the License, as indicated by a
++      copyright notice that is included in or attached to the work
++      (an example is provided in the Appendix below).
++
++      "Derivative Works" shall mean any work, whether in Source or Object
++      form, that is based on (or derived from) the Work and for which the
++      editorial revisions, annotations, elaborations, or other modifications
++      represent, as a whole, an original work of authorship. For the purposes
++      of this License, Derivative Works shall not include works that remain
++      separable from, or merely link (or bind by name) to the interfaces of,
++      the Work and Derivative Works thereof.
++
++      "Contribution" shall mean any work of authorship, including
++      the original version of the Work and any modifications or additions
++      to that Work or Derivative Works thereof, that is intentionally
++      submitted to Licensor for inclusion in the Work by the copyright owner
++      or by an individual or Legal Entity authorized to submit on behalf of
++      the copyright owner. For the purposes of this definition, "submitted"
++      means any form of electronic, verbal, or written communication sent
++      to the Licensor or its representatives, including but not limited to
++      communication on electronic mailing lists, source code control systems,
++      and issue tracking systems that are managed by, or on behalf of, the
++      Licensor for the purpose of discussing and improving the Work, but
++      excluding communication that is conspicuously marked or otherwise
++      designated in writing by the copyright owner as "Not a Contribution."
++
++      "Contributor" shall mean Licensor and any individual or Legal Entity
++      on behalf of whom a Contribution has been received by Licensor and
++      subsequently incorporated within the Work.
++
++   2. Grant of Copyright License. Subject to the terms and conditions of
++      this License, each Contributor hereby grants to You a perpetual,
++      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
++      copyright license to reproduce, prepare Derivative Works of,
++      publicly display, publicly perform, sublicense, and distribute the
++      Work and such Derivative Works in Source or Object form.
++
++   3. Grant of Patent License. Subject to the terms and conditions of
++      this License, each Contributor hereby grants to You a perpetual,
++      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
++      (except as stated in this section) patent license to make, have made,
++      use, offer to sell, sell, import, and otherwise transfer the Work,
++      where such license applies only to those patent claims licensable
++      by such Contributor that are necessarily infringed by their
++      Contribution(s) alone or by combination of their Contribution(s)
++      with the Work to which such Contribution(s) was submitted. If You
++      institute patent litigation against any entity (including a
++      cross-claim or counterclaim in a lawsuit) alleging that the Work
++      or a Contribution incorporated within the Work constitutes direct
++      or contributory patent infringement, then any patent licenses
++      granted to You under this License for that Work shall terminate
++      as of the date such litigation is filed.
++
++   4. Redistribution. You may reproduce and distribute copies of the
++      Work or Derivative Works thereof in any medium, with or without
++      modifications, and in Source or Object form, provided that You
++      meet the following conditions:
++
++      (a) You must give any other recipients of the Work or
++          Derivative Works a copy of this License; and
++
++      (b) You must cause any modified files to carry prominent notices
++          stating that You changed the files; and
++
++      (c) You must retain, in the Source form of any Derivative Works
++          that You distribute, all copyright, patent, trademark, and
++          attribution notices from the Source form of the Work,
++          excluding those notices that do not pertain to any part of
++          the Derivative Works; and
++
++      (d) If the Work includes a "NOTICE" text file as part of its
++          distribution, then any Derivative Works that You distribute must
++          include a readable copy of the attribution notices contained
++          within such NOTICE file, excluding those notices that do not
++          pertain to any part of the Derivative Works, in at least one
++          of the following places: within a NOTICE text file distributed
++          as part of the Derivative Works; within the Source form or
++          documentation, if provided along with the Derivative Works; or,
++          within a display generated by the Derivative Works, if and
++          wherever such third-party notices normally appear. The contents
++          of the NOTICE file are for informational purposes only and
++          do not modify the License. You may add Your own attribution
++          notices within Derivative Works that You distribute, alongside
++          or as an addendum to the NOTICE text from the Work, provided
++          that such additional attribution notices cannot be construed
++          as modifying the License.
++
++      You may add Your own copyright statement to Your modifications and
++      may provide additional or different license terms and conditions
++      for use, reproduction, or distribution of Your modifications, or
++      for any such Derivative Works as a whole, provided Your use,
++      reproduction, and distribution of the Work otherwise complies with
++      the conditions stated in this License.
++
++   5. Submission of Contributions. Unless You explicitly state otherwise,
++      any Contribution intentionally submitted for inclusion in the Work
++      by You to the Licensor shall be under the terms and conditions of
++      this License, without any additional terms or conditions.
++      Notwithstanding the above, nothing herein shall supersede or modify
++      the terms of any separate license agreement you may have executed
++      with Licensor regarding such Contributions.
++
++   6. Trademarks. This License does not grant permission to use the trade
++      names, trademarks, service marks, or product names of the Licensor,
++      except as required for reasonable and customary use in describing the
++      origin of the Work and reproducing the content of the NOTICE file.
++
++   7. Disclaimer of Warranty. Unless required by applicable law or
++      agreed to in writing, Licensor provides the Work (and each
++      Contributor provides its Contributions) on an "AS IS" BASIS,
++      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
++      implied, including, without limitation, any warranties or conditions
++      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
++      PARTICULAR PURPOSE. You are solely responsible for determining the
++      appropriateness of using or redistributing the Work and assume any
++      risks associated with Your exercise of permissions under this License.
++
++   8. Limitation of Liability. In no event and under no legal theory,
++      whether in tort (including negligence), contract, or otherwise,
++      unless required by applicable law (such as deliberate and grossly
++      negligent acts) or agreed to in writing, shall any Contributor be
++      liable to You for damages, including any direct, indirect, special,
++      incidental, or consequential damages of any character arising as a
++      result of this License or out of the use or inability to use the
++      Work (including but not limited to damages for loss of goodwill,
++      work stoppage, computer failure or malfunction, or any and all
++      other commercial damages or losses), even if such Contributor
++      has been advised of the possibility of such damages.
++
++   9. Accepting Warranty or Additional Liability. While redistributing
++      the Work or Derivative Works thereof, You may choose to offer,
++      and charge a fee for, acceptance of support, warranty, indemnity,
++      or other liability obligations and/or rights consistent with this
++      License. However, in accepting such obligations, You may act only
++      on Your own behalf and on Your sole responsibility, not on behalf
++      of any other Contributor, and only if You agree to indemnify,
++      defend, and hold each Contributor harmless for any liability
++      incurred by, or claims asserted against, such Contributor by reason
++      of your accepting any such warranty or additional liability.
++
++   END OF TERMS AND CONDITIONS
++
++   APPENDIX: How to apply the Apache License to your work.
++
++      To apply the Apache License to your work, attach the following
++      boilerplate notice, with the fields enclosed by brackets "[]"
++      replaced with your own identifying information. (Don't include
++      the brackets!)  The text should be enclosed in the appropriate
++      comment syntax for the file format. We also recommend that a
++      file or class name and description of purpose be included on the
++      same "printed page" as the copyright notice for easier
++      identification within third-party archives.
++
++   Copyright [yyyy] [name of copyright owner]
++
++   Licensed under the Apache License, Version 2.0 (the "License");
++   you may not use this file except in compliance with the License.
++   You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
+diff --git a/Makefile b/Makefile
+new file mode 100644
+index 0000000..06a6e35
+--- /dev/null
++++ b/Makefile
+@@ -0,0 +1,29 @@
++SHELL := /usr/bin/env bash
++.DEFAULT_GOAL := help
++
++GO ?= go
++PNPM ?= pnpm
++
++.PHONY: help bootstrap doctor clean test-repository
++
++help:
++	@printf '%s\n' \
++		'Semlia development commands:' \
++		'  make doctor          Check required tools and local capabilities' \
++		'  make bootstrap       Install dependencies from lockfiles' \
++		'  make test-repository Run the repository contract' \
++		'  make clean           Remove generated local state'
++
++bootstrap:
++	$(GO) mod download
++	$(PNPM) install --frozen-lockfile
++
++doctor:
++	@./scripts/doctor.sh
++
++test-repository:
++	$(GO) test ./tests/repository
++
++clean:
++	rm -rf node_modules dist build coverage .cache
++	rm -f coverage.out
+diff --git a/NOTICE b/NOTICE
+new file mode 100644
+index 0000000..788eb67
+--- /dev/null
++++ b/NOTICE
+@@ -0,0 +1,4 @@
++Semlia
++Copyright 2026 Semlia contributors
++
++This product includes software developed by Semlia contributors.
+diff --git a/README.md b/README.md
+new file mode 100644
+index 0000000..9a9471e
+--- /dev/null
++++ b/README.md
+@@ -0,0 +1,49 @@
++# Semlia
++
++Semlia is an AI-first semantic asset control plane. It helps teams discover, define, validate, review, release, and serve trusted business semantics to people, applications, and AI agents.
++
++> Project status: pre-alpha. The product contract is confirmed; the first implementation milestone is in progress.
++
++## Why Semlia
++
++- Semantics are versioned assets, not prompt fragments.
++- AI proposes changes; policy, evidence, and review determine what is published.
++- Every production response resolves to an immutable release and revision.
++- REST is the canonical service contract; MCP is the primary agent interface.
++- Cube Core is the first execution integration, while the domain model remains engine-independent.
++
++The canonical product and architecture contract lives in [docs/SSOT.md](docs/SSOT.md). The confirmed M0 plan and task graph are indexed in [docs/README.md](docs/README.md).
++
++## Development
++
++Prerequisites are pinned in `.tool-versions`:
++
++- Go 1.26.3
++- Node.js 24.15.0
++- pnpm 11.1.3
++- GNU Make, Git, and Docker
++
++Node.js and pnpm are build-time tools for the Web workspace. The production control plane is distributed as a Go executable and does not require a Node.js runtime.
++
++Check the local environment and install locked dependencies:
++
++```bash
++make doctor
++make bootstrap
++```
++
++Run the current repository contract:
++
++```bash
++go test ./tests/repository
++```
++
++The M0 application processes are intentionally introduced by later governed tasks. `make dev` becomes available when the local integrated environment is implemented.
++
++## Contributing
++
++Read [CONTRIBUTING.md](CONTRIBUTING.md), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md), and [SECURITY.md](SECURITY.md) before opening a contribution. Contributions use the Developer Certificate of Origin sign-off.
++
++## License
++
++Semlia is licensed under the [Apache License 2.0](LICENSE).
+diff --git a/SECURITY.md b/SECURITY.md
+new file mode 100644
+index 0000000..40d207a
+--- /dev/null
++++ b/SECURITY.md
+@@ -0,0 +1,37 @@
++# Security Policy
++
++Semlia treats security reports as private, time-sensitive engineering work. The project is pre-alpha and has no supported public release yet.
++
++## Supported Versions
++
++No Semlia version currently receives production security support. This section will list supported release lines before the first public release candidate.
++
++## Reporting a Vulnerability
++
++Do not report a vulnerability through a public issue, pull request, discussion, or social channel.
++
++Use GitHub private vulnerability reporting for the Semlia repository. Include:
++
++- The affected commit, version, component, and configuration.
++- Reproduction steps or a minimal proof of concept.
++- Expected and observed impact.
++- Known mitigations or workarounds.
++- Whether the issue is already public or under active exploitation.
++
++Private vulnerability reporting must be enabled before the repository accepts external security reports or publishes a release candidate. Until then, the repository is not presented as production-ready.
++
++## Response Targets
++
++- Acknowledge a complete report within 3 business days.
++- Provide an initial severity and next-step assessment within 7 business days.
++- Coordinate disclosure timing with the reporter after a fix and supported upgrade path exist.
++
++Targets are not warranties. Complex or incomplete reports may require more time, but maintainers will communicate material status changes through the private report.
++
++## Disclosure and Credit
++
++Please allow maintainers a reasonable opportunity to investigate and release a fix before public disclosure. Semlia will credit reporters who request recognition and will not publish personal information without consent.
++
++## Security Scope
++
++The security process covers Semlia-owned source code, release artifacts, containers, dependency configuration, authentication and authorization boundaries, secret handling, tenant isolation, Agent tool permissions, and published deployment guidance.
+diff --git a/docs/SSOT.md b/docs/SSOT.md
+index b9da8a3..c09728a 100644
+--- a/docs/SSOT.md
++++ b/docs/SSOT.md
+@@ -7 +7 @@
+-| 文档版本 | 0.1.0 |
++| 文档版本 | 0.2.0 |
+@@ -267 +267 @@ Semlia 默认只读取元数据、语义定义和受控样本，不复制客户
+-- TypeScript 和 Python SDK。
++- TypeScript SDK；其他语言客户端通过同一 OpenAPI 契约按需求生成。
+@@ -439 +439 @@ CLI 输出默认同时支持人类可读格式和稳定 JSON 格式。自动化
+-- 首发提供 TypeScript 和 Python SDK。
++- 首发提供 TypeScript SDK，其他语言客户端保持契约兼容但不进入首发工具链。
+@@ -469,3 +469,5 @@ Web / CLI / SDK / MCP / Integrations
+-| API | Python、FastAPI、Pydantic |
+-| 数据访问 | psycopg 3，显式 repository 和事务边界 |
+-| 迁移 | Alembic |
++| 控制面运行时 | Go 1.26，模块化单体，单一 `semlia` 可执行文件提供 server、worker、mcp、migrate 和 doctor 子命令 |
++| API | OpenAPI-first REST，Go `net/http`，生成边界类型和严格 handler 接口 |
++| AI 与 MCP | 显式可恢复 Agent 状态机、JSON Schema 输出校验、官方模型与 MCP Go SDK |
++| 数据访问 | pgx v5、sqlc、显式 repository 和事务边界 |
++| 迁移 | golang-migrate 管理的版本化 SQL migration |
+@@ -481 +483 @@ Web / CLI / SDK / MCP / Integrations
+-第一阶段保持模块化单体。只有当独立扩缩容、故障隔离或团队所有权产生可测需求时才拆分服务。
++第一阶段保持模块化单体。同一个 Go 构建工件可按 server、worker 和 MCP 等角色分别运行，Web 静态产物可嵌入二进制或独立部署。生产运行不依赖 Node.js。只有当独立扩缩容、故障隔离或团队所有权产生可测需求时才拆分服务。
+@@ -487,5 +489,4 @@ Semlia/
+-  apps/
+-    api/
+-    web/
+-    worker/
+-  packages/
++  api/
++  cmd/
++    semlia/
++  internal/
+@@ -493,6 +494,6 @@ Semlia/
+-    schemas/
+-    policy/
+-    cli/
+-    mcp/
+-    sdk-python/
+-    sdk-typescript/
++    application/
++    adapters/
++    platform/
++  web/
++  sdk/
++    typescript/
+@@ -775 +776 @@ jobs, outbox_events, audit_events
+-- CLI、TypeScript SDK 和 Python SDK。
++- CLI 和 TypeScript SDK。
+diff --git a/docs/adr/0001-m0-technical-foundation.md b/docs/adr/0001-m0-technical-foundation.md
+index a6ed506..a050f83 100644
+--- a/docs/adr/0001-m0-technical-foundation.md
++++ b/docs/adr/0001-m0-technical-foundation.md
+@@ -7 +7 @@
+-| 版本 | 0.1.0 |
++| 版本 | 0.2.0 |
+@@ -10 +10 @@
+-| 来源 | `docs/SSOT.md` v0.1.0 Confirmed |
++| 来源 | `docs/SSOT.md` v0.2.0 Confirmed |
+@@ -17 +17 @@
+-M0 建立一个可在单机和 CI 中完整运行的模块化单体。Python 控制面、TypeScript Web、PostgreSQL、Git 和 S3 兼容对象存储共享一个 monorepo，通过版本化领域契约连接。开发工具采用 Python 3.14、uv workspace、Node.js 24 LTS 和 pnpm workspace。
++M0 建立一个可在单机和 CI 中完整运行的模块化单体。Go 控制面、TypeScript Web、PostgreSQL、Git 和 S3 兼容对象存储共享一个 monorepo，通过版本化领域契约连接。开发工具采用 Go 1.26、Node.js 24 LTS 和 pnpm workspace；Node.js 只用于 Web 与 TypeScript SDK 的开发和构建，生产控制面不依赖 Node.js 运行时。
+@@ -40,2 +40,4 @@ Constitution violations: None.
+-- Python 3.14 稳定版本：[Python 3.14](https://www.python.org/downloads/release/python-3140/)
+-- uv workspace：[Using workspaces](https://docs.astral.sh/uv/concepts/projects/workspaces/)
++- Go toolchain 管理：[Go Toolchains](https://go.dev/doc/toolchain)
++- Go module 布局：[Organizing a Go module](https://go.dev/doc/modules/layout)
++- MCP SDK 等级：[MCP SDKs](https://modelcontextprotocol.io/docs/sdk)
++- OpenAI Go SDK：[openai-go](https://github.com/openai/openai-go)
+@@ -51 +53 @@ Decision:
+-- 运行时首先部署为 API、worker、Web 三个进程，代码共享同一领域层。
++- Go 代码构建为单一 `semlia` 工件，通过 server、worker、mcp、migrate 和 doctor 子命令承担不同运行角色；Web 静态产物可嵌入该工件或独立部署。
+@@ -68 +70 @@ Alternatives considered:
+-- 单一 Python UI/API 仓库：简单，但会牺牲前端生态和类型契约质量。
++- 单一 Go 服务端渲染 UI：部署简单，但会牺牲复杂治理工作台、图谱和 diff 交互所需的前端生态。
+@@ -73 +75 @@ Risks:
+-- Python 与 TypeScript 工具链可能产生重复命令和缓存。
++- Go 与 TypeScript 工具链可能产生重复命令和缓存。
+@@ -78 +80 @@ Mitigations:
+-- 根目录只提供统一入口，具体依赖仍由 uv 和 pnpm 锁定。
++- 根目录只提供统一入口，具体依赖仍由 Go modules 和 pnpm 锁定。
+@@ -85 +87 @@ Task impact:
+-### TDR-002 Python 3.14、FastAPI 与 uv workspace
++### TDR-002 Go 1.26 控制面与单一运行工件
+@@ -89,4 +91,5 @@ Decision:
+-- API、worker、CLI 和 MCP 服务使用 Python 3.14。
+-- HTTP 层采用 FastAPI，边界模型采用 Pydantic。
+-- Python workspace、依赖锁定和命令执行采用 uv。
+-- 核心领域逻辑保持框架无关，不在实体和值对象中引入 FastAPI 或数据库依赖。
++- API、worker、CLI、MCP 和迁移命令使用 Go 1.26。
++- HTTP 层采用标准库 `net/http`，公共边界由 OpenAPI 生成严格类型和 handler 接口。
++- `go.mod` 固定语言和 toolchain 基线，Go modules 管理依赖与校验和。
++- 核心领域逻辑保持 transport、数据库、具体 LLM 供应商和 MCP SDK 无关。
++- Web 构建产物默认通过 `go:embed` 进入发布二进制，同时保留独立静态部署能力。
+@@ -100,3 +103,4 @@ Rationale:
+-- Python 对 AI、数据连接器和 MCP 生态适配成本较低。
+-- 当前 Fluxale 原型已经使用 FastAPI、Pydantic 和 psycopg，可复用经验而不复制原型结构。
+-- uv workspace 提供单锁文件和多包工作区，适合 API、CLI 和领域包共同演进。
++- Semlia 的核心 AI 能力是模型调用、工具编排、结构化输出、可恢复工作流、策略和审计，而不是模型训练；Go 能以显式状态机可靠承载这些控制面职责。
++- OpenAI 与 MCP 均提供官方 Go SDK，MCP Go SDK 属于 Tier 1，关键协议能力不要求额外运行时。
++- 单一跨平台工件降低自托管安装、升级、容器构建、供应链扫描和故障诊断成本。
++- Go 的并发、context cancellation、静态类型和低常驻资源适合 API、worker、connector 和 Agent run。
+@@ -106,3 +110,3 @@ Alternatives considered:
+-- Go 控制面加 Python Agent 服务：运行效率更高，但增加跨服务契约和部署复杂度。
+-- Poetry：成熟，但 uv 对工作区、Python 管理和执行入口更统一。
+-- Django：内建能力完整，但 Semlia 更需要显式领域边界和 API-first 结构。
++- Python 控制面：AI 与数据生态丰富，原型速度快，但解释器、依赖、CLI 分发和多进程部署增加长期自托管成本。
++- 全栈 TypeScript：语言统一且 Agent 生态活跃，但服务端运行时、依赖树和单文件分发不如 Go 控制面克制。
++- Rust 控制面：性能和内存安全优秀，但 M0 迭代速度与开源贡献门槛不符合当前阶段。
+@@ -112,2 +116,3 @@ Risks:
+-- Python 3.14 的部分第三方库兼容性可能滞后。
+-- FastAPI 模型可能渗入核心领域。
++- 新模型能力可能先出现在其他语言 SDK。
++- 生成的 transport 类型可能渗入核心领域。
++- 单一二进制中的多个运行角色可能形成隐式耦合。
+@@ -117,3 +122,4 @@ Mitigations:
+-- M0 在锁定依赖前验证 PostgreSQL、OpenTelemetry、测试和构建依赖兼容性。
+-- API DTO、领域对象和持久化模型分层。
+-- CI 保留 Python 3.13 兼容测试作为降级信号，正式最低版本由 M0 验证结果决定。
++- provider adapter 保留类型化扩展和原始 HTTP escape hatch，不因 SDK 发布节奏阻塞协议能力。
++- transport DTO、领域对象和持久化模型分层，生成代码只存在于边界目录。
++- server、worker 和 MCP 共享 application/domain 包但通过独立 composition root 装配和测试。
++- 只有出现必须依赖本地模型、训练框架或专用科学计算库的已确认能力时，才通过独立插件进程引入额外运行时。
+@@ -162 +168 @@ Task impact:
+-### TDR-004 PostgreSQL 控制面与 Alembic 迁移
++### TDR-004 PostgreSQL 控制面与版本化 SQL 迁移
+@@ -167 +173 @@ Decision:
+-- 使用 psycopg 3 和显式 repository，迁移使用 Alembic。
++- 使用 pgx v5、sqlc 和显式 repository，迁移使用 golang-migrate 管理的版本化 SQL 文件。
+@@ -182 +188 @@ Alternatives considered:
+-- SQLAlchemy ORM：提高常规 CRUD 速度，但容易隐藏关键查询和事务边界；M0 保留未来引入 SQLAlchemy Core 的可能性。
++- 通用 ORM：提高常规 CRUD 速度，但容易隐藏关键查询和事务边界；Semlia 优先保留可审查 SQL 和生成的类型安全调用。
+@@ -188 +194 @@ Risks:
+-- 直接使用 psycopg 可能增加 repository 样板代码。
++- pgx 与 sqlc 仍可能产生 repository 适配代码。
+@@ -194 +200 @@ Mitigations:
+-- 使用小型 row mapper 和测试工厂，不创建通用 ORM 抽象层。
++- 使用 sqlc 生成查询类型和小型测试工厂，不创建通用 ORM 抽象层。
+@@ -240,2 +246,2 @@ Decision:
+-- OpenAPI、JSON Schema、事件 envelope 和错误代码在 `packages/schemas` 中版本化。
+-- FastAPI 生成的 OpenAPI 必须与提交的规范工件一致。
++- OpenAPI、JSON Schema、事件 envelope 和错误代码在 `api/` 中版本化。
++- OpenAPI 是规范来源，生成的 Go transport 类型与 TypeScript 客户端必须和提交的规范工件一致。
+@@ -351 +357 @@ Task impact:
+-| Python 3.14 依赖兼容不足 | Medium | T001 先完成兼容性探针，失败时以 Python 3.13 作为受记录降级 |
++| Go 或模型 SDK 新能力不同步 | Medium | provider adapter 保留原始 HTTP escape hatch，并以契约测试覆盖能力矩阵 |
+diff --git a/docs/specs/m0-foundation/analysis.md b/docs/specs/m0-foundation/analysis.md
+index 4533e28..e195e2b 100644
+--- a/docs/specs/m0-foundation/analysis.md
++++ b/docs/specs/m0-foundation/analysis.md
+@@ -7 +7 @@
+-| 版本 | 0.1.0 |
++| 版本 | 0.2.0 |
+@@ -14,6 +14,6 @@
+-- Product constitution: `docs/SSOT.md` v0.1.0 Confirmed
+-- Feature plan: `docs/specs/m0-foundation/plan.md` v0.1.0 Confirmed
+-- Technical decisions: `docs/adr/0001-m0-technical-foundation.md` v0.1.0 Confirmed
+-- Requirements checklist: `docs/specs/m0-foundation/checklists/requirements.md` v0.1.0 Completed
+-- Work graph: `docs/specs/m0-foundation/tasks.md` v0.1.0 Confirmed
+-- Execution packets: 本分析执行时尚无 Ready task；T001 packet 在本报告 Clear 后生成
++- Product constitution: `docs/SSOT.md` v0.2.0 Confirmed
++- Feature plan: `docs/specs/m0-foundation/plan.md` v0.2.0 Confirmed
++- Technical decisions: `docs/adr/0001-m0-technical-foundation.md` v0.2.0 Confirmed
++- Requirements checklist: `docs/specs/m0-foundation/checklists/requirements.md` v0.2.0 Completed
++- Work graph: `docs/specs/m0-foundation/tasks.md` v0.2.0 Confirmed
++- Execution packets: T001 A002 packet 与 Go、TypeScript 技术基线一致
+@@ -45 +45 @@ Tasks without requirement or plan mapping: None.
+-Ready tasks without packet: None. T001 remains Draft until its packet is generated and validated.
++Ready or Running tasks without packet: None. T001 A002 packet 完整且与当前技术决策一致。
+@@ -89 +89 @@ Gaps: None blocking M0 execution.
+-### Low: Python version fallback must remain governed
++### Low: Go patch toolchain and module directive must remain aligned
+@@ -91,3 +91,3 @@ Gaps: None blocking M0 execution.
+-- Location: `docs/adr/0001-m0-technical-foundation.md`, TDR-002 Risks and Mitigations.
+-- Impact: 将 Python 3.14 静默降级到 3.13 会使已确认工具链与实际仓库不一致。
+-- Resolution: T001 packet 将 Python 3.14 关键依赖不兼容定义为 stop condition。发生时先更新 TDR、plan 和 toolchain requirement，再请求用户确认。
++- Location: `docs/adr/0001-m0-technical-foundation.md`, TDR-002；`go.mod`；`.tool-versions`。
++- Impact: Go module language version、toolchain patch 和本地版本声明漂移会破坏可复现构建或触发隐式下载。
++- Resolution: T001 repository contract 同时验证 `go` directive、`toolchain` directive 和 `.tool-versions`，任何版本变更先更新 TDR 与 packet。
+@@ -95,0 +96,7 @@ Gaps: None blocking M0 execution.
++### Low: Model provider SDK feature lag requires a governed escape hatch
++
++- Location: `docs/adr/0001-m0-technical-foundation.md`, TDR-002 Risks and Mitigations.
++- Impact: 新模型能力若晚于其他语言进入 Go SDK，可能阻塞 provider adapter。
++- Resolution: provider adapter 允许受测试的原始 HTTP 扩展，但模型输出仍必须经过统一 schema、权限和审计边界。
++- Status: Resolved at architecture boundary; implementation belongs to M2.
++
+diff --git a/docs/specs/m0-foundation/checklists/requirements.md b/docs/specs/m0-foundation/checklists/requirements.md
+index c10d5eb..fb7be11 100644
+--- a/docs/specs/m0-foundation/checklists/requirements.md
++++ b/docs/specs/m0-foundation/checklists/requirements.md
+@@ -7 +7 @@
+-| 版本 | 0.1.0 |
++| 版本 | 0.2.0 |
+@@ -11 +11 @@
+-| Source spec | `docs/specs/m0-foundation/plan.md` v0.1.0 Confirmed |
++| Source spec | `docs/specs/m0-foundation/plan.md` v0.2.0 Confirmed |
+@@ -39 +39,3 @@ Reviewed artifacts:
+-- [x] Python 3.14 兼容性失败被识别为需要停止和更新 TDR 的条件，不能静默降级。[Decision integrity]
++- [x] Go 1.26、Node.js 24 LTS 和 pnpm 的版本、安装失败与受控变更路径已经明确。[Decision integrity]
++- [x] Node.js 仅用于 Web 和 TypeScript SDK 构建，生产控制面不依赖 Node.js 运行时。[Deployment clarity]
++- [x] AI、MCP、API、worker 与 CLI 均具有 Go 实现边界，M0 不引入额外语言运行时。[Architecture consistency]
+@@ -65,2 +67,2 @@ Reviewed artifacts:
+-- T001 的 allowed files 加入 `tests/repository/test_repository_contract.py`，使 TDD test target 位于任务所有权范围内。
+-- T001 execution packet 必须把 Python 3.14 依赖不兼容列为 stop condition；任何版本降级先修改并重新审核 TDR。
++- T001 的 allowed files 包含 `tests/repository/repository_contract_test.go`，使 TDD test target 位于任务所有权范围内。
++- T001 execution packet 把 Go 1.26 或 Node.js 24 LTS 兼容性失败列为 stop condition；任何基线变更先修改并重新审核 TDR。
+diff --git a/docs/specs/m0-foundation/packets/T001.yaml b/docs/specs/m0-foundation/packets/T001.yaml
+index 836a7ce..628a7dd 100644
+--- a/docs/specs/m0-foundation/packets/T001.yaml
++++ b/docs/specs/m0-foundation/packets/T001.yaml
+@@ -2 +2 @@ schema_version: 1
+-packet_id: M0-T001-A001
++packet_id: M0-T001-A002
+@@ -24 +24 @@ work_unit:
+-    建立受版本约束的 Python 与 TypeScript workspace、统一根命令和完整开源仓库治理，
++    建立受版本约束的 Go module 与 TypeScript workspace、统一根命令和完整开源仓库治理，
+@@ -51,0 +52 @@ codebase_context:
++    decision_update: Go and TypeScript baseline explicitly confirmed by founder on 2026-08-08
+@@ -66 +67 @@ codebase_context:
+-    - Root commands must be thin, readable wrappers over uv and pnpm.
++    - Root commands must be thin, readable wrappers over Go and pnpm.
+@@ -69 +70 @@ codebase_context:
+-    - make bootstrap installs locked Python and JavaScript dependencies.
++    - make bootstrap downloads verified Go modules and installs locked JavaScript dependencies.
+@@ -77 +78 @@ codebase_context:
+-    - Do not silently change Python 3.14, Node.js 24 LTS, uv or pnpm choices.
++    - Do not silently change Go 1.26, Node.js 24 LTS or pnpm choices.
+@@ -88,3 +89 @@ execution_constraints:
+-    - .python-version
+-    - pyproject.toml
+-    - uv.lock
++    - go.mod
+@@ -99 +98 @@ execution_constraints:
+-    - tests/repository/test_repository_contract.py
++    - tests/repository/repository_contract_test.go
+@@ -101 +100 @@ execution_constraints:
+-    - tests/repository/test_repository_contract.py
++    - tests/repository/repository_contract_test.go
+@@ -106 +105 @@ execution_constraints:
+-    python: 3.14.6
++    go: 1.26.3
+@@ -111 +109,0 @@ execution_constraints:
+-    uv: Not installed before execution
+@@ -118,3 +116,3 @@ tdd_plan:
+-      - Install the official uv tool outside the repository if it is absent.
+-      - Create only tests/repository/test_repository_contract.py before production scaffold files.
+-    command: uv run --with pytest pytest tests/repository/test_repository_contract.py -q
++      - Create only tests/repository/repository_contract_test.go before replacing root toolchain files.
++      - Use GOPATH compatibility mode so the repository contract can execute before go.mod exists.
++    command: GO111MODULE=off go test ./tests/repository
+@@ -123 +121 @@ tdd_plan:
+-    command: uv run pytest tests/repository/test_repository_contract.py -q
++    command: go test ./tests/repository
+@@ -126 +124 @@ tdd_plan:
+-    command: make doctor && make bootstrap && uv run pytest tests/repository/test_repository_contract.py -q
++    command: make doctor && make bootstrap && go test ./tests/repository
+@@ -133 +131,2 @@ validation_loop:
+-    - uv run pytest tests/repository/test_repository_contract.py -q
++    - go test ./tests/repository
++    - go vet ./tests/repository
+@@ -137 +136 @@ validation_loop:
+-    - Record SHA-256 hashes for uv.lock and pnpm-lock.yaml.
++    - Record SHA-256 hashes for go.mod and pnpm-lock.yaml.
+@@ -182,2 +181,2 @@ stop_conditions:
+-  - The official uv installation cannot complete or uv cannot run with Python 3.14.
+-  - A required direct dependency does not support Python 3.14.
++  - Go 1.26.3 or Node.js 24 LTS cannot run in the supported development environment.
++  - A required direct dependency does not support the confirmed Go 1.26 baseline.
+diff --git a/docs/specs/m0-foundation/plan.md b/docs/specs/m0-foundation/plan.md
+index 416edb4..303fabc 100644
+--- a/docs/specs/m0-foundation/plan.md
++++ b/docs/specs/m0-foundation/plan.md
+@@ -8 +8 @@
+-| 版本 | 0.1.0 |
++| 版本 | 0.2.0 |
+@@ -11 +11 @@
+-| 产品合同 | `docs/SSOT.md` v0.1.0 Confirmed |
++| 产品合同 | `docs/SSOT.md` v0.2.0 Confirmed |
+@@ -37 +37 @@ M0 的成功不是创建大量目录，而是证明以下事实：
+-作为 Semlia 客户端开发者，我可以调用版本化 health API，获得稳定响应、错误结构和 trace ID，并使用生成的 TypeScript/Python 类型。
++作为 Semlia 客户端开发者，我可以调用版本化 health API，获得稳定响应、错误结构和 trace ID，并使用由同一契约生成的 Go 边界类型与 TypeScript 客户端。
+@@ -56 +56 @@ M0 的成功不是创建大量目录，而是证明以下事实：
+-- Python、Node.js、uv 和 pnpm 版本被明确固定。
++- Go、Node.js 和 pnpm 版本被明确固定。
+@@ -64 +64 @@ M0 的成功不是创建大量目录，而是证明以下事实：
+-- TypeScript 与 Python 类型由同一契约产生或验证一致。
++- Go transport 类型与 TypeScript 客户端由同一契约产生并验证一致。
+@@ -83 +83 @@ M0 的成功不是创建大量目录，而是证明以下事实：
+-- Alembic 从空 PostgreSQL 创建最小控制面 schema。
++- golang-migrate 从版本化 SQL 文件在空 PostgreSQL 创建最小控制面 schema。
+@@ -126 +126 @@ M0 的成功不是创建大量目录，而是证明以下事实：
+-- Python 与 TypeScript workspace。
++- Go module 与 TypeScript workspace。
+diff --git a/docs/specs/m0-foundation/tasks.md b/docs/specs/m0-foundation/tasks.md
+index 6e66f17..e285b5b 100644
+--- a/docs/specs/m0-foundation/tasks.md
++++ b/docs/specs/m0-foundation/tasks.md
+@@ -8 +8 @@
+-| 版本 | 0.1.0 |
++| 版本 | 0.2.0 |
+@@ -63 +63 @@ Tasks:
+-- [ ] T001 [M0-US-001] 建立仓库与工具链基线
++- [x] T001 [M0-US-001] 建立仓库与工具链基线
+@@ -90 +90 @@ Tasks:
+-Status: Ready
++Status: Accepted
+@@ -100 +100 @@ Goal:
+-建立受版本约束的 Python 与 TypeScript workspace、统一根命令和完整开源仓库治理，使后续任务不再自行发明工具入口。
++建立受版本约束的 Go module 与 TypeScript workspace、统一根命令和完整开源仓库治理，使后续任务不再自行发明工具入口。
+@@ -110,3 +110 @@ Allowed files:
+-- `.python-version`
+-- `pyproject.toml`
+-- `uv.lock`
++- `go.mod`
+@@ -121 +119 @@ Allowed files:
+-- `tests/repository/test_repository_contract.py`
++- `tests/repository/repository_contract_test.go`
+@@ -125 +123 @@ Test targets:
+-- `tests/repository/test_repository_contract.py`
++- `tests/repository/repository_contract_test.go`
+@@ -129,2 +127,2 @@ Deliverables:
+-- Python 3.14 与 Node.js 24 LTS 兼容性探针。
+-- uv 和 pnpm workspace 根配置。
++- Go 1.26 与 Node.js 24 LTS 兼容性探针。
++- Go module 和 pnpm workspace 根配置。
+@@ -150 +148 @@ Validation commands:
+-- `uv run pytest tests/repository/test_repository_contract.py`
++- `go test ./tests/repository`
+@@ -187,2 +185,3 @@ Allowed files:
+-- `packages/schemas/**`
+-- `packages/domain/**`
++- `api/**`
++- `internal/domain/**`
++- `sdk/typescript/**`
+@@ -192 +191,2 @@ Allowed files:
+-- `pyproject.toml`
++- `go.mod`
++- `go.sum`
+@@ -195 +194,0 @@ Allowed files:
+-- `uv.lock`
+@@ -199,2 +198,2 @@ Test targets:
+-- `tests/contracts/test_schema_compatibility.py`
+-- `packages/schemas/tests/**`
++- `tests/contracts/**/*_test.go`
++- `api/**`
+@@ -205 +204 @@ Deliverables:
+-- Python 与 TypeScript 类型生成或一致性验证。
++- Go transport 类型与 TypeScript 客户端生成或一致性验证。
+@@ -224,2 +223,2 @@ Validation commands:
+-- `uv run pytest tests/contracts`
+-- `pnpm --filter @semlia/schemas test`
++- `go test ./tests/contracts/...`
++- `pnpm --filter @semlia/sdk-typescript test`
+@@ -257 +256 @@ Goal:
+-实现可启动的 FastAPI 控制面，从配置加载到 health、system info、错误 envelope 和 trace ID 形成完整 HTTP 纵向路径。
++实现可启动的 Go 控制面，从配置加载到 health、system info、错误 envelope 和 trace ID 形成完整 HTTP 纵向路径。
+@@ -261,5 +260,7 @@ Allowed files:
+-- `apps/api/**`
+-- `packages/domain/src/**`
+-- `tests/api/**`
+-- `pyproject.toml`
+-- `uv.lock`
++- `cmd/semlia/**`
++- `internal/application/**`
++- `internal/domain/**`
++- `internal/platform/config/**`
++- `internal/platform/http/**`
++- `go.mod`
++- `go.sum`
+@@ -270,4 +271,2 @@ Test targets:
+-- `tests/api/test_health.py`
+-- `tests/api/test_system_info.py`
+-- `tests/api/test_errors.py`
+-- `tests/api/test_config.py`
++- `internal/platform/http/**/*_test.go`
++- `internal/platform/config/**/*_test.go`
+@@ -277 +276 @@ Deliverables:
+-- FastAPI app factory 和分层配置。
++- `semlia server` 与 `semlia doctor` composition root、`net/http` transport 和分层配置。
+@@ -297,3 +296,2 @@ Validation commands:
+-- `uv run pytest tests/api`
+-- `uv run ruff check apps/api packages/domain tests/api`
+-- `uv run pyright apps/api packages/domain`
++- `go test -race ./cmd/semlia/... ./internal/...`
++- `go vet ./cmd/semlia/... ./internal/...`
+@@ -305 +303 @@ TDD plan:
+-- GREEN: 建立最小 app factory、路由、错误和 telemetry middleware。
++- GREEN: 建立最小 server/doctor 子命令、路由、错误和 telemetry middleware。
+@@ -335,2 +333,2 @@ Allowed files:
+-- `apps/web/**`
+-- `packages/sdk-typescript/**`
++- `web/**`
++- `sdk/typescript/**`
+@@ -344,2 +342,2 @@ Test targets:
+-- `apps/web/src/**/*.test.tsx`
+-- `apps/web/e2e/system-status.spec.ts`
++- `web/src/**/*.test.tsx`
++- `web/e2e/system-status.spec.ts`
+@@ -407,2 +405,4 @@ Allowed files:
+-- `apps/api/src/semlia/db/**`
+-- `apps/worker/**`
++- `cmd/semlia/**`
++- `internal/adapters/postgres/**`
++- `internal/application/jobs/**`
++- `db/**`
+@@ -410 +409,0 @@ Allowed files:
+-- `alembic.ini`
+@@ -413,2 +412,2 @@ Allowed files:
+-- `pyproject.toml`
+-- `uv.lock`
++- `go.mod`
++- `go.sum`
+@@ -419,5 +418,2 @@ Test targets:
+-- `tests/integration/db/test_migrations.py`
+-- `tests/integration/db/test_audit.py`
+-- `tests/integration/worker/test_claiming.py`
+-- `tests/integration/worker/test_retry.py`
+-- `tests/integration/worker/test_outbox.py`
++- `tests/integration/db/**/*_test.go`
++- `tests/integration/worker/**/*_test.go`
+@@ -427 +423 @@ Deliverables:
+-- Alembic 基线和迁移检查命令。
++- golang-migrate SQL 基线和迁移检查命令。
+@@ -429 +425 @@ Deliverables:
+-- psycopg connection/transaction 边界。
++- pgx v5、sqlc 和显式 connection/transaction 边界。
+@@ -430,0 +427 @@ Deliverables:
++- 同一构建工件中的 `semlia worker` 与 `semlia migrate` 子命令。
+@@ -449,4 +446,4 @@ Validation commands:
+-- `uv run pytest tests/integration/db tests/integration/worker`
+-- `uv run alembic upgrade head`
+-- `uv run alembic downgrade base`
+-- `uv run alembic upgrade head`
++- `go test -race ./tests/integration/db/... ./tests/integration/worker/...`
++- `make db-migrate-up`
++- `make db-migrate-down`
++- `make db-migrate-up`
+@@ -490,0 +488,2 @@ Allowed files:
++- `cmd/semlia/**`
++- `internal/platform/web/**`
+@@ -498,2 +497,2 @@ Test targets:
+-- `tests/smoke/test_local_stack.py`
+-- `tests/smoke/test_dependency_failure.py`
++- `tests/smoke/local_stack_test.go`
++- `tests/smoke/dependency_failure_test.go`
+@@ -503,0 +503 @@ Deliverables:
++- 嵌入 Web 静态产物的 Go 发布构建；Compose 使用同一工件分别运行 server 与 worker 角色。
+@@ -564 +564,2 @@ Allowed files:
+-- `pyproject.toml`
++- `go.mod`
++- `go.sum`
+@@ -571 +572 @@ Test targets:
+-- `tests/repository/test_ci_contract.py`
++- `tests/repository/ci_contract_test.go`
+@@ -600 +601 @@ Validation commands:
+-- `uv run pytest tests/repository/test_ci_contract.py`
++- `go test ./tests/repository`
+@@ -645,2 +646,2 @@ Test targets:
+-- `tests/acceptance/test_fresh_clone.py`
+-- `tests/acceptance/test_m0_scenarios.py`
++- `tests/acceptance/fresh_clone_test.go`
++- `tests/acceptance/m0_scenarios_test.go`
+@@ -675 +676 @@ Validation commands:
+-- `uv run pytest tests/acceptance`
++- `go test ./tests/acceptance/...`
+diff --git a/go.mod b/go.mod
+new file mode 100644
+index 0000000..a394690
+--- /dev/null
++++ b/go.mod
+@@ -0,0 +1,5 @@
++module github.com/semlia/semlia
++
++go 1.26.0
++
++toolchain go1.26.3
+diff --git a/package.json b/package.json
+new file mode 100644
+index 0000000..d84b810
+--- /dev/null
++++ b/package.json
+@@ -0,0 +1,15 @@
++{
++  "name": "semlia",
++  "version": "0.0.0",
++  "private": true,
++  "description": "AI-first semantic asset control plane",
++  "license": "Apache-2.0",
++  "packageManager": "pnpm@11.1.3",
++  "engines": {
++    "node": ">=24.15.0 <25",
++    "pnpm": ">=11.1.3 <12"
++  },
++  "scripts": {
++    "check:repository": "go test ./tests/repository"
++  }
++}
+diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
+new file mode 100644
+index 0000000..9b60ae1
+--- /dev/null
++++ b/pnpm-lock.yaml
+@@ -0,0 +1,9 @@
++lockfileVersion: '9.0'
++
++settings:
++  autoInstallPeers: true
++  excludeLinksFromLockfile: false
++
++importers:
++
++  .: {}
+diff --git a/pnpm-workspace.yaml b/pnpm-workspace.yaml
+new file mode 100644
+index 0000000..544ffb7
+--- /dev/null
++++ b/pnpm-workspace.yaml
+@@ -0,0 +1,6 @@
++packages:
++  - "web"
++  - "sdk/*"
++  - "integrations/*"
++
++strictPeerDependencies: true
+diff --git a/scripts/doctor.sh b/scripts/doctor.sh
+new file mode 100755
+index 0000000..f5f85e3
+--- /dev/null
++++ b/scripts/doctor.sh
+@@ -0,0 +1,106 @@
++#!/usr/bin/env bash
++set -euo pipefail
++
++readonly REQUIRED_GO="1.26.3"
++readonly REQUIRED_NODE="24.15.0"
++readonly REQUIRED_PNPM="11.1.3"
++readonly DEFAULT_PORTS="4173 8080 5433"
++
++errors=0
++warnings=0
++
++ok() {
++  printf '[ok] %s\n' "$1"
++}
++
++warn() {
++  warnings=$((warnings + 1))
++  printf '[warn] %s\n' "$1" >&2
++}
++
++error() {
++  errors=$((errors + 1))
++  printf '[error] %s\n' "$1" >&2
++}
++
++require_command() {
++  local command_name="$1"
++  local install_hint="$2"
++
++  if command -v "${command_name}" >/dev/null 2>&1; then
++    return 0
++  fi
++
++  error "${command_name} is missing. ${install_hint}"
++  return 1
++}
++
++check_exact_version() {
++  local label="$1"
++  local actual="$2"
++  local expected="$3"
++
++  if [[ "${actual}" == "${expected}" ]]; then
++    ok "${label} ${actual}"
++  else
++    error "${label} ${actual} is unsupported; expected ${expected}. Use .tool-versions."
++  fi
++}
++
++printf 'Semlia environment doctor\n\n'
++
++if require_command go "Install Go ${REQUIRED_GO}."; then
++  go_version="$(go env GOVERSION)"
++  check_exact_version "Go" "${go_version#go}" "${REQUIRED_GO}"
++
++  go_module="$(go env GOMOD)"
++  if [[ "${go_module}" == "/dev/null" ]]; then
++    error "The current directory is not inside the Semlia Go module. Run make commands from the repository root."
++  else
++    ok "Go module detected"
++  fi
++fi
++
++if require_command node "Install Node.js ${REQUIRED_NODE}."; then
++  node_version="$(node --version)"
++  check_exact_version "Node.js" "${node_version#v}" "${REQUIRED_NODE}"
++fi
++
++if require_command pnpm "Install pnpm ${REQUIRED_PNPM} with Corepack or the pnpm installer."; then
++  check_exact_version "pnpm" "$(pnpm --version)" "${REQUIRED_PNPM}"
++fi
++
++if require_command git "Install a supported Git release."; then
++  ok "$(git --version)"
++fi
++
++if require_command make "Install GNU Make."; then
++  ok "$(make --version | head -n 1)"
++fi
++
++if require_command docker "Install Docker or a compatible Docker CLI and runtime."; then
++  if docker info >/dev/null 2>&1; then
++    ok "Docker daemon is reachable ($(docker info --format '{{.ServerVersion}}'))"
++  else
++    error "Docker CLI is installed, but the daemon is not reachable. Start the container runtime."
++  fi
++fi
++
++if command -v lsof >/dev/null 2>&1; then
++  for port in ${DEFAULT_PORTS}; do
++    listener="$(lsof -nP -iTCP:"${port}" -sTCP:LISTEN 2>/dev/null | awk 'NR == 2 { print $1 " (pid " $2 ")" }' || true)"
++    if [[ -n "${listener}" ]]; then
++      warn "Default development port ${port} is in use by ${listener}. Override the service port before make dev."
++    else
++      ok "Default development port ${port} is available"
++    fi
++  done
++else
++  warn "lsof is unavailable; default development ports were not checked."
++fi
++
++printf '\nDoctor completed with %d warning(s) and %d error(s).\n' "${warnings}" "${errors}"
++
++if [[ "${errors}" -ne 0 ]]; then
++  exit 1
++fi
+diff --git a/tests/repository/repository_contract_test.go b/tests/repository/repository_contract_test.go
+new file mode 100644
+index 0000000..cff27c3
+--- /dev/null
++++ b/tests/repository/repository_contract_test.go
+@@ -0,0 +1,212 @@
++package repository_test
++
++import (
++	"encoding/json"
++	"maps"
++	"os"
++	"path/filepath"
++	"regexp"
++	"runtime"
++	"sort"
++	"strings"
++	"testing"
++)
++
++var root = repositoryRoot()
++
++var requiredFiles = []string{
++	"README.md",
++	"LICENSE",
++	"NOTICE",
++	".gitignore",
++	".editorconfig",
++	".tool-versions",
++	"go.mod",
++	"package.json",
++	"pnpm-workspace.yaml",
++	"pnpm-lock.yaml",
++	"Makefile",
++	"CONTRIBUTING.md",
++	"CODE_OF_CONDUCT.md",
++	"SECURITY.md",
++	"scripts/doctor.sh",
++}
++
++var expectedTools = map[string]string{
++	"golang": "1.26.3",
++	"nodejs": "24.15.0",
++	"pnpm":   "11.1.3",
++}
++
++var forbiddenLegacyFiles = []string{
++	".python-version",
++	"pyproject.toml",
++	"uv.lock",
++}
++
++func repositoryRoot() string {
++	_, filename, _, ok := runtime.Caller(0)
++	if !ok {
++		panic("resolve repository contract path")
++	}
++	return filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
++}
++
++func read(t *testing.T, relativePath string) string {
++	t.Helper()
++	content, err := os.ReadFile(filepath.Join(root, relativePath))
++	if err != nil {
++		t.Fatalf("read %s: %v", relativePath, err)
++	}
++	return string(content)
++}
++
++func TestRequiredRepositoryFilesExist(t *testing.T) {
++	var missing []string
++	for _, path := range requiredFiles {
++		info, err := os.Stat(filepath.Join(root, path))
++		if err != nil || !info.Mode().IsRegular() {
++			missing = append(missing, path)
++		}
++	}
++	if len(missing) > 0 {
++		t.Fatalf("missing repository files: %s", strings.Join(missing, ", "))
++	}
++}
++
++func TestToolVersionsArePinnedAndConsistent(t *testing.T) {
++	entries := map[string]string{}
++	for _, line := range strings.Split(read(t, ".tool-versions"), "\n") {
++		fields := strings.Fields(line)
++		if len(fields) == 0 || strings.HasPrefix(fields[0], "#") {
++			continue
++		}
++		if len(fields) != 2 {
++			t.Fatalf("invalid .tool-versions entry: %q", line)
++		}
++		entries[fields[0]] = fields[1]
++	}
++
++	if !maps.Equal(entries, expectedTools) {
++		t.Fatalf("tool versions mismatch: got %v, want %v", entries, expectedTools)
++	}
++
++	goMod := read(t, "go.mod")
++	for label, pattern := range map[string]string{
++		"module":    `(?m)^module github\.com/semlia/semlia$`,
++		"language":  `(?m)^go 1\.26\.0$`,
++		"toolchain": `(?m)^toolchain go1\.26\.3$`,
++	} {
++		if !regexp.MustCompile(pattern).MatchString(goMod) {
++			t.Errorf("go.mod %s declaration does not match %s", label, pattern)
++		}
++	}
++
++	var packageJSON struct {
++		Private        bool              `json:"private"`
++		PackageManager string            `json:"packageManager"`
++		Engines        map[string]string `json:"engines"`
++		Scripts        map[string]string `json:"scripts"`
++	}
++	if err := json.Unmarshal([]byte(read(t, "package.json")), &packageJSON); err != nil {
++		t.Fatalf("parse package.json: %v", err)
++	}
++	if !packageJSON.Private {
++		t.Error("package.json must be private")
++	}
++	if packageJSON.PackageManager != "pnpm@11.1.3" {
++		t.Errorf("packageManager = %q", packageJSON.PackageManager)
++	}
++	if packageJSON.Engines["node"] != ">=24.15.0 <25" || packageJSON.Engines["pnpm"] != ">=11.1.3 <12" {
++		t.Errorf("unexpected package engines: %v", packageJSON.Engines)
++	}
++	if packageJSON.Scripts["check:repository"] != "go test ./tests/repository" {
++		t.Errorf("unexpected repository check: %q", packageJSON.Scripts["check:repository"])
++	}
++}
++
++func TestPythonToolchainIsNotPartOfBaseline(t *testing.T) {
++	for _, path := range forbiddenLegacyFiles {
++		if _, err := os.Stat(filepath.Join(root, path)); !os.IsNotExist(err) {
++			t.Errorf("legacy Python baseline file must be absent: %s", path)
++		}
++	}
++}
++
++func TestMakefileExposesStableRootCommands(t *testing.T) {
++	makefile := read(t, "Makefile")
++	for _, target := range []string{"bootstrap", "doctor", "clean"} {
++		if !regexp.MustCompile(`(?m)^` + regexp.QuoteMeta(target) + `:(?:\s|$)`).MatchString(makefile) {
++			t.Errorf("missing Make target %s", target)
++		}
++		if !regexp.MustCompile(`(?m)^\.PHONY:.*\b` + regexp.QuoteMeta(target) + `\b`).MatchString(makefile) {
++			t.Errorf("Make target %s is not phony", target)
++		}
++	}
++}
++
++func TestDoctorScriptIsExecutableAndPortable(t *testing.T) {
++	path := filepath.Join(root, "scripts", "doctor.sh")
++	info, err := os.Stat(path)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if info.Mode()&0o100 == 0 {
++		t.Error("doctor.sh must be executable by its owner")
++	}
++
++	script := read(t, "scripts/doctor.sh")
++	for _, required := range []string{"#!/usr/bin/env bash\n", "set -euo pipefail", "REQUIRED_GO", "require_command go"} {
++		if !strings.Contains(script, required) {
++			t.Errorf("doctor.sh missing %q", required)
++		}
++	}
++	for _, forbidden := range []string{"/Users/", "/home/", "REQUIRED_PYTHON", "require_command python", "require_command uv"} {
++		if strings.Contains(script, forbidden) {
++			t.Errorf("doctor.sh contains forbidden baseline reference %q", forbidden)
++		}
++	}
++}
++
++func TestOpenSourcePolicyFilesAreActionable(t *testing.T) {
++	checks := map[string][]string{
++		"LICENSE":            {"Apache License", "Version 2.0, January 2004", "END OF TERMS AND CONDITIONS"},
++		"CONTRIBUTING.md":    {"Developer Certificate of Origin", "Signed-off-by:", "make bootstrap"},
++		"SECURITY.md":        {"private vulnerability reporting", "public issue"},
++		"CODE_OF_CONDUCT.md": {"Contributor Covenant 3.0", "Reporting an Issue"},
++	}
++	for path, phrases := range checks {
++		content := read(t, path)
++		for _, phrase := range phrases {
++			if !strings.Contains(strings.ToLower(content), strings.ToLower(phrase)) {
++				t.Errorf("%s missing %q", path, phrase)
++			}
++		}
++	}
++}
++
++func TestRootConfigurationContainsNoPersonalPathsOrSecrets(t *testing.T) {
++	patterns := map[string]*regexp.Regexp{
++		"macOS user path": regexp.MustCompile(`/Users/[^/\s]+/`),
++		"Linux user path": regexp.MustCompile(`/home/[^/\s]+/`),
++		"private key":     regexp.MustCompile(`-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----`),
++		"credential URL":  regexp.MustCompile(`postgres(?:ql)?://[^\s:@]+:[^\s@]+@`),
++	}
++
++	var findings []string
++	for _, path := range requiredFiles {
++		if path == "LICENSE" {
++			continue
++		}
++		content := read(t, path)
++		for label, pattern := range patterns {
++			if pattern.MatchString(content) {
++				findings = append(findings, path+": "+label)
++			}
++		}
++	}
++	sort.Strings(findings)
++	if len(findings) > 0 {
++		t.Fatalf("unsafe repository content: %s", strings.Join(findings, "; "))
++	}
++}

@@ -4,19 +4,19 @@
 
 | 字段 | 值 |
 | --- | --- |
-| 版本 | 0.1.0 |
+| 版本 | 0.2.0 |
 | 状态 | Completed |
 | Scope | m0-foundation |
 | 最后更新 | 2026-08-08 |
 
 ## 1. Inputs
 
-- Product constitution: `docs/SSOT.md` v0.1.0 Confirmed
-- Feature plan: `docs/specs/m0-foundation/plan.md` v0.1.0 Confirmed
-- Technical decisions: `docs/adr/0001-m0-technical-foundation.md` v0.1.0 Confirmed
-- Requirements checklist: `docs/specs/m0-foundation/checklists/requirements.md` v0.1.0 Completed
-- Work graph: `docs/specs/m0-foundation/tasks.md` v0.1.0 Confirmed
-- Execution packets: 本分析执行时尚无 Ready task；T001 packet 在本报告 Clear 后生成
+- Product constitution: `docs/SSOT.md` v0.2.0 Confirmed
+- Feature plan: `docs/specs/m0-foundation/plan.md` v0.2.0 Confirmed
+- Technical decisions: `docs/adr/0001-m0-technical-foundation.md` v0.2.0 Confirmed
+- Requirements checklist: `docs/specs/m0-foundation/checklists/requirements.md` v0.2.0 Completed
+- Work graph: `docs/specs/m0-foundation/tasks.md` v0.2.0 Confirmed
+- Execution packets: T001 A002 packet 与 Go、TypeScript 技术基线一致
 
 ## 2. Coverage
 
@@ -42,7 +42,7 @@ Requirements without task coverage: None.
 
 Tasks without requirement or plan mapping: None.
 
-Ready tasks without packet: None. T001 remains Draft until its packet is generated and validated.
+Ready or Running tasks without packet: None. T001 A002 packet 完整且与当前技术决策一致。
 
 Packets missing required fields: None at analysis time.
 
@@ -86,12 +86,19 @@ Gaps: None blocking M0 execution.
 
 ## 6. Findings
 
-### Low: Python version fallback must remain governed
+### Low: Go patch toolchain and module directive must remain aligned
+
+- Location: `docs/adr/0001-m0-technical-foundation.md`, TDR-002；`go.mod`；`.tool-versions`。
+- Impact: Go module language version、toolchain patch 和本地版本声明漂移会破坏可复现构建或触发隐式下载。
+- Resolution: T001 repository contract 同时验证 `go` directive、`toolchain` directive 和 `.tool-versions`，任何版本变更先更新 TDR 与 packet。
+- Status: Resolved in execution constraints.
+
+### Low: Model provider SDK feature lag requires a governed escape hatch
 
 - Location: `docs/adr/0001-m0-technical-foundation.md`, TDR-002 Risks and Mitigations.
-- Impact: 将 Python 3.14 静默降级到 3.13 会使已确认工具链与实际仓库不一致。
-- Resolution: T001 packet 将 Python 3.14 关键依赖不兼容定义为 stop condition。发生时先更新 TDR、plan 和 toolchain requirement，再请求用户确认。
-- Status: Resolved in execution constraints.
+- Impact: 新模型能力若晚于其他语言进入 Go SDK，可能阻塞 provider adapter。
+- Resolution: provider adapter 允许受测试的原始 HTTP 扩展，但模型输出仍必须经过统一 schema、权限和审计边界。
+- Status: Resolved at architecture boundary; implementation belongs to M2.
 
 ### Low: Work graph representation could misstate dependencies
 

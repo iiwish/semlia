@@ -4,11 +4,11 @@
 
 | 字段 | 值 |
 | --- | --- |
-| 版本 | 0.1.0 |
+| 版本 | 0.2.0 |
 | 状态 | Completed |
 | Feature | m0-foundation |
 | 最后更新 | 2026-08-08 |
-| Source spec | `docs/specs/m0-foundation/plan.md` v0.1.0 Confirmed |
+| Source spec | `docs/specs/m0-foundation/plan.md` v0.2.0 Confirmed |
 
 ## 1. Checklist Scope
 
@@ -36,7 +36,9 @@ Reviewed artifacts:
 - [x] 每个 task 都声明依赖、并行边界、冲突、允许文件、测试目标、TDD 和证据。[Executability]
 - [x] T001 的允许文件包含其 repository contract test target。[Executability]
 - [x] 工作图与 task detail 中的 T003、T005、T006、T007 依赖一致。[Consistency]
-- [x] Python 3.14 兼容性失败被识别为需要停止和更新 TDR 的条件，不能静默降级。[Decision integrity]
+- [x] Go 1.26、Node.js 24 LTS 和 pnpm 的版本、安装失败与受控变更路径已经明确。[Decision integrity]
+- [x] Node.js 仅用于 Web 和 TypeScript SDK 构建，生产控制面不依赖 Node.js 运行时。[Deployment clarity]
+- [x] AI、MCP、API、worker 与 CLI 均具有 Go 实现边界，M0 不引入额外语言运行时。[Architecture consistency]
 - [x] 所有高影响决策均已由创始人通过 M0 计划确认。[Readiness]
 
 ## 3. Coverage Matrix
@@ -62,8 +64,8 @@ Reviewed artifacts:
 ## 5. Resolution Notes
 
 - 工作图使用 Mermaid 重新表达 T003、T005、T006、T007 的实际依赖，避免 ASCII 连线产生歧义。
-- T001 的 allowed files 加入 `tests/repository/test_repository_contract.py`，使 TDD test target 位于任务所有权范围内。
-- T001 execution packet 必须把 Python 3.14 依赖不兼容列为 stop condition；任何版本降级先修改并重新审核 TDR。
+- T001 的 allowed files 包含 `tests/repository/repository_contract_test.go`，使 TDD test target 位于任务所有权范围内。
+- T001 execution packet 把 Go 1.26 或 Node.js 24 LTS 兼容性失败列为 stop condition；任何基线变更先修改并重新审核 TDR。
 
 ## 6. User Review Gate
 

@@ -5,7 +5,7 @@
 | 字段 | 值 |
 | --- | --- |
 | Feature | m0-foundation |
-| 版本 | 0.1.0 |
+| 版本 | 0.2.0 |
 | 状态 | Confirmed |
 | 最后更新 | 2026-08-08 |
 | Source | `docs/SSOT.md`, `docs/specs/m0-foundation/plan.md` |
@@ -60,7 +60,7 @@ Stories:
 
 Tasks:
 
-- [ ] T001 [M0-US-001] 建立仓库与工具链基线
+- [x] T001 [M0-US-001] 建立仓库与工具链基线
 - [ ] T002 [M0-US-002] 建立版本化公共契约
 - [ ] T003 [M0-US-002] 实现控制面 API 纵向基础
 - [ ] T004 [P] [M0-US-002] 实现 Web system-status 纵向基础
@@ -87,7 +87,7 @@ Tasks:
 
 ### T001 建立仓库与工具链基线
 
-Status: Ready
+Status: Accepted
 Priority: P0
 Depends on: None
 Blocks: T002, T003, T004, T005, T006, T007, T008
@@ -97,7 +97,7 @@ Conflicts with: None
 
 Goal:
 
-建立受版本约束的 Python 与 TypeScript workspace、统一根命令和完整开源仓库治理，使后续任务不再自行发明工具入口。
+建立受版本约束的 Go module 与 TypeScript workspace、统一根命令和完整开源仓库治理，使后续任务不再自行发明工具入口。
 
 Allowed files:
 
@@ -107,9 +107,7 @@ Allowed files:
 - `.gitignore`
 - `.editorconfig`
 - `.tool-versions`
-- `.python-version`
-- `pyproject.toml`
-- `uv.lock`
+- `go.mod`
 - `package.json`
 - `pnpm-workspace.yaml`
 - `pnpm-lock.yaml`
@@ -118,16 +116,16 @@ Allowed files:
 - `CODE_OF_CONDUCT.md`
 - `SECURITY.md`
 - `scripts/doctor.sh`
-- `tests/repository/test_repository_contract.py`
+- `tests/repository/repository_contract_test.go`
 
 Test targets:
 
-- `tests/repository/test_repository_contract.py`
+- `tests/repository/repository_contract_test.go`
 
 Deliverables:
 
-- Python 3.14 与 Node.js 24 LTS 兼容性探针。
-- uv 和 pnpm workspace 根配置。
+- Go 1.26 与 Node.js 24 LTS 兼容性探针。
+- Go module 和 pnpm workspace 根配置。
 - `make bootstrap`、`make doctor`、`make clean`。
 - Apache 2.0 LICENSE、NOTICE、贡献和安全文档。
 
@@ -147,7 +145,7 @@ Validation commands:
 
 - `make doctor`
 - `make bootstrap`
-- `uv run pytest tests/repository/test_repository_contract.py`
+- `go test ./tests/repository`
 - `git diff --check`
 
 TDD plan:
@@ -184,25 +182,26 @@ Goal:
 
 Allowed files:
 
-- `packages/schemas/**`
-- `packages/domain/**`
+- `api/**`
+- `internal/domain/**`
+- `sdk/typescript/**`
 - `scripts/generate-contracts.sh`
 - `tests/contracts/**`
 - `Makefile`
-- `pyproject.toml`
+- `go.mod`
+- `go.sum`
 - `package.json`
 - `pnpm-lock.yaml`
-- `uv.lock`
 
 Test targets:
 
-- `tests/contracts/test_schema_compatibility.py`
-- `packages/schemas/tests/**`
+- `tests/contracts/**/*_test.go`
+- `api/**`
 
 Deliverables:
 
 - Version、resource ID、timestamp、pagination、error envelope 和 event envelope schema。
-- Python 与 TypeScript 类型生成或一致性验证。
+- Go transport 类型与 TypeScript 客户端生成或一致性验证。
 - `make contracts` 和 `make contracts-check`。
 
 Acceptance criteria:
@@ -221,8 +220,8 @@ Validation commands:
 
 - `make contracts`
 - `make contracts-check`
-- `uv run pytest tests/contracts`
-- `pnpm --filter @semlia/schemas test`
+- `go test ./tests/contracts/...`
+- `pnpm --filter @semlia/sdk-typescript test`
 - `git diff --exit-code`
 
 TDD plan:
@@ -254,27 +253,27 @@ Conflicts with: T004 不冲突；T005 必须等待本任务定义数据库配置
 
 Goal:
 
-实现可启动的 FastAPI 控制面，从配置加载到 health、system info、错误 envelope 和 trace ID 形成完整 HTTP 纵向路径。
+实现可启动的 Go 控制面，从配置加载到 health、system info、错误 envelope 和 trace ID 形成完整 HTTP 纵向路径。
 
 Allowed files:
 
-- `apps/api/**`
-- `packages/domain/src/**`
-- `tests/api/**`
-- `pyproject.toml`
-- `uv.lock`
+- `cmd/semlia/**`
+- `internal/application/**`
+- `internal/domain/**`
+- `internal/platform/config/**`
+- `internal/platform/http/**`
+- `go.mod`
+- `go.sum`
 - `Makefile`
 
 Test targets:
 
-- `tests/api/test_health.py`
-- `tests/api/test_system_info.py`
-- `tests/api/test_errors.py`
-- `tests/api/test_config.py`
+- `internal/platform/http/**/*_test.go`
+- `internal/platform/config/**/*_test.go`
 
 Deliverables:
 
-- FastAPI app factory 和分层配置。
+- `semlia server` 与 `semlia doctor` composition root、`net/http` transport 和分层配置。
 - Liveness、readiness 和 system info endpoint。
 - 统一错误映射、request ID/trace ID 和结构化日志。
 - 生产配置 fail-closed 检查。
@@ -294,15 +293,14 @@ Definition of Done:
 
 Validation commands:
 
-- `uv run pytest tests/api`
-- `uv run ruff check apps/api packages/domain tests/api`
-- `uv run pyright apps/api packages/domain`
+- `go test -race ./cmd/semlia/... ./internal/...`
+- `go vet ./cmd/semlia/... ./internal/...`
 - `make contracts-check`
 
 TDD plan:
 
 - RED: 先实现 endpoint、错误和配置行为测试，确认 app 尚不存在时失败。
-- GREEN: 建立最小 app factory、路由、错误和 telemetry middleware。
+- GREEN: 建立最小 server/doctor 子命令、路由、错误和 telemetry middleware。
 - REFACTOR: 分离 transport、application 和 domain，不改变契约。
 
 Packet path:
@@ -332,8 +330,8 @@ Goal:
 
 Allowed files:
 
-- `apps/web/**`
-- `packages/sdk-typescript/**`
+- `web/**`
+- `sdk/typescript/**`
 - `package.json`
 - `pnpm-workspace.yaml`
 - `pnpm-lock.yaml`
@@ -341,8 +339,8 @@ Allowed files:
 
 Test targets:
 
-- `apps/web/src/**/*.test.tsx`
-- `apps/web/e2e/system-status.spec.ts`
+- `web/src/**/*.test.tsx`
+- `web/e2e/system-status.spec.ts`
 
 Deliverables:
 
@@ -404,30 +402,29 @@ Goal:
 
 Allowed files:
 
-- `apps/api/src/semlia/db/**`
-- `apps/worker/**`
+- `cmd/semlia/**`
+- `internal/adapters/postgres/**`
+- `internal/application/jobs/**`
+- `db/**`
 - `migrations/**`
-- `alembic.ini`
 - `tests/integration/db/**`
 - `tests/integration/worker/**`
-- `pyproject.toml`
-- `uv.lock`
+- `go.mod`
+- `go.sum`
 - `Makefile`
 
 Test targets:
 
-- `tests/integration/db/test_migrations.py`
-- `tests/integration/db/test_audit.py`
-- `tests/integration/worker/test_claiming.py`
-- `tests/integration/worker/test_retry.py`
-- `tests/integration/worker/test_outbox.py`
+- `tests/integration/db/**/*_test.go`
+- `tests/integration/worker/**/*_test.go`
 
 Deliverables:
 
-- Alembic 基线和迁移检查命令。
+- golang-migrate SQL 基线和迁移检查命令。
 - workspace identity、audit event、job 和 outbox 最小表。
-- psycopg connection/transaction 边界。
+- pgx v5、sqlc 和显式 connection/transaction 边界。
 - job claim、lease、retry、dead-letter 和 outbox dispatcher。
+- 同一构建工件中的 `semlia worker` 与 `semlia migrate` 子命令。
 
 Acceptance criteria:
 
@@ -446,10 +443,10 @@ Definition of Done:
 Validation commands:
 
 - `make db-test`
-- `uv run pytest tests/integration/db tests/integration/worker`
-- `uv run alembic upgrade head`
-- `uv run alembic downgrade base`
-- `uv run alembic upgrade head`
+- `go test -race ./tests/integration/db/... ./tests/integration/worker/...`
+- `make db-migrate-up`
+- `make db-migrate-down`
+- `make db-migrate-up`
 
 TDD plan:
 
@@ -488,6 +485,8 @@ Allowed files:
 - `compose.override.yaml`
 - `.env.example`
 - `deploy/local/**`
+- `cmd/semlia/**`
+- `internal/platform/web/**`
 - `scripts/dev/**`
 - `tests/smoke/**`
 - `Makefile`
@@ -495,12 +494,13 @@ Allowed files:
 
 Test targets:
 
-- `tests/smoke/test_local_stack.py`
-- `tests/smoke/test_dependency_failure.py`
+- `tests/smoke/local_stack_test.go`
+- `tests/smoke/dependency_failure_test.go`
 
 Deliverables:
 
 - `make dev`、`make dev-down`、`make smoke`。
+- 嵌入 Web 静态产物的 Go 发布构建；Compose 使用同一工件分别运行 server 与 worker 角色。
 - 健康检查、依赖顺序、数据 volume 和安全开发配置。
 - PostgreSQL 停止与恢复的故障路径测试。
 
@@ -561,14 +561,15 @@ Allowed files:
 - `scripts/ci/**`
 - `scripts/release/**`
 - `Makefile`
-- `pyproject.toml`
+- `go.mod`
+- `go.sum`
 - `package.json`
 - `README.md`
 - `SECURITY.md`
 
 Test targets:
 
-- `tests/repository/test_ci_contract.py`
+- `tests/repository/ci_contract_test.go`
 - `.github/workflows/**`
 
 Deliverables:
@@ -597,7 +598,7 @@ Validation commands:
 - `make security-check`
 - `make build`
 - `make sbom`
-- `uv run pytest tests/repository/test_ci_contract.py`
+- `go test ./tests/repository`
 
 TDD plan:
 
@@ -642,8 +643,8 @@ Allowed files:
 
 Test targets:
 
-- `tests/acceptance/test_fresh_clone.py`
-- `tests/acceptance/test_m0_scenarios.py`
+- `tests/acceptance/fresh_clone_test.go`
+- `tests/acceptance/m0_scenarios_test.go`
 
 Deliverables:
 
@@ -672,7 +673,7 @@ Validation commands:
 - `make dev`
 - `make check`
 - `make smoke`
-- `uv run pytest tests/acceptance`
+- `go test ./tests/acceptance/...`
 - `make dev-down`
 
 TDD plan:

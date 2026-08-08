@@ -4,17 +4,17 @@
 
 | 字段 | 值 |
 | --- | --- |
-| 版本 | 0.1.0 |
+| 版本 | 0.2.0 |
 | 状态 | Confirmed |
 | 最后更新 | 2026-08-08 |
-| 来源 | `docs/SSOT.md` v0.1.0 Confirmed |
+| 来源 | `docs/SSOT.md` v0.2.0 Confirmed |
 | 计划 | `docs/specs/m0-foundation/plan.md` |
 | 工作图 | `docs/specs/m0-foundation/tasks.md` |
 | 审核 | 2026-08-08 经创始人确认 |
 
 ## 1. 决策摘要
 
-M0 建立一个可在单机和 CI 中完整运行的模块化单体。Python 控制面、TypeScript Web、PostgreSQL、Git 和 S3 兼容对象存储共享一个 monorepo，通过版本化领域契约连接。开发工具采用 Python 3.14、uv workspace、Node.js 24 LTS 和 pnpm workspace。
+M0 建立一个可在单机和 CI 中完整运行的模块化单体。Go 控制面、TypeScript Web、PostgreSQL、Git 和 S3 兼容对象存储共享一个 monorepo，通过版本化领域契约连接。开发工具采用 Go 1.26、Node.js 24 LTS 和 pnpm workspace；Node.js 只用于 Web 与 TypeScript SDK 的开发和构建，生产控制面不依赖 Node.js 运行时。
 
 M0 不实现完整语义业务能力。它交付可验证的工程底座，使 M1 可以在不重做仓库、运行时、迁移、契约、测试和发布体系的前提下开发第一条 Semantic Registry 纵向闭环。
 
@@ -37,8 +37,10 @@ Constitution violations: None.
 - M0 交付计划：`docs/specs/m0-foundation/plan.md`
 - M0 工作图：`docs/specs/m0-foundation/tasks.md`
 - Node.js 发布策略：[Node.js Releases](https://nodejs.org/en/about/previous-releases)
-- Python 3.14 稳定版本：[Python 3.14](https://www.python.org/downloads/release/python-3140/)
-- uv workspace：[Using workspaces](https://docs.astral.sh/uv/concepts/projects/workspaces/)
+- Go toolchain 管理：[Go Toolchains](https://go.dev/doc/toolchain)
+- Go module 布局：[Organizing a Go module](https://go.dev/doc/modules/layout)
+- MCP SDK 等级：[MCP SDKs](https://modelcontextprotocol.io/docs/sdk)
+- OpenAI Go SDK：[openai-go](https://github.com/openai/openai-go)
 - pnpm workspace：[pnpm workspaces](https://pnpm.io/workspaces)
 
 ## 4. 技术决策
@@ -48,7 +50,7 @@ Constitution violations: None.
 Decision:
 
 - 单一 Git 仓库承载 API、worker、Web、领域包、契约、SDK 和集成。
-- 运行时首先部署为 API、worker、Web 三个进程，代码共享同一领域层。
+- Go 代码构建为单一 `semlia` 工件，通过 server、worker、mcp、migrate 和 doctor 子命令承担不同运行角色；Web 静态产物可嵌入该工件或独立部署。
 - 模块通过公开包接口和 schema 通信，禁止跨模块直接读取内部表或私有实现。
 
 Requirement mapping:
@@ -65,31 +67,32 @@ Alternatives considered:
 
 - 多仓库：边界清晰，但 M0 会增加版本协调和本地开发成本。
 - 微服务：提供故障隔离，但当前没有流量和团队所有权证据支持其复杂度。
-- 单一 Python UI/API 仓库：简单，但会牺牲前端生态和类型契约质量。
+- 单一 Go 服务端渲染 UI：部署简单，但会牺牲复杂治理工作台、图谱和 diff 交互所需的前端生态。
 
 Risks:
 
 - 模块化单体可能演变为无边界大包。
-- Python 与 TypeScript 工具链可能产生重复命令和缓存。
+- Go 与 TypeScript 工具链可能产生重复命令和缓存。
 
 Mitigations:
 
 - 每个模块声明公共 API、依赖方向和所有权。
-- 根目录只提供统一入口，具体依赖仍由 uv 和 pnpm 锁定。
+- 根目录只提供统一入口，具体依赖仍由 Go modules 和 pnpm 锁定。
 - CI 检查循环依赖和生成契约是否干净。
 
 Task impact:
 
 - T001、T002、T003、T004、T007。
 
-### TDR-002 Python 3.14、FastAPI 与 uv workspace
+### TDR-002 Go 1.26 控制面与单一运行工件
 
 Decision:
 
-- API、worker、CLI 和 MCP 服务使用 Python 3.14。
-- HTTP 层采用 FastAPI，边界模型采用 Pydantic。
-- Python workspace、依赖锁定和命令执行采用 uv。
-- 核心领域逻辑保持框架无关，不在实体和值对象中引入 FastAPI 或数据库依赖。
+- API、worker、CLI、MCP 和迁移命令使用 Go 1.26。
+- HTTP 层采用标准库 `net/http`，公共边界由 OpenAPI 生成严格类型和 handler 接口。
+- `go.mod` 固定语言和 toolchain 基线，Go modules 管理依赖与校验和。
+- 核心领域逻辑保持 transport、数据库、具体 LLM 供应商和 MCP SDK 无关。
+- Web 构建产物默认通过 `go:embed` 进入发布二进制，同时保留独立静态部署能力。
 
 Requirement mapping:
 
@@ -97,26 +100,29 @@ Requirement mapping:
 
 Rationale:
 
-- Python 对 AI、数据连接器和 MCP 生态适配成本较低。
-- 当前 Fluxale 原型已经使用 FastAPI、Pydantic 和 psycopg，可复用经验而不复制原型结构。
-- uv workspace 提供单锁文件和多包工作区，适合 API、CLI 和领域包共同演进。
+- Semlia 的核心 AI 能力是模型调用、工具编排、结构化输出、可恢复工作流、策略和审计，而不是模型训练；Go 能以显式状态机可靠承载这些控制面职责。
+- OpenAI 与 MCP 均提供官方 Go SDK，MCP Go SDK 属于 Tier 1，关键协议能力不要求额外运行时。
+- 单一跨平台工件降低自托管安装、升级、容器构建、供应链扫描和故障诊断成本。
+- Go 的并发、context cancellation、静态类型和低常驻资源适合 API、worker、connector 和 Agent run。
 
 Alternatives considered:
 
-- Go 控制面加 Python Agent 服务：运行效率更高，但增加跨服务契约和部署复杂度。
-- Poetry：成熟，但 uv 对工作区、Python 管理和执行入口更统一。
-- Django：内建能力完整，但 Semlia 更需要显式领域边界和 API-first 结构。
+- Python 控制面：AI 与数据生态丰富，原型速度快，但解释器、依赖、CLI 分发和多进程部署增加长期自托管成本。
+- 全栈 TypeScript：语言统一且 Agent 生态活跃，但服务端运行时、依赖树和单文件分发不如 Go 控制面克制。
+- Rust 控制面：性能和内存安全优秀，但 M0 迭代速度与开源贡献门槛不符合当前阶段。
 
 Risks:
 
-- Python 3.14 的部分第三方库兼容性可能滞后。
-- FastAPI 模型可能渗入核心领域。
+- 新模型能力可能先出现在其他语言 SDK。
+- 生成的 transport 类型可能渗入核心领域。
+- 单一二进制中的多个运行角色可能形成隐式耦合。
 
 Mitigations:
 
-- M0 在锁定依赖前验证 PostgreSQL、OpenTelemetry、测试和构建依赖兼容性。
-- API DTO、领域对象和持久化模型分层。
-- CI 保留 Python 3.13 兼容测试作为降级信号，正式最低版本由 M0 验证结果决定。
+- provider adapter 保留类型化扩展和原始 HTTP escape hatch，不因 SDK 发布节奏阻塞协议能力。
+- transport DTO、领域对象和持久化模型分层，生成代码只存在于边界目录。
+- server、worker 和 MCP 共享 application/domain 包但通过独立 composition root 装配和测试。
+- 只有出现必须依赖本地模型、训练框架或专用科学计算库的已确认能力时，才通过独立插件进程引入额外运行时。
 
 Task impact:
 
@@ -159,12 +165,12 @@ Task impact:
 
 - T001、T004、T007。
 
-### TDR-004 PostgreSQL 控制面与 Alembic 迁移
+### TDR-004 PostgreSQL 控制面与版本化 SQL 迁移
 
 Decision:
 
 - PostgreSQL 是控制面唯一事务数据库，开发和 CI 固定 PostgreSQL 18，兼容目标为 PostgreSQL 17 及以上。
-- 使用 psycopg 3 和显式 repository，迁移使用 Alembic。
+- 使用 pgx v5、sqlc 和显式 repository，迁移使用 golang-migrate 管理的版本化 SQL 文件。
 - M0 建立 workspace、audit event、job 和 outbox 的最小基础表，不提前创建完整 M1 资产模型。
 - 应用启动只检查迁移状态，不自动执行 DDL 或写入演示数据。
 
@@ -179,19 +185,19 @@ Rationale:
 
 Alternatives considered:
 
-- SQLAlchemy ORM：提高常规 CRUD 速度，但容易隐藏关键查询和事务边界；M0 保留未来引入 SQLAlchemy Core 的可能性。
+- 通用 ORM：提高常规 CRUD 速度，但容易隐藏关键查询和事务边界；Semlia 优先保留可审查 SQL 和生成的类型安全调用。
 - SQLite 作为服务端数据库：安装简单，但不能证明目标并发、锁和迁移行为。
 - MongoDB：灵活 schema 不抵消 Semlia 对关系、版本和事务一致性的要求。
 
 Risks:
 
-- 直接使用 psycopg 可能增加 repository 样板代码。
+- pgx 与 sqlc 仍可能产生 repository 适配代码。
 - 过早设计完整领域 schema 会固化错误模型。
 
 Mitigations:
 
 - 只实现 M0 运行所需表，领域数据模型在 M1 单独审核。
-- 使用小型 row mapper 和测试工厂，不创建通用 ORM 抽象层。
+- 使用 sqlc 生成查询类型和小型测试工厂，不创建通用 ORM 抽象层。
 
 Task impact:
 
@@ -237,8 +243,8 @@ Task impact:
 
 Decision:
 
-- OpenAPI、JSON Schema、事件 envelope 和错误代码在 `packages/schemas` 中版本化。
-- FastAPI 生成的 OpenAPI 必须与提交的规范工件一致。
+- OpenAPI、JSON Schema、事件 envelope 和错误代码在 `api/` 中版本化。
+- OpenAPI 是规范来源，生成的 Go transport 类型与 TypeScript 客户端必须和提交的规范工件一致。
 - 错误响应统一包含 `code`、`message`、`traceId`、`details` 和可选 `retryable`。
 - 所有公共 ID、时间、分页、幂等键和版本字段拥有统一格式。
 
@@ -348,7 +354,7 @@ Task impact:
 | M0 变成长期平台建设，迟迟没有 M1 用户价值 | High | M0 只交付 M1 必需底座，退出后立即进入 Cube 纵向闭环 |
 | 工具链过多导致贡献门槛高 | Medium | 根目录提供 `make bootstrap`、`make dev`、`make check` 三个主入口 |
 | 契约和代码生成过度设计 | Medium | 只定义 M0 health、error、event envelope 和 identity 基础类型 |
-| Python 3.14 依赖兼容不足 | Medium | T001 先完成兼容性探针，失败时以 Python 3.13 作为受记录降级 |
+| Go 或模型 SDK 新能力不同步 | Medium | provider adapter 保留原始 HTTP escape hatch，并以契约测试覆盖能力矩阵 |
 | 自托管安全默认值不可靠 | High | 禁止默认密码，生成开发密钥，生产配置缺失时拒绝启动 |
 
 ## 6. 任务后果

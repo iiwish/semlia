@@ -4,7 +4,7 @@
 
 | 字段 | 值 |
 | --- | --- |
-| 文档版本 | 0.1.0 |
+| 文档版本 | 0.2.0 |
 | 状态 | Confirmed |
 | 最后更新 | 2026-08-08 |
 | 产品名称 | Semlia |
@@ -264,7 +264,7 @@ Semlia 默认只读取元数据、语义定义和受控样本，不复制客户�
 - REST API 作为规范服务契约。
 - MCP 作为 AI Agent 首选接口。
 - CLI 作为本地开发和 CI 接口。
-- TypeScript 和 Python SDK。
+- TypeScript SDK；其他语言客户端通过同一 OpenAPI 契约按需求生成。
 - Webhook 和事件订阅。
 - 可导出的 Cube、JSON 和 Markdown 工件。
 
@@ -436,7 +436,7 @@ CLI 输出默认同时支持人类可读格式和稳定 JSON 格式。自动化�
 
 ### 9.4 SDK 与事件
 
-- 首发提供 TypeScript 和 Python SDK。
+- 首发提供 TypeScript SDK，其他语言客户端保持契约兼容但不进入首发工具链。
 - SDK 由 OpenAPI 合约生成基础客户端，并增加少量领域友好封装。
 - Webhook 使用签名、重试、幂等键和事件版本。
 - 核心事件包括资产变更、验证完成、审核决定、release 发布、绑定风险和资产废弃。
@@ -466,9 +466,11 @@ Web / CLI / SDK / MCP / Integrations
 | 层 | 选择 |
 | --- | --- |
 | Web | React、TypeScript、Vite |
-| API | Python、FastAPI、Pydantic |
-| 数据访问 | psycopg 3，显式 repository 和事务边界 |
-| 迁移 | Alembic |
+| 控制面运行时 | Go 1.26，模块化单体，单一 `semlia` 可执行文件提供 server、worker、mcp、migrate 和 doctor 子命令 |
+| API | OpenAPI-first REST，Go `net/http`，生成边界类型和严格 handler 接口 |
+| AI 与 MCP | 显式可恢复 Agent 状态机、JSON Schema 输出校验、官方模型与 MCP Go SDK |
+| 数据访问 | pgx v5、sqlc、显式 repository 和事务边界 |
+| 迁移 | golang-migrate 管理的版本化 SQL migration |
 | 控制面数据库 | PostgreSQL 17 或更高版本 |
 | 文件与证据 | S3 兼容对象存储，开发环境支持本地文件系统 |
 | 语义内容版本 | 内嵌或外部 Git 仓库 |
@@ -478,24 +480,23 @@ Web / CLI / SDK / MCP / Integrations
 | 本地部署 | Docker Compose |
 | 集群部署 | Helm 和 Kubernetes |
 
-第一阶段保持模块化单体。只有当独立扩缩容、故障隔离或团队所有权产生可测需求时才拆分服务。
+第一阶段保持模块化单体。同一个 Go 构建工件可按 server、worker 和 MCP 等角色分别运行，Web 静态产物可嵌入二进制或独立部署。生产运行不依赖 Node.js。只有当独立扩缩容、故障隔离或团队所有权产生可测需求时才拆分服务。
 
 ### 10.3 仓库建议布局
 
 ```text
 Semlia/
-  apps/
-    api/
-    web/
-    worker/
-  packages/
+  api/
+  cmd/
+    semlia/
+  internal/
     domain/
-    schemas/
-    policy/
-    cli/
-    mcp/
-    sdk-python/
-    sdk-typescript/
+    application/
+    adapters/
+    platform/
+  web/
+  sdk/
+    typescript/
   integrations/
     cube/
     dbt/
@@ -772,7 +773,7 @@ jobs, outbox_events, audit_events
 
 - 版本化 REST API。
 - MCP server 与只读资源。
-- CLI、TypeScript SDK 和 Python SDK。
+- CLI 和 TypeScript SDK。
 - 消费者注册、release 绑定、Webhook 和使用事件。
 
 退出标准：Fluxale 和至少一个独立 Agent 在生产式流程中只通过 Semlia 获取语义。

@@ -1,5 +1,5 @@
 schema_version: 1
-packet_id: M0-T001-A001
+packet_id: M0-T001-A002
 task_id: T001
 feature_id: m0-foundation
 mode: execute_one_task
@@ -21,7 +21,7 @@ governance_inputs:
 work_unit:
   title: 建立仓库与工具链基线
   goal: >-
-    建立受版本约束的 Python 与 TypeScript workspace、统一根命令和完整开源仓库治理，
+    建立受版本约束的 Go module 与 TypeScript workspace、统一根命令和完整开源仓库治理，
     使后续任务不再自行发明工具入口。
   epic: E001
   story: M0-US-001
@@ -49,6 +49,7 @@ codebase_context:
     branch: main
     latest_confirmed_plan_commit: b28114c
     implementation_state: Documentation-only repository with no application scaffold
+    decision_update: Go and TypeScript baseline explicitly confirmed by founder on 2026-08-08
   local_instructions:
     - Follow the session-level AGENTS.md guidance.
     - Use pnpm rather than npm for the JavaScript workspace.
@@ -63,10 +64,10 @@ codebase_context:
     - docs/specs/m0-foundation/analysis.md
   existing_patterns:
     - There is no existing code pattern; T001 defines only repository and toolchain conventions.
-    - Root commands must be thin, readable wrappers over uv and pnpm.
+    - Root commands must be thin, readable wrappers over Go and pnpm.
     - Version declarations must be mutually consistent and covered by a repository contract test.
   interfaces_or_contracts:
-    - make bootstrap installs locked Python and JavaScript dependencies.
+    - make bootstrap downloads verified Go modules and installs locked JavaScript dependencies.
     - make doctor reports supported tool versions and actionable failures.
     - make clean removes generated local state without deleting user source or documentation.
     - Repeating bootstrap must not change lockfiles or tracked configuration.
@@ -74,7 +75,7 @@ codebase_context:
     - Do not create API, Web, worker, database, schema, connector or Agent implementation.
     - Do not modify product scope, TDR decisions or tasks T002 through T008.
     - Do not add a production credential, personal absolute path or customer data.
-    - Do not silently change Python 3.14, Node.js 24 LTS, uv or pnpm choices.
+    - Do not silently change Go 1.26, Node.js 24 LTS or pnpm choices.
 
 execution_constraints:
   branch_or_worktree: current main branch
@@ -85,9 +86,7 @@ execution_constraints:
     - .gitignore
     - .editorconfig
     - .tool-versions
-    - .python-version
-    - pyproject.toml
-    - uv.lock
+    - go.mod
     - package.json
     - pnpm-workspace.yaml
     - pnpm-lock.yaml
@@ -96,45 +95,45 @@ execution_constraints:
     - CODE_OF_CONDUCT.md
     - SECURITY.md
     - scripts/doctor.sh
-    - tests/repository/test_repository_contract.py
+    - tests/repository/repository_contract_test.go
   test_targets:
-    - tests/repository/test_repository_contract.py
+    - tests/repository/repository_contract_test.go
   ownership_notes:
     - Governance status and evidence files are updated by the orchestrator, not by the implementation work unit.
     - Stop if any allowed file already contains user changes that are not part of this task.
   environment_observed:
-    python: 3.14.6
+    go: 1.26.3
     node: 24.15.0
     pnpm: 11.1.3
     make: GNU Make 3.81
     docker: 29.4.0
-    uv: Not installed before execution
 
 tdd_plan:
   required: true
   exception: null
   red:
     preparation:
-      - Install the official uv tool outside the repository if it is absent.
-      - Create only tests/repository/test_repository_contract.py before production scaffold files.
-    command: uv run --with pytest pytest tests/repository/test_repository_contract.py -q
+      - Create only tests/repository/repository_contract_test.go before replacing root toolchain files.
+      - Use GOPATH compatibility mode so the repository contract can execute before go.mod exists.
+    command: GO111MODULE=off go test ./tests/repository
     expected_failure: Repository contract fails because required root files, version declarations and commands do not exist.
   green:
-    command: uv run pytest tests/repository/test_repository_contract.py -q
+    command: go test ./tests/repository
     expected_signal: Repository contract passes with pinned, consistent tools and required root commands.
   refactor:
-    command: make doctor && make bootstrap && uv run pytest tests/repository/test_repository_contract.py -q
+    command: make doctor && make bootstrap && go test ./tests/repository
     expected_signal: Commands pass and a second bootstrap leaves lockfile hashes unchanged.
 
 validation_loop:
   commands:
     - make doctor
     - make bootstrap
-    - uv run pytest tests/repository/test_repository_contract.py -q
+    - go test ./tests/repository
+    - go vet ./tests/repository
     - pnpm install --frozen-lockfile
     - git diff --check
   deterministic_check:
-    - Record SHA-256 hashes for uv.lock and pnpm-lock.yaml.
+    - Record SHA-256 hashes for go.mod and pnpm-lock.yaml.
     - Run make bootstrap a second time.
     - Confirm both hashes are unchanged.
   retry_budget: 2
@@ -179,8 +178,8 @@ handoff:
 
 stop_conditions:
   - An allowed file has unrelated user changes.
-  - The official uv installation cannot complete or uv cannot run with Python 3.14.
-  - A required direct dependency does not support Python 3.14.
+  - Go 1.26.3 or Node.js 24 LTS cannot run in the supported development environment.
+  - A required direct dependency does not support the confirmed Go 1.26 baseline.
   - Implementing the task requires changing a confirmed TDR or expanding allowed files.
   - A validation command is unavailable after bootstrap.
   - The repository contract can pass only by weakening a confirmed requirement.

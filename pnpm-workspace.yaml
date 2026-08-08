@@ -1,0 +1,6 @@
+packages:
+  - "web"
+  - "sdk/*"
+  - "integrations/*"
+
+strictPeerDependencies: true

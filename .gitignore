@@ -1,0 +1,32 @@
+# Operating systems and editors
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Go
+*.test
+coverage.out
+go.work
+go.work.sum
+
+# JavaScript
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Build and local runtime state
+build/
+.cache/
+.semlia/
+data/
+logs/
+*.log

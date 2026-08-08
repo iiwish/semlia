@@ -5,10 +5,10 @@
 | 字段 | 值 |
 | --- | --- |
 | Feature ID | m0-foundation |
-| 版本 | 0.1.0 |
+| 版本 | 0.2.0 |
 | 状态 | Confirmed |
 | 最后更新 | 2026-08-08 |
-| 产品合同 | `docs/SSOT.md` v0.1.0 Confirmed |
+| 产品合同 | `docs/SSOT.md` v0.2.0 Confirmed |
 | 技术决策 | `docs/adr/0001-m0-technical-foundation.md` |
 | 工作图 | `docs/specs/m0-foundation/tasks.md` |
 | 审核 | 2026-08-08 经创始人确认 |
@@ -34,7 +34,7 @@ M0 的成功不是创建大量目录，而是证明以下事实：
 
 ### M0-US-002 客户端调用控制面
 
-作为 Semlia 客户端开发者，我可以调用版本化 health API，获得稳定响应、错误结构和 trace ID，并使用生成的 TypeScript/Python 类型。
+作为 Semlia 客户端开发者，我可以调用版本化 health API，获得稳定响应、错误结构和 trace ID，并使用由同一契约生成的 Go 边界类型与 TypeScript 客户端。
 
 ### M0-US-003 维护者安全演进数据库
 
@@ -53,7 +53,7 @@ M0 的成功不是创建大量目录，而是证明以下事实：
 ### M0-FR-001 仓库与工具链
 
 - 仓库采用 TDR 定义的 monorepo 布局。
-- Python、Node.js、uv 和 pnpm 版本被明确固定。
+- Go、Node.js 和 pnpm 版本被明确固定。
 - 根目录提供 `make bootstrap`、`make dev`、`make check` 和 `make clean`。
 - 锁文件和生成规则可重复执行且不会制造无意义 diff。
 
@@ -61,7 +61,7 @@ M0 的成功不是创建大量目录，而是证明以下事实：
 
 - 建立 API version、resource ID、timestamp、pagination、error response 和 event envelope 的最小 schema。
 - schema 具有机器可读版本和兼容性测试。
-- TypeScript 与 Python 类型由同一契约产生或验证一致。
+- Go transport 类型与 TypeScript 客户端由同一契约产生并验证一致。
 - 不提前定义 M1 的完整语义资产 schema。
 
 ### M0-FR-003 控制面 API
@@ -80,7 +80,7 @@ M0 的成功不是创建大量目录，而是证明以下事实：
 
 ### M0-FR-005 数据库基础
 
-- Alembic 从空 PostgreSQL 创建最小控制面 schema。
+- golang-migrate 从版本化 SQL 文件在空 PostgreSQL 创建最小控制面 schema。
 - 基础表覆盖 workspace identity、audit event、job 和 outbox。
 - 所有租户数据表包含 `workspace_id` 或明确记录为何属于全局表。
 - 迁移测试覆盖 upgrade、重复检查和 downgrade 到 M0 基线。
@@ -123,7 +123,7 @@ M0 的成功不是创建大量目录，而是证明以下事实：
 ### 包含
 
 - 项目根文件、许可证和社区治理。
-- Python 与 TypeScript workspace。
+- Go module 与 TypeScript workspace。
 - 最小 API、Web 和 worker 进程。
 - 公共 schema 和生成类型。
 - PostgreSQL 迁移、基础表和集成测试。
