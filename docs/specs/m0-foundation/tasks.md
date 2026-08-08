@@ -61,7 +61,7 @@ Stories:
 Tasks:
 
 - [x] T001 [M0-US-001] 建立仓库与工具链基线
-- [ ] T002 [M0-US-002] 建立版本化公共契约
+- [x] T002 [M0-US-002] 建立版本化公共契约
 - [ ] T003 [M0-US-002] 实现控制面 API 纵向基础
 - [ ] T004 [P] [M0-US-002] 实现 Web system-status 纵向基础
 - [ ] T005 [M0-US-003, M0-US-004] 实现 PostgreSQL 迁移、job 与 outbox
@@ -168,7 +168,7 @@ Evidence required:
 
 ### T002 建立版本化公共契约
 
-Status: Ready
+Status: Accepted
 Priority: P0
 Depends on: T001
 Blocks: T003, T004, T007

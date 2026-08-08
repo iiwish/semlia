@@ -63,7 +63,7 @@ codebase_context:
     oasdiff: v1.28.0
     openapi_typescript: 7.13.0
     openapi_fetch: 0.17.0
-    typescript: 7.0.2
+    typescript: 5.9.3
   contract_surface:
     specification: api/openapi/semlia.v1.yaml
     go_types: api/gen/go/types.gen.go

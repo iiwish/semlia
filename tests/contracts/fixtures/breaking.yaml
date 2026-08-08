@@ -1,0 +1,11 @@
+openapi: 3.0.3
+info:
+  title: Compatibility breaking revision
+  version: 2.0.0
+paths:
+  /status:
+    get:
+      operationId: getStatus
+      responses:
+        "200":
+          description: Status

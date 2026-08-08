@@ -1,0 +1,23 @@
+openapi: 3.0.3
+info:
+  title: Compatibility revision
+  version: 1.1.0
+paths:
+  /things:
+    get:
+      operationId: listThings
+      responses:
+        "200":
+          description: Things
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+  /status:
+    get:
+      operationId: getStatus
+      responses:
+        "200":
+          description: Status

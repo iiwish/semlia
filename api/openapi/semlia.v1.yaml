@@ -1,0 +1,248 @@
+openapi: 3.0.3
+info:
+  title: Semlia Control API
+  version: 0.1.0
+  description: Versioned control-plane contract shared by Semlia services and clients.
+  license:
+    name: Apache-2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+x-semlia-contract-version: 1
+servers:
+  - url: http://localhost:8080
+    description: Local development
+tags:
+  - name: System
+    description: Process and dependency status.
+paths:
+  /health/live:
+    get:
+      operationId: getLiveness
+      summary: Check whether the process is alive
+      tags:
+        - System
+      responses:
+        "200":
+          description: The process is alive.
+          headers:
+            X-Trace-ID:
+              $ref: "#/components/headers/TraceId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /health/ready:
+    get:
+      operationId: getReadiness
+      summary: Check whether required dependencies are ready
+      tags:
+        - System
+      responses:
+        "200":
+          description: Required dependencies are ready.
+          headers:
+            X-Trace-ID:
+              $ref: "#/components/headers/TraceId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /api/v1/system/info:
+    get:
+      operationId: getSystemInfo
+      summary: Read public build and contract information
+      tags:
+        - System
+      responses:
+        "200":
+          description: Public service information.
+          headers:
+            X-Trace-ID:
+              $ref: "#/components/headers/TraceId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemInfo"
+        default:
+          $ref: "#/components/responses/Error"
+components:
+  headers:
+    TraceId:
+      description: W3C-compatible trace identifier for support and correlation.
+      required: true
+      schema:
+        $ref: "#/components/schemas/TraceId"
+  responses:
+    Error:
+      description: The request failed.
+      headers:
+        X-Trace-ID:
+          $ref: "#/components/headers/TraceId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ServiceUnavailable:
+      description: A required dependency is unavailable.
+      headers:
+        X-Trace-ID:
+          $ref: "#/components/headers/TraceId"
+        Retry-After:
+          description: Suggested retry delay in seconds.
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+  schemas:
+    ApiVersion:
+      type: string
+      description: Major version used in public API paths and payloads.
+      pattern: "^v[1-9][0-9]*$"
+      example: v1
+    SchemaVersion:
+      type: string
+      description: Semantic version of the public contract bundle.
+      pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"
+      example: 0.1.0
+    ResourceId:
+      type: string
+      description: Stable typed identifier composed of a lowercase prefix and ULID.
+      pattern: "^[a-z][a-z0-9_]{1,31}_[0-9A-HJKMNP-TV-Z]{26}$"
+      example: workspace_01ARZ3NDEKTSV4RRFFQ69G5FAV
+    Timestamp:
+      type: string
+      format: date-time
+      pattern: "Z$"
+      description: RFC 3339 timestamp normalized to UTC at public boundaries.
+      example: "2026-08-08T08:00:00Z"
+    TraceId:
+      type: string
+      description: Lowercase 16-byte W3C trace identifier.
+      pattern: "^[0-9a-f]{32}$"
+      example: 4bf92f3577b34da6a3ce929d0e0e4736
+    Cursor:
+      type: string
+      minLength: 1
+      maxLength: 2048
+      description: Opaque pagination cursor that clients must not interpret.
+    PageInfo:
+      type: object
+      additionalProperties: false
+      required:
+        - limit
+      properties:
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 200
+        nextCursor:
+          $ref: "#/components/schemas/Cursor"
+    ErrorCode:
+      type: string
+      description: Stable machine-readable error identifier.
+      pattern: "^[A-Z][A-Z0-9_]{2,63}$"
+      example: DEPENDENCY_UNAVAILABLE
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - message
+        - traceId
+        - details
+      properties:
+        code:
+          $ref: "#/components/schemas/ErrorCode"
+        message:
+          type: string
+          minLength: 1
+          maxLength: 1024
+        traceId:
+          $ref: "#/components/schemas/TraceId"
+        details:
+          type: object
+          additionalProperties: true
+        retryable:
+          type: boolean
+    EventType:
+      type: string
+      description: Namespaced event type using lowercase dot-separated segments.
+      pattern: "^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9]*)+$"
+      example: system.readiness.changed
+    EventEnvelope:
+      type: object
+      additionalProperties: false
+      required:
+        - specVersion
+        - id
+        - type
+        - source
+        - time
+        - traceId
+        - data
+      properties:
+        specVersion:
+          type: string
+          enum:
+            - semlia.events/v1
+        id:
+          $ref: "#/components/schemas/ResourceId"
+        type:
+          $ref: "#/components/schemas/EventType"
+        source:
+          type: string
+          format: uri
+          example: urn:semlia:control-plane
+        subject:
+          $ref: "#/components/schemas/ResourceId"
+        workspaceId:
+          $ref: "#/components/schemas/ResourceId"
+        time:
+          $ref: "#/components/schemas/Timestamp"
+        traceId:
+          $ref: "#/components/schemas/TraceId"
+        data:
+          type: object
+          additionalProperties: true
+    HealthResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+        - traceId
+      properties:
+        status:
+          type: string
+          enum:
+            - live
+            - ready
+        traceId:
+          $ref: "#/components/schemas/TraceId"
+    SystemInfo:
+      type: object
+      additionalProperties: false
+      required:
+        - service
+        - apiVersion
+        - schemaVersion
+        - buildVersion
+        - traceId
+      properties:
+        service:
+          type: string
+          enum:
+            - semlia
+        apiVersion:
+          $ref: "#/components/schemas/ApiVersion"
+        schemaVersion:
+          $ref: "#/components/schemas/SchemaVersion"
+        buildVersion:
+          type: string
+          minLength: 1
+          maxLength: 128
+        traceId:
+          $ref: "#/components/schemas/TraceId"
