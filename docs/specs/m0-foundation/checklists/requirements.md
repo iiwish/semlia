@@ -4,11 +4,11 @@
 
 | 字段 | 值 |
 | --- | --- |
-| 版本 | 0.2.0 |
+| 版本 | 0.3.0 |
 | 状态 | Completed |
 | Feature | m0-foundation |
 | 最后更新 | 2026-08-08 |
-| Source spec | `docs/specs/m0-foundation/plan.md` v0.2.0 Confirmed |
+| Source spec | `docs/specs/m0-foundation/plan.md` v0.3.0 Confirmed |
 
 ## 1. Checklist Scope
 
@@ -33,6 +33,7 @@ Reviewed artifacts:
 - [x] 性能、可靠性、安全、隐私、可访问性、可观测性和兼容性要求均有覆盖。[NFR]
 - [x] 技术选择与 SSOT 的 P-003、P-005、P-006、P-007、P-008 和 P-009 一致。[Consistency]
 - [x] Git、PostgreSQL、控制面、release、contract、job 和 outbox 术语使用一致。[Terminology]
+- [x] P001 使用独立 prototype package 和显式 mock boundary，不改变 M0 runtime scope 或提前定义 M1 schema。[Scope]
 - [x] 每个 task 都声明依赖、并行边界、冲突、允许文件、测试目标、TDD 和证据。[Executability]
 - [x] T001 的允许文件包含其 repository contract test target。[Executability]
 - [x] 工作图与 task detail 中的 T003、T005、T006、T007 依赖一致。[Consistency]

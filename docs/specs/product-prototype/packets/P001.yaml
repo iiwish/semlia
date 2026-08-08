@@ -1,0 +1,119 @@
+schema_version: 1
+packet_id: PRODUCT-P001-A001
+task_id: P001
+feature_id: product-prototype
+mode: execute_one_task
+adapter: codex
+
+governance_inputs:
+  product_contract: docs/SSOT.md
+  product_design: docs/specs/product-prototype/product-design.md
+  requirements_checklist: docs/specs/product-prototype/checklists/requirements.md
+  work_graph: docs/specs/m0-foundation/tasks.md
+  analysis: docs/specs/product-prototype/analysis.md
+  approval_gates:
+    product_contract: Confirmed by founder on 2026-08-08
+    dependencies: T001 and T002 Accepted
+    prototype_priority: Founder explicitly requested an inspectable frontend prototype before continuing backend tasks on 2026-08-08
+    analysis: Clear for P001 execution
+
+work_unit:
+  title: 建立可检查的产品原型
+  goal: >-
+    通过隔离、诚实标识 mock data 的 React prototype，把 Semlia 的资产发现、可信详情、
+    proposal review、validation evidence、immutable release 和 consumer binding 变成可点击旅程。
+  priority: P0
+  depends_on:
+    - T001
+    - T002
+  blocks:
+    - T003 product review ordering
+    - T004 product review ordering
+  parallel: false
+
+architecture_boundaries:
+  - Prototype lives only in prototypes/product and is not production Web.
+  - Data is repository-local and no network request is allowed.
+  - Session-only actions must never imply durable approval or publication.
+  - Prototype types do not define the M1 domain or public API.
+  - Generated SDK and OpenAPI contract remain unchanged.
+
+design_contract:
+  archetype: Scientific Atlas / Command Center
+  secondary_tension: Editorial precision
+  signature_move: Truth Trace synchronizes asset selection, lineage, evidence and release binding highlights.
+  mandatory:
+    - Persistent Prototype · Mock data boundary
+    - Direct operational first viewport
+    - Overview, Assets, Proposals and Releases views
+    - Asset search/filter/detail and proposal diff/validation review
+    - Desktop and mobile layouts with keyboard focus and reduced motion
+    - Code-native semantic graph as the primary visual asset
+  forbidden:
+    - Marketing hero or chat-first home
+    - Nested cards, decorative gradients, orbs or generic KPI-only dashboard
+    - Remote images, fonts, API calls or persistence
+    - Production web, backend, OpenAPI or M1 schema changes
+
+execution_constraints:
+  branch_or_worktree: current main branch
+  allowed_files:
+    - prototypes/product/**
+    - package.json
+    - pnpm-workspace.yaml
+    - pnpm-lock.yaml
+    - Makefile
+    - docs/specs/product-prototype/**
+    - docs/evidence/P001/**
+    - docs/specs/m0-foundation/plan.md
+    - docs/specs/m0-foundation/tasks.md
+    - docs/specs/m0-foundation/analysis.md
+    - docs/specs/m0-foundation/checklists/requirements.md
+  test_targets:
+    - prototypes/product/src/**/*.test.tsx
+    - prototypes/product/e2e/**/*.spec.ts
+  ownership_notes:
+    - Direct execution is used because delegation was not requested and host policy forbids implicit subagents.
+    - Stop if an allowed file contains unrelated user changes.
+
+tdd_plan:
+  required: true
+  red:
+    command: pnpm --filter @semlia/product-prototype test
+    expected_failure: Tests fail before the application shell and journeys exist.
+  green:
+    command: pnpm --filter @semlia/product-prototype test && pnpm --filter @semlia/product-prototype build
+    expected_signal: Mock boundary, navigation, filtering and proposal review interactions pass and the app builds.
+  refactor:
+    command: pnpm --filter @semlia/product-prototype lint && pnpm --filter @semlia/product-prototype typecheck && pnpm --filter @semlia/product-prototype test:e2e
+    expected_signal: Code quality, desktop/mobile interactions and screenshot review pass.
+
+validation_loop:
+  commands:
+    - pnpm install --frozen-lockfile
+    - pnpm --filter @semlia/product-prototype lint
+    - pnpm --filter @semlia/product-prototype typecheck
+    - pnpm --filter @semlia/product-prototype test
+    - pnpm --filter @semlia/product-prototype build
+    - pnpm --filter @semlia/product-prototype test:e2e
+    - git diff --check
+  visual_viewports:
+    - 1440x900
+    - 1024x768
+    - 390x844
+
+evidence_contract:
+  summary: docs/evidence/P001/summary.md
+  diff: docs/evidence/P001/diff.patch
+  test_results: docs/evidence/P001/test-results.md
+  screenshots: docs/evidence/P001/screenshots/
+  required:
+    - changed files
+    - RED and GREEN results
+    - browser interaction path
+    - desktop and mobile screenshots
+    - design rubric
+    - mock boundary
+    - residual risks
+
+acceptance_rule: P001 moves to Needs_Review after browser QA and to Accepted only after explicit founder acceptance.

@@ -4,7 +4,7 @@
 
 | 字段 | 值 |
 | --- | --- |
-| 版本 | 0.3.0 |
+| 版本 | 0.4.0 |
 | 状态 | Completed |
 | Scope | m0-foundation |
 | 最后更新 | 2026-08-08 |
@@ -12,11 +12,12 @@
 ## 1. Inputs
 
 - Product constitution: `docs/SSOT.md` v0.2.0 Confirmed
-- Feature plan: `docs/specs/m0-foundation/plan.md` v0.2.0 Confirmed
-- Technical decisions: `docs/adr/0001-m0-technical-foundation.md` v0.2.0 Confirmed
-- Requirements checklist: `docs/specs/m0-foundation/checklists/requirements.md` v0.2.0 Completed
-- Work graph: `docs/specs/m0-foundation/tasks.md` v0.2.0 Confirmed
-- Execution packets: T001 已 Accepted；T002 A001 packet 与 OpenAPI-first 技术基线一致
+- Feature plan: `docs/specs/m0-foundation/plan.md` v0.3.0 Confirmed
+- Technical decisions: `docs/adr/0001-m0-technical-foundation.md` v0.2.1 Confirmed
+- Requirements checklist: `docs/specs/m0-foundation/checklists/requirements.md` v0.3.0 Completed
+- Work graph: `docs/specs/m0-foundation/tasks.md` v0.3.0 Confirmed
+- Product prototype design: `docs/specs/product-prototype/product-design.md` v0.1.0 Confirmed
+- Execution packets: T001、T002 已 Accepted；P001 packet 完整且只允许修改隔离原型和治理文件
 
 ## 2. Coverage
 
@@ -40,18 +41,18 @@
 
 Requirements without task coverage: None.
 
-Tasks without requirement or plan mapping: None.
+Tasks without requirement or plan mapping: None. P001 映射 SSOT 产品旅程，用于产品评审，不声明满足 M0 runtime requirement。
 
-Ready or Running tasks without packet: None. T002 A001 packet 完整且与当前技术决策一致。
+Ready or Running tasks without packet: None. P001 packet 明确 mock boundary、设计 contract、可访问性与视觉验证。
 
 Packets missing required fields: None at analysis time.
 
 ## 3. Constitution Check
 
-- P-001、P-002、P-004：M0 不实现语义和 AI 行为，不产生冲突。
+- P-001、P-002、P-004：M0 runtime 不实现语义和 AI 行为；P001 仅以本地 mock data 表达已确认的产品旅程，不创建生产领域行为。
 - P-003：T002、T005、T007 建立版本、迁移和确定性生成基础。
 - P-005：T001 和 T002 保持 Git 可读、可 diff 和 clean-tree 验证。
-- P-006：T002 和 T003 先建立契约与 API，T004 只消费生成客户端。
+- P-006：T002 建立生产契约；P001 与生产路径隔离；T003 建立 API，T004 只消费生成客户端。
 - P-007：M0 不实现执行引擎，仓库边界为 M1 Cube adapter 保留独立 integration 位置。
 - P-008：T001、T003、T006 和 T007 覆盖密钥、配置、日志和供应链安全。
 - P-009：所有任务均要求测试、验证、证据和独立 review。

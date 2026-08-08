@@ -5,7 +5,7 @@
 | 字段 | 值 |
 | --- | --- |
 | Feature | m0-foundation |
-| 版本 | 0.2.1 |
+| 版本 | 0.3.0 |
 | 状态 | Confirmed |
 | 最后更新 | 2026-08-08 |
 | Source | `docs/SSOT.md`, `docs/specs/m0-foundation/plan.md` |
@@ -27,8 +27,9 @@
 ```mermaid
 flowchart TD
     T001["T001 Repository and toolchain baseline"] --> T002["T002 Versioned contract foundation"]
-    T002 --> T003["T003 Control API vertical slice"]
-    T002 --> T004["T004 Web system-status vertical slice"]
+    T002 --> P001["P001 Inspectable product prototype"]
+    P001 --> T003["T003 Control API vertical slice"]
+    P001 --> T004["T004 Web system-status vertical slice"]
     T003 --> T005["T005 PostgreSQL job and outbox"]
     T003 --> T006["T006 Local integrated environment"]
     T004 --> T006
@@ -39,7 +40,8 @@ flowchart TD
 
 可并行边界：
 
-- T003 与 T004 在 T002 完成后可以并行，文件所有权不重叠。
+- P001 是隔离的产品评审路径，不成为生产 Web 或 API 实现；创始人接受核心旅程后继续 T003、T004。
+- T003 与 T004 在 P001 完成后可以并行，文件所有权不重叠。
 - T005 可与 T004 并行，但依赖 T003 提供应用配置和数据库连接边界。
 - T007 可以在 T001 后开始工作流骨架，但最终门禁依赖 T002 至 T006 的验证命令。
 
@@ -60,6 +62,7 @@ Stories:
 
 Tasks:
 
+- [ ] P001 [Product Review] 建立可检查的产品原型
 - [x] T001 [M0-US-001] 建立仓库与工具链基线
 - [x] T002 [M0-US-002] 建立版本化公共契约
 - [ ] T003 [M0-US-002] 实现控制面 API 纵向基础
@@ -84,6 +87,85 @@ Tasks:
 - [ ] T008 [M0-US-001, M0-US-005] 完成 fresh-clone 验收与 M0 交付证据
 
 ## 4. Task Details
+
+### P001 建立可检查的产品原型
+
+Status: Running
+Priority: P0
+Depends on: T001, T002
+Blocks: T003, T004 product review ordering
+Story / Requirement: SSOT sections 5, 6, 7, 8, 17 and 18
+Parallel: No
+Conflicts with: Production `web/**` and API behavior remain outside this task
+
+Goal:
+
+交付一个明确使用 mock data 的独立可点击原型，让创始人直接检查语义资产发现、详情、提案审核、release 和消费者绑定旅程，并据此确认后续产品实现方向。
+
+Allowed files:
+
+- `prototypes/product/**`
+- `package.json`
+- `pnpm-workspace.yaml`
+- `pnpm-lock.yaml`
+- `Makefile`
+- `docs/specs/product-prototype/**`
+- `docs/evidence/P001/**`
+- `docs/specs/m0-foundation/plan.md`
+- `docs/specs/m0-foundation/tasks.md`
+- `docs/specs/m0-foundation/analysis.md`
+- `docs/specs/m0-foundation/checklists/requirements.md`
+
+Test targets:
+
+- `prototypes/product/src/**/*.test.tsx`
+- `prototypes/product/e2e/**/*.spec.ts`
+
+Deliverables:
+
+- 产品原型 design contract、页面与状态清单。
+- Overview、Assets、Proposals 和 Releases 可点击视图。
+- 资产 master-detail、关系图、证据、结构化 diff、验证结果和 release binding。
+- 桌面与移动视觉证据。
+
+Acceptance criteria:
+
+- 首屏直接展示语义资产控制工作，不是营销页或聊天页。
+- 所有 mock data 和本地模拟动作持续、明确标识，不产生真实写入错觉。
+- 用户可以完成查找资产、检查来源、打开提案、查看 diff 与验证、模拟审核、检查 release 绑定的完整路径。
+- 主要导航、筛选、tabs、drawer/dialog 和关键操作支持键盘与可见焦点。
+- 1440x900 与 390x844 无文本溢出、控件遮挡或不可达操作。
+
+Definition of Done:
+
+- lint、typecheck、unit test、build 和 Playwright 主路径通过。
+- 设计 review 和 desktop/mobile screenshot evidence 存在。
+- 用户接受后才能把原型决策转入生产 Web 或 M1 specification。
+
+Validation commands:
+
+- `pnpm --filter @semlia/product-prototype lint`
+- `pnpm --filter @semlia/product-prototype typecheck`
+- `pnpm --filter @semlia/product-prototype test`
+- `pnpm --filter @semlia/product-prototype build`
+- `pnpm --filter @semlia/product-prototype test:e2e`
+- `git diff --check`
+
+TDD plan:
+
+- RED: 为 mock 标识、核心导航、资产筛选和提案审核路径编写失败测试。
+- GREEN: 实现最小多视图原型和真实交互状态。
+- REFACTOR: 对照 design contract 完成响应式、可访问性、视觉和 reduced-motion QA。
+
+Packet path:
+
+- `docs/specs/product-prototype/packets/P001.yaml`
+
+Evidence required:
+
+- Changed files、RED/GREEN results 和 browser interaction results。
+- Desktop/mobile screenshots、design rubric 和 accessibility results。
+- Diff summary、mock boundary 和 residual risks。
 
 ### T001 建立仓库与工具链基线
 
