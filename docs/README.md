@@ -7,6 +7,9 @@
 | 文档 | 作用 | 当前状态 |
 | --- | --- | --- |
 | [SSOT.md](./SSOT.md) | 产品宪法、范围、领域模型、架构、质量标准和路线图 | Confirmed |
+| [M0 TDR](./adr/0001-m0-technical-foundation.md) | M0 技术选择、取舍、风险和任务影响 | Confirmed |
+| [M0 Plan](./specs/m0-foundation/plan.md) | M0 范围、需求、交付顺序和退出标准 | Confirmed |
+| [M0 Work Graph](./specs/m0-foundation/tasks.md) | Epic、Story、Task、依赖、文件边界和验证命令 | Confirmed |
 
 ## 使用规则
 
