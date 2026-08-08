@@ -24,21 +24,17 @@
 
 ## 2. 工作图
 
-```text
-E001 Repository Foundation
-  M0-US-001
-    T001 Repository and toolchain baseline
-      |
-      +--> T002 Versioned contract foundation
-      |      |
-      |      +--> T003 Control API vertical slice --------+
-      |      +--> T004 Web system-status vertical slice --+--> T006 Local integrated environment
-      |                                                   |          |
-      +------------------> T005 PostgreSQL job/outbox -----+          +--> T008 Fresh-clone acceptance
-                                                                     |
-E002 Quality and Distribution                                         |
-  M0-US-005                                                           |
-    T007 CI, security and supply-chain gates -------------------------+
+```mermaid
+flowchart TD
+    T001["T001 Repository and toolchain baseline"] --> T002["T002 Versioned contract foundation"]
+    T002 --> T003["T003 Control API vertical slice"]
+    T002 --> T004["T004 Web system-status vertical slice"]
+    T003 --> T005["T005 PostgreSQL job and outbox"]
+    T003 --> T006["T006 Local integrated environment"]
+    T004 --> T006
+    T005 --> T006
+    T006 --> T007["T007 CI, security and supply-chain gates"]
+    T007 --> T008["T008 Fresh-clone acceptance"]
 ```
 
 可并行边界：
@@ -91,7 +87,7 @@ Tasks:
 
 ### T001 建立仓库与工具链基线
 
-Status: Draft
+Status: Ready
 Priority: P0
 Depends on: None
 Blocks: T002, T003, T004, T005, T006, T007, T008
@@ -122,6 +118,7 @@ Allowed files:
 - `CODE_OF_CONDUCT.md`
 - `SECURITY.md`
 - `scripts/doctor.sh`
+- `tests/repository/test_repository_contract.py`
 
 Test targets:
 
@@ -151,7 +148,7 @@ Validation commands:
 - `make doctor`
 - `make bootstrap`
 - `uv run pytest tests/repository/test_repository_contract.py`
-- `git diff --exit-code`
+- `git diff --check`
 
 TDD plan:
 

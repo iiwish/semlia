@@ -10,6 +10,8 @@
 | [M0 TDR](./adr/0001-m0-technical-foundation.md) | M0 技术选择、取舍、风险和任务影响 | Confirmed |
 | [M0 Plan](./specs/m0-foundation/plan.md) | M0 范围、需求、交付顺序和退出标准 | Confirmed |
 | [M0 Work Graph](./specs/m0-foundation/tasks.md) | Epic、Story、Task、依赖、文件边界和验证命令 | Confirmed |
+| [M0 Requirements Checklist](./specs/m0-foundation/checklists/requirements.md) | M0 需求完整性、可测性和覆盖检查 | Completed |
+| [M0 Consistency Analysis](./specs/m0-foundation/analysis.md) | SSOT、TDR、计划和工作图一致性分析 | Clear for T001 |
 
 ## 使用规则
 
@@ -27,7 +29,9 @@ docs/
   SSOT.md
   adr/                 # 已接受的技术决策
   specs/               # 经确认的功能规格
+    feature-id/packets/ # 单任务自包含执行包
   contracts/           # OpenAPI、事件和插件契约
+  evidence/             # 实现、验证与评审证据
   operations/          # 部署、备份、恢复和安全运行手册
   contributing/        # 开发、测试、评审和发布指南
 ```
