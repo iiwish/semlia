@@ -4,7 +4,7 @@
 
 | 字段 | 值 |
 | --- | --- |
-| 版本 | 0.2.0 |
+| 版本 | 0.3.0 |
 | 状态 | Completed |
 | Scope | m0-foundation |
 | 最后更新 | 2026-08-08 |
@@ -16,7 +16,7 @@
 - Technical decisions: `docs/adr/0001-m0-technical-foundation.md` v0.2.0 Confirmed
 - Requirements checklist: `docs/specs/m0-foundation/checklists/requirements.md` v0.2.0 Completed
 - Work graph: `docs/specs/m0-foundation/tasks.md` v0.2.0 Confirmed
-- Execution packets: T001 A002 packet 与 Go、TypeScript 技术基线一致
+- Execution packets: T001 已 Accepted；T002 A001 packet 与 OpenAPI-first 技术基线一致
 
 ## 2. Coverage
 
@@ -42,7 +42,7 @@ Requirements without task coverage: None.
 
 Tasks without requirement or plan mapping: None.
 
-Ready or Running tasks without packet: None. T001 A002 packet 完整且与当前技术决策一致。
+Ready or Running tasks without packet: None. T002 A001 packet 完整且与当前技术决策一致。
 
 Packets missing required fields: None at analysis time.
 
@@ -114,8 +114,15 @@ Gaps: None blocking M0 execution.
 - Resolution: 将 repository contract test 加入 allowed files。
 - Status: Resolved.
 
+### Low: OpenAPI 3.1 support differs across generators
+
+- Location: `docs/adr/0001-m0-technical-foundation.md`, TDR-006。
+- Impact: 在 Go generator 尚未稳定支持 OpenAPI 3.1 时提前采用会增加生成差异和维护风险。
+- Resolution: M0 固定 OpenAPI 3.0.3，使用锁定的 oapi-codegen、openapi-typescript 和 oasdiff；3.1 升级必须通过独立兼容性评审。
+- Status: Resolved in T002 packet.
+
 ## 7. Execute Gate
 
-- Result: Clear for T001 packetization.
-- Reason: 产品合同、TDR、计划和工作图均已确认；checklist 已完成；没有未解决的 Critical 或 High finding；T001 无未满足依赖。
-- Constraint: 只允许 T001 进入 Ready。T002 至 T008 保持 Draft。
+- Result: Clear for T002 execution.
+- Reason: T001 已由用户明确接受；产品合同、TDR、计划和工作图保持一致；checklist 已完成；没有未解决的 Critical 或 High finding；T002 无其他未满足依赖。
+- Constraint: 只允许 T002 进入 Ready。T003 至 T008 保持 Draft。

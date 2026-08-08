@@ -5,7 +5,7 @@
 | 字段 | 值 |
 | --- | --- |
 | Feature | m0-foundation |
-| 版本 | 0.2.0 |
+| 版本 | 0.2.1 |
 | 状态 | Confirmed |
 | 最后更新 | 2026-08-08 |
 | Source | `docs/SSOT.md`, `docs/specs/m0-foundation/plan.md` |
@@ -168,7 +168,7 @@ Evidence required:
 
 ### T002 建立版本化公共契约
 
-Status: Draft
+Status: Ready
 Priority: P0
 Depends on: T001
 Blocks: T003, T004, T007

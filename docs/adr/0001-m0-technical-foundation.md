@@ -4,7 +4,7 @@
 
 | 字段 | 值 |
 | --- | --- |
-| 版本 | 0.2.0 |
+| 版本 | 0.2.1 |
 | 状态 | Confirmed |
 | 最后更新 | 2026-08-08 |
 | 来源 | `docs/SSOT.md` v0.2.0 Confirmed |
@@ -244,7 +244,9 @@ Task impact:
 Decision:
 
 - OpenAPI、JSON Schema、事件 envelope 和错误代码在 `api/` 中版本化。
+- M0 使用 OpenAPI 3.0.3；稳定工具链完整支持 3.1 后，以独立兼容性决策升级。
 - OpenAPI 是规范来源，生成的 Go transport 类型与 TypeScript 客户端必须和提交的规范工件一致。
+- Go 类型使用 oapi-codegen，TypeScript 类型使用 openapi-typescript，breaking change 检测使用 oasdiff；版本进入锁文件和 Go tool directive。
 - 错误响应统一包含 `code`、`message`、`traceId`、`details` 和可选 `retryable`。
 - 所有公共 ID、时间、分页、幂等键和版本字段拥有统一格式。
 
@@ -269,6 +271,7 @@ Risks:
 Mitigations:
 
 - 只提交需要发布的生成工件，生成过程必须确定且可重复。
+- 生成器使用本地锁定版本和临时目录比较，不从远程 URL 读取规范。
 - CI 使用 clean-tree check 发现漂移。
 
 Task impact:

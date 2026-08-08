@@ -1,0 +1,197 @@
+schema_version: 1
+packet_id: M0-T002-A001
+task_id: T002
+feature_id: m0-foundation
+mode: execute_one_task
+adapter: codex
+
+governance_inputs:
+  product_contract: docs/SSOT.md
+  requirements_checklist: docs/specs/m0-foundation/checklists/requirements.md
+  technical_decisions: docs/adr/0001-m0-technical-foundation.md
+  feature_plan: docs/specs/m0-foundation/plan.md
+  work_graph: docs/specs/m0-foundation/tasks.md
+  analysis: docs/specs/m0-foundation/analysis.md
+  approval_gates:
+    product_contract: Confirmed by founder on 2026-08-08
+    technical_plan_and_work_graph: Confirmed by founder on 2026-08-08
+    dependency_t001: Accepted by founder on 2026-08-08
+    task_execution: Founder explicitly requested continuing T002 on 2026-08-08
+    analysis: Clear for T002 execution
+
+work_unit:
+  title: 建立版本化公共契约
+  goal: >-
+    建立 OpenAPI-first 的最小 API 与事件契约，生成 Go transport 类型和 TypeScript 客户端，
+    并提供 schema 验证、breaking change、确定性生成和 drift 检查。
+  epic: E001
+  story: M0-US-002
+  requirements:
+    - M0-FR-002
+    - M0-NFR-003
+    - M0-NFR-006
+  priority: P0
+  depends_on:
+    - T001
+  blocks:
+    - T003
+    - T004
+    - T007
+  parallel: false
+  conflicts_with:
+    - T003 and T004 must not create duplicate public DTOs before T002 is accepted.
+
+codebase_context:
+  repository_state:
+    branch: main
+    baseline_commit: a0b5254
+    implementation_state: T001 accepted; Go module and TypeScript workspace baseline exist
+  local_instructions:
+    - Follow the session-level AGENTS.md guidance.
+    - Use pnpm rather than npm.
+    - Use apply_patch for manual edits and generated commands only for generated artifacts and lockfiles.
+    - Keep canonical documentation in present tense.
+  architecture_boundaries:
+    - OpenAPI is the canonical transport contract.
+    - M0 uses OpenAPI 3.0.3 because stable oapi-codegen supports 3.0, not 3.1.
+    - Generated Go types are transport boundary types and must not become domain entities.
+    - TypeScript uses generated schema types through a thin openapi-fetch client.
+    - Contract generation reads only repository-local specifications.
+  pinned_tools:
+    oapi_codegen: v2.8.0
+    kin_openapi: v0.146.0
+    oasdiff: v1.28.0
+    openapi_typescript: 7.13.0
+    openapi_fetch: 0.17.0
+    typescript: 7.0.2
+  contract_surface:
+    specification: api/openapi/semlia.v1.yaml
+    go_types: api/gen/go/types.gen.go
+    typescript_types: sdk/typescript/src/schema.gen.ts
+    typescript_client: sdk/typescript/src/client.ts
+    required_schemas:
+      - ApiVersion
+      - ResourceId
+      - Timestamp
+      - TraceId
+      - PageInfo
+      - ErrorResponse
+      - EventEnvelope
+      - HealthResponse
+      - SystemInfo
+    required_operations:
+      - getLiveness
+      - getReadiness
+      - getSystemInfo
+  forbidden_changes:
+    - Do not implement HTTP handlers, databases, workers, Web pages, Cube connectors, MCP or Agent behavior.
+    - Do not define semantic asset, proposal, review, release or policy business schemas.
+    - Do not create handwritten duplicate Go or TypeScript DTOs.
+    - Do not use remote schemas or unpinned generator versions.
+    - Do not adopt OpenAPI 3.1 inside this task.
+
+execution_constraints:
+  branch_or_worktree: current main branch
+  allowed_files:
+    - api/**
+    - internal/domain/**
+    - sdk/typescript/**
+    - scripts/generate-contracts.sh
+    - tests/contracts/**
+    - Makefile
+    - go.mod
+    - go.sum
+    - package.json
+    - pnpm-lock.yaml
+  test_targets:
+    - tests/contracts/**/*_test.go
+    - sdk/typescript/src/**/*.test.ts
+  ownership_notes:
+    - Governance status and evidence files are updated by the orchestrator.
+    - Direct execution is used because host policy requires explicit user authorization before delegation and none was requested.
+    - Stop if an allowed file contains unrelated user changes.
+
+tdd_plan:
+  required: true
+  exception: null
+  red:
+    preparation:
+      - Add the repository-level contract test before specifications, generated files or generator dependencies.
+    command: go test ./tests/contracts/...
+    expected_failure: Contract test fails because the canonical specification and generated artifacts do not exist.
+  green:
+    command: make contracts && go test ./tests/contracts/... && pnpm --filter @semlia/sdk-typescript test
+    expected_signal: Spec validation, valid/invalid payload matrix and generated Go/TypeScript compilation pass.
+  refactor:
+    command: make contracts-check && go test -race ./tests/contracts/... && go vet ./...
+    expected_signal: Regeneration is byte-stable, drift is absent and compatibility fixtures behave as expected.
+
+validation_loop:
+  commands:
+    - make contracts
+    - make contracts-check
+    - go test -race ./tests/contracts/...
+    - go test ./...
+    - go vet ./...
+    - go mod tidy -diff
+    - pnpm --filter @semlia/sdk-typescript test
+    - pnpm install --frozen-lockfile
+    - git diff --check
+  deterministic_check:
+    - Record SHA-256 hashes for generated Go and TypeScript files.
+    - Run make contracts twice.
+    - Confirm both hashes are unchanged.
+  compatibility_check:
+    - oasdiff accepts the compatible fixture.
+    - oasdiff rejects the breaking fixture.
+    - Current public spec validates with all references resolved.
+  retry_budget: 2
+  failure_policy:
+    first_failure: Fix only an issue directly caused by T002 files or pinned tool compatibility.
+    second_failure: Determine whether the failure requires a TDR or scope update.
+    beyond_budget: Stop and create blocked evidence without weakening contract tests.
+
+evidence_contract:
+  summary: docs/evidence/T002/summary.md
+  diff: docs/evidence/T002/diff.patch
+  test_results: docs/evidence/T002/test-results.md
+  required:
+    - changed files
+    - schema and operation inventory
+    - valid and invalid payload matrix
+    - RED, GREEN and REFACTOR results
+    - deterministic generation hashes
+    - compatibility fixture results
+    - validation results
+    - diff summary
+    - residual risks
+
+review_contract:
+  required_passes:
+    - spec_compliance
+    - bug_code_quality
+    - qa_acceptance
+  focus:
+    - No M1 business schema leakage
+    - Stable IDs, timestamps, errors and event envelope
+    - Generated boundary types are deterministic and compile
+    - Breaking changes are detectable before CI integration
+    - No remote schema or generated timestamp makes builds nondeterministic
+  acceptance_rule: T002 can move to Needs_Review after evidence and to Accepted only after explicit user acceptance.
+
+handoff:
+  external_issue: null
+  pull_request: null
+  finish_options:
+    - keep changes on main for user review
+    - commit after explicit acceptance
+    - push and create PR after explicit request
+
+stop_conditions:
+  - An allowed file has unrelated user changes.
+  - A pinned generator cannot run with Go 1.26.3 or Node.js 24.15.0.
+  - Stable generators require OpenAPI 3.1 or cannot produce both Go and TypeScript types from the 3.0.3 specification.
+  - Implementing the task requires semantic asset business schemas or runtime handler behavior.
+  - Deterministic generation cannot be achieved without network access at generation time.
+  - The compatibility fixture cannot distinguish a safe addition from a breaking removal.
+  - An unresolved Critical or High finding appears.
