@@ -4,10 +4,10 @@
 
 | 字段 | 值 |
 | --- | --- |
-| 版本 | 0.4.0 |
+| 版本 | 0.14.0 |
 | 状态 | Completed |
 | Scope | m0-foundation |
-| 最后更新 | 2026-08-08 |
+| 最后更新 | 2026-08-10 |
 
 ## 1. Inputs
 
@@ -15,9 +15,9 @@
 - Feature plan: `docs/specs/m0-foundation/plan.md` v0.3.0 Confirmed
 - Technical decisions: `docs/adr/0001-m0-technical-foundation.md` v0.2.1 Confirmed
 - Requirements checklist: `docs/specs/m0-foundation/checklists/requirements.md` v0.3.0 Completed
-- Work graph: `docs/specs/m0-foundation/tasks.md` v0.3.0 Confirmed
+- Work graph: `docs/specs/m0-foundation/tasks.md` v0.4.0 Confirmed
 - Product prototype design: `docs/specs/product-prototype/product-design.md` v0.1.0 Confirmed
-- Execution packets: T001、T002 已 Accepted；P001 packet 完整且只允许修改隔离原型和治理文件
+- Execution packets: T001、T002、P001、T003、T004、T005、T006 已 Accepted；T007 本地 implementation、evidence 和三轮 review 完成，M0-T007-A001 因 remote CI gate 状态为 Blocked
 
 ## 2. Coverage
 
@@ -43,7 +43,7 @@ Requirements without task coverage: None.
 
 Tasks without requirement or plan mapping: None. P001 映射 SSOT 产品旅程，用于产品评审，不声明满足 M0 runtime requirement。
 
-Ready or Running tasks without packet: None. P001 packet 明确 mock boundary、设计 contract、可访问性与视觉验证。
+Ready or Running tasks without packet: None. T007 packet 覆盖本地可复现门禁、最小权限 workflow、依赖/密钥/容器扫描、SBOM、checksum 和可签名 release artifact。
 
 Packets missing required fields: None at analysis time.
 
@@ -124,6 +124,8 @@ Gaps: None blocking M0 execution.
 
 ## 7. Execute Gate
 
-- Result: Clear for T002 execution.
-- Reason: T001 已由用户明确接受；产品合同、TDR、计划和工作图保持一致；checklist 已完成；没有未解决的 Critical 或 High finding；T002 无其他未满足依赖。
-- Constraint: 只允许 T002 进入 Ready。T003 至 T008 保持 Draft。
+- Result: Blocked only by the external T007 CI run gate.
+- Local completion: CI contract RED/GREEN、完整 `make check`、独立 security/build/SBOM/release/repository validation 和三轮 review 均通过；缓存态完整本地 gate 为 61.33 秒。
+- Security result: Trivy 0.73.0 immutable-digest scan 对 Go modules、production/development pnpm dependencies、repository secrets、container OS 和 Go binary 均报告 0 个 High/Critical finding。
+- Artifact result: 4.2 MB archive 包含 version、完整 commit、migrations、notices 和 21-component CycloneDX 1.7 SBOM；archive 与外部 SBOM 的 SHA-256 校验通过。
+- External gate: 当前 checkout 没有 Git remote，无法生成真实 GitHub Actions run URL 或测量 hosted job durations；T007 在至少完成一次远端完整绿色运行前不得进入 `Needs_Review` 或 `Accepted`，T008 保持 Draft。

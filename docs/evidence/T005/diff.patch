@@ -1,0 +1,3378 @@
+diff --git a/Makefile b/Makefile
+index e1e19a6..9cf2ea1 100644
+--- a/Makefile
++++ b/Makefile
+@@ -4,7 +4,7 @@ SHELL := /usr/bin/env bash
+ GO ?= go
+ PNPM ?= pnpm
+ 
+-.PHONY: help bootstrap build server contracts contracts-check doctor clean prototype prototype-build test-contracts test-repository
++.PHONY: help bootstrap build server contracts contracts-check doctor clean prototype prototype-build test-contracts test-repository db-generate db-generate-check db-test db-migrate-up db-migrate-down db-migrate-version
+ 
+ help:
+ 	@printf '%s\n' \
+@@ -15,6 +15,10 @@ help:
+ 		'  make server          Run the Semlia control-plane server' \
+ 		'  make contracts       Generate Go and TypeScript contract artifacts' \
+ 		'  make contracts-check Verify committed contract artifacts are current' \
++		'  make db-generate      Generate typed PostgreSQL queries with sqlc' \
++		'  make db-test          Run isolated PostgreSQL integration tests' \
++		'  make db-migrate-up    Apply migrations to SEMLIA_DATABASE_URL' \
++		'  make db-migrate-down  Revert migrations on SEMLIA_DATABASE_URL' \
+ 		'  make prototype       Start the inspectable product prototype' \
+ 		'  make prototype-build Build the product prototype' \
+ 		'  make test-contracts  Run public contract tests' \
+@@ -40,6 +44,27 @@ contracts:
+ contracts-check:
+ 	@./scripts/generate-contracts.sh --check
+ 
++db-generate:
++	$(GO) tool sqlc generate -f db/sqlc.yaml
++
++db-generate-check:
++	@before="$$(find internal/adapters/postgres/sqlc -type f -exec cksum {} + | sort)"; \
++	$(GO) tool sqlc generate -f db/sqlc.yaml; \
++	after="$$(find internal/adapters/postgres/sqlc -type f -exec cksum {} + | sort)"; \
++	test "$$before" = "$$after"
++
++db-test:
++	$(GO) test ./tests/integration/db/... ./tests/integration/worker/...
++
++db-migrate-up:
++	SEMLIA_MIGRATIONS_PATH="$(CURDIR)/migrations" $(GO) run ./cmd/semlia migrate up
++
++db-migrate-down:
++	SEMLIA_MIGRATIONS_PATH="$(CURDIR)/migrations" $(GO) run ./cmd/semlia migrate down
++
++db-migrate-version:
++	SEMLIA_MIGRATIONS_PATH="$(CURDIR)/migrations" $(GO) run ./cmd/semlia migrate version
++
+ prototype:
+ 	$(PNPM) --filter @semlia/product-prototype dev
+ 
+diff --git a/cmd/semlia/main.go b/cmd/semlia/main.go
+index 2610067..b8e3b98 100644
+--- a/cmd/semlia/main.go
++++ b/cmd/semlia/main.go
+@@ -9,10 +9,13 @@ import (
+ 	"net/http"
+ 	"os"
+ 	"os/signal"
++	"strings"
+ 	"syscall"
+ 	"time"
+ 
++	pgstore "github.com/semlia/semlia/internal/adapters/postgres"
+ 	"github.com/semlia/semlia/internal/application"
++	"github.com/semlia/semlia/internal/application/jobs"
+ 	"github.com/semlia/semlia/internal/domain"
+ 	"github.com/semlia/semlia/internal/platform/config"
+ 	httpapi "github.com/semlia/semlia/internal/platform/http"
+@@ -24,6 +27,12 @@ const (
+ 	schemaVersion = "0.1.0"
+ )
+ 
++var (
++	errMigrationInitialize = errors.New("migration initialization failed")
++	errMigrationApply      = errors.New("migration operation failed")
++	errMigrationFinalize   = errors.New("migration finalization failed")
++)
++
+ func main() {
+ 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+ 	defer stop()
+@@ -31,7 +40,7 @@ func main() {
+ }
+ 
+ func run(ctx context.Context, args []string, lookup config.LookupEnv, stdout, stderr io.Writer) int {
+-	if len(args) != 1 {
++	if !validCommand(args) {
+ 		printUsage(stderr)
+ 		return 2
+ 	}
+@@ -52,10 +61,119 @@ func run(ctx context.Context, args []string, lookup config.LookupEnv, stdout, st
+ 			return 1
+ 		}
+ 		return 0
++	case "migrate":
++		if cfg.DatabaseURL == "" {
++			fmt.Fprintln(stderr, "migration error: database is not configured")
++			return 1
++		}
++		if err := migrateDatabase(cfg.DatabaseURL, migrationPath(lookup), args[1], stdout); err != nil {
++			fmt.Fprintf(stderr, "migration error: %s\n", migrationFailureStage(err))
++			return 1
++		}
++		return 0
++	case "worker":
++		if cfg.DatabaseURL == "" {
++			fmt.Fprintln(stderr, "worker error: database is not configured")
++			return 1
++		}
++		if err := runWorker(ctx, cfg.DatabaseURL); err != nil {
++			fmt.Fprintln(stderr, "worker error: operation failed")
++			return 1
++		}
++		return 0
++	}
++	return 2
++}
++
++func validCommand(args []string) bool {
++	if len(args) == 1 {
++		return args[0] == "doctor" || args[0] == "server" || args[0] == "worker"
++	}
++	if len(args) == 2 && args[0] == "migrate" {
++		return args[1] == "up" || args[1] == "down" || args[1] == "version"
++	}
++	return false
++}
++
++func migrationPath(lookup config.LookupEnv) string {
++	if value, ok := lookup("SEMLIA_MIGRATIONS_PATH"); ok && strings.TrimSpace(value) != "" {
++		return strings.TrimSpace(value)
++	}
++	return "migrations"
++}
++
++func migrateDatabase(databaseURL, migrationsPath, action string, output io.Writer) (resultErr error) {
++	migrator, err := pgstore.NewMigrator(databaseURL, migrationsPath)
++	if err != nil {
++		return fmt.Errorf("%w: %w", errMigrationInitialize, err)
++	}
++	defer func() {
++		if err := migrator.Close(); resultErr == nil && err != nil {
++			resultErr = fmt.Errorf("%w: %w", errMigrationFinalize, err)
++		}
++	}()
++
++	switch action {
++	case "up":
++		if err := migrator.Up(); err != nil {
++			return fmt.Errorf("%w: %w", errMigrationApply, err)
++		}
++		fmt.Fprintln(output, "migration up complete")
++	case "down":
++		if err := migrator.Down(); err != nil {
++			return fmt.Errorf("%w: %w", errMigrationApply, err)
++		}
++		fmt.Fprintln(output, "migration down complete")
++	case "version":
++		version, dirty, err := migrator.Version()
++		if err != nil {
++			return fmt.Errorf("%w: %w", errMigrationApply, err)
++		}
++		if version == 0 {
++			fmt.Fprintln(output, "migration version: empty")
++			return nil
++		}
++		fmt.Fprintf(output, "migration version: %d (dirty=%t)\n", version, dirty)
++	}
++	return nil
++}
++
++func migrationFailureStage(err error) string {
++	switch {
++	case errors.Is(err, errMigrationInitialize):
++		return "initialization failed"
++	case errors.Is(err, errMigrationFinalize):
++		return "finalization failed"
+ 	default:
+-		printUsage(stderr)
+-		return 2
++		return "operation failed"
++	}
++}
++
++func runWorker(ctx context.Context, databaseURL string) error {
++	pool, err := pgstore.Open(ctx, databaseURL)
++	if err != nil {
++		return err
++	}
++	defer pool.Close()
++
++	worker := jobs.NewWorker(
++		pgstore.NewStore(pool),
++		jobs.ClockFunc(time.Now),
++		jobs.BackoffFunc(workerBackoff),
++		30*time.Second,
++	)
++	owner := fmt.Sprintf("worker-%d", os.Getpid())
++	return worker.Run(ctx, owner, 500*time.Millisecond)
++}
++
++func workerBackoff(attempt int32) time.Duration {
++	if attempt < 1 {
++		attempt = 1
++	}
++	if attempt > 6 {
++		attempt = 6
+ 	}
++	return time.Second << (attempt - 1)
+ }
+ 
+ func serve(ctx context.Context, cfg config.Config, output io.Writer) error {
+@@ -113,5 +231,6 @@ func newLogger(format config.LogFormat, output io.Writer) *slog.Logger {
+ }
+ 
+ func printUsage(output io.Writer) {
+-	fmt.Fprintln(output, "usage: semlia <server|doctor>")
++	fmt.Fprintln(output, "usage: semlia <server|doctor|worker|migrate>")
++	fmt.Fprintln(output, "       semlia migrate <up|down|version>")
+ }
+diff --git a/cmd/semlia/main_test.go b/cmd/semlia/main_test.go
+index d3dbc4d..ae94026 100644
+--- a/cmd/semlia/main_test.go
++++ b/cmd/semlia/main_test.go
+@@ -44,7 +44,37 @@ func TestDoctorDoesNotEchoInvalidProductionSecrets(t *testing.T) {
+ func TestUnknownCommandPrintsUsage(t *testing.T) {
+ 	var stderr bytes.Buffer
+ 	code := run(context.Background(), []string{"unknown"}, emptyEnvironment, ioDiscard{}, &stderr)
+-	if code != 2 || !strings.Contains(stderr.String(), "server|doctor") {
++	if code != 2 || !strings.Contains(stderr.String(), "server|doctor|worker|migrate") {
++		t.Fatalf("exit = %d, stderr = %s", code, stderr.String())
++	}
++}
++
++func TestMigrateRequiresDatabaseConfiguration(t *testing.T) {
++	var stderr bytes.Buffer
++	code := run(context.Background(), []string{"migrate", "up"}, emptyEnvironment, ioDiscard{}, &stderr)
++	if code != 1 {
++		t.Fatalf("exit = %d, stderr = %s", code, stderr.String())
++	}
++	if stderr.String() != "migration error: database is not configured\n" {
++		t.Fatalf("stderr = %q", stderr.String())
++	}
++}
++
++func TestWorkerRequiresDatabaseConfiguration(t *testing.T) {
++	var stderr bytes.Buffer
++	code := run(context.Background(), []string{"worker"}, emptyEnvironment, ioDiscard{}, &stderr)
++	if code != 1 {
++		t.Fatalf("exit = %d, stderr = %s", code, stderr.String())
++	}
++	if stderr.String() != "worker error: database is not configured\n" {
++		t.Fatalf("stderr = %q", stderr.String())
++	}
++}
++
++func TestMigrateRejectsUnknownAction(t *testing.T) {
++	var stderr bytes.Buffer
++	code := run(context.Background(), []string{"migrate", "force"}, emptyEnvironment, ioDiscard{}, &stderr)
++	if code != 2 || !strings.Contains(stderr.String(), "migrate <up|down|version>") {
+ 		t.Fatalf("exit = %d, stderr = %s", code, stderr.String())
+ 	}
+ }
+diff --git a/db/README.md b/db/README.md
+new file mode 100644
+index 0000000..1a36c44
+--- /dev/null
++++ b/db/README.md
+@@ -0,0 +1,19 @@
++# PostgreSQL persistence
++
++Semlia uses PostgreSQL 18 as its only transactional database. Schema changes are explicit: application and worker startup never run DDL. Use `semlia migrate` or the root `db-migrate-*` Make targets.
++
++## Migration baseline
++
++`000001_m0_foundation` owns the M0 workspace identity, immutable audit facts, leased jobs, and transactional outbox tables. The down migration removes those tables in dependency order. PostgreSQL check constraints keep lease and terminal-state fields consistent.
++
++## Query and index policy
++
++Job and outbox claim queries order available work by `available_at`, `created_at`, and `id`, then lock one row with `FOR UPDATE SKIP LOCKED`. The matching partial indexes only contain claimable states. Separate partial indexes support expired-lease scans, while workspace/status indexes support operational history views. Integration tests use `EXPLAIN` with sequential scans disabled to detect query/index drift.
++
++## Retention guidance
++
++- Retain succeeded jobs for 30 days and dead-letter jobs for 90 days.
++- Retain published outbox events for 7 days; retain retryable and dead-letter events until resolved.
++- Retain audit events according to the product's audit policy. M0 does not implement audit deletion.
++
++Retention is operational guidance for a later maintenance job. This migration deliberately contains no automatic deletion or partition policy.
+diff --git a/db/queries/audit.sql b/db/queries/audit.sql
+new file mode 100644
+index 0000000..3459454
+--- /dev/null
++++ b/db/queries/audit.sql
+@@ -0,0 +1,7 @@
++-- name: CreateAuditEvent :exec
++INSERT INTO audit_events (
++    id, workspace_id, event_type, actor_id, payload, trace_id, created_at
++) VALUES (
++    sqlc.arg(id), sqlc.arg(workspace_id), sqlc.arg(event_type),
++    sqlc.narg(actor_id), sqlc.arg(payload), sqlc.arg(trace_id), sqlc.arg(created_at)
++);
+diff --git a/db/queries/jobs.sql b/db/queries/jobs.sql
+new file mode 100644
+index 0000000..2ba08a8
+--- /dev/null
++++ b/db/queries/jobs.sql
+@@ -0,0 +1,72 @@
++-- name: EnqueueJob :one
++INSERT INTO jobs (
++    id, workspace_id, job_type, payload, max_attempts,
++    available_at, idempotency_key, trace_id
++) VALUES (
++    sqlc.arg(id), sqlc.arg(workspace_id), sqlc.arg(job_type), sqlc.arg(payload),
++    sqlc.arg(max_attempts), sqlc.arg(available_at), sqlc.arg(idempotency_key), sqlc.arg(trace_id)
++)
++ON CONFLICT (workspace_id, idempotency_key) DO UPDATE
++SET idempotency_key = EXCLUDED.idempotency_key
++RETURNING *;
++
++-- name: ReapExpiredJobs :execrows
++UPDATE jobs
++SET status = CASE WHEN attempt >= max_attempts THEN 'dead_letter' ELSE 'retryable' END,
++    available_at = sqlc.arg(expired_at),
++    leased_until = NULL,
++    lease_owner = NULL,
++    last_error_code = 'LEASE_EXPIRED',
++    updated_at = sqlc.arg(expired_at),
++    completed_at = CASE WHEN attempt >= max_attempts THEN sqlc.arg(expired_at) ELSE NULL END
++WHERE status = 'running'
++  AND leased_until <= sqlc.arg(expired_at);
++
++-- name: ClaimJob :one
++WITH candidate AS (
++    SELECT id
++    FROM jobs
++    WHERE status IN ('queued', 'retryable')
++      AND available_at <= sqlc.arg(claimed_at)
++    ORDER BY available_at, created_at, id
++    FOR UPDATE SKIP LOCKED
++    LIMIT 1
++)
++UPDATE jobs
++SET status = 'running',
++    attempt = attempt + 1,
++    leased_until = sqlc.arg(leased_until),
++    lease_owner = sqlc.arg(lease_owner),
++    last_error_code = NULL,
++    updated_at = sqlc.arg(claimed_at)
++FROM candidate
++WHERE jobs.id = candidate.id
++RETURNING jobs.*;
++
++-- name: MarkJobSucceeded :execrows
++UPDATE jobs
++SET status = 'succeeded',
++    leased_until = NULL,
++    lease_owner = NULL,
++    last_error_code = NULL,
++    updated_at = sqlc.arg(completed_at),
++    completed_at = sqlc.arg(completed_at)
++WHERE id = sqlc.arg(id)
++  AND status = 'running'
++  AND lease_owner = sqlc.arg(lease_owner);
++
++-- name: MarkJobFailed :execrows
++UPDATE jobs
++SET status = CASE WHEN attempt >= max_attempts THEN 'dead_letter' ELSE 'retryable' END,
++    available_at = sqlc.arg(available_at),
++    leased_until = NULL,
++    lease_owner = NULL,
++    last_error_code = sqlc.arg(error_code),
++    updated_at = sqlc.arg(failed_at),
++    completed_at = CASE
++        WHEN attempt >= max_attempts THEN sqlc.arg(failed_at)::timestamptz
++        ELSE NULL::timestamptz
++    END
++WHERE id = sqlc.arg(id)
++  AND status = 'running'
++  AND lease_owner = sqlc.arg(lease_owner);
+diff --git a/db/queries/outbox.sql b/db/queries/outbox.sql
+new file mode 100644
+index 0000000..9c6f207
+--- /dev/null
++++ b/db/queries/outbox.sql
+@@ -0,0 +1,63 @@
++-- name: EnqueueOutboxEvent :exec
++INSERT INTO outbox_events (
++    id, workspace_id, event_type, payload, max_attempts, available_at, trace_id
++) VALUES (
++    sqlc.arg(id), sqlc.arg(workspace_id), sqlc.arg(event_type), sqlc.arg(payload),
++    sqlc.arg(max_attempts), sqlc.arg(available_at), sqlc.arg(trace_id)
++);
++
++-- name: ReapExpiredOutboxEvents :execrows
++UPDATE outbox_events
++SET status = CASE WHEN attempt >= max_attempts THEN 'dead_letter' ELSE 'retryable' END,
++    available_at = sqlc.arg(expired_at),
++    leased_until = NULL,
++    lease_owner = NULL,
++    last_error_code = 'LEASE_EXPIRED',
++    updated_at = sqlc.arg(expired_at)
++WHERE status = 'publishing'
++  AND leased_until <= sqlc.arg(expired_at);
++
++-- name: ClaimOutboxEvent :one
++WITH candidate AS (
++    SELECT id
++    FROM outbox_events
++    WHERE status IN ('queued', 'retryable')
++      AND available_at <= sqlc.arg(claimed_at)
++    ORDER BY available_at, created_at, id
++    FOR UPDATE SKIP LOCKED
++    LIMIT 1
++)
++UPDATE outbox_events
++SET status = 'publishing',
++    attempt = attempt + 1,
++    leased_until = sqlc.arg(leased_until),
++    lease_owner = sqlc.arg(lease_owner),
++    last_error_code = NULL,
++    updated_at = sqlc.arg(claimed_at)
++FROM candidate
++WHERE outbox_events.id = candidate.id
++RETURNING outbox_events.*;
++
++-- name: MarkOutboxEventPublished :execrows
++UPDATE outbox_events
++SET status = 'published',
++    leased_until = NULL,
++    lease_owner = NULL,
++    last_error_code = NULL,
++    updated_at = sqlc.arg(published_at),
++    published_at = sqlc.arg(published_at)
++WHERE id = sqlc.arg(id)
++  AND status = 'publishing'
++  AND lease_owner = sqlc.arg(lease_owner);
++
++-- name: MarkOutboxEventFailed :execrows
++UPDATE outbox_events
++SET status = CASE WHEN attempt >= max_attempts THEN 'dead_letter' ELSE 'retryable' END,
++    available_at = sqlc.arg(available_at),
++    leased_until = NULL,
++    lease_owner = NULL,
++    last_error_code = sqlc.arg(error_code),
++    updated_at = sqlc.arg(failed_at)
++WHERE id = sqlc.arg(id)
++  AND status = 'publishing'
++  AND lease_owner = sqlc.arg(lease_owner);
+diff --git a/db/queries/workspaces.sql b/db/queries/workspaces.sql
+new file mode 100644
+index 0000000..2d092f6
+--- /dev/null
++++ b/db/queries/workspaces.sql
+@@ -0,0 +1,4 @@
++-- name: CreateWorkspace :one
++INSERT INTO workspaces (id, slug, display_name)
++VALUES ($1, $2, $3)
++RETURNING *;
+diff --git a/db/sqlc.yaml b/db/sqlc.yaml
+new file mode 100644
+index 0000000..002a9de
+--- /dev/null
++++ b/db/sqlc.yaml
+@@ -0,0 +1,15 @@
++version: "2"
++sql:
++  - engine: postgresql
++    schema:
++      - ../migrations/000001_m0_foundation.up.sql
++    queries:
++      - queries
++    gen:
++      go:
++        package: dbgen
++        out: ../internal/adapters/postgres/sqlc
++        sql_package: pgx/v5
++        emit_json_tags: true
++        emit_interface: false
++        emit_empty_slices: true
+diff --git a/go.mod b/go.mod
+index e10eda5..f0303b1 100644
+--- a/go.mod
++++ b/go.mod
+@@ -7,38 +7,99 @@ toolchain go1.26.3
+ tool (
+ 	github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
+ 	github.com/oasdiff/oasdiff
++	github.com/sqlc-dev/sqlc/cmd/sqlc
+ )
+ 
+ require (
+ 	github.com/getkin/kin-openapi v0.146.0
+-	go.opentelemetry.io/otel v1.36.0
+-	go.opentelemetry.io/otel/sdk v1.36.0
+-	go.opentelemetry.io/otel/trace v1.36.0
++	github.com/golang-migrate/migrate/v4 v4.19.1
++	github.com/jackc/pgx/v5 v5.10.0
++	github.com/testcontainers/testcontainers-go v0.44.0
++	github.com/testcontainers/testcontainers-go/modules/postgres v0.44.0
++	go.opentelemetry.io/otel v1.44.0
++	go.opentelemetry.io/otel/sdk v1.44.0
++	go.opentelemetry.io/otel/trace v1.44.0
+ )
+ 
+ require (
++	cel.dev/expr v0.25.1 // indirect
+ 	cloud.google.com/go v0.123.0 // indirect
++	dario.cat/mergo v1.0.2 // indirect
++	filippo.io/edwards25519 v1.1.1 // indirect
++	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
++	github.com/Microsoft/go-winio v0.6.2 // indirect
+ 	github.com/TwiN/go-color v1.4.1 // indirect
++	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
+ 	github.com/bahlo/generic-list-go v0.2.0 // indirect
+ 	github.com/buger/jsonparser v1.1.2 // indirect
++	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
++	github.com/cespare/xxhash/v2 v2.3.0 // indirect
++	github.com/containerd/errdefs v1.0.0 // indirect
++	github.com/containerd/errdefs/pkg v0.3.0 // indirect
++	github.com/containerd/log v0.1.0 // indirect
++	github.com/containerd/platforms v0.2.1 // indirect
++	github.com/coreos/go-semver v0.3.1 // indirect
++	github.com/cpuguy83/dockercfg v0.3.2 // indirect
++	github.com/cubicdaiya/gonp v1.0.4 // indirect
++	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
++	github.com/distribution/reference v0.6.0 // indirect
++	github.com/docker/go-connections v0.7.0 // indirect
++	github.com/docker/go-units v0.5.0 // indirect
+ 	github.com/dprotaso/go-yit v0.0.0-20220510233725-9ba8df137936 // indirect
++	github.com/ebitengine/purego v0.10.1 // indirect
++	github.com/fatih/structtag v1.2.0 // indirect
++	github.com/felixge/httpsnoop v1.1.0 // indirect
+ 	github.com/fsnotify/fsnotify v1.9.0 // indirect
+ 	github.com/go-logr/logr v1.4.3 // indirect
+ 	github.com/go-logr/stdr v1.2.2 // indirect
++	github.com/go-ole/go-ole v1.3.0 // indirect
+ 	github.com/go-openapi/jsonpointer v0.23.1 // indirect
+ 	github.com/go-openapi/swag/jsonname v0.26.0 // indirect
++	github.com/go-sql-driver/mysql v1.9.3 // indirect
+ 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
++	github.com/google/cel-go v0.28.0 // indirect
+ 	github.com/google/uuid v1.6.0 // indirect
+ 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
+ 	github.com/invopop/jsonschema v0.14.0 // indirect
++	github.com/jackc/pgpassfile v1.0.0 // indirect
++	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
++	github.com/jackc/puddle/v2 v2.2.2 // indirect
++	github.com/jinzhu/inflection v1.0.0 // indirect
++	github.com/klauspost/compress v1.18.6 // indirect
++	github.com/lib/pq v1.12.3 // indirect
++	github.com/lufia/plan9stats v0.0.0-20260330125221-c963978e514e // indirect
++	github.com/magiconair/properties v1.8.10 // indirect
++	github.com/moby/docker-image-spec v1.3.1 // indirect
++	github.com/moby/go-archive v0.2.0 // indirect
++	github.com/moby/moby/api v1.55.0 // indirect
++	github.com/moby/moby/client v0.5.0 // indirect
++	github.com/moby/patternmatcher v0.6.1 // indirect
++	github.com/moby/sys/sequential v0.7.0 // indirect
++	github.com/moby/sys/user v0.4.0 // indirect
++	github.com/moby/sys/userns v0.1.0 // indirect
++	github.com/moby/term v0.5.2 // indirect
++	github.com/ncruces/go-sqlite3 v0.32.0 // indirect
++	github.com/ncruces/julianday v1.0.0 // indirect
+ 	github.com/oapi-codegen/oapi-codegen/v2 v2.8.0 // indirect
+ 	github.com/oasdiff/oasdiff v1.28.0 // indirect
+ 	github.com/oasdiff/yaml v0.1.1 // indirect
+ 	github.com/oasdiff/yaml3 v0.0.14 // indirect
++	github.com/opencontainers/go-digest v1.0.0 // indirect
++	github.com/opencontainers/image-spec v1.1.1 // indirect
+ 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
+ 	github.com/pelletier/go-toml/v2 v2.3.0 // indirect
++	github.com/pganalyze/pg_query_go/v6 v6.2.2 // indirect
++	github.com/pingcap/errors v0.11.5-0.20250523034308-74f78ae071ee // indirect
++	github.com/pingcap/failpoint v0.0.0-20240528011301-b51a646c7c86 // indirect
++	github.com/pingcap/log v1.1.0 // indirect
++	github.com/pingcap/tidb/pkg/parser v0.0.0-20260418072757-ce92298d1124 // indirect
++	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
++	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
++	github.com/riza-io/grpc-go v0.2.0 // indirect
+ 	github.com/sagikazarmark/locafero v0.12.0 // indirect
+ 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
++	github.com/shirou/gopsutil/v4 v4.26.6 // indirect
++	github.com/sirupsen/logrus v1.9.4 // indirect
+ 	github.com/speakeasy-api/jsonpath v0.6.3 // indirect
+ 	github.com/speakeasy-api/openapi v1.24.0 // indirect
+ 	github.com/spf13/afero v1.15.0 // indirect
+@@ -46,23 +107,44 @@ require (
+ 	github.com/spf13/cobra v1.10.2 // indirect
+ 	github.com/spf13/pflag v1.0.10 // indirect
+ 	github.com/spf13/viper v1.21.0 // indirect
++	github.com/sqlc-dev/doubleclick v1.0.0 // indirect
++	github.com/sqlc-dev/sqlc v1.31.1 // indirect
++	github.com/stretchr/testify v1.11.1 // indirect
+ 	github.com/subosito/gotenv v1.6.0 // indirect
++	github.com/tetratelabs/wazero v1.11.0 // indirect
+ 	github.com/tidwall/gjson v1.18.0 // indirect
+ 	github.com/tidwall/match v1.2.0 // indirect
+ 	github.com/tidwall/pretty v1.2.1 // indirect
+ 	github.com/tidwall/sjson v1.2.5 // indirect
++	github.com/tklauser/go-sysconf v0.4.0 // indirect
++	github.com/tklauser/numcpus v0.12.0 // indirect
+ 	github.com/vmware-labs/yaml-jsonpath v0.3.2 // indirect
+ 	github.com/wI2L/jsondiff v0.7.1 // indirect
++	github.com/wasilibs/go-pgquery v0.0.0-20250409022910-10ac41983c07 // indirect
++	github.com/wasilibs/wazero-helpers v0.0.0-20240620070341-3dff1577cd52 // indirect
+ 	github.com/yargevad/filepathx v1.0.0 // indirect
+ 	github.com/yuin/goldmark v1.8.5 // indirect
+-	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
+-	go.opentelemetry.io/otel/metric v1.36.0 // indirect
++	github.com/yusufpapurcu/wmi v1.2.4 // indirect
++	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
++	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.69.0 // indirect
++	go.opentelemetry.io/otel/metric v1.44.0 // indirect
++	go.uber.org/atomic v1.11.0 // indirect
++	go.uber.org/multierr v1.11.0 // indirect
++	go.uber.org/zap v1.27.0 // indirect
+ 	go.yaml.in/yaml/v3 v3.0.5 // indirect
+ 	go.yaml.in/yaml/v4 v4.0.0-rc.2 // indirect
++	golang.org/x/crypto v0.54.0 // indirect
++	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b // indirect
+ 	golang.org/x/mod v0.38.0 // indirect
++	golang.org/x/net v0.57.0 // indirect
+ 	golang.org/x/sync v0.22.0 // indirect
+ 	golang.org/x/sys v0.47.0 // indirect
+ 	golang.org/x/text v0.40.0 // indirect
+ 	golang.org/x/tools v0.48.0 // indirect
++	google.golang.org/genproto/googleapis/api v0.0.0-20260120221211-b8f7ae30c516 // indirect
++	google.golang.org/genproto/googleapis/rpc v0.0.0-20260120221211-b8f7ae30c516 // indirect
++	google.golang.org/grpc v1.80.0 // indirect
++	google.golang.org/protobuf v1.36.11 // indirect
++	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
+ 	gopkg.in/yaml.v3 v3.0.1 // indirect
+ )
+diff --git a/go.sum b/go.sum
+index 3e79e11..9e9b08f 100644
+--- a/go.sum
++++ b/go.sum
+@@ -1,24 +1,76 @@
++cel.dev/expr v0.25.1 h1:1KrZg61W6TWSxuNZ37Xy49ps13NUovb66QLprthtwi4=
++cel.dev/expr v0.25.1/go.mod h1:hrXvqGP6G6gyx8UAHSHJ5RGk//1Oj5nXQ2NI02Nrsg4=
+ cloud.google.com/go v0.123.0 h1:2NAUJwPR47q+E35uaJeYoNhuNEM9kM8SjgRgdeOJUSE=
+ cloud.google.com/go v0.123.0/go.mod h1:xBoMV08QcqUGuPW65Qfm1o9Y4zKZBpGS+7bImXLTAZU=
++dario.cat/mergo v1.0.2 h1:85+piFYR1tMbRrLcDwR18y4UKJ3aH1Tbzi24VRW1TK8=
++dario.cat/mergo v1.0.2/go.mod h1:E/hbnu0NxMFBjpMIE34DRGLWqDy0g5FuKDhCb31ngxA=
++filippo.io/edwards25519 v1.1.1 h1:YpjwWWlNmGIDyXOn8zLzqiD+9TyIlPhGFG96P39uBpw=
++filippo.io/edwards25519 v1.1.1/go.mod h1:BxyFTGdWcka3PhytdK4V28tE5sGfRvvvRV7EaN4VDT4=
++github.com/AdaLogics/go-fuzz-headers v0.0.0-20240806141605-e8a1dd7889d6 h1:He8afgbRMd7mFxO99hRNu+6tazq8nFF9lIwo9JFroBk=
++github.com/AdaLogics/go-fuzz-headers v0.0.0-20240806141605-e8a1dd7889d6/go.mod h1:8o94RPi1/7XTJvwPpRSzSUedZrtlirdB3r9Z20bi2f8=
++github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c h1:udKWzYgxTojEKWjV8V+WSxDXJ4NFATAsZjh8iIbsQIg=
++github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c/go.mod h1:xomTg63KZ2rFqZQzSB4Vz2SUXa1BpHTVz9L5PTmPC4E=
++github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
++github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERoyfY=
++github.com/Microsoft/go-winio v0.6.2/go.mod h1:yd8OoFMLzJbo9gZq8j5qaps8bJ9aShtEA8Ipt1oGCvU=
+ github.com/TwiN/go-color v1.4.1 h1:mqG0P/KBgHKVqmtL5ye7K0/Gr4l6hTksPgTgMk3mUzc=
+ github.com/TwiN/go-color v1.4.1/go.mod h1:WcPf/jtiW95WBIsEeY1Lc/b8aaWoiqQpu5cf8WFxu+s=
++github.com/antlr4-go/antlr/v4 v4.13.1 h1:SqQKkuVZ+zWkMMNkjy5FZe5mr5WURWnlpmOuzYWrPrQ=
++github.com/antlr4-go/antlr/v4 v4.13.1/go.mod h1:GKmUxMtwp6ZgGwZSva4eWPC5mS6vUAmOABFgjdkM7Nw=
+ github.com/bahlo/generic-list-go v0.2.0 h1:5sz/EEAK+ls5wF+NeqDpk5+iNdMDXrh3z3nPnH1Wvgk=
+ github.com/bahlo/generic-list-go v0.2.0/go.mod h1:2KvAjgMlE5NNynlg/5iLrrCCZ2+5xWbdbCW3pNTGyYg=
++github.com/benbjohnson/clock v1.1.0/go.mod h1:J11/hYXuz8f4ySSvYwY0FKfm+ezbsZBKZxNJlLklBHA=
+ github.com/buger/jsonparser v1.1.2 h1:frqHqw7otoVbk5M8LlE/L7HTnIq2v9RX6EJ48i9AxJk=
+ github.com/buger/jsonparser v1.1.2/go.mod h1:6RYKKt7H4d4+iWqouImQ9R2FZql3VbhNgx27UK13J/0=
++github.com/cenkalti/backoff/v4 v4.3.0 h1:MyRJ/UdXutAwSAT+s3wNd7MfTIcy71VQueUuFK343L8=
++github.com/cenkalti/backoff/v4 v4.3.0/go.mod h1:Y3VNntkOUPxTVeUxJ/G5vcM//AlwfmyYozVcomhLiZE=
++github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=
++github.com/cespare/xxhash/v2 v2.3.0/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
+ github.com/chzyer/logex v1.1.10/go.mod h1:+Ywpsq7O8HXn0nuIou7OrIPyXbp3wmkHB+jjWRnGsAI=
+ github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e/go.mod h1:nSuG5e5PlCu98SY8svDHJxuZscDgtXS6KTTbou5AhLI=
+ github.com/chzyer/test v0.0.0-20180213035817-a1ea475d72b1/go.mod h1:Q3SI9o4m/ZMnBNeIyt5eFwwo7qiLfzFZmjNmxjkiQlU=
++github.com/containerd/errdefs v1.0.0 h1:tg5yIfIlQIrxYtu9ajqY42W3lpS19XqdxRQeEwYG8PI=
++github.com/containerd/errdefs v1.0.0/go.mod h1:+YBYIdtsnF4Iw6nWZhJcqGSg/dwvV7tyJ/kCkyJ2k+M=
++github.com/containerd/errdefs/pkg v0.3.0 h1:9IKJ06FvyNlexW690DXuQNx2KA2cUJXx151Xdx3ZPPE=
++github.com/containerd/errdefs/pkg v0.3.0/go.mod h1:NJw6s9HwNuRhnjJhM7pylWwMyAkmCQvQ4GpJHEqRLVk=
++github.com/containerd/log v0.1.0 h1:TCJt7ioM2cr/tfR8GPbGf9/VRAX8D2B4PjzCpfX540I=
++github.com/containerd/log v0.1.0/go.mod h1:VRRf09a7mHDIRezVKTRCrOq78v577GXq3bSa3EhrzVo=
++github.com/containerd/platforms v0.2.1 h1:zvwtM3rz2YHPQsF2CHYM8+KtB5dvhISiXh5ZpSBQv6A=
++github.com/containerd/platforms v0.2.1/go.mod h1:XHCb+2/hzowdiut9rkudds9bE5yJ7npe7dG/wG+uFPw=
++github.com/coreos/go-semver v0.3.1 h1:yi21YpKnrx1gt5R+la8n5WgS0kCrsPp33dmEyHReZr4=
++github.com/coreos/go-semver v0.3.1/go.mod h1:irMmmIw/7yzSRPWryHsK7EYSg09caPQL03VsM8rvUec=
++github.com/cpuguy83/dockercfg v0.3.2 h1:DlJTyZGBDlXqUZ2Dk2Q3xHs/FtnooJJVaad2S9GKorA=
++github.com/cpuguy83/dockercfg v0.3.2/go.mod h1:sugsbF4//dDlL/i+S+rtpIWp+5h0BHJHfjj5/jFyUJc=
+ github.com/cpuguy83/go-md2man/v2 v2.0.6/go.mod h1:oOW0eioCTA6cOiMLiUPZOpcVxMig6NIQQ7OS05n1F4g=
++github.com/creack/pty v1.1.24 h1:bJrF4RRfyJnbTJqzRLHzcGaZK1NeM5kTC9jGgovnR1s=
++github.com/creack/pty v1.1.24/go.mod h1:08sCNb52WyoAwi2QDyzUCTgcvVFhUzewun7wtTfvcwE=
++github.com/cubicdaiya/gonp v1.0.4 h1:ky2uIAJh81WiLcGKBVD5R7KsM/36W6IqqTy6Bo6rGws=
++github.com/cubicdaiya/gonp v1.0.4/go.mod h1:iWGuP/7+JVTn02OWhRemVbMmG1DOUnmrGTYYACpOI0I=
+ github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+ github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+ github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc h1:U9qPSI2PIWSS1VwoXQT9A3Wy9MM3WgvqSxFWenqJduM=
+ github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
++github.com/dhui/dktest v0.4.6 h1:+DPKyScKSEp3VLtbMDHcUq6V5Lm5zfZZVb0Sk7Ahom4=
++github.com/dhui/dktest v0.4.6/go.mod h1:JHTSYDtKkvFNFHJKqCzVzqXecyv+tKt8EzceOmQOgbU=
++github.com/distribution/reference v0.6.0 h1:0IXCQ5g4/QMHHkarYzh5l+u8T3t73zM5QvfrDyIgxBk=
++github.com/distribution/reference v0.6.0/go.mod h1:BbU0aIcezP1/5jX/8MP0YiH4SdvB5Y4f/wlDRiLyi3E=
+ github.com/dlclark/regexp2 v1.11.4 h1:rPYF9/LECdNymJufQKmri9gV604RvvABwgOA8un7yAo=
+ github.com/dlclark/regexp2 v1.11.4/go.mod h1:DHkYz0B9wPfa6wondMfaivmHpzrQ3v9q8cnmRbL6yW8=
++github.com/docker/docker v28.3.3+incompatible h1:Dypm25kh4rmk49v1eiVbsAtpAsYURjYkaKubwuBdxEI=
++github.com/docker/docker v28.3.3+incompatible/go.mod h1:eEKB0N0r5NX/I1kEveEz05bcu8tLC/8azJZsviup8Sk=
++github.com/docker/go-connections v0.7.0 h1:6SsRfJddP22WMrCkj19x9WKjEDTB+ahsdiGYf0mN39c=
++github.com/docker/go-connections v0.7.0/go.mod h1:no1qkHdjq7kLMGUXYAduOhYPSJxxvgWBh7ogVvptn3Q=
++github.com/docker/go-units v0.5.0 h1:69rxXcBk27SvSaaxTtLh/8llcHD8vYHT7WSdRZ/jvr4=
++github.com/docker/go-units v0.5.0/go.mod h1:fgPhTUdO+D/Jk86RDLlptpiXQzgHJF7gydDDbaIK4Dk=
+ github.com/dprotaso/go-yit v0.0.0-20191028211022-135eb7262960/go.mod h1:9HQzr9D/0PGwMEbC3d5AB7oi67+h4TsQqItC1GVYG58=
+ github.com/dprotaso/go-yit v0.0.0-20220510233725-9ba8df137936 h1:PRxIJD8XjimM5aTknUK9w6DHLDox2r2M3DI4i2pnd3w=
+ github.com/dprotaso/go-yit v0.0.0-20220510233725-9ba8df137936/go.mod h1:ttYvX5qlB+mlV1okblJqcSMtR4c52UKxDiX9GRBS8+Q=
++github.com/ebitengine/purego v0.10.1 h1:dewVBCBT2GaMu1SrNTYxQhgQBethzfhiwvZiLGP/qyY=
++github.com/ebitengine/purego v0.10.1/go.mod h1:iIjxzd6CiRiOG0UyXP+V1+jWqUXVjPKLAI0mRfJZTmQ=
++github.com/fatih/structtag v1.2.0 h1:/OdNE99OxoI/PqaW/SuSK9uxxT3f/tcSZgon/ssNSx4=
++github.com/fatih/structtag v1.2.0/go.mod h1:mBJUNpUnHmRKrKlQQlmCrh5PuhftFbNv8Ys4/aAZl94=
++github.com/felixge/httpsnoop v1.1.0 h1:3YtUj32ZZkqZtt3sZZsClsymw/QDuVfpNhoA31zeORc=
++github.com/felixge/httpsnoop v1.1.0/go.mod h1:Zqxgdd+1Rkcz8euOqdr7lqgCRJztwr5hp9vDSi5UZCE=
+ github.com/frankban/quicktest v1.14.6 h1:7Xjx+VpznH+oBnejlPUj8oUpdxnVs4f8XU8WnHkI4W8=
+ github.com/frankban/quicktest v1.14.6/go.mod h1:4ptaffx2x8+WTWXmUCuVU6aPUX1/Mz7zb5vbUoiM6w0=
+ github.com/fsnotify/fsnotify v1.4.7/go.mod h1:jwhsz4b93w/PPRr/qN1Yymfu8t87LnFCMoQvtojpjFo=
+@@ -32,15 +84,24 @@ github.com/go-logr/logr v1.4.3 h1:CjnDlHq8ikf6E492q6eKboGOC0T8CDaOvkHCIg8idEI=
+ github.com/go-logr/logr v1.4.3/go.mod h1:9T104GzyrTigFIr8wt5mBrctHMim0Nb2HLGrmQ40KvY=
+ github.com/go-logr/stdr v1.2.2 h1:hSWxHoqTgW2S2qGc0LTAI563KZ5YKYRhT3MFKZMbjag=
+ github.com/go-logr/stdr v1.2.2/go.mod h1:mMo/vtBO5dYbehREoey6XUKy/eSumjCCveDpRre4VKE=
++github.com/go-ole/go-ole v1.2.6/go.mod h1:pprOEPIfldk/42T2oK7lQ4v4JSDwmV0As9GaiUsvbm0=
++github.com/go-ole/go-ole v1.3.0 h1:Dt6ye7+vXGIKZ7Xtk4s6/xVdGDQynvom7xCFEdWr6uE=
++github.com/go-ole/go-ole v1.3.0/go.mod h1:5LS6F96DhAwUc7C+1HLexzMXY1xGRSryjyPPKW6zv78=
+ github.com/go-openapi/jsonpointer v0.23.1 h1:1HBACs7XIwR2RcmItfdSFlALhGbe6S92p0ry4d1GWg4=
+ github.com/go-openapi/jsonpointer v0.23.1/go.mod h1:iWRmZTrGn7XwYhtPt/fvdSFj1OfNBngqRT2UG3BxSqY=
+ github.com/go-openapi/swag/jsonname v0.26.0 h1:gV1NFX9M8avo0YSpmWogqfQISigCmpaiNci8cGECU5w=
+ github.com/go-openapi/swag/jsonname v0.26.0/go.mod h1:urBBR8bZNoDYGr653ynhIx+gTeIz0ARZxHkAPktJK2M=
+ github.com/go-openapi/testify/v2 v2.4.2 h1:tiByHpvE9uHrrKjOszax7ZvKB7QOgizBWGBLuq0ePx4=
+ github.com/go-openapi/testify/v2 v2.4.2/go.mod h1:SgsVHtfooshd0tublTtJ50FPKhujf47YRqauXXOUxfw=
++github.com/go-sql-driver/mysql v1.9.3 h1:U/N249h2WzJ3Ukj8SowVFjdtZKfu9vlLZxjPXV1aweo=
++github.com/go-sql-driver/mysql v1.9.3/go.mod h1:qn46aNg1333BRMNU69Lq93t8du/dwxI64Gl8i5p1WMU=
+ github.com/go-task/slim-sprig v0.0.0-20210107165309-348f09dbbbc0/go.mod h1:fyg7847qk6SyHyPtNmDHnmrv/HOrqktSC+C9fM+CJOE=
+ github.com/go-viper/mapstructure/v2 v2.5.0 h1:vM5IJoUAy3d7zRSVtIwQgBj7BiWtMPfmPEgAXnvj1Ro=
+ github.com/go-viper/mapstructure/v2 v2.5.0/go.mod h1:oJDH3BJKyqBA2TXFhDsKDGDTlndYOZ6rGS0BRZIxGhM=
++github.com/gogo/protobuf v1.3.2 h1:Ov1cvc58UF3b5XjBnZv7+opcTcQFZebYjWzi34vdm4Q=
++github.com/gogo/protobuf v1.3.2/go.mod h1:P1XiOD3dCwIKUDQYPy72D8LYyHL2YPYrpS2s69NZV8Q=
++github.com/golang-migrate/migrate/v4 v4.19.1 h1:OCyb44lFuQfYXYLx1SCxPZQGU7mcaZ7gH9yH4jSFbBA=
++github.com/golang-migrate/migrate/v4 v4.19.1/go.mod h1:CTcgfjxhaUtsLipnLoQRWCrjYXycRz/g5+RWDuYgPrE=
+ github.com/golang/protobuf v1.2.0/go.mod h1:6lQm79b+lXiMfvg/cZm0SGofjICqVBUtrP5yJMmIC1U=
+ github.com/golang/protobuf v1.4.0-rc.1/go.mod h1:ceaxUfeHdC40wWswd/P6IGgMaK3YpKi5j83Wpe3EHw8=
+ github.com/golang/protobuf v1.4.0-rc.1.0.20200221234624-67d41d38c208/go.mod h1:xKAWHe0F5eneWXFV3EuXVDTCmh+JuBKY0li0aMyXATA=
+@@ -50,6 +111,10 @@ github.com/golang/protobuf v1.4.0/go.mod h1:jodUvKwWbYaEsadDk5Fwe5c77LiNKVO9IDvq
+ github.com/golang/protobuf v1.4.2/go.mod h1:oDoupMAO8OvCJWAcko0GGGIgR6R6ocIYbsSw735rRwI=
+ github.com/golang/protobuf v1.5.0/go.mod h1:FsONVRAS9T7sI+LIUmWTfcYkHO4aIWwzhcaSAoJOfIk=
+ github.com/golang/protobuf v1.5.2/go.mod h1:XVQd3VNwM+JqD3oG2Ue2ip4fOMUkwXdXDdiuN0vRsmY=
++github.com/golang/protobuf v1.5.4 h1:i7eJL8qZTpSEXOPTxNKhASYpMn+8e5Q6AdndVa1dWek=
++github.com/golang/protobuf v1.5.4/go.mod h1:lnTiLA8Wa4RWRcIUkrtSVa5nRhsEGBg48fD6rSs7xps=
++github.com/google/cel-go v0.28.0 h1:KjSWstCpz/MN5t4a8gnGJNIYUsJRpdi/r97xWDphIQc=
++github.com/google/cel-go v0.28.0/go.mod h1:X0bD6iVNR8pkROSOoHVdgTkzmRcosof7WQqCD6wcMc8=
+ github.com/google/go-cmp v0.3.0/go.mod h1:8QqcDgzrUqlUb/G2PQTWiueGozuR1884gddMywk6iLU=
+ github.com/google/go-cmp v0.3.1/go.mod h1:8QqcDgzrUqlUb/G2PQTWiueGozuR1884gddMywk6iLU=
+ github.com/google/go-cmp v0.4.0/go.mod h1:v8dTdLbMG2kIc/vJvl+f65V22dbkXbowE6jgT/gNBxE=
+@@ -65,6 +130,18 @@ github.com/inconshreveable/mousetrap v1.1.0 h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2
+ github.com/inconshreveable/mousetrap v1.1.0/go.mod h1:vpF70FUmC8bwa3OWnCshd2FqLfsEA9PFc4w1p2J65bw=
+ github.com/invopop/jsonschema v0.14.0 h1:MHQqLhvpNUZfw+hM3AZDYK7jxO8FZoQeQM77g8iyZjg=
+ github.com/invopop/jsonschema v0.14.0/go.mod h1:ygm6C2EaVNMBDPpaPlnOA2pFAxBnxGjFlMZABxm9n2I=
++github.com/jackc/pgpassfile v1.0.0 h1:/6Hmqy13Ss2zCq62VdNG8tM1wchn8zjSGOBJ6icpsIM=
++github.com/jackc/pgpassfile v1.0.0/go.mod h1:CEx0iS5ambNFdcRtxPj5JhEz+xB6uRky5eyVu/W2HEg=
++github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 h1:iCEnooe7UlwOQYpKFhBabPMi4aNAfoODPEFNiAnClxo=
++github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761/go.mod h1:5TJZWKEWniPve33vlWYSoGYefn3gLQRzjfDlhSJ9ZKM=
++github.com/jackc/pgx/v5 v5.10.0 h1:VhSvgU2jSli8o3AqIEOTJr7rZwAEUVo4E4XhR94Zfr0=
++github.com/jackc/pgx/v5 v5.10.0/go.mod h1:mal1tBGAFfLHvZzaYh77YS/eC6IX9OWbRV1QIIM0Jn4=
++github.com/jackc/puddle/v2 v2.2.2 h1:PR8nw+E/1w0GLuRFSmiioY6UooMp6KJv0/61nB7icHo=
++github.com/jackc/puddle/v2 v2.2.2/go.mod h1:vriiEXHvEE654aYKXXjOvZM39qJ0q+azkZFrfEOc3H4=
++github.com/jinzhu/inflection v1.0.0 h1:K317FqzuhWc8YvSVlFMCCUb36O/S9MCKRDI7QkRKD/E=
++github.com/jinzhu/inflection v1.0.0/go.mod h1:h+uFLlag+Qp1Va5pdKtLDYj+kHp5pxUVkryuEj+Srlc=
++github.com/klauspost/compress v1.18.6 h1:2jupLlAwFm95+YDR+NwD2MEfFO9d4z4Prjl1XXDjuao=
++github.com/klauspost/compress v1.18.6/go.mod h1:cwPg85FWrGar70rWktvGQj8/hthj3wpl0PGDogxkrSQ=
+ github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORNo=
+ github.com/kr/pretty v0.3.1 h1:flRD4NNwYAUpkphVc1HcthR4KEIFJ65n8Mw5qdRn3LE=
+ github.com/kr/pretty v0.3.1/go.mod h1:hoEshYVHaxMs3cyo3Yncou5ZscifuDolrwPKZanG3xk=
+@@ -72,6 +149,38 @@ github.com/kr/pty v1.1.1/go.mod h1:pFQYn66WHrOpPYNljwOMqo10TkYh1fy3cYio2l3bCsQ=
+ github.com/kr/text v0.1.0/go.mod h1:4Jbv+DJW3UT/LiOwJeYQe1efqtUx/iVham/4vfdArNI=
+ github.com/kr/text v0.2.0 h1:5Nx0Ya0ZqY2ygV366QzturHI13Jq95ApcVaJBhpS+AY=
+ github.com/kr/text v0.2.0/go.mod h1:eLer722TekiGuMkidMxC/pM04lWEeraHUUmBw8l2grE=
++github.com/lib/pq v1.12.3 h1:tTWxr2YLKwIvK90ZXEw8GP7UFHtcbTtty8zsI+YjrfQ=
++github.com/lib/pq v1.12.3/go.mod h1:/p+8NSbOcwzAEI7wiMXFlgydTwcgTr3OSKMsD2BitpA=
++github.com/lufia/plan9stats v0.0.0-20260330125221-c963978e514e h1:Q6MvJtQK/iRcRtzAscm/zF23XxJlbECiGPyRicsX+Ak=
++github.com/lufia/plan9stats v0.0.0-20260330125221-c963978e514e/go.mod h1:autxFIvghDt3jPTLoqZ9OZ7s9qTGNAWmYCjVFWPX/zg=
++github.com/magiconair/properties v1.8.10 h1:s31yESBquKXCV9a/ScB3ESkOjUYYv+X0rg8SYxI99mE=
++github.com/magiconair/properties v1.8.10/go.mod h1:Dhd985XPs7jluiymwWYZ0G4Z61jb3vdS329zhj2hYo0=
++github.com/mdelapenya/tlscert v0.2.0 h1:7H81W6Z/4weDvZBNOfQte5GpIMo0lGYEeWbkGp5LJHI=
++github.com/mdelapenya/tlscert v0.2.0/go.mod h1:O4njj3ELLnJjGdkN7M/vIVCpZ+Cf0L6muqOG4tLSl8o=
++github.com/moby/docker-image-spec v1.3.1 h1:jMKff3w6PgbfSa69GfNg+zN/XLhfXJGnEx3Nl2EsFP0=
++github.com/moby/docker-image-spec v1.3.1/go.mod h1:eKmb5VW8vQEh/BAr2yvVNvuiJuY6UIocYsFu/DxxRpo=
++github.com/moby/go-archive v0.2.0 h1:zg5QDUM2mi0JIM9fdQZWC7U8+2ZfixfTYoHL7rWUcP8=
++github.com/moby/go-archive v0.2.0/go.mod h1:mNeivT14o8xU+5q1YnNrkQVpK+dnNe/K6fHqnTg4qPU=
++github.com/moby/moby/api v1.55.0 h1:2/sexvQyqIWS8pRSCFddBfpW2qE7vR7FCL+vN8pxwMc=
++github.com/moby/moby/api v1.55.0/go.mod h1:+RQ6wluLwtYaTd1WnPLykIDPekkuyD/ROWQClE83pzs=
++github.com/moby/moby/client v0.5.0 h1:5XhyPk2fuOWf6RlSFa3MkIIgDZkF25xToXW8Q/BH7cc=
++github.com/moby/moby/client v0.5.0/go.mod h1:rcVpF8ncl9vo5gaIBdol6CnbEtSj1uxMvEV/UrykF/s=
++github.com/moby/patternmatcher v0.6.1 h1:qlhtafmr6kgMIJjKJMDmMWq7WLkKIo23hsrpR3x084U=
++github.com/moby/patternmatcher v0.6.1/go.mod h1:hDPoyOpDY7OrrMDLaYoY3hf52gNCR/YOUYxkhApJIxc=
++github.com/moby/sys/sequential v0.7.0 h1:ASQNGNROJSuOO6LL6bPHbKvuZu6NU8P4ldPWk31zj/8=
++github.com/moby/sys/sequential v0.7.0/go.mod h1:NfSTAp6V3fw4tmkD62PEcOKeZKquXT8VKCkf7aVR79o=
++github.com/moby/sys/user v0.4.0 h1:jhcMKit7SA80hivmFJcbB1vqmw//wU61Zdui2eQXuMs=
++github.com/moby/sys/user v0.4.0/go.mod h1:bG+tYYYJgaMtRKgEmuueC0hJEAZWwtIbZTB+85uoHjs=
++github.com/moby/sys/userns v0.1.0 h1:tVLXkFOxVu9A64/yh59slHVv9ahO9UIev4JZusOLG/g=
++github.com/moby/sys/userns v0.1.0/go.mod h1:IHUYgu/kao6N8YZlp9Cf444ySSvCmDlmzUcYfDHOl28=
++github.com/moby/term v0.5.2 h1:6qk3FJAFDs6i/q3W/pQ97SX192qKfZgGjCQqfCJkgzQ=
++github.com/moby/term v0.5.2/go.mod h1:d3djjFCrjnB+fl8NJux+EJzu0msscUP+f8it8hPkFLc=
++github.com/morikuni/aec v1.0.0 h1:nP9CBfwrvYnBRgY6qfDQkygYDmYwOilePFkwzv4dU8A=
++github.com/morikuni/aec v1.0.0/go.mod h1:BbKIizmSmc5MMPqRYbxO4ZU0S0+P200+tUnFx7PXmsc=
++github.com/ncruces/go-sqlite3 v0.32.0 h1:hNBUXp88LrfQCsuyXLqWTbTUG35sUuktDsqhhgHvU20=
++github.com/ncruces/go-sqlite3 v0.32.0/go.mod h1:MIWTK60ONDl0oVY073zYvJP21C3Dly6P9bxVpgkLwdQ=
++github.com/ncruces/julianday v1.0.0 h1:fH0OKwa7NWvniGQtxdJRxAgkBMolni2BjDHaWTxqt7M=
++github.com/ncruces/julianday v1.0.0/go.mod h1:Dusn2KvZrrovOMJuOt0TNXL6tB7U2E8kvza5fFc9G7g=
+ github.com/nxadm/tail v1.4.4/go.mod h1:kenIhsEOeOJmVchQTgglprH7qJGnHDVpk1VPCcaMI8A=
+ github.com/nxadm/tail v1.4.8 h1:nPr65rt6Y5JFSKQO7qToXr7pePgD6Gwiw05lkbyAQTE=
+ github.com/nxadm/tail v1.4.8/go.mod h1:+ncqLTQzXmGhMZNUePPaPqPvBxHAIsmXswZKocGu+AU=
+@@ -95,13 +204,35 @@ github.com/onsi/gomega v1.10.1/go.mod h1:iN09h71vgCQne3DLsj+A5owkum+a2tYe+TOCB1y
+ github.com/onsi/gomega v1.17.0/go.mod h1:HnhC7FXeEQY45zxNK3PPoIUhzk/80Xly9PcubAlGdZY=
+ github.com/onsi/gomega v1.19.0 h1:4ieX6qQjPP/BfC3mpsAtIGGlxTWPeA3Inl/7DtXw1tw=
+ github.com/onsi/gomega v1.19.0/go.mod h1:LY+I3pBVzYsTBU1AnDwOSxaYi9WoWiqgwooUqq9yPro=
++github.com/opencontainers/go-digest v1.0.0 h1:apOUWs51W5PlhuyGyz9FCeeBIOUDA/6nW8Oi/yOhh5U=
++github.com/opencontainers/go-digest v1.0.0/go.mod h1:0JzlMkj0TRzQZfJkVvzbP0HBR3IKzErnv2BNG4W4MAM=
++github.com/opencontainers/image-spec v1.1.1 h1:y0fUlFfIZhPF1W537XOLg0/fcx6zcHCJwooC2xJA040=
++github.com/opencontainers/image-spec v1.1.1/go.mod h1:qpqAh3Dmcf36wStyyWU+kCeDgrGnAve2nCC8+7h8Q0M=
+ github.com/pb33f/ordered-map/v2 v2.3.1 h1:5319HDO0aw4DA4gzi+zv4FXU9UlSs3xGZ40wcP1nBjY=
+ github.com/pb33f/ordered-map/v2 v2.3.1/go.mod h1:qxFQgd0PkVUtOMCkTapqotNgzRhMPL7VvaHKbd1HnmQ=
+ github.com/pelletier/go-toml/v2 v2.3.0 h1:k59bC/lIZREW0/iVaQR8nDHxVq8OVlIzYCOJf421CaM=
+ github.com/pelletier/go-toml/v2 v2.3.0/go.mod h1:2gIqNv+qfxSVS7cM2xJQKtLSTLUE9V8t9Stt+h56mCY=
++github.com/pganalyze/pg_query_go/v6 v6.2.2 h1:O0L6zMC226R82RF3X5n0Ki6HjytDsoAzuzp4ATVAHNo=
++github.com/pganalyze/pg_query_go/v6 v6.2.2/go.mod h1:Cn6+j4870kJz3iYNsb0VsNG04vpSWgEvBwc590J4qD0=
++github.com/pingcap/errors v0.11.0/go.mod h1:Oi8TUi2kEtXXLMJk9l1cGmz20kV3TaQ0usTwv5KuLY8=
++github.com/pingcap/errors v0.11.5-0.20250523034308-74f78ae071ee h1:/IDPbpzkzA97t1/Z1+C3KlxbevjMeaI6BQYxvivu4u8=
++github.com/pingcap/errors v0.11.5-0.20250523034308-74f78ae071ee/go.mod h1:X2r9ueLEUZgtx2cIogM0v4Zj5uvvzhuuiu7Pn8HzMPg=
++github.com/pingcap/failpoint v0.0.0-20240528011301-b51a646c7c86 h1:tdMsjOqUR7YXHoBitzdebTvOjs/swniBTOLy5XiMtuE=
++github.com/pingcap/failpoint v0.0.0-20240528011301-b51a646c7c86/go.mod h1:exzhVYca3WRtd6gclGNErRWb1qEgff3LYta0LvRmON4=
++github.com/pingcap/log v1.1.0 h1:ELiPxACz7vdo1qAvvaWJg1NrYFoY6gqAh/+Uo6aXdD8=
++github.com/pingcap/log v1.1.0/go.mod h1:DWQW5jICDR7UJh4HtxXSM20Churx4CQL0fwL/SoOSA4=
++github.com/pingcap/tidb/pkg/parser v0.0.0-20260418072757-ce92298d1124 h1:zYmP5fBH+i2yhhU6f5uOol6zxHtR2/sD47BsJLfy0oU=
++github.com/pingcap/tidb/pkg/parser v0.0.0-20260418072757-ce92298d1124/go.mod h1:zDLDsfNBU5+L6T4J9/OgWAHc/WZvMUjbpgHqQ/t3yKo=
++github.com/pkg/errors v0.8.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
++github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
++github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
+ github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
+ github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 h1:Jamvg5psRIccs7FGNTlIRMkT8wgtp5eCXdBlqhYGL6U=
+ github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
++github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 h1:o4JXh1EVt9k/+g42oCprj/FisM4qX9L3sZB3upGN2ZU=
++github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55/go.mod h1:OmDBASR4679mdNQnz2pUhc2G8CO2JrUAVFDRBDP/hJE=
++github.com/riza-io/grpc-go v0.2.0 h1:2HxQKFVE7VuYstcJ8zqpN84VnAoJ4dCL6YFhJewNcHQ=
++github.com/riza-io/grpc-go v0.2.0/go.mod h1:2bDvR9KkKC3KhtlSHfR3dAXjUMT86kg4UfWFyVGWqi8=
+ github.com/rogpeppe/go-internal v1.14.1 h1:UQB4HGPB6osV0SQTLymcB4TgvyWu6ZyliaW0tI/otEQ=
+ github.com/rogpeppe/go-internal v1.14.1/go.mod h1:MaRKkUm5W0goXpeCfT7UZI6fk/L7L7so1lCWt35ZSgc=
+ github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
+@@ -111,6 +242,10 @@ github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 h1:KRzFb2m7YtdldCEkzs6KqmJw4nqEV
+ github.com/santhosh-tekuri/jsonschema/v6 v6.0.2/go.mod h1:JXeL+ps8p7/KNMjDQk3TCwPpBy0wYklyWTfbkIzdIFU=
+ github.com/sergi/go-diff v1.1.0 h1:we8PVUC3FE2uYfodKH/nBHMSetSfHDR6scGdBi+erh0=
+ github.com/sergi/go-diff v1.1.0/go.mod h1:STckp+ISIX8hZLjrqAeVduY0gWCT9IjLuqbuNXdaHfM=
++github.com/shirou/gopsutil/v4 v4.26.6 h1:Mzr/npDtQC/xpeEuQKHZt8Zo9CmPvhTj8nkR8w5TLDs=
++github.com/shirou/gopsutil/v4 v4.26.6/go.mod h1:LZ6ewCSkBqUpvSOf+LsTGnRinC6iaNUNMGBtDkJBaLQ=
++github.com/sirupsen/logrus v1.9.4 h1:TsZE7l11zFCLZnZ+teH4Umoq5BhEIfIzfRDZ1Uzql2w=
++github.com/sirupsen/logrus v1.9.4/go.mod h1:ftWc9WdOfJ0a92nsE2jF5u5ZwH8Bv2zdeOC42RjbV2g=
+ github.com/speakeasy-api/jsonpath v0.6.3 h1:c+QPwzAOdrWvzycuc9HFsIZcxKIaWcNpC+xhOW9rJxU=
+ github.com/speakeasy-api/jsonpath v0.6.3/go.mod h1:2cXloNuQ+RSXi5HTRaeBh7JEmjRXTiaKpFTdZiL7URI=
+ github.com/speakeasy-api/openapi v1.24.0 h1:opoD27rupX7zBVPq1HkIGLeMOzNNA7JalhYP8q34i04=
+@@ -126,13 +261,27 @@ github.com/spf13/pflag v1.0.10 h1:4EBh2KAYBwaONj6b2Ye1GiHfwjqyROoF4RwYO+vPwFk=
+ github.com/spf13/pflag v1.0.10/go.mod h1:McXfInJRrz4CZXVZOBLb0bTZqETkiAhM9Iw0y3An2Bg=
+ github.com/spf13/viper v1.21.0 h1:x5S+0EU27Lbphp4UKm1C+1oQO+rKx36vfCoaVebLFSU=
+ github.com/spf13/viper v1.21.0/go.mod h1:P0lhsswPGWD/1lZJ9ny3fYnVqxiegrlNrEmgLjbTCAY=
++github.com/sqlc-dev/doubleclick v1.0.0 h1:2/OApfQ2eLgcfa/Fqs8WSMA6atH0G8j9hHbQIgMfAXI=
++github.com/sqlc-dev/doubleclick v1.0.0/go.mod h1:ODHRroSrk/rr5neRHlWMSRijqOak8YmNaO3VAZCNl5Y=
++github.com/sqlc-dev/sqlc v1.31.1 h1:+V+BjBJfFNPX/RFfL8eiZD9jk9lVJUEGGllWvnYNqbc=
++github.com/sqlc-dev/sqlc v1.31.1/go.mod h1:6ZPww/Jd3G6MzJeW6NrqizjL+52vYNaaXP9yMeJ/Nao=
+ github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
++github.com/stretchr/objx v0.5.3 h1:jmXUvGomnU1o3W/V5h2VEradbpJDwGrzugQQvL0POH4=
++github.com/stretchr/objx v0.5.3/go.mod h1:rDQraq+vQZU7Fde9LOZLr8Tax6zZvy4kuNKF+QYS+U0=
++github.com/stretchr/testify v1.3.0/go.mod h1:M5WIy9Dh21IEIfnGCwXGc5bZfKNJtfHm1UVUgZn+9EI=
+ github.com/stretchr/testify v1.4.0/go.mod h1:j7eGeouHqKxXV5pUuKE4zz7dFj8WfuZ+81PSLYec5m4=
+ github.com/stretchr/testify v1.5.1/go.mod h1:5W2xD1RspED5o8YsWQXVCued0rvSQ+mT+I5cxcmMvtA=
++github.com/stretchr/testify v1.7.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
+ github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=
+ github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
+ github.com/subosito/gotenv v1.6.0 h1:9NlTDc1FTs4qu0DDq7AEtTPNw6SVm7uBMsUCUjABIf8=
+ github.com/subosito/gotenv v1.6.0/go.mod h1:Dk4QP5c2W3ibzajGcXpNraDfq2IrhjMIvMSWPKKo0FU=
++github.com/testcontainers/testcontainers-go v0.44.0 h1:/Fwh6HY1mIikhnm9e7HwoxGycx0lzRAE0f5VQpjFxzI=
++github.com/testcontainers/testcontainers-go v0.44.0/go.mod h1:IcnwQrYTO86xHXu5bvMaBH7ATlbS3Qn1M1QWW3c66rE=
++github.com/testcontainers/testcontainers-go/modules/postgres v0.44.0 h1:8fdv/9y3JMxjQ+ULAcOG8RtgeNu5t9XF9LolSXDuTwM=
++github.com/testcontainers/testcontainers-go/modules/postgres v0.44.0/go.mod h1:CFr2LncGYokw+OKjXcr8ARCKG1SaC2UEnGxFBovE86g=
++github.com/tetratelabs/wazero v1.11.0 h1:+gKemEuKCTevU4d7ZTzlsvgd1uaToIDtlQlmNbwqYhA=
++github.com/tetratelabs/wazero v1.11.0/go.mod h1:eV28rsN8Q+xwjogd7f4/Pp4xFxO7uOGbLcD/LzB1wiU=
+ github.com/tidwall/gjson v1.14.2/go.mod h1:/wbyibRr2FHMks5tjHJ5F8dMZh3AcwJEMf5vlfC0lxk=
+ github.com/tidwall/gjson v1.18.0 h1:FIDeeyB800efLX89e5a8Y0BNH+LOngJyGrIWxG2FKQY=
+ github.com/tidwall/gjson v1.18.0/go.mod h1:/wbyibRr2FHMks5tjHJ5F8dMZh3AcwJEMf5vlfC0lxk=
+@@ -144,27 +293,54 @@ github.com/tidwall/pretty v1.2.1 h1:qjsOFOWWQl+N3RsoF5/ssm1pHmJJwhjlSbZ51I6wMl4=
+ github.com/tidwall/pretty v1.2.1/go.mod h1:ITEVvHYasfjBbM0u2Pg8T2nJnzm8xPwvNhhsoaGGjNU=
+ github.com/tidwall/sjson v1.2.5 h1:kLy8mja+1c9jlljvWTlSazM7cKDRfJuR/bOJhcY5NcY=
+ github.com/tidwall/sjson v1.2.5/go.mod h1:Fvgq9kS/6ociJEDnK0Fk1cpYF4FIW6ZF7LAe+6jwd28=
++github.com/tklauser/go-sysconf v0.4.0 h1:7H0uAN+7RkwWRaxhYXDLqa5V3LPrJeV8wmD9dRUgPQU=
++github.com/tklauser/go-sysconf v0.4.0/go.mod h1:8mTNWyog7H+MpKijp4VmKJAd2bbYQ2zuUwkYRbUArPI=
++github.com/tklauser/numcpus v0.12.0 h1:NR85qdvHA9pFse3x3weVZ0r0ST8R6l5RHbZrlRaqob4=
++github.com/tklauser/numcpus v0.12.0/go.mod h1:ABHeXzJnr/qqwguhClkZKT1/8VABcYrsyUiUGobwWJg=
+ github.com/vmware-labs/yaml-jsonpath v0.3.2 h1:/5QKeCBGdsInyDCyVNLbXyilb61MXGi9NP674f9Hobk=
+ github.com/vmware-labs/yaml-jsonpath v0.3.2/go.mod h1:U6whw1z03QyqgWdgXxvVnQ90zN1BWz5V+51Ewf8k+rQ=
+ github.com/wI2L/jsondiff v0.7.1 h1:Fg9+yj+1/x3UtPBJhR91TKEzRkrEEWcAcLbg9dzEaNM=
+ github.com/wI2L/jsondiff v0.7.1/go.mod h1:yAt2W7U6Jd4HK0RA8DGSGk0zDtfEtOUUJVnH/xICpjo=
++github.com/wasilibs/go-pgquery v0.0.0-20250409022910-10ac41983c07 h1:mJdDDPblDfPe7z7go8Dvv1AJQDI3eQ/5xith3q2mFlo=
++github.com/wasilibs/go-pgquery v0.0.0-20250409022910-10ac41983c07/go.mod h1:Ak17IJ037caFp4jpCw/iQQ7/W74Sqpb1YuKJU6HTKfM=
++github.com/wasilibs/wazero-helpers v0.0.0-20240620070341-3dff1577cd52 h1:OvLBa8SqJnZ6P+mjlzc2K7PM22rRUPE1x32G9DTPrC4=
++github.com/wasilibs/wazero-helpers v0.0.0-20240620070341-3dff1577cd52/go.mod h1:jMeV4Vpbi8osrE/pKUxRZkVaA0EX7NZN0A9/oRzgpgY=
+ github.com/yargevad/filepathx v1.0.0 h1:SYcT+N3tYGi+NvazubCNlvgIPbzAk7i7y2dwg3I5FYc=
+ github.com/yargevad/filepathx v1.0.0/go.mod h1:BprfX/gpYNJHJfc35GjRRpVcwWXS89gGulUIU5tK3tA=
+ github.com/yuin/goldmark v1.2.1/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
+ github.com/yuin/goldmark v1.8.5 h1:r6N5afV5qj/5S4UTch8agZHJ8UxNCMwX7WjkkJam2NA=
+ github.com/yuin/goldmark v1.8.5/go.mod h1:ip/1k0VRfGynBgxOz0yCqHrbZXhcjxyuS66Brc7iBKg=
+-go.opentelemetry.io/auto/sdk v1.1.0 h1:cH53jehLUN6UFLY71z+NDOiNJqDdPRaXzTel0sJySYA=
+-go.opentelemetry.io/auto/sdk v1.1.0/go.mod h1:3wSPjt5PWp2RhlCcmmOial7AvC4DQqZb7a7wCow3W8A=
+-go.opentelemetry.io/otel v1.36.0 h1:UumtzIklRBY6cI/lllNZlALOF5nNIzJVb16APdvgTXg=
+-go.opentelemetry.io/otel v1.36.0/go.mod h1:/TcFMXYjyRNh8khOAO9ybYkqaDBb/70aVwkNML4pP8E=
+-go.opentelemetry.io/otel/metric v1.36.0 h1:MoWPKVhQvJ+eeXWHFBOPoBOi20jh6Iq2CcCREuTYufE=
+-go.opentelemetry.io/otel/metric v1.36.0/go.mod h1:zC7Ks+yeyJt4xig9DEw9kuUFe5C3zLbVjV2PzT6qzbs=
+-go.opentelemetry.io/otel/sdk v1.36.0 h1:b6SYIuLRs88ztox4EyrvRti80uXIFy+Sqzoh9kFULbs=
+-go.opentelemetry.io/otel/sdk v1.36.0/go.mod h1:+lC+mTgD+MUWfjJubi2vvXWcVxyr9rmlshZni72pXeY=
+-go.opentelemetry.io/otel/trace v1.36.0 h1:ahxWNuqZjpdiFAyrIoQ4GIiAIhxAunQR6MUoKrsNd4w=
+-go.opentelemetry.io/otel/trace v1.36.0/go.mod h1:gQ+OnDZzrybY4k4seLzPAWNwVBBVlF2szhehOBB/tGA=
++github.com/yusufpapurcu/wmi v1.2.4 h1:zFUKzehAFReQwLys1b/iSMl+JQGSCSjtVqQn9bBrPo0=
++github.com/yusufpapurcu/wmi v1.2.4/go.mod h1:SBZ9tNy3G9/m5Oi98Zks0QjeHVDvuK0qfxQmPyzfmi0=
++go.opentelemetry.io/auto/sdk v1.2.1 h1:jXsnJ4Lmnqd11kwkBV2LgLoFMZKizbCi5fNZ/ipaZ64=
++go.opentelemetry.io/auto/sdk v1.2.1/go.mod h1:KRTj+aOaElaLi+wW1kO/DZRXwkF4C5xPbEe3ZiIhN7Y=
++go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.69.0 h1:8tvICD4vSTOOsNrsI4Ljf6C+6UKvpTEH5XY3JMoyPoo=
++go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.69.0/go.mod h1:z9+yiacE0IHRqM4qFfkbt/JYlmYXgss8GY/jXoNuPJI=
++go.opentelemetry.io/otel v1.44.0 h1:JjwHmHpA4iZ3wBxluu2fbbE7j4kqlE8jXyAyPXH7HqU=
++go.opentelemetry.io/otel v1.44.0/go.mod h1:BMgjTHL9WPRlRjL2oZCBTL4whCGtXch2H4BhOPIAyYc=
++go.opentelemetry.io/otel/metric v1.44.0 h1:1w0gILTcHdr3YI+ixLyjemwrVnsMURbTZFrSYCdDdmc=
++go.opentelemetry.io/otel/metric v1.44.0/go.mod h1:8O7hanEPBNgEMmybD3s2VBKcgWOCsA6tzHBPODAiquo=
++go.opentelemetry.io/otel/sdk v1.44.0 h1:nHYwb9lK+fJPU/dnT6s7W7Z8itMWyqrnVfbheVYrZ58=
++go.opentelemetry.io/otel/sdk v1.44.0/go.mod h1:Osuydd3Se74nqjAKxid74N5eC+jfEqfTegHRnq58oK0=
++go.opentelemetry.io/otel/sdk/metric v1.44.0 h1:3LlKgI+VjbVsjNRFZJZAJ30WjXC5VkNRks6si09iEfI=
++go.opentelemetry.io/otel/sdk/metric v1.44.0/go.mod h1:5B5pMARnXxKhltooO4xUuCBorl65a4EpnTalObqOigA=
++go.opentelemetry.io/otel/trace v1.44.0 h1:jxF5CsGYCe74MCRx2X4g7WsY/VBKRqqpNvXlX/6gtIk=
++go.opentelemetry.io/otel/trace v1.44.0/go.mod h1:oLl1jrMQAVo6v3GAggN+1VH9VIz9iUSvW53sW1Q8PIE=
++go.uber.org/atomic v1.6.0/go.mod h1:sABNBOSYdrvTF6hTgEIbc7YasKWGhgEQZyfxyTvoXHQ=
++go.uber.org/atomic v1.7.0/go.mod h1:fEN4uk6kAWBTFdckzkM89CLk9XfWZrxpCo0nPH17wJc=
++go.uber.org/atomic v1.9.0/go.mod h1:fEN4uk6kAWBTFdckzkM89CLk9XfWZrxpCo0nPH17wJc=
++go.uber.org/atomic v1.11.0 h1:ZvwS0R+56ePWxUNi+Atn9dWONBPp/AUETXlHW0DxSjE=
++go.uber.org/atomic v1.11.0/go.mod h1:LUxbIzbOniOlMKjJjyPfpl4v+PKK2cNJn91OQbhoJI0=
++go.uber.org/goleak v1.1.10/go.mod h1:8a7PlsEVH3e/a/GLqe5IIrQx6GzcnRmZEufDUTk4A7A=
+ go.uber.org/goleak v1.3.0 h1:2K3zAYmnTNqV73imy9J1T3WC+gmCePx2hEGkimedGto=
+ go.uber.org/goleak v1.3.0/go.mod h1:CoHD4mav9JJNrW/WLlf7HGZPjdw8EucARQHekz1X6bE=
++go.uber.org/multierr v1.6.0/go.mod h1:cdWPpRnG4AhwMwsgIHip0KRBQjJy5kYEpYjJxpXp9iU=
++go.uber.org/multierr v1.7.0/go.mod h1:7EAYxJLBy9rStEaz58O2t4Uvip6FSURkq8/ppBp95ak=
++go.uber.org/multierr v1.11.0 h1:blXXJkSxSSfBVBlC76pxqeO+LN3aDfLQo+309xJstO0=
++go.uber.org/multierr v1.11.0/go.mod h1:20+QtiLqy0Nd6FdQB9TLXag12DsQkrbs3htMFfDN80Y=
++go.uber.org/zap v1.19.0/go.mod h1:xg/QME4nWcxGxrpdeYfq7UvYrLh66cuVKdrbD1XF/NI=
++go.uber.org/zap v1.27.0 h1:aJMhYGrd5QSmlpLMr2MftRKl7t8J8PTZPA732ud/XR8=
++go.uber.org/zap v1.27.0/go.mod h1:GB2qFLM7cTU87MWRP2mPIjqfIDnGu+VIO4V/SdhGo2E=
+ go.yaml.in/yaml/v3 v3.0.4/go.mod h1:DhzuOOF2ATzADvBadXxruRBLzYTpT36CKvDb3+aBEFg=
+ go.yaml.in/yaml/v3 v3.0.5 h1:N6y/pJk8buWs9NY5ERU2HSMfm+IuD/OtfdAnq6kESPw=
+ go.yaml.in/yaml/v3 v3.0.5/go.mod h1:HVTZu1O7/Vkt2N+BFy8Zza+lnLsABggaTM2ZpNIGuKg=
+@@ -173,10 +349,16 @@ go.yaml.in/yaml/v4 v4.0.0-rc.2/go.mod h1:aZqd9kCMsGL7AuUv/m/PvWLdg5sjJsZ4oHDEnfP
+ golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2/go.mod h1:djNgcEr1/C05ACkg1iLfiJU5Ep61QUkGW8qpdssI0+w=
+ golang.org/x/crypto v0.0.0-20191011191535-87dc89f01550/go.mod h1:yigFU9vqHzYiE8UmvKecakEJjdnWj3jj499lnFckfCI=
+ golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9/go.mod h1:LzIPMQfyMNhhGPhUkYOs5KpL4U8rLKemX1yGLhDgUto=
++golang.org/x/crypto v0.54.0 h1:YLIA59K4fiNzHzjnZt2tUJQjQtUWfWbeHBqKtk3eScw=
++golang.org/x/crypto v0.54.0/go.mod h1:KWL8ny2AZdGR2cWmzeHrp2azQPGogOv+HeQaVEXC2dk=
++golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b h1:M2rDM6z3Fhozi9O7NWsxAkg/yqS/lQJ6PmkyIV3YP+o=
++golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b/go.mod h1:3//PLf8L/X+8b4vuAfHzxeRUl04Adcb341+IGKfnqS8=
++golang.org/x/lint v0.0.0-20190930215403-16217165b5de/go.mod h1:6SW0HCj/g11FgYtHlgUYUwCkIfeOF89ocIRzGO/8vkc=
+ golang.org/x/mod v0.3.0/go.mod h1:s0Qsj1ACt9ePp/hMypM3fl4fZqREWJwdYDEqhRiZZUA=
+ golang.org/x/mod v0.38.0 h1:MECBjubtXD7yj4HrhIUcywNaGeNVUdfVnxmPajOk4yk=
+ golang.org/x/mod v0.38.0/go.mod h1:V6Xz0pq8TQ3dGqVQ1FVHuelZpAL0uNhSkk9ogYP3c40=
+ golang.org/x/net v0.0.0-20180906233101-161cd47e91fd/go.mod h1:mL1N/T3taQHkDXs73rZJwtUhF3w3ftmwwsq0BUmARs4=
++golang.org/x/net v0.0.0-20190311183353-d8887717615a/go.mod h1:t9HGtf8HONx5eT2rtn7q6eTqICYqUVnKs3thJo3Qplg=
+ golang.org/x/net v0.0.0-20190404232315-eb5bcb51f2a3/go.mod h1:t9HGtf8HONx5eT2rtn7q6eTqICYqUVnKs3thJo3Qplg=
+ golang.org/x/net v0.0.0-20190620200207-3b0461eec859/go.mod h1:z5CRVTTTmAJ677TzLLGU+0bjPO0LkuOLi4/5GtJWs/s=
+ golang.org/x/net v0.0.0-20200520004742-59133d7f0dd7/go.mod h1:qpuaurCH72eLCgpAm/N6yyVIVM9cpaDIP3A8BGJEC5A=
+@@ -194,20 +376,26 @@ golang.org/x/sys v0.0.0-20180909124046-d0be0721c37e/go.mod h1:STP8DvDyc/dI5b8T5h
+ golang.org/x/sys v0.0.0-20190215142949-d0b11bdaac8a/go.mod h1:STP8DvDyc/dI5b8T5hshtkjS+E42TnysNCUPdjciGhY=
+ golang.org/x/sys v0.0.0-20190412213103-97732733099d/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
+ golang.org/x/sys v0.0.0-20190904154756-749cb33beabd/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
++golang.org/x/sys v0.0.0-20190916202348-b4ddaad3f8a3/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
+ golang.org/x/sys v0.0.0-20191005200804-aed5e4c7ecf9/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
+ golang.org/x/sys v0.0.0-20191120155948-bd437916bb0e/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
+ golang.org/x/sys v0.0.0-20191204072324-ce4227a45e2e/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
+ golang.org/x/sys v0.0.0-20200323222414-85ca7c5b95cd/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
+ golang.org/x/sys v0.0.0-20200930185726-fdedc70b468f/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
+ golang.org/x/sys v0.0.0-20201119102817-f84b799fce68/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
++golang.org/x/sys v0.0.0-20201204225414-ed752295db88/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
+ golang.org/x/sys v0.0.0-20210112080510-489259a85091/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
+ golang.org/x/sys v0.0.0-20210423082822-04245dca01da/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
+ golang.org/x/sys v0.0.0-20210615035016-665e8c7367d1/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
++golang.org/x/sys v0.0.0-20210616094352-59db8d763f22/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+ golang.org/x/sys v0.0.0-20211216021012-1d35b9e2eb4e/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
++golang.org/x/sys v0.1.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+ golang.org/x/sys v0.47.0 h1:o7XGOvZQCADBQQ4Y7VNq2dRWQR7JmOUW8Kxx4ZsNgWs=
+ golang.org/x/sys v0.47.0/go.mod h1:4GL1E5IUh+htKOUEOaiffhrAeqysfVGipDYzABqnCmw=
+ golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1/go.mod h1:bj7SfCRtBDWHUb9snDiAeCFNEtKQo2Wmx5Cou7ajbmo=
+ golang.org/x/term v0.0.0-20210927222741-03fcf44c2211/go.mod h1:jbD1KX2456YbFQfuXm/mYQcufACuNUgVhRMnK/tPxf8=
++golang.org/x/term v0.45.0 h1:NwWyBmoJCbfTHpxrWoZ9C6/VxOf7ic219I8xZZFdrf0=
++golang.org/x/term v0.45.0/go.mod h1:9aqxs0blBcrm/n0L9QW0aRVD+ktan8ssZromtqJC43w=
+ golang.org/x/text v0.3.0/go.mod h1:NqM8EUOU14njkJ3fqMW+pc6Ldnwhi/IjpwHt7yyuwOQ=
+ golang.org/x/text v0.3.3/go.mod h1:5Zoc/QRtKVWzQhOtBMvqHzDpF6irO9z98xDceosuGiQ=
+ golang.org/x/text v0.3.6/go.mod h1:5Zoc/QRtKVWzQhOtBMvqHzDpF6irO9z98xDceosuGiQ=
+@@ -215,6 +403,9 @@ golang.org/x/text v0.3.7/go.mod h1:u+2+/6zg+i71rQMx5EYifcz6MCKuco9NR6JIITiCfzQ=
+ golang.org/x/text v0.40.0 h1:Ub2Z6/xjgF1WrYQz2nuITOEegKFtiIy+rieRJ5lHZKs=
+ golang.org/x/text v0.40.0/go.mod h1:hpnzDAfGV753zIKo+wk3u1bVKCGPbrnF7+7LBF/UHVY=
+ golang.org/x/tools v0.0.0-20180917221912-90fa682c2a6e/go.mod h1:n7NCudcB/nEzxVGmLbDWY5pfWTLqBcC2KZ6jyYvM4mQ=
++golang.org/x/tools v0.0.0-20190311212946-11955173bddd/go.mod h1:LCzVGOaR6xXOjkQ3onu1FJEFr0SW1gC7cKk1uF8kGRs=
++golang.org/x/tools v0.0.0-20191029041327-9cc4af7d6b2c/go.mod h1:b+2E5dAYhXwXZwtnZ6UAqBI28+e2cm9otk0dWdXHAEo=
++golang.org/x/tools v0.0.0-20191108193012-7d206e10da11/go.mod h1:b+2E5dAYhXwXZwtnZ6UAqBI28+e2cm9otk0dWdXHAEo=
+ golang.org/x/tools v0.0.0-20191119224855-298f0cb1881e/go.mod h1:b+2E5dAYhXwXZwtnZ6UAqBI28+e2cm9otk0dWdXHAEo=
+ golang.org/x/tools v0.0.0-20201224043029-2b0845dc783e/go.mod h1:emZCQorbCU4vsT4fOWvOPXz4eW1wZW4PmDk9uLelYpA=
+ golang.org/x/tools v0.48.0 h1:3+hClM1aLL5mjMKm5ovokw9epgRXPuu2tILgismM6RE=
+@@ -223,6 +414,14 @@ golang.org/x/xerrors v0.0.0-20190717185122-a985d3407aa7/go.mod h1:I/5z698sn9Ka8T
+ golang.org/x/xerrors v0.0.0-20191011141410-1b5146add898/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
+ golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
+ golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
++gonum.org/v1/gonum v0.17.0 h1:VbpOemQlsSMrYmn7T2OUvQ4dqxQXU+ouZFQsZOx50z4=
++gonum.org/v1/gonum v0.17.0/go.mod h1:El3tOrEuMpv2UdMrbNlKEh9vd86bmQ6vqIcDwxEOc1E=
++google.golang.org/genproto/googleapis/api v0.0.0-20260120221211-b8f7ae30c516 h1:vmC/ws+pLzWjj/gzApyoZuSVrDtF1aod4u/+bbj8hgM=
++google.golang.org/genproto/googleapis/api v0.0.0-20260120221211-b8f7ae30c516/go.mod h1:p3MLuOwURrGBRoEyFHBT3GjUwaCQVKeNqqWxlcISGdw=
++google.golang.org/genproto/googleapis/rpc v0.0.0-20260120221211-b8f7ae30c516 h1:sNrWoksmOyF5bvJUcnmbeAmQi8baNhqg5IWaI3llQqU=
++google.golang.org/genproto/googleapis/rpc v0.0.0-20260120221211-b8f7ae30c516/go.mod h1:j9x/tPzZkyxcgEFkiKEEGxfvyumM01BEtsW8xzOahRQ=
++google.golang.org/grpc v1.80.0 h1:Xr6m2WmWZLETvUNvIUmeD5OAagMw3FiKmMlTdViWsHM=
++google.golang.org/grpc v1.80.0/go.mod h1:ho/dLnxwi3EDJA4Zghp7k2Ec1+c2jqup0bFkw07bwF4=
+ google.golang.org/protobuf v0.0.0-20200109180630-ec00e32a8dfd/go.mod h1:DFci5gLYBciE7Vtevhsrf46CRTquxDuWsQurQQe4oz8=
+ google.golang.org/protobuf v0.0.0-20200221191635-4d8936d0db64/go.mod h1:kwYJMbMJ01Woi6D6+Kah6886xMZcty6N08ah7+eCXa0=
+ google.golang.org/protobuf v0.0.0-20200228230310-ab0ca4ff8a60/go.mod h1:cfTl7dwQJ+fmap5saPgwCLgHXTUD7jkjRqWcaiX5VyM=
+@@ -231,20 +430,32 @@ google.golang.org/protobuf v1.21.0/go.mod h1:47Nbq4nVaFHyn7ilMalzfO3qCViNmqZ2kzi
+ google.golang.org/protobuf v1.23.0/go.mod h1:EGpADcykh3NcUnDUJcl1+ZksZNG86OlYog2l/sGQquU=
+ google.golang.org/protobuf v1.26.0-rc.1/go.mod h1:jlhhOSvTdKEhbULTjvd4ARK9grFBp09yW+WbY/TyQbw=
+ google.golang.org/protobuf v1.26.0/go.mod h1:9q0QmTI4eRPtz6boOQmLYwt+qCgq0jsYwAQnmE0givc=
++google.golang.org/protobuf v1.36.11 h1:fV6ZwhNocDyBLK0dj+fg8ektcVegBBuEolpbTQyBNVE=
++google.golang.org/protobuf v1.36.11/go.mod h1:HTf+CrKn2C3g5S8VImy6tdcUvCska2kB7j23XfzDpco=
+ gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
++gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
+ gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
+ gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c h1:Hei/4ADfdWqJk1ZMxUNpqntNwaWcugrBjAiHlqqRiVk=
+ gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c/go.mod h1:JHkPIbrfpd72SG/EVd6muEfDQjcINNoR0C8j2r3qZ4Q=
+ gopkg.in/fsnotify.v1 v1.4.7/go.mod h1:Tz8NjZHkW78fSQdbUxIjBTcgA1z1m8ZHf0WmKUhAMys=
++gopkg.in/natefinch/lumberjack.v2 v2.0.0/go.mod h1:l0ndWWf7gzL7RNwBG7wST/UCcT4T24xpD6X8LsfU/+k=
++gopkg.in/natefinch/lumberjack.v2 v2.2.1 h1:bBRl1b0OH9s/DuPhuXpNl+VtCaJXFZ5/uEFST95x9zc=
++gopkg.in/natefinch/lumberjack.v2 v2.2.1/go.mod h1:YD8tP3GAjkrDg1eZH7EGmyESg/lsYskCTPBJVb9jqSc=
+ gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 h1:uRGJdciOHaEIrze2W8Q3AKkepLTh2hOroT7a+7czfdQ=
+ gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7/go.mod h1:dt/ZhP58zS4L8KSrWDmTeBkI65Dw0HsyUHuEVlX15mw=
+ gopkg.in/yaml.v2 v2.2.1/go.mod h1:hI93XBmqTisBFMUTm0b8Fm+jr3Dg1NNxqwp+5A1VGuI=
+ gopkg.in/yaml.v2 v2.2.2/go.mod h1:hI93XBmqTisBFMUTm0b8Fm+jr3Dg1NNxqwp+5A1VGuI=
+ gopkg.in/yaml.v2 v2.2.4/go.mod h1:hI93XBmqTisBFMUTm0b8Fm+jr3Dg1NNxqwp+5A1VGuI=
++gopkg.in/yaml.v2 v2.2.8/go.mod h1:hI93XBmqTisBFMUTm0b8Fm+jr3Dg1NNxqwp+5A1VGuI=
+ gopkg.in/yaml.v2 v2.3.0/go.mod h1:hI93XBmqTisBFMUTm0b8Fm+jr3Dg1NNxqwp+5A1VGuI=
+ gopkg.in/yaml.v2 v2.4.0 h1:D8xgwECY7CYvx+Y2n4sBz93Jn9JRvxdiyyo8CTfuKaY=
+ gopkg.in/yaml.v2 v2.4.0/go.mod h1:RDklbk79AGWmwhnvt/jBztapEOGDOx6ZbXqjP6csGnQ=
+ gopkg.in/yaml.v3 v3.0.0-20191026110619-0b21df46bc1d/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
+ gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
++gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
+ gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
+ gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
++gotest.tools/v3 v3.5.2 h1:7koQfIKdy+I8UTetycgUqXWSDwpgv193Ka+qRsmBY8Q=
++gotest.tools/v3 v3.5.2/go.mod h1:LtdLGcnqToBH83WByAAi/wiwSFCArdFIUV/xxN4pcjA=
++pgregory.net/rapid v1.2.0 h1:keKAYRcjm+e1F0oAuU5F5+YPAWcyxNNRK2wud503Gnk=
++pgregory.net/rapid v1.2.0/go.mod h1:PY5XlDGj0+V1FCq0o192FdRhpKHGTRIWBgqjDBTrq04=
+diff --git a/internal/adapters/postgres/doc.go b/internal/adapters/postgres/doc.go
+new file mode 100644
+index 0000000..e275f99
+--- /dev/null
++++ b/internal/adapters/postgres/doc.go
+@@ -0,0 +1,2 @@
++// Package postgres implements Semlia's PostgreSQL persistence boundary.
++package postgres
+diff --git a/internal/adapters/postgres/migrate.go b/internal/adapters/postgres/migrate.go
+new file mode 100644
+index 0000000..59707a6
+--- /dev/null
++++ b/internal/adapters/postgres/migrate.go
+@@ -0,0 +1,77 @@
++package postgres
++
++import (
++	"database/sql"
++	"errors"
++	"fmt"
++	"net/url"
++	"path/filepath"
++
++	"github.com/golang-migrate/migrate/v4"
++	migratepostgres "github.com/golang-migrate/migrate/v4/database/postgres"
++	_ "github.com/golang-migrate/migrate/v4/source/file"
++	_ "github.com/jackc/pgx/v5/stdlib"
++)
++
++type Migrator struct {
++	migration *migrate.Migrate
++}
++
++func NewMigrator(databaseURL, migrationsPath string) (*Migrator, error) {
++	absolutePath, err := filepath.Abs(migrationsPath)
++	if err != nil {
++		return nil, fmt.Errorf("resolve migration directory: %w", err)
++	}
++	database, err := sql.Open("pgx", databaseURL)
++	if err != nil {
++		return nil, fmt.Errorf("open migration database: %w", err)
++	}
++	driver, err := migratepostgres.WithInstance(database, &migratepostgres.Config{})
++	if err != nil {
++		_ = database.Close()
++		return nil, fmt.Errorf("create migration driver: %w", err)
++	}
++	sourceURL := (&url.URL{Scheme: "file", Path: absolutePath}).String()
++	migration, err := migrate.NewWithDatabaseInstance(sourceURL, "postgres", driver)
++	if err != nil {
++		_ = database.Close()
++		return nil, fmt.Errorf("create migrator: %w", err)
++	}
++	return &Migrator{migration: migration}, nil
++}
++
++func (migrator *Migrator) Up() error {
++	if err := migrator.migration.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
++		return fmt.Errorf("apply migrations: %w", err)
++	}
++	return nil
++}
++
++func (migrator *Migrator) Down() error {
++	if err := migrator.migration.Down(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
++		return fmt.Errorf("revert migrations: %w", err)
++	}
++	return nil
++}
++
++func (migrator *Migrator) Version() (uint, bool, error) {
++	version, dirty, err := migrator.migration.Version()
++	if errors.Is(err, migrate.ErrNilVersion) {
++		return 0, false, nil
++	}
++	if err != nil {
++		return 0, false, fmt.Errorf("read migration version: %w", err)
++	}
++	return version, dirty, nil
++}
++
++func (migrator *Migrator) Close() error {
++	sourceErr, databaseErr := migrator.migration.Close()
++	if sourceErr != nil {
++		return fmt.Errorf("close migration source: %w", sourceErr)
++	}
++	if databaseErr != nil {
++		return fmt.Errorf("close migration database: %w", databaseErr)
++	}
++	return nil
++}
+diff --git a/internal/adapters/postgres/pool.go b/internal/adapters/postgres/pool.go
+new file mode 100644
+index 0000000..ee46002
+--- /dev/null
++++ b/internal/adapters/postgres/pool.go
+@@ -0,0 +1,26 @@
++package postgres
++
++import (
++	"context"
++	"fmt"
++
++	"github.com/jackc/pgx/v5/pgxpool"
++)
++
++type Pool = pgxpool.Pool
++
++func Open(ctx context.Context, databaseURL string) (*Pool, error) {
++	config, err := pgxpool.ParseConfig(databaseURL)
++	if err != nil {
++		return nil, fmt.Errorf("parse PostgreSQL configuration: %w", err)
++	}
++	pool, err := pgxpool.NewWithConfig(ctx, config)
++	if err != nil {
++		return nil, fmt.Errorf("open PostgreSQL pool: %w", err)
++	}
++	if err := pool.Ping(ctx); err != nil {
++		pool.Close()
++		return nil, fmt.Errorf("ping PostgreSQL: %w", err)
++	}
++	return pool, nil
++}
+diff --git a/internal/adapters/postgres/sqlc/audit.sql.go b/internal/adapters/postgres/sqlc/audit.sql.go
+new file mode 100644
+index 0000000..f87a781
+--- /dev/null
++++ b/internal/adapters/postgres/sqlc/audit.sql.go
+@@ -0,0 +1,44 @@
++// Code generated by sqlc. DO NOT EDIT.
++// versions:
++//   sqlc v1.31.1
++// source: audit.sql
++
++package dbgen
++
++import (
++	"context"
++
++	"github.com/jackc/pgx/v5/pgtype"
++)
++
++const createAuditEvent = `-- name: CreateAuditEvent :exec
++INSERT INTO audit_events (
++    id, workspace_id, event_type, actor_id, payload, trace_id, created_at
++) VALUES (
++    $1, $2, $3,
++    $4, $5, $6, $7
++)
++`
++
++type CreateAuditEventParams struct {
++	ID          string             `json:"id"`
++	WorkspaceID string             `json:"workspace_id"`
++	EventType   string             `json:"event_type"`
++	ActorID     pgtype.Text        `json:"actor_id"`
++	Payload     []byte             `json:"payload"`
++	TraceID     string             `json:"trace_id"`
++	CreatedAt   pgtype.Timestamptz `json:"created_at"`
++}
++
++func (q *Queries) CreateAuditEvent(ctx context.Context, arg CreateAuditEventParams) error {
++	_, err := q.db.Exec(ctx, createAuditEvent,
++		arg.ID,
++		arg.WorkspaceID,
++		arg.EventType,
++		arg.ActorID,
++		arg.Payload,
++		arg.TraceID,
++		arg.CreatedAt,
++	)
++	return err
++}
+diff --git a/internal/adapters/postgres/sqlc/db.go b/internal/adapters/postgres/sqlc/db.go
+new file mode 100644
+index 0000000..9db2f37
+--- /dev/null
++++ b/internal/adapters/postgres/sqlc/db.go
+@@ -0,0 +1,32 @@
++// Code generated by sqlc. DO NOT EDIT.
++// versions:
++//   sqlc v1.31.1
++
++package dbgen
++
++import (
++	"context"
++
++	"github.com/jackc/pgx/v5"
++	"github.com/jackc/pgx/v5/pgconn"
++)
++
++type DBTX interface {
++	Exec(context.Context, string, ...interface{}) (pgconn.CommandTag, error)
++	Query(context.Context, string, ...interface{}) (pgx.Rows, error)
++	QueryRow(context.Context, string, ...interface{}) pgx.Row
++}
++
++func New(db DBTX) *Queries {
++	return &Queries{db: db}
++}
++
++type Queries struct {
++	db DBTX
++}
++
++func (q *Queries) WithTx(tx pgx.Tx) *Queries {
++	return &Queries{
++		db: tx,
++	}
++}
+diff --git a/internal/adapters/postgres/sqlc/jobs.sql.go b/internal/adapters/postgres/sqlc/jobs.sql.go
+new file mode 100644
+index 0000000..ffb4e21
+--- /dev/null
++++ b/internal/adapters/postgres/sqlc/jobs.sql.go
+@@ -0,0 +1,208 @@
++// Code generated by sqlc. DO NOT EDIT.
++// versions:
++//   sqlc v1.31.1
++// source: jobs.sql
++
++package dbgen
++
++import (
++	"context"
++
++	"github.com/jackc/pgx/v5/pgtype"
++)
++
++const claimJob = `-- name: ClaimJob :one
++WITH candidate AS (
++    SELECT id
++    FROM jobs
++    WHERE status IN ('queued', 'retryable')
++      AND available_at <= $3
++    ORDER BY available_at, created_at, id
++    FOR UPDATE SKIP LOCKED
++    LIMIT 1
++)
++UPDATE jobs
++SET status = 'running',
++    attempt = attempt + 1,
++    leased_until = $1,
++    lease_owner = $2,
++    last_error_code = NULL,
++    updated_at = $3
++FROM candidate
++WHERE jobs.id = candidate.id
++RETURNING jobs.id, jobs.workspace_id, jobs.job_type, jobs.payload, jobs.status, jobs.attempt, jobs.max_attempts, jobs.available_at, jobs.leased_until, jobs.lease_owner, jobs.idempotency_key, jobs.last_error_code, jobs.trace_id, jobs.created_at, jobs.updated_at, jobs.completed_at
++`
++
++type ClaimJobParams struct {
++	LeasedUntil pgtype.Timestamptz `json:"leased_until"`
++	LeaseOwner  pgtype.Text        `json:"lease_owner"`
++	ClaimedAt   pgtype.Timestamptz `json:"claimed_at"`
++}
++
++func (q *Queries) ClaimJob(ctx context.Context, arg ClaimJobParams) (Job, error) {
++	row := q.db.QueryRow(ctx, claimJob, arg.LeasedUntil, arg.LeaseOwner, arg.ClaimedAt)
++	var i Job
++	err := row.Scan(
++		&i.ID,
++		&i.WorkspaceID,
++		&i.JobType,
++		&i.Payload,
++		&i.Status,
++		&i.Attempt,
++		&i.MaxAttempts,
++		&i.AvailableAt,
++		&i.LeasedUntil,
++		&i.LeaseOwner,
++		&i.IdempotencyKey,
++		&i.LastErrorCode,
++		&i.TraceID,
++		&i.CreatedAt,
++		&i.UpdatedAt,
++		&i.CompletedAt,
++	)
++	return i, err
++}
++
++const enqueueJob = `-- name: EnqueueJob :one
++INSERT INTO jobs (
++    id, workspace_id, job_type, payload, max_attempts,
++    available_at, idempotency_key, trace_id
++) VALUES (
++    $1, $2, $3, $4,
++    $5, $6, $7, $8
++)
++ON CONFLICT (workspace_id, idempotency_key) DO UPDATE
++SET idempotency_key = EXCLUDED.idempotency_key
++RETURNING id, workspace_id, job_type, payload, status, attempt, max_attempts, available_at, leased_until, lease_owner, idempotency_key, last_error_code, trace_id, created_at, updated_at, completed_at
++`
++
++type EnqueueJobParams struct {
++	ID             string             `json:"id"`
++	WorkspaceID    string             `json:"workspace_id"`
++	JobType        string             `json:"job_type"`
++	Payload        []byte             `json:"payload"`
++	MaxAttempts    int32              `json:"max_attempts"`
++	AvailableAt    pgtype.Timestamptz `json:"available_at"`
++	IdempotencyKey string             `json:"idempotency_key"`
++	TraceID        string             `json:"trace_id"`
++}
++
++func (q *Queries) EnqueueJob(ctx context.Context, arg EnqueueJobParams) (Job, error) {
++	row := q.db.QueryRow(ctx, enqueueJob,
++		arg.ID,
++		arg.WorkspaceID,
++		arg.JobType,
++		arg.Payload,
++		arg.MaxAttempts,
++		arg.AvailableAt,
++		arg.IdempotencyKey,
++		arg.TraceID,
++	)
++	var i Job
++	err := row.Scan(
++		&i.ID,
++		&i.WorkspaceID,
++		&i.JobType,
++		&i.Payload,
++		&i.Status,
++		&i.Attempt,
++		&i.MaxAttempts,
++		&i.AvailableAt,
++		&i.LeasedUntil,
++		&i.LeaseOwner,
++		&i.IdempotencyKey,
++		&i.LastErrorCode,
++		&i.TraceID,
++		&i.CreatedAt,
++		&i.UpdatedAt,
++		&i.CompletedAt,
++	)
++	return i, err
++}
++
++const markJobFailed = `-- name: MarkJobFailed :execrows
++UPDATE jobs
++SET status = CASE WHEN attempt >= max_attempts THEN 'dead_letter' ELSE 'retryable' END,
++    available_at = $1,
++    leased_until = NULL,
++    lease_owner = NULL,
++    last_error_code = $2,
++    updated_at = $3,
++    completed_at = CASE
++        WHEN attempt >= max_attempts THEN $3::timestamptz
++        ELSE NULL::timestamptz
++    END
++WHERE id = $4
++  AND status = 'running'
++  AND lease_owner = $5
++`
++
++type MarkJobFailedParams struct {
++	AvailableAt pgtype.Timestamptz `json:"available_at"`
++	ErrorCode   pgtype.Text        `json:"error_code"`
++	FailedAt    pgtype.Timestamptz `json:"failed_at"`
++	ID          string             `json:"id"`
++	LeaseOwner  pgtype.Text        `json:"lease_owner"`
++}
++
++func (q *Queries) MarkJobFailed(ctx context.Context, arg MarkJobFailedParams) (int64, error) {
++	result, err := q.db.Exec(ctx, markJobFailed,
++		arg.AvailableAt,
++		arg.ErrorCode,
++		arg.FailedAt,
++		arg.ID,
++		arg.LeaseOwner,
++	)
++	if err != nil {
++		return 0, err
++	}
++	return result.RowsAffected(), nil
++}
++
++const markJobSucceeded = `-- name: MarkJobSucceeded :execrows
++UPDATE jobs
++SET status = 'succeeded',
++    leased_until = NULL,
++    lease_owner = NULL,
++    last_error_code = NULL,
++    updated_at = $1,
++    completed_at = $1
++WHERE id = $2
++  AND status = 'running'
++  AND lease_owner = $3
++`
++
++type MarkJobSucceededParams struct {
++	CompletedAt pgtype.Timestamptz `json:"completed_at"`
++	ID          string             `json:"id"`
++	LeaseOwner  pgtype.Text        `json:"lease_owner"`
++}
++
++func (q *Queries) MarkJobSucceeded(ctx context.Context, arg MarkJobSucceededParams) (int64, error) {
++	result, err := q.db.Exec(ctx, markJobSucceeded, arg.CompletedAt, arg.ID, arg.LeaseOwner)
++	if err != nil {
++		return 0, err
++	}
++	return result.RowsAffected(), nil
++}
++
++const reapExpiredJobs = `-- name: ReapExpiredJobs :execrows
++UPDATE jobs
++SET status = CASE WHEN attempt >= max_attempts THEN 'dead_letter' ELSE 'retryable' END,
++    available_at = $1,
++    leased_until = NULL,
++    lease_owner = NULL,
++    last_error_code = 'LEASE_EXPIRED',
++    updated_at = $1,
++    completed_at = CASE WHEN attempt >= max_attempts THEN $1 ELSE NULL END
++WHERE status = 'running'
++  AND leased_until <= $1
++`
++
++func (q *Queries) ReapExpiredJobs(ctx context.Context, expiredAt pgtype.Timestamptz) (int64, error) {
++	result, err := q.db.Exec(ctx, reapExpiredJobs, expiredAt)
++	if err != nil {
++		return 0, err
++	}
++	return result.RowsAffected(), nil
++}
+diff --git a/internal/adapters/postgres/sqlc/models.go b/internal/adapters/postgres/sqlc/models.go
+new file mode 100644
+index 0000000..fd4187a
+--- /dev/null
++++ b/internal/adapters/postgres/sqlc/models.go
+@@ -0,0 +1,64 @@
++// Code generated by sqlc. DO NOT EDIT.
++// versions:
++//   sqlc v1.31.1
++
++package dbgen
++
++import (
++	"github.com/jackc/pgx/v5/pgtype"
++)
++
++type AuditEvent struct {
++	ID          string             `json:"id"`
++	WorkspaceID string             `json:"workspace_id"`
++	EventType   string             `json:"event_type"`
++	ActorID     pgtype.Text        `json:"actor_id"`
++	Payload     []byte             `json:"payload"`
++	TraceID     string             `json:"trace_id"`
++	CreatedAt   pgtype.Timestamptz `json:"created_at"`
++}
++
++type Job struct {
++	ID             string             `json:"id"`
++	WorkspaceID    string             `json:"workspace_id"`
++	JobType        string             `json:"job_type"`
++	Payload        []byte             `json:"payload"`
++	Status         string             `json:"status"`
++	Attempt        int32              `json:"attempt"`
++	MaxAttempts    int32              `json:"max_attempts"`
++	AvailableAt    pgtype.Timestamptz `json:"available_at"`
++	LeasedUntil    pgtype.Timestamptz `json:"leased_until"`
++	LeaseOwner     pgtype.Text        `json:"lease_owner"`
++	IdempotencyKey string             `json:"idempotency_key"`
++	LastErrorCode  pgtype.Text        `json:"last_error_code"`
++	TraceID        string             `json:"trace_id"`
++	CreatedAt      pgtype.Timestamptz `json:"created_at"`
++	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
++	CompletedAt    pgtype.Timestamptz `json:"completed_at"`
++}
++
++type OutboxEvent struct {
++	ID            string             `json:"id"`
++	WorkspaceID   string             `json:"workspace_id"`
++	EventType     string             `json:"event_type"`
++	Payload       []byte             `json:"payload"`
++	Status        string             `json:"status"`
++	Attempt       int32              `json:"attempt"`
++	MaxAttempts   int32              `json:"max_attempts"`
++	AvailableAt   pgtype.Timestamptz `json:"available_at"`
++	LeasedUntil   pgtype.Timestamptz `json:"leased_until"`
++	LeaseOwner    pgtype.Text        `json:"lease_owner"`
++	LastErrorCode pgtype.Text        `json:"last_error_code"`
++	TraceID       string             `json:"trace_id"`
++	CreatedAt     pgtype.Timestamptz `json:"created_at"`
++	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
++	PublishedAt   pgtype.Timestamptz `json:"published_at"`
++}
++
++type Workspace struct {
++	ID          string             `json:"id"`
++	Slug        string             `json:"slug"`
++	DisplayName string             `json:"display_name"`
++	CreatedAt   pgtype.Timestamptz `json:"created_at"`
++	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
++}
+diff --git a/internal/adapters/postgres/sqlc/outbox.sql.go b/internal/adapters/postgres/sqlc/outbox.sql.go
+new file mode 100644
+index 0000000..cc9b914
+--- /dev/null
++++ b/internal/adapters/postgres/sqlc/outbox.sql.go
+@@ -0,0 +1,177 @@
++// Code generated by sqlc. DO NOT EDIT.
++// versions:
++//   sqlc v1.31.1
++// source: outbox.sql
++
++package dbgen
++
++import (
++	"context"
++
++	"github.com/jackc/pgx/v5/pgtype"
++)
++
++const claimOutboxEvent = `-- name: ClaimOutboxEvent :one
++WITH candidate AS (
++    SELECT id
++    FROM outbox_events
++    WHERE status IN ('queued', 'retryable')
++      AND available_at <= $3
++    ORDER BY available_at, created_at, id
++    FOR UPDATE SKIP LOCKED
++    LIMIT 1
++)
++UPDATE outbox_events
++SET status = 'publishing',
++    attempt = attempt + 1,
++    leased_until = $1,
++    lease_owner = $2,
++    last_error_code = NULL,
++    updated_at = $3
++FROM candidate
++WHERE outbox_events.id = candidate.id
++RETURNING outbox_events.id, outbox_events.workspace_id, outbox_events.event_type, outbox_events.payload, outbox_events.status, outbox_events.attempt, outbox_events.max_attempts, outbox_events.available_at, outbox_events.leased_until, outbox_events.lease_owner, outbox_events.last_error_code, outbox_events.trace_id, outbox_events.created_at, outbox_events.updated_at, outbox_events.published_at
++`
++
++type ClaimOutboxEventParams struct {
++	LeasedUntil pgtype.Timestamptz `json:"leased_until"`
++	LeaseOwner  pgtype.Text        `json:"lease_owner"`
++	ClaimedAt   pgtype.Timestamptz `json:"claimed_at"`
++}
++
++func (q *Queries) ClaimOutboxEvent(ctx context.Context, arg ClaimOutboxEventParams) (OutboxEvent, error) {
++	row := q.db.QueryRow(ctx, claimOutboxEvent, arg.LeasedUntil, arg.LeaseOwner, arg.ClaimedAt)
++	var i OutboxEvent
++	err := row.Scan(
++		&i.ID,
++		&i.WorkspaceID,
++		&i.EventType,
++		&i.Payload,
++		&i.Status,
++		&i.Attempt,
++		&i.MaxAttempts,
++		&i.AvailableAt,
++		&i.LeasedUntil,
++		&i.LeaseOwner,
++		&i.LastErrorCode,
++		&i.TraceID,
++		&i.CreatedAt,
++		&i.UpdatedAt,
++		&i.PublishedAt,
++	)
++	return i, err
++}
++
++const enqueueOutboxEvent = `-- name: EnqueueOutboxEvent :exec
++INSERT INTO outbox_events (
++    id, workspace_id, event_type, payload, max_attempts, available_at, trace_id
++) VALUES (
++    $1, $2, $3, $4,
++    $5, $6, $7
++)
++`
++
++type EnqueueOutboxEventParams struct {
++	ID          string             `json:"id"`
++	WorkspaceID string             `json:"workspace_id"`
++	EventType   string             `json:"event_type"`
++	Payload     []byte             `json:"payload"`
++	MaxAttempts int32              `json:"max_attempts"`
++	AvailableAt pgtype.Timestamptz `json:"available_at"`
++	TraceID     string             `json:"trace_id"`
++}
++
++func (q *Queries) EnqueueOutboxEvent(ctx context.Context, arg EnqueueOutboxEventParams) error {
++	_, err := q.db.Exec(ctx, enqueueOutboxEvent,
++		arg.ID,
++		arg.WorkspaceID,
++		arg.EventType,
++		arg.Payload,
++		arg.MaxAttempts,
++		arg.AvailableAt,
++		arg.TraceID,
++	)
++	return err
++}
++
++const markOutboxEventFailed = `-- name: MarkOutboxEventFailed :execrows
++UPDATE outbox_events
++SET status = CASE WHEN attempt >= max_attempts THEN 'dead_letter' ELSE 'retryable' END,
++    available_at = $1,
++    leased_until = NULL,
++    lease_owner = NULL,
++    last_error_code = $2,
++    updated_at = $3
++WHERE id = $4
++  AND status = 'publishing'
++  AND lease_owner = $5
++`
++
++type MarkOutboxEventFailedParams struct {
++	AvailableAt pgtype.Timestamptz `json:"available_at"`
++	ErrorCode   pgtype.Text        `json:"error_code"`
++	FailedAt    pgtype.Timestamptz `json:"failed_at"`
++	ID          string             `json:"id"`
++	LeaseOwner  pgtype.Text        `json:"lease_owner"`
++}
++
++func (q *Queries) MarkOutboxEventFailed(ctx context.Context, arg MarkOutboxEventFailedParams) (int64, error) {
++	result, err := q.db.Exec(ctx, markOutboxEventFailed,
++		arg.AvailableAt,
++		arg.ErrorCode,
++		arg.FailedAt,
++		arg.ID,
++		arg.LeaseOwner,
++	)
++	if err != nil {
++		return 0, err
++	}
++	return result.RowsAffected(), nil
++}
++
++const markOutboxEventPublished = `-- name: MarkOutboxEventPublished :execrows
++UPDATE outbox_events
++SET status = 'published',
++    leased_until = NULL,
++    lease_owner = NULL,
++    last_error_code = NULL,
++    updated_at = $1,
++    published_at = $1
++WHERE id = $2
++  AND status = 'publishing'
++  AND lease_owner = $3
++`
++
++type MarkOutboxEventPublishedParams struct {
++	PublishedAt pgtype.Timestamptz `json:"published_at"`
++	ID          string             `json:"id"`
++	LeaseOwner  pgtype.Text        `json:"lease_owner"`
++}
++
++func (q *Queries) MarkOutboxEventPublished(ctx context.Context, arg MarkOutboxEventPublishedParams) (int64, error) {
++	result, err := q.db.Exec(ctx, markOutboxEventPublished, arg.PublishedAt, arg.ID, arg.LeaseOwner)
++	if err != nil {
++		return 0, err
++	}
++	return result.RowsAffected(), nil
++}
++
++const reapExpiredOutboxEvents = `-- name: ReapExpiredOutboxEvents :execrows
++UPDATE outbox_events
++SET status = CASE WHEN attempt >= max_attempts THEN 'dead_letter' ELSE 'retryable' END,
++    available_at = $1,
++    leased_until = NULL,
++    lease_owner = NULL,
++    last_error_code = 'LEASE_EXPIRED',
++    updated_at = $1
++WHERE status = 'publishing'
++  AND leased_until <= $1
++`
++
++func (q *Queries) ReapExpiredOutboxEvents(ctx context.Context, expiredAt pgtype.Timestamptz) (int64, error) {
++	result, err := q.db.Exec(ctx, reapExpiredOutboxEvents, expiredAt)
++	if err != nil {
++		return 0, err
++	}
++	return result.RowsAffected(), nil
++}
+diff --git a/internal/adapters/postgres/sqlc/workspaces.sql.go b/internal/adapters/postgres/sqlc/workspaces.sql.go
+new file mode 100644
+index 0000000..35aa500
+--- /dev/null
++++ b/internal/adapters/postgres/sqlc/workspaces.sql.go
+@@ -0,0 +1,35 @@
++// Code generated by sqlc. DO NOT EDIT.
++// versions:
++//   sqlc v1.31.1
++// source: workspaces.sql
++
++package dbgen
++
++import (
++	"context"
++)
++
++const createWorkspace = `-- name: CreateWorkspace :one
++INSERT INTO workspaces (id, slug, display_name)
++VALUES ($1, $2, $3)
++RETURNING id, slug, display_name, created_at, updated_at
++`
++
++type CreateWorkspaceParams struct {
++	ID          string `json:"id"`
++	Slug        string `json:"slug"`
++	DisplayName string `json:"display_name"`
++}
++
++func (q *Queries) CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams) (Workspace, error) {
++	row := q.db.QueryRow(ctx, createWorkspace, arg.ID, arg.Slug, arg.DisplayName)
++	var i Workspace
++	err := row.Scan(
++		&i.ID,
++		&i.Slug,
++		&i.DisplayName,
++		&i.CreatedAt,
++		&i.UpdatedAt,
++	)
++	return i, err
++}
+diff --git a/internal/adapters/postgres/store.go b/internal/adapters/postgres/store.go
+new file mode 100644
+index 0000000..4de5f54
+--- /dev/null
++++ b/internal/adapters/postgres/store.go
+@@ -0,0 +1,286 @@
++package postgres
++
++import (
++	"context"
++	"encoding/json"
++	"errors"
++	"fmt"
++	"time"
++
++	"github.com/jackc/pgx/v5"
++	"github.com/jackc/pgx/v5/pgtype"
++	dbgen "github.com/semlia/semlia/internal/adapters/postgres/sqlc"
++	"github.com/semlia/semlia/internal/application/jobs"
++)
++
++var ErrLeaseLost = errors.New("lease ownership was lost")
++
++type Store struct {
++	pool    *Pool
++	queries *dbgen.Queries
++}
++
++type TxStore struct {
++	queries *dbgen.Queries
++}
++
++func NewStore(pool *Pool) *Store {
++	return &Store{pool: pool, queries: dbgen.New(pool)}
++}
++
++func (store *Store) EnqueueJob(ctx context.Context, input jobs.EnqueueJobParams) (jobs.Job, error) {
++	row, err := store.queries.EnqueueJob(ctx, dbgen.EnqueueJobParams{
++		ID:             input.ID,
++		WorkspaceID:    input.WorkspaceID,
++		JobType:        input.Type,
++		Payload:        input.Payload,
++		MaxAttempts:    input.MaxAttempts,
++		AvailableAt:    timestamp(input.AvailableAt),
++		IdempotencyKey: input.IdempotencyKey,
++		TraceID:        input.TraceID,
++	})
++	if err != nil {
++		return jobs.Job{}, fmt.Errorf("enqueue job: %w", err)
++	}
++	return jobFromRow(row), nil
++}
++
++func (store *Store) ReapExpiredJobs(ctx context.Context, now time.Time) error {
++	if _, err := store.queries.ReapExpiredJobs(ctx, timestamp(now)); err != nil {
++		return fmt.Errorf("reap expired job leases: %w", err)
++	}
++	return nil
++}
++
++func (store *Store) ClaimJob(ctx context.Context, owner string, now time.Time, leaseDuration time.Duration) (*jobs.Job, error) {
++	row, err := store.queries.ClaimJob(ctx, dbgen.ClaimJobParams{
++		LeasedUntil: timestamp(now.Add(leaseDuration)),
++		LeaseOwner:  textValue(owner),
++		ClaimedAt:   timestamp(now),
++	})
++	if errors.Is(err, pgx.ErrNoRows) {
++		return nil, nil
++	}
++	if err != nil {
++		return nil, fmt.Errorf("claim job lease: %w", err)
++	}
++	job := jobFromRow(row)
++	return &job, nil
++}
++
++func (store *Store) MarkJobSucceeded(ctx context.Context, id, owner string, completedAt time.Time) error {
++	rows, err := store.queries.MarkJobSucceeded(ctx, dbgen.MarkJobSucceededParams{
++		CompletedAt: timestamp(completedAt),
++		ID:          id,
++		LeaseOwner:  textValue(owner),
++	})
++	if err != nil {
++		return fmt.Errorf("complete job: %w", err)
++	}
++	return requireLease(rows)
++}
++
++func (store *Store) MarkJobFailed(
++	ctx context.Context,
++	id, owner, errorCode string,
++	availableAt, failedAt time.Time,
++) error {
++	rows, err := store.queries.MarkJobFailed(ctx, dbgen.MarkJobFailedParams{
++		AvailableAt: timestamp(availableAt),
++		ErrorCode:   textValue(errorCode),
++		FailedAt:    timestamp(failedAt),
++		ID:          id,
++		LeaseOwner:  textValue(owner),
++	})
++	if err != nil {
++		return fmt.Errorf("fail job: %w", err)
++	}
++	return requireLease(rows)
++}
++
++func (store *Store) ReapExpiredOutboxEvents(ctx context.Context, now time.Time) error {
++	if _, err := store.queries.ReapExpiredOutboxEvents(ctx, timestamp(now)); err != nil {
++		return fmt.Errorf("reap expired outbox leases: %w", err)
++	}
++	return nil
++}
++
++func (store *Store) ClaimOutboxEvent(
++	ctx context.Context,
++	owner string,
++	now time.Time,
++	leaseDuration time.Duration,
++) (*jobs.OutboxEvent, error) {
++	row, err := store.queries.ClaimOutboxEvent(ctx, dbgen.ClaimOutboxEventParams{
++		LeasedUntil: timestamp(now.Add(leaseDuration)),
++		LeaseOwner:  textValue(owner),
++		ClaimedAt:   timestamp(now),
++	})
++	if errors.Is(err, pgx.ErrNoRows) {
++		return nil, nil
++	}
++	if err != nil {
++		return nil, fmt.Errorf("claim outbox lease: %w", err)
++	}
++	event := outboxFromRow(row)
++	return &event, nil
++}
++
++func (store *Store) MarkOutboxEventPublished(ctx context.Context, id, owner string, publishedAt time.Time) error {
++	rows, err := store.queries.MarkOutboxEventPublished(ctx, dbgen.MarkOutboxEventPublishedParams{
++		PublishedAt: timestamp(publishedAt),
++		ID:          id,
++		LeaseOwner:  textValue(owner),
++	})
++	if err != nil {
++		return fmt.Errorf("publish outbox event: %w", err)
++	}
++	return requireLease(rows)
++}
++
++func (store *Store) MarkOutboxEventFailed(
++	ctx context.Context,
++	id, owner, errorCode string,
++	availableAt, failedAt time.Time,
++) error {
++	rows, err := store.queries.MarkOutboxEventFailed(ctx, dbgen.MarkOutboxEventFailedParams{
++		AvailableAt: timestamp(availableAt),
++		ErrorCode:   textValue(errorCode),
++		FailedAt:    timestamp(failedAt),
++		ID:          id,
++		LeaseOwner:  textValue(owner),
++	})
++	if err != nil {
++		return fmt.Errorf("fail outbox event: %w", err)
++	}
++	return requireLease(rows)
++}
++
++func (store *Store) WithTx(ctx context.Context, operation func(*TxStore) error) error {
++	if operation == nil {
++		return errors.New("transaction operation is required")
++	}
++	tx, err := store.pool.BeginTx(ctx, pgx.TxOptions{})
++	if err != nil {
++		return fmt.Errorf("begin transaction: %w", err)
++	}
++	defer func() { _ = tx.Rollback(ctx) }()
++
++	txStore := &TxStore{queries: dbgen.New(tx)}
++	if err := operation(txStore); err != nil {
++		return err
++	}
++	if err := tx.Commit(ctx); err != nil {
++		return fmt.Errorf("commit transaction: %w", err)
++	}
++	return nil
++}
++
++func (store *TxStore) CreateAuditEvent(ctx context.Context, event jobs.AuditEvent) error {
++	actorID := pgtype.Text{}
++	if event.ActorID != "" {
++		actorID = textValue(event.ActorID)
++	}
++	if err := store.queries.CreateAuditEvent(ctx, dbgen.CreateAuditEventParams{
++		ID:          event.ID,
++		WorkspaceID: event.WorkspaceID,
++		EventType:   event.Type,
++		ActorID:     actorID,
++		Payload:     event.Payload,
++		TraceID:     event.TraceID,
++		CreatedAt:   timestamp(event.CreatedAt),
++	}); err != nil {
++		return fmt.Errorf("create audit event: %w", err)
++	}
++	return nil
++}
++
++func (store *TxStore) EnqueueOutbox(ctx context.Context, event jobs.OutboxEvent) error {
++	if err := store.queries.EnqueueOutboxEvent(ctx, dbgen.EnqueueOutboxEventParams{
++		ID:          event.ID,
++		WorkspaceID: event.WorkspaceID,
++		EventType:   event.Type,
++		Payload:     event.Payload,
++		MaxAttempts: event.MaxAttempts,
++		AvailableAt: timestamp(event.AvailableAt),
++		TraceID:     event.TraceID,
++	}); err != nil {
++		return fmt.Errorf("enqueue outbox event: %w", err)
++	}
++	return nil
++}
++
++func requireLease(rows int64) error {
++	if rows != 1 {
++		return ErrLeaseLost
++	}
++	return nil
++}
++
++func timestamp(value time.Time) pgtype.Timestamptz {
++	return pgtype.Timestamptz{Time: value.UTC(), Valid: true}
++}
++
++func textValue(value string) pgtype.Text {
++	return pgtype.Text{String: value, Valid: true}
++}
++
++func jobFromRow(row dbgen.Job) jobs.Job {
++	return jobs.Job{
++		ID:             row.ID,
++		WorkspaceID:    row.WorkspaceID,
++		Type:           row.JobType,
++		Payload:        cloneJSON(row.Payload),
++		Status:         row.Status,
++		Attempt:        row.Attempt,
++		MaxAttempts:    row.MaxAttempts,
++		AvailableAt:    row.AvailableAt.Time,
++		LeasedUntil:    optionalTime(row.LeasedUntil),
++		LeaseOwner:     optionalText(row.LeaseOwner),
++		IdempotencyKey: row.IdempotencyKey,
++		LastErrorCode:  optionalText(row.LastErrorCode),
++		TraceID:        row.TraceID,
++		CreatedAt:      row.CreatedAt.Time,
++		UpdatedAt:      row.UpdatedAt.Time,
++		CompletedAt:    optionalTime(row.CompletedAt),
++	}
++}
++
++func outboxFromRow(row dbgen.OutboxEvent) jobs.OutboxEvent {
++	return jobs.OutboxEvent{
++		ID:            row.ID,
++		WorkspaceID:   row.WorkspaceID,
++		Type:          row.EventType,
++		Payload:       cloneJSON(row.Payload),
++		Status:        row.Status,
++		Attempt:       row.Attempt,
++		MaxAttempts:   row.MaxAttempts,
++		AvailableAt:   row.AvailableAt.Time,
++		LeasedUntil:   optionalTime(row.LeasedUntil),
++		LeaseOwner:    optionalText(row.LeaseOwner),
++		LastErrorCode: optionalText(row.LastErrorCode),
++		TraceID:       row.TraceID,
++		CreatedAt:     row.CreatedAt.Time,
++		UpdatedAt:     row.UpdatedAt.Time,
++		PublishedAt:   optionalTime(row.PublishedAt),
++	}
++}
++
++func optionalTime(value pgtype.Timestamptz) *time.Time {
++	if !value.Valid {
++		return nil
++	}
++	result := value.Time.UTC()
++	return &result
++}
++
++func optionalText(value pgtype.Text) string {
++	if !value.Valid {
++		return ""
++	}
++	return value.String
++}
++
++func cloneJSON(value []byte) json.RawMessage {
++	return append(json.RawMessage(nil), value...)
++}
+diff --git a/internal/application/jobs/dispatcher.go b/internal/application/jobs/dispatcher.go
+new file mode 100644
+index 0000000..1d447c0
+--- /dev/null
++++ b/internal/application/jobs/dispatcher.go
+@@ -0,0 +1,87 @@
++package jobs
++
++import (
++	"context"
++	"errors"
++	"fmt"
++	"time"
++)
++
++const (
++	PublishFailed = "PUBLISH_FAILED"
++	PublishPanic  = "PUBLISH_PANIC"
++)
++
++type Dispatcher struct {
++	repository    OutboxRepository
++	publisher     Publisher
++	clock         Clock
++	backoff       Backoff
++	leaseDuration time.Duration
++}
++
++func NewDispatcher(
++	repository OutboxRepository,
++	publisher Publisher,
++	clock Clock,
++	backoff Backoff,
++	leaseDuration time.Duration,
++) *Dispatcher {
++	return &Dispatcher{
++		repository:    repository,
++		publisher:     publisher,
++		clock:         clock,
++		backoff:       backoff,
++		leaseDuration: leaseDuration,
++	}
++}
++
++func (dispatcher *Dispatcher) RunOne(ctx context.Context, owner string) (bool, error) {
++	if owner == "" {
++		return false, errors.New("dispatcher owner is required")
++	}
++	if dispatcher.repository == nil || dispatcher.publisher == nil || dispatcher.clock == nil || dispatcher.backoff == nil || dispatcher.leaseDuration <= 0 {
++		return false, errors.New("dispatcher is not configured")
++	}
++
++	now := dispatcher.clock.Now().UTC()
++	if err := dispatcher.repository.ReapExpiredOutboxEvents(ctx, now); err != nil {
++		return false, fmt.Errorf("reap expired outbox events: %w", err)
++	}
++	event, err := dispatcher.repository.ClaimOutboxEvent(ctx, owner, now, dispatcher.leaseDuration)
++	if err != nil {
++		return false, fmt.Errorf("claim outbox event: %w", err)
++	}
++	if event == nil {
++		return false, nil
++	}
++
++	errorCode := dispatcher.publish(ctx, *event)
++	finishedAt := dispatcher.clock.Now().UTC()
++	if errorCode == "" {
++		if err := dispatcher.repository.MarkOutboxEventPublished(ctx, event.ID, owner, finishedAt); err != nil {
++			return true, fmt.Errorf("mark outbox event published: %w", err)
++		}
++		return true, nil
++	}
++	delay := dispatcher.backoff.Delay(event.Attempt)
++	if delay < 0 {
++		delay = 0
++	}
++	if err := dispatcher.repository.MarkOutboxEventFailed(ctx, event.ID, owner, errorCode, finishedAt.Add(delay), finishedAt); err != nil {
++		return true, fmt.Errorf("mark outbox event failed: %w", err)
++	}
++	return true, nil
++}
++
++func (dispatcher *Dispatcher) publish(ctx context.Context, event OutboxEvent) (code string) {
++	defer func() {
++		if recover() != nil {
++			code = PublishPanic
++		}
++	}()
++	if err := dispatcher.publisher.Publish(ctx, event); err != nil {
++		return PublishFailed
++	}
++	return ""
++}
+diff --git a/internal/application/jobs/doc.go b/internal/application/jobs/doc.go
+new file mode 100644
+index 0000000..49241b4
+--- /dev/null
++++ b/internal/application/jobs/doc.go
+@@ -0,0 +1,2 @@
++// Package jobs coordinates leased background jobs and outbox delivery.
++package jobs
+diff --git a/internal/application/jobs/types.go b/internal/application/jobs/types.go
+new file mode 100644
+index 0000000..936d44a
+--- /dev/null
++++ b/internal/application/jobs/types.go
+@@ -0,0 +1,101 @@
++package jobs
++
++import (
++	"context"
++	"encoding/json"
++	"time"
++)
++
++type Job struct {
++	ID             string
++	WorkspaceID    string
++	Type           string
++	Payload        json.RawMessage
++	Status         string
++	Attempt        int32
++	MaxAttempts    int32
++	AvailableAt    time.Time
++	LeasedUntil    *time.Time
++	LeaseOwner     string
++	IdempotencyKey string
++	LastErrorCode  string
++	TraceID        string
++	CreatedAt      time.Time
++	UpdatedAt      time.Time
++	CompletedAt    *time.Time
++}
++
++type EnqueueJobParams struct {
++	ID             string
++	WorkspaceID    string
++	Type           string
++	Payload        json.RawMessage
++	MaxAttempts    int32
++	AvailableAt    time.Time
++	IdempotencyKey string
++	TraceID        string
++}
++
++type AuditEvent struct {
++	ID          string
++	WorkspaceID string
++	Type        string
++	ActorID     string
++	Payload     json.RawMessage
++	TraceID     string
++	CreatedAt   time.Time
++}
++
++type OutboxEvent struct {
++	ID            string
++	WorkspaceID   string
++	Type          string
++	Payload       json.RawMessage
++	Status        string
++	Attempt       int32
++	MaxAttempts   int32
++	AvailableAt   time.Time
++	LeasedUntil   *time.Time
++	LeaseOwner    string
++	LastErrorCode string
++	TraceID       string
++	CreatedAt     time.Time
++	UpdatedAt     time.Time
++	PublishedAt   *time.Time
++}
++
++type Clock interface {
++	Now() time.Time
++}
++
++type ClockFunc func() time.Time
++
++func (fn ClockFunc) Now() time.Time { return fn() }
++
++type Backoff interface {
++	Delay(attempt int32) time.Duration
++}
++
++type BackoffFunc func(attempt int32) time.Duration
++
++func (fn BackoffFunc) Delay(attempt int32) time.Duration { return fn(attempt) }
++
++type Handler func(context.Context, Job) error
++
++type Publisher interface {
++	Publish(context.Context, OutboxEvent) error
++}
++
++type Repository interface {
++	ReapExpiredJobs(context.Context, time.Time) error
++	ClaimJob(context.Context, string, time.Time, time.Duration) (*Job, error)
++	MarkJobSucceeded(context.Context, string, string, time.Time) error
++	MarkJobFailed(context.Context, string, string, string, time.Time, time.Time) error
++}
++
++type OutboxRepository interface {
++	ReapExpiredOutboxEvents(context.Context, time.Time) error
++	ClaimOutboxEvent(context.Context, string, time.Time, time.Duration) (*OutboxEvent, error)
++	MarkOutboxEventPublished(context.Context, string, string, time.Time) error
++	MarkOutboxEventFailed(context.Context, string, string, string, time.Time, time.Time) error
++}
+diff --git a/internal/application/jobs/worker.go b/internal/application/jobs/worker.go
+new file mode 100644
+index 0000000..76999f9
+--- /dev/null
++++ b/internal/application/jobs/worker.go
+@@ -0,0 +1,121 @@
++package jobs
++
++import (
++	"context"
++	"errors"
++	"fmt"
++	"time"
++)
++
++const (
++	HandlerFailed   = "HANDLER_FAILED"
++	HandlerNotFound = "HANDLER_NOT_FOUND"
++	HandlerPanic    = "HANDLER_PANIC"
++)
++
++type Worker struct {
++	repository    Repository
++	clock         Clock
++	backoff       Backoff
++	leaseDuration time.Duration
++	handlers      map[string]Handler
++}
++
++func NewWorker(repository Repository, clock Clock, backoff Backoff, leaseDuration time.Duration) *Worker {
++	return &Worker{
++		repository:    repository,
++		clock:         clock,
++		backoff:       backoff,
++		leaseDuration: leaseDuration,
++		handlers:      make(map[string]Handler),
++	}
++}
++
++func (worker *Worker) Register(jobType string, handler Handler) {
++	if jobType == "" || handler == nil {
++		return
++	}
++	worker.handlers[jobType] = handler
++}
++
++func (worker *Worker) RunOne(ctx context.Context, owner string) (bool, error) {
++	if owner == "" {
++		return false, errors.New("worker owner is required")
++	}
++	if worker.repository == nil || worker.clock == nil || worker.backoff == nil || worker.leaseDuration <= 0 {
++		return false, errors.New("worker is not configured")
++	}
++
++	now := worker.clock.Now().UTC()
++	if err := worker.repository.ReapExpiredJobs(ctx, now); err != nil {
++		return false, fmt.Errorf("reap expired jobs: %w", err)
++	}
++	job, err := worker.repository.ClaimJob(ctx, owner, now, worker.leaseDuration)
++	if err != nil {
++		return false, fmt.Errorf("claim job: %w", err)
++	}
++	if job == nil {
++		return false, nil
++	}
++
++	errorCode := worker.execute(ctx, *job)
++	finishedAt := worker.clock.Now().UTC()
++	if errorCode == "" {
++		if err := worker.repository.MarkJobSucceeded(ctx, job.ID, owner, finishedAt); err != nil {
++			return true, fmt.Errorf("mark job succeeded: %w", err)
++		}
++		return true, nil
++	}
++
++	delay := worker.backoff.Delay(job.Attempt)
++	if delay < 0 {
++		delay = 0
++	}
++	if err := worker.repository.MarkJobFailed(ctx, job.ID, owner, errorCode, finishedAt.Add(delay), finishedAt); err != nil {
++		return true, fmt.Errorf("mark job failed: %w", err)
++	}
++	return true, nil
++}
++
++func (worker *Worker) Run(ctx context.Context, owner string, pollInterval time.Duration) error {
++	if pollInterval <= 0 {
++		return errors.New("poll interval must be positive")
++	}
++	for {
++		processed, err := worker.RunOne(ctx, owner)
++		if err != nil {
++			return err
++		}
++		if processed {
++			continue
++		}
++		timer := time.NewTimer(pollInterval)
++		select {
++		case <-ctx.Done():
++			if !timer.Stop() {
++				select {
++				case <-timer.C:
++				default:
++				}
++			}
++			return nil
++		case <-timer.C:
++		}
++	}
++}
++
++func (worker *Worker) execute(ctx context.Context, job Job) (code string) {
++	handler := worker.handlers[job.Type]
++	if handler == nil {
++		return HandlerNotFound
++	}
++	defer func() {
++		if recover() != nil {
++			code = HandlerPanic
++		}
++	}()
++	if err := handler(ctx, job); err != nil {
++		return HandlerFailed
++	}
++	return ""
++}
+diff --git a/migrations/000001_m0_foundation.down.sql b/migrations/000001_m0_foundation.down.sql
+new file mode 100644
+index 0000000..047f577
+--- /dev/null
++++ b/migrations/000001_m0_foundation.down.sql
+@@ -0,0 +1,5 @@
++DROP TABLE IF EXISTS outbox_events;
++DROP TABLE IF EXISTS jobs;
++DROP TABLE IF EXISTS audit_events;
++DROP TABLE IF EXISTS workspaces;
++DROP FUNCTION IF EXISTS reject_audit_event_mutation();
+diff --git a/migrations/000001_m0_foundation.up.sql b/migrations/000001_m0_foundation.up.sql
+new file mode 100644
+index 0000000..acd3d32
+--- /dev/null
++++ b/migrations/000001_m0_foundation.up.sql
+@@ -0,0 +1,113 @@
++CREATE TABLE workspaces (
++    id text PRIMARY KEY CHECK (id <> ''),
++    slug text NOT NULL UNIQUE CHECK (slug <> ''),
++    display_name text NOT NULL CHECK (display_name <> ''),
++    created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
++    updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
++);
++
++CREATE TABLE audit_events (
++    id text PRIMARY KEY CHECK (id <> ''),
++    workspace_id text NOT NULL REFERENCES workspaces (id) ON DELETE RESTRICT,
++    event_type text NOT NULL CHECK (event_type <> ''),
++    actor_id text,
++    payload jsonb NOT NULL,
++    trace_id text NOT NULL CHECK (trace_id ~ '^[0-9a-f]{32}$'),
++    created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
++);
++
++CREATE INDEX audit_events_workspace_created_idx
++    ON audit_events (workspace_id, created_at DESC, id);
++
++CREATE FUNCTION reject_audit_event_mutation()
++RETURNS trigger
++LANGUAGE plpgsql
++AS $$
++BEGIN
++    RAISE EXCEPTION 'audit events are immutable' USING ERRCODE = '55000';
++END;
++$$;
++
++CREATE TRIGGER audit_events_immutable
++    BEFORE UPDATE OR DELETE ON audit_events
++    FOR EACH ROW EXECUTE FUNCTION reject_audit_event_mutation();
++
++CREATE TABLE jobs (
++    id text PRIMARY KEY CHECK (id <> ''),
++    workspace_id text NOT NULL REFERENCES workspaces (id) ON DELETE RESTRICT,
++    job_type text NOT NULL CHECK (job_type <> ''),
++    payload jsonb NOT NULL,
++    status text NOT NULL DEFAULT 'queued'
++        CHECK (status IN ('queued', 'running', 'retryable', 'succeeded', 'dead_letter')),
++    attempt integer NOT NULL DEFAULT 0 CHECK (attempt >= 0),
++    max_attempts integer NOT NULL CHECK (max_attempts >= 1),
++    available_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
++    leased_until timestamptz,
++    lease_owner text,
++    idempotency_key text NOT NULL CHECK (idempotency_key <> ''),
++    last_error_code text CHECK (last_error_code IS NULL OR last_error_code ~ '^[A-Z][A-Z0-9_]{2,63}$'),
++    trace_id text NOT NULL CHECK (trace_id ~ '^[0-9a-f]{32}$'),
++    created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
++    updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
++    completed_at timestamptz,
++    CONSTRAINT jobs_attempt_bound CHECK (attempt <= max_attempts),
++    CONSTRAINT jobs_lease_state CHECK (
++        (status = 'running' AND leased_until IS NOT NULL AND lease_owner IS NOT NULL)
++        OR (status <> 'running' AND leased_until IS NULL AND lease_owner IS NULL)
++    ),
++    CONSTRAINT jobs_completion_state CHECK (
++        (status IN ('succeeded', 'dead_letter') AND completed_at IS NOT NULL)
++        OR (status NOT IN ('succeeded', 'dead_letter') AND completed_at IS NULL)
++    ),
++    UNIQUE (workspace_id, idempotency_key)
++);
++
++CREATE INDEX jobs_claimable_idx
++    ON jobs (available_at, created_at, id)
++    WHERE status IN ('queued', 'retryable');
++
++CREATE INDEX jobs_expired_lease_idx
++    ON jobs (leased_until, id)
++    WHERE status = 'running';
++
++CREATE INDEX jobs_workspace_status_updated_idx
++    ON jobs (workspace_id, status, updated_at DESC, id);
++
++CREATE TABLE outbox_events (
++    id text PRIMARY KEY CHECK (id <> ''),
++    workspace_id text NOT NULL REFERENCES workspaces (id) ON DELETE RESTRICT,
++    event_type text NOT NULL CHECK (event_type <> ''),
++    payload jsonb NOT NULL,
++    status text NOT NULL DEFAULT 'queued'
++        CHECK (status IN ('queued', 'publishing', 'retryable', 'published', 'dead_letter')),
++    attempt integer NOT NULL DEFAULT 0 CHECK (attempt >= 0),
++    max_attempts integer NOT NULL CHECK (max_attempts >= 1),
++    available_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
++    leased_until timestamptz,
++    lease_owner text,
++    last_error_code text CHECK (last_error_code IS NULL OR last_error_code ~ '^[A-Z][A-Z0-9_]{2,63}$'),
++    trace_id text NOT NULL CHECK (trace_id ~ '^[0-9a-f]{32}$'),
++    created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
++    updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
++    published_at timestamptz,
++    CONSTRAINT outbox_events_attempt_bound CHECK (attempt <= max_attempts),
++    CONSTRAINT outbox_events_lease_state CHECK (
++        (status = 'publishing' AND leased_until IS NOT NULL AND lease_owner IS NOT NULL)
++        OR (status <> 'publishing' AND leased_until IS NULL AND lease_owner IS NULL)
++    ),
++    CONSTRAINT outbox_events_publication_state CHECK (
++        (status = 'published' AND published_at IS NOT NULL)
++        OR (status <> 'published' AND published_at IS NULL)
++    )
++);
++
++CREATE INDEX outbox_events_claimable_idx
++    ON outbox_events (available_at, created_at, id)
++    WHERE status IN ('queued', 'retryable');
++
++CREATE INDEX outbox_events_expired_lease_idx
++    ON outbox_events (leased_until, id)
++    WHERE status = 'publishing';
++
++CREATE INDEX outbox_events_workspace_status_updated_idx
++    ON outbox_events (workspace_id, status, updated_at DESC, id);
+diff --git a/tests/integration/db/database_test.go b/tests/integration/db/database_test.go
+new file mode 100644
+index 0000000..d931df1
+--- /dev/null
++++ b/tests/integration/db/database_test.go
+@@ -0,0 +1,347 @@
++package db_test
++
++import (
++	"context"
++	"fmt"
++	"os"
++	"os/exec"
++	"path/filepath"
++	"runtime"
++	"sort"
++	"strings"
++	"testing"
++	"time"
++
++	pgstore "github.com/semlia/semlia/internal/adapters/postgres"
++	"github.com/testcontainers/testcontainers-go"
++	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
++)
++
++const postgresImage = "postgres:18-alpine"
++
++var (
++	databaseURL string
++	repoRoot    = repositoryRoot()
++)
++
++func TestMain(m *testing.M) {
++	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
++	defer cancel()
++
++	container, err := tcpostgres.Run(
++		ctx,
++		postgresImage,
++		tcpostgres.WithDatabase("semlia_test"),
++		tcpostgres.WithUsername("semlia"),
++		tcpostgres.WithPassword("integration-test-only"),
++		tcpostgres.BasicWaitStrategies(),
++	)
++	if err != nil {
++		fmt.Fprintln(os.Stderr, "start isolated PostgreSQL container: failed")
++		os.Exit(1)
++	}
++
++	databaseURL, err = container.ConnectionString(ctx, "sslmode=disable")
++	if err != nil {
++		_ = testcontainers.TerminateContainer(container)
++		fmt.Fprintln(os.Stderr, "resolve isolated PostgreSQL connection: failed")
++		os.Exit(1)
++	}
++
++	code := m.Run()
++	if err := testcontainers.TerminateContainer(container); err != nil && code == 0 {
++		fmt.Fprintf(os.Stderr, "terminate isolated PostgreSQL container: %v\n", err)
++		code = 1
++	}
++	os.Exit(code)
++}
++
++func TestMigrationLifecycleAndTenantSchema(t *testing.T) {
++	migrator := newMigrator(t)
++
++	if err := migrator.Up(); err != nil {
++		t.Fatalf("upgrade empty database: %v", err)
++	}
++	assertVersion(t, migrator, 1, true)
++	if err := migrator.Up(); err != nil {
++		t.Fatalf("repeat upgrade: %v", err)
++	}
++
++	pool := openPool(t)
++	firstInventory := tableInventory(t, pool)
++	wantTables := []string{"audit_events", "jobs", "outbox_events", "schema_migrations", "workspaces"}
++	if strings.Join(firstInventory, ",") != strings.Join(wantTables, ",") {
++		t.Fatalf("table inventory = %v, want %v", firstInventory, wantTables)
++	}
++	t.Logf("%s migration version 1 inventory: %v", postgresImage, firstInventory)
++	assertTenantForeignKeys(t, pool)
++
++	if err := migrator.Down(); err != nil {
++		t.Fatalf("downgrade database: %v", err)
++	}
++	assertVersion(t, migrator, 0, false)
++	if err := migrator.Up(); err != nil {
++		t.Fatalf("upgrade database again: %v", err)
++	}
++	if got := tableInventory(t, pool); strings.Join(got, ",") != strings.Join(firstInventory, ",") {
++		t.Fatalf("inventory after up/down/up = %v, want %v", got, firstInventory)
++	}
++}
++
++func TestClaimQueriesUsePartialIndexes(t *testing.T) {
++	resetSchema(t)
++	pool := openPool(t)
++	ctx := context.Background()
++
++	if _, err := pool.Exec(ctx, `
++		INSERT INTO workspaces (id, slug, display_name)
++		VALUES ('workspace_index_test', 'index-test', 'Index Test')`); err != nil {
++		t.Fatal(err)
++	}
++	if _, err := pool.Exec(ctx, `
++		INSERT INTO jobs (
++			id, workspace_id, job_type, payload, max_attempts,
++			available_at, idempotency_key, trace_id
++		) VALUES (
++			'job_index_test', 'workspace_index_test', 'index.test', '{}'::jsonb, 3,
++			CURRENT_TIMESTAMP, 'index-test', '4bf92f3577b34da6a3ce929d0e0e4736'
++		)`); err != nil {
++		t.Fatal(err)
++	}
++	if _, err := pool.Exec(ctx, `
++		INSERT INTO outbox_events (
++			id, workspace_id, event_type, payload, max_attempts, available_at, trace_id
++		) VALUES (
++			'outbox_index_test', 'workspace_index_test', 'index.test', '{}'::jsonb, 3,
++			CURRENT_TIMESTAMP, '4bf92f3577b34da6a3ce929d0e0e4736'
++		)`); err != nil {
++		t.Fatal(err)
++	}
++	if _, err := pool.Exec(ctx, "SET enable_seqscan = off"); err != nil {
++		t.Fatal(err)
++	}
++
++	assertPlanUsesIndex(t, pool, `
++		SELECT id FROM jobs
++		WHERE status IN ('queued', 'retryable') AND available_at <= CURRENT_TIMESTAMP
++		ORDER BY available_at, created_at, id
++		FOR UPDATE SKIP LOCKED LIMIT 1`, "jobs_claimable_idx")
++	assertPlanUsesIndex(t, pool, `
++		SELECT id FROM outbox_events
++		WHERE status IN ('queued', 'retryable') AND available_at <= CURRENT_TIMESTAMP
++		ORDER BY available_at, created_at, id
++		FOR UPDATE SKIP LOCKED LIMIT 1`, "outbox_events_claimable_idx")
++}
++
++func TestAuditEventsAreImmutable(t *testing.T) {
++	resetSchema(t)
++	pool := openPool(t)
++	ctx := context.Background()
++	if _, err := pool.Exec(ctx, `
++		INSERT INTO workspaces (id, slug, display_name)
++		VALUES ('workspace_audit', 'workspace-audit', 'Workspace Audit')`); err != nil {
++		t.Fatal(err)
++	}
++	if _, err := pool.Exec(ctx, `
++		INSERT INTO audit_events (
++			id, workspace_id, event_type, actor_id, payload, trace_id
++		) VALUES (
++			'audit_immutable', 'workspace_audit', 'source.created', 'founder',
++			'{}'::jsonb, '4bf92f3577b34da6a3ce929d0e0e4736'
++		)`); err != nil {
++		t.Fatal(err)
++	}
++	if _, err := pool.Exec(ctx, "UPDATE audit_events SET event_type = 'source.changed' WHERE id = 'audit_immutable'"); err == nil {
++		t.Fatal("audit update was accepted")
++	}
++	if _, err := pool.Exec(ctx, "DELETE FROM audit_events WHERE id = 'audit_immutable'"); err == nil {
++		t.Fatal("audit delete was accepted")
++	}
++	var count int
++	if err := pool.QueryRow(ctx, "SELECT count(*) FROM audit_events WHERE id = 'audit_immutable'").Scan(&count); err != nil {
++		t.Fatal(err)
++	}
++	if count != 1 {
++		t.Fatalf("immutable audit rows = %d", count)
++	}
++}
++
++func TestWorkerStartupDoesNotRunMigrations(t *testing.T) {
++	migrator := newMigrator(t)
++	if err := migrator.Down(); err != nil {
++		t.Fatal(err)
++	}
++	t.Cleanup(func() {
++		if err := migrator.Up(); err != nil {
++			t.Errorf("restore migrated schema: %v", err)
++		}
++	})
++
++	pool := openPool(t)
++	before := tableInventory(t, pool)
++	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
++	defer cancel()
++	command := exec.CommandContext(ctx, "go", "run", "./cmd/semlia", "worker")
++	command.Dir = repoRoot
++	command.Env = append(os.Environ(),
++		"SEMLIA_ENV=test",
++		"SEMLIA_DATABASE_URL="+databaseURL,
++	)
++	output, err := command.CombinedOutput()
++	if err == nil {
++		t.Fatal("worker unexpectedly started against an unmigrated database")
++	}
++	if ctx.Err() != nil {
++		t.Fatal("worker hung instead of failing on the missing schema")
++	}
++	if !strings.Contains(string(output), "worker error: operation failed\n") {
++		t.Fatalf("worker output = %q", output)
++	}
++	if strings.Contains(string(output), "integration-test-only") {
++		t.Fatal("worker output leaked database credentials")
++	}
++	after := tableInventory(t, pool)
++	if strings.Join(after, ",") != strings.Join(before, ",") {
++		t.Fatalf("worker startup changed schema: before=%v after=%v", before, after)
++	}
++}
++
++func newMigrator(t *testing.T) *pgstore.Migrator {
++	t.Helper()
++	migrator, err := pgstore.NewMigrator(databaseURL, filepath.Join(repoRoot, "migrations"))
++	if err != nil {
++		t.Fatal(err)
++	}
++	t.Cleanup(func() {
++		if err := migrator.Close(); err != nil {
++			t.Errorf("close migrator: %v", err)
++		}
++	})
++	return migrator
++}
++
++func resetSchema(t *testing.T) {
++	t.Helper()
++	migrator := newMigrator(t)
++	if err := migrator.Down(); err != nil {
++		t.Fatal(err)
++	}
++	if err := migrator.Up(); err != nil {
++		t.Fatal(err)
++	}
++}
++
++func openPool(t *testing.T) *pgstore.Pool {
++	t.Helper()
++	pool, err := pgstore.Open(context.Background(), databaseURL)
++	if err != nil {
++		t.Fatal(err)
++	}
++	t.Cleanup(pool.Close)
++	return pool
++}
++
++func assertVersion(t *testing.T, migrator *pgstore.Migrator, want uint, exists bool) {
++	t.Helper()
++	got, dirty, err := migrator.Version()
++	if !exists {
++		if err != nil {
++			t.Fatalf("read empty migration version: %v", err)
++		}
++		if got != 0 || dirty {
++			t.Fatalf("empty migration version = %d dirty=%t", got, dirty)
++		}
++		return
++	}
++	if err != nil || got != want || dirty {
++		t.Fatalf("migration version = %d dirty=%t err=%v, want %d clean", got, dirty, err, want)
++	}
++}
++
++func tableInventory(t *testing.T, pool *pgstore.Pool) []string {
++	t.Helper()
++	rows, err := pool.Query(context.Background(), `
++		SELECT table_name
++		FROM information_schema.tables
++		WHERE table_schema = 'public' AND table_type = 'BASE TABLE'`)
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer rows.Close()
++	var tables []string
++	for rows.Next() {
++		var name string
++		if err := rows.Scan(&name); err != nil {
++			t.Fatal(err)
++		}
++		tables = append(tables, name)
++	}
++	if err := rows.Err(); err != nil {
++		t.Fatal(err)
++	}
++	sort.Strings(tables)
++	return tables
++}
++
++func assertTenantForeignKeys(t *testing.T, pool *pgstore.Pool) {
++	t.Helper()
++	rows, err := pool.Query(context.Background(), `
++		SELECT tc.table_name
++		FROM information_schema.table_constraints tc
++		JOIN information_schema.key_column_usage kcu
++		  ON tc.constraint_name = kcu.constraint_name
++		 AND tc.constraint_schema = kcu.constraint_schema
++		JOIN information_schema.constraint_column_usage ccu
++		  ON tc.constraint_name = ccu.constraint_name
++		 AND tc.constraint_schema = ccu.constraint_schema
++		WHERE tc.constraint_type = 'FOREIGN KEY'
++		  AND kcu.column_name = 'workspace_id'
++		  AND ccu.table_name = 'workspaces'
++		ORDER BY tc.table_name`)
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer rows.Close()
++	var tables []string
++	for rows.Next() {
++		var table string
++		if err := rows.Scan(&table); err != nil {
++			t.Fatal(err)
++		}
++		tables = append(tables, table)
++	}
++	want := []string{"audit_events", "jobs", "outbox_events"}
++	if strings.Join(tables, ",") != strings.Join(want, ",") {
++		t.Fatalf("workspace foreign keys = %v, want %v", tables, want)
++	}
++}
++
++func assertPlanUsesIndex(t *testing.T, pool *pgstore.Pool, query, index string) {
++	t.Helper()
++	rows, err := pool.Query(context.Background(), "EXPLAIN "+query)
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer rows.Close()
++	var plan strings.Builder
++	for rows.Next() {
++		var line string
++		if err := rows.Scan(&line); err != nil {
++			t.Fatal(err)
++		}
++		plan.WriteString(line)
++		plan.WriteByte('\n')
++	}
++	if !strings.Contains(plan.String(), index) {
++		t.Fatalf("query plan does not use %s:\n%s", index, plan.String())
++	}
++	t.Logf("%s plan:\n%s", index, plan.String())
++}
++
++func repositoryRoot() string {
++	_, filename, _, ok := runtime.Caller(0)
++	if !ok {
++		panic("resolve repository root")
++	}
++	return filepath.Clean(filepath.Join(filepath.Dir(filename), "..", "..", ".."))
++}
+diff --git a/tests/integration/worker/worker_test.go b/tests/integration/worker/worker_test.go
+new file mode 100644
+index 0000000..064fdea
+--- /dev/null
++++ b/tests/integration/worker/worker_test.go
+@@ -0,0 +1,491 @@
++package worker_test
++
++import (
++	"context"
++	"errors"
++	"fmt"
++	"os"
++	"path/filepath"
++	"runtime"
++	"sort"
++	"sync"
++	"testing"
++	"time"
++
++	pgstore "github.com/semlia/semlia/internal/adapters/postgres"
++	"github.com/semlia/semlia/internal/application/jobs"
++	"github.com/testcontainers/testcontainers-go"
++	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
++)
++
++const postgresImage = "postgres:18-alpine"
++
++var (
++	databaseURL string
++	repoRoot    = repositoryRoot()
++)
++
++func TestMain(m *testing.M) {
++	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
++	defer cancel()
++	container, err := tcpostgres.Run(
++		ctx,
++		postgresImage,
++		tcpostgres.WithDatabase("semlia_worker_test"),
++		tcpostgres.WithUsername("semlia"),
++		tcpostgres.WithPassword("integration-test-only"),
++		tcpostgres.BasicWaitStrategies(),
++	)
++	if err != nil {
++		fmt.Fprintln(os.Stderr, "start isolated PostgreSQL container: failed")
++		os.Exit(1)
++	}
++	databaseURL, err = container.ConnectionString(ctx, "sslmode=disable")
++	if err != nil {
++		_ = testcontainers.TerminateContainer(container)
++		fmt.Fprintln(os.Stderr, "resolve isolated PostgreSQL connection: failed")
++		os.Exit(1)
++	}
++	migrator, err := pgstore.NewMigrator(databaseURL, filepath.Join(repoRoot, "migrations"))
++	if err != nil {
++		_ = testcontainers.TerminateContainer(container)
++		fmt.Fprintln(os.Stderr, "create migrator")
++		os.Exit(1)
++	}
++	if err := migrator.Up(); err != nil {
++		_ = migrator.Close()
++		_ = testcontainers.TerminateContainer(container)
++		fmt.Fprintln(os.Stderr, "migrate isolated PostgreSQL")
++		os.Exit(1)
++	}
++	_ = migrator.Close()
++
++	code := m.Run()
++	if err := testcontainers.TerminateContainer(container); err != nil && code == 0 {
++		fmt.Fprintf(os.Stderr, "terminate isolated PostgreSQL container: %v\n", err)
++		code = 1
++	}
++	os.Exit(code)
++}
++
++func TestConcurrentClaimCreatesOneLease(t *testing.T) {
++	pool, store := newStore(t)
++	resetData(t, pool)
++	createWorkspace(t, pool, "workspace_claim")
++	now := time.Date(2026, 8, 10, 8, 0, 0, 0, time.UTC)
++	job, err := store.EnqueueJob(context.Background(), jobs.EnqueueJobParams{
++		ID: "job_claim", WorkspaceID: "workspace_claim", Type: "discover.source",
++		Payload: []byte(`{"source":"fixture"}`), MaxAttempts: 3,
++		AvailableAt: now, IdempotencyKey: "claim-once", TraceID: traceID,
++	})
++	if err != nil {
++		t.Fatal(err)
++	}
++
++	start := make(chan struct{})
++	results := make(chan *jobs.Job, 2)
++	errs := make(chan error, 2)
++	var wg sync.WaitGroup
++	for _, owner := range []string{"worker-a", "worker-b"} {
++		wg.Add(1)
++		go func(owner string) {
++			defer wg.Done()
++			<-start
++			claimed, claimErr := store.ClaimJob(context.Background(), owner, now, time.Minute)
++			results <- claimed
++			errs <- claimErr
++		}(owner)
++	}
++	close(start)
++	wg.Wait()
++	close(results)
++	close(errs)
++
++	for err := range errs {
++		if err != nil {
++			t.Fatal(err)
++		}
++	}
++	var claimed []*jobs.Job
++	for result := range results {
++		if result != nil {
++			claimed = append(claimed, result)
++		}
++	}
++	if len(claimed) != 1 || claimed[0].ID != job.ID || claimed[0].Attempt != 1 {
++		t.Fatalf("claims = %+v", claimed)
++	}
++	t.Logf("concurrent claim count=%d owner=%s attempt=%d", len(claimed), claimed[0].LeaseOwner, claimed[0].Attempt)
++	if err := store.MarkJobSucceeded(context.Background(), job.ID, "not-the-owner", now); !errors.Is(err, pgstore.ErrLeaseLost) {
++		t.Fatalf("wrong owner completion error = %v", err)
++	}
++	if err := store.MarkJobSucceeded(context.Background(), job.ID, claimed[0].LeaseOwner, now); err != nil {
++		t.Fatalf("current owner completion: %v", err)
++	}
++}
++
++func TestConcurrentEnqueueIsIdempotentPerWorkspace(t *testing.T) {
++	pool, store := newStore(t)
++	resetData(t, pool)
++	createWorkspace(t, pool, "workspace_idempotency")
++	now := time.Date(2026, 8, 10, 8, 0, 0, 0, time.UTC)
++
++	start := make(chan struct{})
++	ids := make(chan string, 8)
++	errs := make(chan error, 8)
++	var wg sync.WaitGroup
++	for i := range 8 {
++		wg.Add(1)
++		go func(i int) {
++			defer wg.Done()
++			<-start
++			job, err := store.EnqueueJob(context.Background(), jobs.EnqueueJobParams{
++				ID: fmt.Sprintf("job_idempotent_%d", i), WorkspaceID: "workspace_idempotency",
++				Type: "discover.source", Payload: []byte(`{}`), MaxAttempts: 3,
++				AvailableAt: now, IdempotencyKey: "same-request", TraceID: traceID,
++			})
++			if err == nil {
++				ids <- job.ID
++			}
++			errs <- err
++		}(i)
++	}
++	close(start)
++	wg.Wait()
++	close(ids)
++	close(errs)
++	for err := range errs {
++		if err != nil {
++			t.Fatal(err)
++		}
++	}
++	unique := map[string]struct{}{}
++	for id := range ids {
++		unique[id] = struct{}{}
++	}
++	if len(unique) != 1 {
++		t.Fatalf("returned job IDs = %v", unique)
++	}
++	var count int
++	if err := pool.QueryRow(context.Background(), `
++		SELECT count(*) FROM jobs
++		WHERE workspace_id = 'workspace_idempotency' AND idempotency_key = 'same-request'`).Scan(&count); err != nil {
++		t.Fatal(err)
++	}
++	if count != 1 {
++		t.Fatalf("idempotent rows = %d", count)
++	}
++	t.Logf("concurrent idempotency returned_ids=%d persisted_rows=%d", len(unique), count)
++}
++
++func TestWorkerRetriesThenDeadLettersWithStableErrorCode(t *testing.T) {
++	pool, store := newStore(t)
++	resetData(t, pool)
++	createWorkspace(t, pool, "workspace_retry")
++	now := time.Date(2026, 8, 10, 8, 0, 0, 0, time.UTC)
++	clock := &fakeClock{now: now}
++	worker := jobs.NewWorker(store, clock, jobs.BackoffFunc(func(int32) time.Duration {
++		return 5 * time.Minute
++	}), time.Minute)
++	worker.Register("discover.source", func(context.Context, jobs.Job) error {
++		return errors.New("postgres://user:database-secret@private.invalid/semlia")
++	})
++	job, err := store.EnqueueJob(context.Background(), jobs.EnqueueJobParams{
++		ID: "job_retry", WorkspaceID: "workspace_retry", Type: "discover.source",
++		Payload: []byte(`{}`), MaxAttempts: 2, AvailableAt: now,
++		IdempotencyKey: "retry", TraceID: traceID,
++	})
++	if err != nil {
++		t.Fatal(err)
++	}
++
++	processed, err := worker.RunOne(context.Background(), "worker-retry")
++	if err != nil || !processed {
++		t.Fatalf("first run processed=%t err=%v", processed, err)
++	}
++	assertJobState(t, pool, job.ID, "retryable", 1, "HANDLER_FAILED", now.Add(5*time.Minute))
++
++	clock.now = now.Add(5 * time.Minute)
++	processed, err = worker.RunOne(context.Background(), "worker-retry")
++	if err != nil || !processed {
++		t.Fatalf("second run processed=%t err=%v", processed, err)
++	}
++	assertJobState(t, pool, job.ID, "dead_letter", 2, "HANDLER_FAILED", time.Time{})
++
++	var leaked bool
++	if err := pool.QueryRow(context.Background(), `
++		SELECT EXISTS (
++			SELECT 1 FROM jobs
++			WHERE id = $1 AND row_to_json(jobs)::text LIKE '%database-secret%'
++		) FROM jobs WHERE id = $1`, job.ID).Scan(&leaked); err != nil {
++		t.Fatal(err)
++	}
++	if leaked {
++		t.Fatal("raw handler error leaked into job persistence")
++	}
++}
++
++func TestExpiredLeaseIsRequeuedOrDeadLettered(t *testing.T) {
++	pool, store := newStore(t)
++	resetData(t, pool)
++	createWorkspace(t, pool, "workspace_expiry")
++	now := time.Date(2026, 8, 10, 8, 0, 0, 0, time.UTC)
++	for _, input := range []struct {
++		id          string
++		maxAttempts int32
++		wantStatus  string
++	}{
++		{"job_expired_retry", 2, "retryable"},
++		{"job_expired_dead", 1, "dead_letter"},
++	} {
++		if _, err := store.EnqueueJob(context.Background(), jobs.EnqueueJobParams{
++			ID: input.id, WorkspaceID: "workspace_expiry", Type: "expiry.test", Payload: []byte(`{}`),
++			MaxAttempts: input.maxAttempts, AvailableAt: now, IdempotencyKey: input.id, TraceID: traceID,
++		}); err != nil {
++			t.Fatal(err)
++		}
++		claimed, err := store.ClaimJob(context.Background(), input.id+"-owner", now, time.Second)
++		if err != nil || claimed == nil {
++			t.Fatalf("claim %s: %+v %v", input.id, claimed, err)
++		}
++	}
++	if err := store.ReapExpiredJobs(context.Background(), now.Add(2*time.Second)); err != nil {
++		t.Fatal(err)
++	}
++	assertJobStatus(t, pool, "job_expired_retry", "retryable")
++	assertJobStatus(t, pool, "job_expired_dead", "dead_letter")
++}
++
++func TestAuditAndOutboxCommitAtomically(t *testing.T) {
++	pool, store := newStore(t)
++	resetData(t, pool)
++	createWorkspace(t, pool, "workspace_tx")
++	now := time.Date(2026, 8, 10, 8, 0, 0, 0, time.UTC)
++
++	err := store.WithTx(context.Background(), func(tx *pgstore.TxStore) error {
++		if err := tx.CreateAuditEvent(context.Background(), jobs.AuditEvent{
++			ID: "audit_rollback", WorkspaceID: "workspace_tx", Type: "source.created",
++			ActorID: "founder", Payload: []byte(`{"source":"fixture"}`), TraceID: traceID, CreatedAt: now,
++		}); err != nil {
++			return err
++		}
++		if err := tx.EnqueueOutbox(context.Background(), jobs.OutboxEvent{
++			ID: "outbox_rollback", WorkspaceID: "workspace_tx", Type: "source.created",
++			Payload: []byte(`{"source":"fixture"}`), MaxAttempts: 3,
++			AvailableAt: now, TraceID: traceID,
++		}); err != nil {
++			return err
++		}
++		return errors.New("force rollback")
++	})
++	if err == nil {
++		t.Fatal("expected transaction rollback")
++	}
++	assertCounts(t, pool, 0, 0)
++
++	if err := store.WithTx(context.Background(), func(tx *pgstore.TxStore) error {
++		if err := tx.CreateAuditEvent(context.Background(), jobs.AuditEvent{
++			ID: "audit_commit", WorkspaceID: "workspace_tx", Type: "source.created",
++			ActorID: "founder", Payload: []byte(`{"source":"fixture"}`), TraceID: traceID, CreatedAt: now,
++		}); err != nil {
++			return err
++		}
++		return tx.EnqueueOutbox(context.Background(), jobs.OutboxEvent{
++			ID: "outbox_commit", WorkspaceID: "workspace_tx", Type: "source.created",
++			Payload: []byte(`{"source":"fixture"}`), MaxAttempts: 3,
++			AvailableAt: now, TraceID: traceID,
++		})
++	}); err != nil {
++		t.Fatal(err)
++	}
++	assertCounts(t, pool, 1, 1)
++}
++
++func TestOutboxDispatcherPublishesRetriesAndDeadLetters(t *testing.T) {
++	pool, store := newStore(t)
++	resetData(t, pool)
++	createWorkspace(t, pool, "workspace_outbox")
++	now := time.Date(2026, 8, 10, 8, 0, 0, 0, time.UTC)
++	clock := &fakeClock{now: now}
++	publisher := &fakePublisher{failures: map[string]int{
++		"outbox_a_retry":   2,
++		"outbox_z_publish": 1,
++	}}
++	dispatcher := jobs.NewDispatcher(store, publisher, clock, jobs.BackoffFunc(func(int32) time.Duration {
++		return 2 * time.Minute
++	}), time.Minute)
++
++	if err := store.WithTx(context.Background(), func(tx *pgstore.TxStore) error {
++		for _, event := range []jobs.OutboxEvent{
++			{ID: "outbox_a_retry", WorkspaceID: "workspace_outbox", Type: "source.created", Payload: []byte(`{}`), MaxAttempts: 2, AvailableAt: now, TraceID: traceID},
++			{ID: "outbox_z_publish", WorkspaceID: "workspace_outbox", Type: "source.updated", Payload: []byte(`{}`), MaxAttempts: 2, AvailableAt: now, TraceID: traceID},
++		} {
++			if err := tx.EnqueueOutbox(context.Background(), event); err != nil {
++				return err
++			}
++		}
++		return nil
++	}); err != nil {
++		t.Fatal(err)
++	}
++
++	processed, err := dispatcher.RunOne(context.Background(), "dispatcher-a")
++	if err != nil || !processed {
++		t.Fatalf("dispatch retry processed=%t err=%v", processed, err)
++	}
++	assertOutboxState(t, pool, "outbox_a_retry", "retryable", 1, "PUBLISH_FAILED")
++
++	processed, err = dispatcher.RunOne(context.Background(), "dispatcher-a")
++	if err != nil || !processed {
++		t.Fatalf("dispatch publish processed=%t err=%v", processed, err)
++	}
++	assertOutboxState(t, pool, "outbox_z_publish", "retryable", 1, "PUBLISH_FAILED")
++
++	clock.now = now.Add(2 * time.Minute)
++	processed, err = dispatcher.RunOne(context.Background(), "dispatcher-a")
++	if err != nil || !processed {
++		t.Fatalf("dispatch dead letter processed=%t err=%v", processed, err)
++	}
++	assertOutboxState(t, pool, "outbox_a_retry", "dead_letter", 2, "PUBLISH_FAILED")
++
++	processed, err = dispatcher.RunOne(context.Background(), "dispatcher-a")
++	if err != nil || !processed {
++		t.Fatalf("dispatch success processed=%t err=%v", processed, err)
++	}
++	assertOutboxState(t, pool, "outbox_z_publish", "published", 2, "")
++	if got := publisher.publishedIDs(); fmt.Sprint(got) != fmt.Sprint([]string{"outbox_z_publish"}) {
++		t.Fatalf("published IDs = %v", got)
++	}
++	var leaked bool
++	if err := pool.QueryRow(context.Background(), `
++		SELECT EXISTS (
++			SELECT 1 FROM outbox_events
++			WHERE row_to_json(outbox_events)::text LIKE '%publisher-secret%'
++		)`).Scan(&leaked); err != nil {
++		t.Fatal(err)
++	}
++	if leaked {
++		t.Fatal("raw publisher error leaked into outbox persistence")
++	}
++}
++
++const traceID = "4bf92f3577b34da6a3ce929d0e0e4736"
++
++type fakeClock struct{ now time.Time }
++
++func (clock *fakeClock) Now() time.Time { return clock.now }
++
++type fakePublisher struct {
++	mu        sync.Mutex
++	failures  map[string]int
++	published []string
++}
++
++func (publisher *fakePublisher) Publish(_ context.Context, event jobs.OutboxEvent) error {
++	publisher.mu.Lock()
++	defer publisher.mu.Unlock()
++	if publisher.failures[event.ID] > 0 {
++		publisher.failures[event.ID]--
++		return errors.New("publisher-secret")
++	}
++	publisher.published = append(publisher.published, event.ID)
++	return nil
++}
++
++func (publisher *fakePublisher) publishedIDs() []string {
++	publisher.mu.Lock()
++	defer publisher.mu.Unlock()
++	ids := append([]string(nil), publisher.published...)
++	sort.Strings(ids)
++	return ids
++}
++
++func newStore(t *testing.T) (*pgstore.Pool, *pgstore.Store) {
++	t.Helper()
++	pool, err := pgstore.Open(context.Background(), databaseURL)
++	if err != nil {
++		t.Fatal(err)
++	}
++	t.Cleanup(pool.Close)
++	return pool, pgstore.NewStore(pool)
++}
++
++func resetData(t *testing.T, pool *pgstore.Pool) {
++	t.Helper()
++	if _, err := pool.Exec(context.Background(), "TRUNCATE outbox_events, jobs, audit_events, workspaces CASCADE"); err != nil {
++		t.Fatal(err)
++	}
++}
++
++func createWorkspace(t *testing.T, pool *pgstore.Pool, id string) {
++	t.Helper()
++	if _, err := pool.Exec(context.Background(), `
++		INSERT INTO workspaces (id, slug, display_name) VALUES ($1, $2, $3)`, id, id, id); err != nil {
++		t.Fatal(err)
++	}
++}
++
++func assertJobState(t *testing.T, pool *pgstore.Pool, id, status string, attempt int32, code string, available time.Time) {
++	t.Helper()
++	var gotStatus, gotCode string
++	var gotAttempt int32
++	var gotAvailable time.Time
++	if err := pool.QueryRow(context.Background(), `
++		SELECT status, attempt, COALESCE(last_error_code, ''), available_at
++		FROM jobs WHERE id = $1`, id).Scan(&gotStatus, &gotAttempt, &gotCode, &gotAvailable); err != nil {
++		t.Fatal(err)
++	}
++	if gotStatus != status || gotAttempt != attempt || gotCode != code {
++		t.Fatalf("job state = %s attempt=%d code=%s", gotStatus, gotAttempt, gotCode)
++	}
++	if !available.IsZero() && !gotAvailable.Equal(available) {
++		t.Fatalf("available_at = %s, want %s", gotAvailable, available)
++	}
++}
++
++func assertJobStatus(t *testing.T, pool *pgstore.Pool, id, want string) {
++	t.Helper()
++	var got string
++	if err := pool.QueryRow(context.Background(), "SELECT status FROM jobs WHERE id = $1", id).Scan(&got); err != nil {
++		t.Fatal(err)
++	}
++	if got != want {
++		t.Fatalf("job %s status = %s, want %s", id, got, want)
++	}
++}
++
++func assertCounts(t *testing.T, pool *pgstore.Pool, audit, outbox int) {
++	t.Helper()
++	var gotAudit, gotOutbox int
++	if err := pool.QueryRow(context.Background(), "SELECT count(*) FROM audit_events").Scan(&gotAudit); err != nil {
++		t.Fatal(err)
++	}
++	if err := pool.QueryRow(context.Background(), "SELECT count(*) FROM outbox_events").Scan(&gotOutbox); err != nil {
++		t.Fatal(err)
++	}
++	if gotAudit != audit || gotOutbox != outbox {
++		t.Fatalf("audit/outbox counts = %d/%d, want %d/%d", gotAudit, gotOutbox, audit, outbox)
++	}
++}
++
++func assertOutboxState(t *testing.T, pool *pgstore.Pool, id, status string, attempt int32, code string) {
++	t.Helper()
++	var gotStatus, gotCode string
++	var gotAttempt int32
++	if err := pool.QueryRow(context.Background(), `
++		SELECT status, attempt, COALESCE(last_error_code, '')
++		FROM outbox_events WHERE id = $1`, id).Scan(&gotStatus, &gotAttempt, &gotCode); err != nil {
++		t.Fatal(err)
++	}
++	if gotStatus != status || gotAttempt != attempt || gotCode != code {
++		t.Fatalf("outbox state = %s attempt=%d code=%s", gotStatus, gotAttempt, gotCode)
++	}
++}
++
++func repositoryRoot() string {
++	_, filename, _, ok := runtime.Caller(0)
++	if !ok {
++		panic("resolve repository root")
++	}
++	return filepath.Clean(filepath.Join(filepath.Dir(filename), "..", "..", ".."))
++}

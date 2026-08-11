@@ -1,0 +1,225 @@
+schema_version: 1
+packet_id: M0-T005-A001
+task_id: T005
+feature_id: m0-foundation
+mode: execute_one_task
+adapter: codex
+
+governance_inputs:
+  product_contract: docs/SSOT.md
+  project_instructions: AGENTS.md
+  requirements_checklist: docs/specs/m0-foundation/checklists/requirements.md
+  technical_decisions: docs/adr/0001-m0-technical-foundation.md
+  feature_plan: docs/specs/m0-foundation/plan.md
+  work_graph: docs/specs/m0-foundation/tasks.md
+  analysis: docs/specs/m0-foundation/analysis.md
+  approval_gates:
+    product_contract: Confirmed by founder
+    technical_plan_and_work_graph: Confirmed by founder
+    dependencies_t001_t003: Accepted by founder
+    product_ordering_p001_t004: Accepted by founder
+    continued_execution: Explicitly authorized by founder on 2026-08-10
+    analysis: Clear for T005 execution
+
+work_unit:
+  title: 实现 PostgreSQL 迁移、job 与 outbox
+  goal: >-
+    在真实 PostgreSQL 18 上建立可升降级的最小控制面 schema，交付并发安全的 job lease、
+    幂等入队、有界重试/dead-letter 和与领域写入同事务的 outbox。
+  epic: E001
+  stories:
+    - M0-US-003
+    - M0-US-004
+  requirements:
+    - M0-FR-005
+    - M0-FR-006
+    - M0-NFR-006
+  priority: P0
+  depends_on:
+    - T001
+    - T003
+  blocks:
+    - T006
+    - T007
+    - T008
+  parallel: true
+  conflicts_with:
+    - T003 configuration boundary is stable and must not be modified.
+    - T004 Web files are forbidden.
+
+codebase_context:
+  repository_state:
+    branch: main
+    baseline_commit: 2e53e6f plus accepted uncommitted P001 through T004 work
+    implementation_state: No migrations, PostgreSQL adapter, job application service or worker/migrate commands exist.
+  verified_dependencies:
+    source: Official GitHub repositories and Go module proxy checked on 2026-08-10.
+    pgx: github.com/jackc/pgx/v5 v5.10.0
+    golang_migrate: github.com/golang-migrate/migrate/v4 v4.19.1
+    sqlc: github.com/sqlc-dev/sqlc v1.31.1
+    testcontainers_go: github.com/testcontainers/testcontainers-go v0.44.0
+    postgres_image: postgres:18-alpine
+  architecture_boundaries:
+    - migrations/000001_m0_foundation is the only M0 schema migration and must be fully reversible.
+    - PostgreSQL is the sole transactional database; tests use isolated Testcontainers instances and never the existing host port 5432 service.
+    - sqlc generates pgx/v5 query code under internal/adapters/postgres/sqlc; repositories remain explicit and small.
+    - Every tenant table contains workspace_id and a foreign key to workspaces.
+    - Application startup never runs migrations; only semlia migrate and explicit Make targets execute DDL.
+    - Job claiming uses FOR UPDATE SKIP LOCKED and a lease owner/deadline.
+    - Enqueue idempotency is unique per workspace.
+    - Failed handlers store stable error codes only; raw handler errors and credentials are never persisted or logged.
+    - Audit and outbox writes share an explicit pgx transaction.
+    - Worker clock and backoff are interfaces so retry scheduling is deterministic in tests.
+  schema_contract:
+    migration_version: 1
+    tables:
+      workspaces:
+        tenant_scope: root identity table
+        key: id
+      audit_events:
+        tenant_scope: workspace_id required
+        purpose: immutable control-plane audit facts
+      jobs:
+        tenant_scope: workspace_id required
+        states: queued, running, retryable, succeeded, dead_letter
+        required: attempt, max_attempts, available_at, leased_until, lease_owner, idempotency_key, trace_id
+      outbox_events:
+        tenant_scope: workspace_id required
+        states: queued, publishing, published, retryable, dead_letter
+        required: attempt, max_attempts, available_at, leased_until, lease_owner, event_type, payload, trace_id
+    indexes:
+      - Partial job claim index ordered by available_at and created_at.
+      - Partial expired lease index for running jobs.
+      - Unique workspace_id plus idempotency_key on jobs.
+      - Partial outbox claim and expired lease indexes.
+      - Workspace/time indexes for audit and operational history.
+  application_contract:
+    job_worker:
+      - Reap expired leases before claim.
+      - Claim at most one available job.
+      - Increment attempt on claim.
+      - Mark success only for the current lease owner.
+      - Retry with bounded backoff or dead-letter at max attempts.
+    outbox_dispatcher:
+      - Claim at most one event with a lease.
+      - Mark published only after publisher success.
+      - Retry or dead-letter publisher failure without persisting raw errors.
+    transactional_write:
+      - Audit insert and outbox enqueue commit together or remain invisible together.
+  forbidden_changes:
+    - Do not edit T003 config or HTTP files, T004 Web files, OpenAPI, SDK, product prototype or M1 schemas.
+    - Do not use SQLite, an in-memory queue, ORM, Redis, Kafka or Temporal.
+    - Do not connect tests to localhost:5432 or any user-managed database.
+    - Do not auto-migrate during server or worker startup.
+    - Do not store raw error text, database URLs, credentials or payload samples in logs/evidence.
+
+execution_constraints:
+  branch_or_worktree: current main branch
+  allowed_files:
+    - cmd/semlia/**
+    - internal/adapters/postgres/**
+    - internal/application/jobs/**
+    - db/**
+    - migrations/**
+    - tests/integration/db/**
+    - tests/integration/worker/**
+    - go.mod
+    - go.sum
+    - Makefile
+  test_targets:
+    - tests/integration/db/**/*_test.go
+    - tests/integration/worker/**/*_test.go
+  ownership_notes:
+    - Existing accepted P001 through T004 changes are user-approved work and must not be reverted.
+    - cmd/semlia, go.mod, go.sum and Makefile contain accepted earlier task changes; preserve them.
+    - Governance status and evidence files are updated by the orchestrator.
+    - Direct execution is used because delegation was not requested and implicit sub-agents are disabled.
+
+tdd_plan:
+  required: true
+  exception: null
+  red:
+    preparation:
+      - Add real PostgreSQL migration, idempotency, concurrent claim, retry/dead-letter and transactional outbox tests before schema or repositories.
+    command: go test ./tests/integration/db/... ./tests/integration/worker/...
+    expected_failure: Integration tests fail to compile because migration, repository and worker packages do not exist.
+  green:
+    command: make db-generate && make db-test
+    expected_signal: Isolated PostgreSQL 18 containers pass migration, repository, concurrency, retry and outbox behavior.
+  refactor:
+    command: go test -race -count=3 ./tests/integration/db/... ./tests/integration/worker/... && go vet ./...
+    expected_signal: Repeated race-enabled real database tests pass without duplicate claims or flaky timing.
+
+validation_loop:
+  commands:
+    - make db-generate
+    - make db-generate-check
+    - make db-test
+    - go test -race -count=3 ./tests/integration/db/... ./tests/integration/worker/...
+    - go test ./...
+    - go vet ./...
+    - go mod tidy -diff
+    - make build
+    - make contracts-check
+    - git diff --check
+  database_checks:
+    - Empty PostgreSQL 18 upgrade to version 1.
+    - Repeated up reports no change without dirty state.
+    - Down to empty and upgrade again produce the same required table inventory.
+    - Two concurrent claimers yield exactly one job lease.
+    - Concurrent same-key enqueue yields one job ID and one row.
+    - Failed execution retries at deterministic backoff and dead-letters at max attempts.
+    - Rolled-back audit plus outbox transaction leaves both tables unchanged.
+    - Successful publisher is marked published; failed publisher retries without raw error persistence.
+    - EXPLAIN with sequential scans disabled selects job and outbox claim indexes.
+  retry_budget: 2
+  failure_policy:
+    first_failure: Fix only T005 SQL, generated queries, repository, worker or isolated test infrastructure.
+    second_failure: Determine whether schema or transaction semantics require a TDR/task update.
+    beyond_budget: Stop and create blocked evidence without weakening concurrency, rollback or real-PostgreSQL assertions.
+
+evidence_contract:
+  summary: docs/evidence/T005/summary.md
+  diff: docs/evidence/T005/diff.patch
+  test_results: docs/evidence/T005/test-results.md
+  required:
+    - changed files and migration identifiers
+    - RED, GREEN and repeated race results
+    - PostgreSQL 18 container identity
+    - migration up/down/up inventory
+    - idempotency and concurrent lease evidence
+    - retry, dead-letter and transactional outbox evidence
+    - EXPLAIN index evidence
+    - diff summary and rollback notes
+    - residual risks
+
+review_contract:
+  required_passes:
+    - spec_compliance
+    - bug_code_quality
+    - qa_acceptance
+  focus:
+    - Migration reversibility and tenant workspace boundaries
+    - Lease correctness under concurrency and expiry
+    - Idempotency under concurrent writers
+    - Transactional outbox atomicity
+    - No raw errors, credentials or user database access
+    - Query/index alignment and bounded retention guidance
+  acceptance_rule: T005 can move to Needs_Review after evidence and to Accepted only after explicit user acceptance.
+
+handoff:
+  external_issue: null
+  pull_request: null
+  finish_options:
+    - keep changes on main for user review
+    - commit after explicit acceptance
+    - push and create PR after explicit request
+
+stop_conditions:
+  - Docker cannot start an isolated PostgreSQL 18 test container.
+  - An allowed shared file has unrelated user changes that cannot be preserved.
+  - sqlc cannot generate deterministic pgx/v5 queries from the reversible migration.
+  - Correctness requires modifying T003 config, T004 Web or a public API contract.
+  - Concurrent claim or transactional rollback remains flaky after the retry budget.
+  - Tests would need to access localhost:5432 or a non-ephemeral database.
+  - An unresolved Critical or High finding appears.

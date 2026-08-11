@@ -1,0 +1,182 @@
+schema_version: 1
+packet_id: M0-T003-A001
+task_id: T003
+feature_id: m0-foundation
+mode: execute_one_task
+adapter: codex
+
+governance_inputs:
+  product_contract: docs/SSOT.md
+  requirements_checklist: docs/specs/m0-foundation/checklists/requirements.md
+  technical_decisions: docs/adr/0001-m0-technical-foundation.md
+  feature_plan: docs/specs/m0-foundation/plan.md
+  work_graph: docs/specs/m0-foundation/tasks.md
+  analysis: docs/specs/m0-foundation/analysis.md
+  approval_gates:
+    product_contract: Confirmed by founder on 2026-08-08
+    technical_plan_and_work_graph: Confirmed by founder on 2026-08-08 and reaffirmed on 2026-08-10
+    dependencies_t001_t002: Accepted by founder
+    product_prototype_p001: Accepted by founder on 2026-08-10
+    analysis: Clear for T003 execution
+
+work_unit:
+  title: 实现控制面 API 纵向基础
+  goal: >-
+    实现可启动的 Go 控制面，从 fail-closed 配置到 liveness、readiness、
+    system info、统一错误 envelope、W3C trace ID 和结构化日志形成完整 HTTP 纵向路径。
+  epic: E001
+  story: M0-US-002
+  requirements:
+    - M0-FR-003
+    - M0-FR-007
+    - M0-NFR-005
+  priority: P0
+  depends_on:
+    - T001
+    - T002
+    - P001 product review ordering
+  blocks:
+    - T005
+    - T006
+    - T007
+    - T008
+  parallel: true
+  conflicts_with:
+    - T005 must wait for the configuration and readiness probe boundaries defined here.
+    - T004 may proceed separately but must consume only the generated public client.
+
+codebase_context:
+  repository_state:
+    branch: main
+    baseline_commit: 2e53e6f
+    implementation_state: T001 and T002 accepted; no cmd or internal runtime packages exist yet
+  local_instructions:
+    - Follow AGENTS.md and keep product scope desktop-only; this task has no product UI changes.
+    - Use the standard library where it remains clear and testable.
+    - Use generated api/gen/go contract types only at the HTTP transport boundary.
+    - Use apply_patch for manual edits.
+  architecture_boundaries:
+    - cmd/semlia is the composition root for server and doctor commands.
+    - internal/domain holds transport-independent system state.
+    - internal/application exposes a readiness probe boundary and system service.
+    - internal/platform/config owns environment parsing and fail-closed production validation.
+    - internal/platform/http owns routes, JSON mapping, trace middleware and safe structured request logs.
+    - PostgreSQL connectivity and migration checks belong to T005/T006; T003 ships an unavailable default probe rather than reporting false readiness.
+    - OpenTelemetry trace context is accepted and emitted using W3C trace IDs without requiring an external exporter.
+  public_contract:
+    specification: api/openapi/semlia.v1.yaml
+    go_types: api/gen/go/types.gen.go
+    endpoints:
+      - GET /health/live
+      - GET /health/ready
+      - GET /api/v1/system/info
+    stable_error_codes:
+      - DEPENDENCY_UNAVAILABLE
+      - METHOD_NOT_ALLOWED
+      - NOT_FOUND
+      - INTERNAL_ERROR
+  forbidden_changes:
+    - Do not modify OpenAPI or generated contract artifacts unless an actual contract defect blocks implementation.
+    - Do not implement PostgreSQL drivers, migrations, workers, outbox, Web UI, authentication, Cube, MCP or semantic business schemas.
+    - Do not log credentials, authorization headers, database URLs, secret values or internal paths.
+    - Do not report readiness as ready without an injected successful dependency probe.
+
+execution_constraints:
+  branch_or_worktree: current main branch
+  allowed_files:
+    - cmd/semlia/**
+    - internal/application/**
+    - internal/domain/**
+    - internal/platform/config/**
+    - internal/platform/http/**
+    - go.mod
+    - go.sum
+    - Makefile
+  test_targets:
+    - cmd/semlia/**/*_test.go
+    - internal/platform/http/**/*_test.go
+    - internal/platform/config/**/*_test.go
+  ownership_notes:
+    - Existing uncommitted P001 files are accepted user work and must not be reverted.
+    - Makefile contains accepted P001 changes; append only the T003 commands needed for the Go runtime.
+    - Governance status and evidence files are updated by the orchestrator.
+    - Direct execution is used because delegation was not requested and implicit sub-agents are disabled.
+
+tdd_plan:
+  required: true
+  exception: null
+  red:
+    preparation:
+      - Add HTTP contract behavior tests and production configuration validation tests before runtime implementation.
+    command: go test ./cmd/semlia/... ./internal/...
+    expected_failure: Tests fail to compile because the configuration, application service and HTTP runtime do not exist.
+  green:
+    command: go test ./cmd/semlia/... ./internal/...
+    expected_signal: Liveness, ready and unavailable readiness, system info, trace correlation, safe errors and production configuration cases pass.
+  refactor:
+    command: go test -race ./cmd/semlia/... ./internal/... && go vet ./cmd/semlia/... ./internal/... && make contracts-check
+    expected_signal: Runtime packages pass race, vet and public contract drift checks.
+
+validation_loop:
+  commands:
+    - go test -race ./cmd/semlia/... ./internal/...
+    - go test ./...
+    - go vet ./...
+    - make contracts-check
+    - go mod tidy -diff
+    - go build ./cmd/semlia
+    - git diff --check
+  runtime_checks:
+    - Start semlia server on a loopback ephemeral port and verify liveness returns 200 with matching body/header trace IDs.
+    - Verify default readiness returns 503 DEPENDENCY_UNAVAILABLE without leaking an internal error or database URL.
+    - Send a valid W3C traceparent and verify the same trace ID is correlated in the response.
+    - Verify system info exposes only service, API version, schema version, build version and trace ID.
+  retry_budget: 2
+  failure_policy:
+    first_failure: Fix only an issue directly caused by T003 files or compatible OpenTelemetry integration.
+    second_failure: Determine whether the issue requires a TDR, contract or task-scope update.
+    beyond_budget: Stop and create blocked evidence without weakening configuration or response assertions.
+
+evidence_contract:
+  summary: docs/evidence/T003/summary.md
+  diff: docs/evidence/T003/diff.patch
+  test_results: docs/evidence/T003/test-results.md
+  required:
+    - changed files
+    - RED, GREEN and REFACTOR results
+    - successful and unavailable endpoint examples
+    - trace propagation evidence
+    - production configuration and log redaction evidence
+    - validation results
+    - diff summary
+    - residual risks
+
+review_contract:
+  required_passes:
+    - spec_compliance
+    - bug_code_quality
+    - qa_acceptance
+  focus:
+    - Liveness remains independent of PostgreSQL.
+    - Readiness never claims success without a successful injected probe.
+    - All response traces correlate and errors match the generated envelope.
+    - Production configuration fails closed without exposing secret values.
+    - Transport, application and domain types remain separated.
+    - Logs include safe operational fields only.
+  acceptance_rule: T003 can move to Needs_Review after evidence and to Accepted only after explicit user acceptance.
+
+handoff:
+  external_issue: null
+  pull_request: null
+  finish_options:
+    - keep changes on main for user review
+    - commit after explicit acceptance
+    - push and create PR after explicit request
+
+stop_conditions:
+  - An allowed file has unrelated user changes that cannot be preserved.
+  - The generated contract cannot express the required endpoint responses without a public contract change.
+  - Production safety requires a database implementation or authentication behavior assigned to a later task.
+  - Trace correlation cannot be implemented without an external telemetry service.
+  - A credential, database URL or internal path appears in a public error or request log.
+  - An unresolved Critical or High finding appears.

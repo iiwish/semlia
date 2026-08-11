@@ -1,0 +1,210 @@
+schema_version: 1
+packet_id: M0-T007-A001
+task_id: T007
+feature_id: m0-foundation
+mode: execute_one_task
+adapter: agent-neutral
+
+governance_inputs:
+  product_contract: docs/SSOT.md
+  project_instructions: AGENTS.md
+  requirements_checklist: docs/specs/m0-foundation/checklists/requirements.md
+  technical_decisions: docs/adr/0001-m0-technical-foundation.md
+  feature_plan: docs/specs/m0-foundation/plan.md
+  work_graph: docs/specs/m0-foundation/tasks.md
+  analysis: docs/specs/m0-foundation/analysis.md
+  approval_gates:
+    product_contract: Confirmed by founder
+    technical_plan_and_work_graph: Confirmed by founder
+    dependencies_t001_t006: Accepted by founder
+    continued_execution: Explicitly authorized by founder on 2026-08-10
+    security_scope_expansion: Explicitly approved by founder on 2026-08-10
+    analysis: Clear for T007 local execution
+
+work_unit:
+  title: 建立 CI、安全与供应链门禁
+  goal: >-
+    为 pull request、定期安全检查和 release build 建立可在本地通过 Make 复现的最小权限门禁，
+    并生成带版本、commit、checksum、CycloneDX SBOM 和签名/attestation 准备信息的可验证工件。
+  epic: E002
+  stories:
+    - M0-US-005
+  requirements:
+    - M0-FR-007
+    - M0-FR-008
+    - M0-NFR-002
+    - M0-NFR-003
+    - M0-NFR-005
+    - M0-NFR-006
+    - M0-NFR-007
+    - AC-M0-005
+    - AC-M0-006
+    - S-004
+  priority: P0
+  depends_on:
+    - T001
+    - T002
+    - T003
+    - T004
+    - T005
+    - T006
+  blocks:
+    - T008
+  parallel: false
+
+codebase_context:
+  repository_state:
+    branch: main
+    baseline_commit: 2e53e6f plus accepted uncommitted P001 through T006 work
+    remote: absent
+    implementation_state: >-
+      Root build, contract generation, real PostgreSQL integration tests, Web checks, Compose smoke tests and one release image exist,
+      but there are no GitHub workflows, aggregate quality/security commands, repository CI contract, SBOM or release bundle scripts.
+  architecture_boundaries:
+    - Every workflow validation command maps to a named root Make target; make check is the local superset of required pull-request gates.
+    - Pull-request source, smoke and security jobs may run in parallel so the required path can remain below ten minutes.
+    - CI and scheduled security workflows use contents read-only permissions; release attestation gets only contents read, id-token write and attestations write.
+    - Every remote action is pinned to a full commit SHA. Automated dependency updates monitor Go modules, pnpm, Docker and GitHub Actions.
+    - Trivy 0.73.0 is invoked from the official image pinned by immutable digest and scans production/development dependencies, secrets and the local release image for High/Critical findings.
+    - Security reports and release outputs are written below ignored build directories and never add generated scanner databases to Git.
+    - Release bundles contain the single Semlia executable, migrations, license notices, release metadata and CycloneDX SBOM; SHA-256 sums are separate signable subjects.
+    - Workflows never publish, push images, create releases or mutate repository contents in T007.
+  required_gates:
+    source:
+      - Go format and vet
+      - JavaScript lint and typecheck
+      - Go and JavaScript unit/integration tests
+      - migration generation drift
+      - OpenAPI and generated client drift
+      - embedded Web artifact drift
+      - repository CI contract
+      - release binary build
+    smoke:
+      - complete local Compose startup
+      - HTTP, worker restart and PostgreSQL failure/recovery smoke suite
+      - guaranteed Compose cleanup
+    security:
+      - dependency and secret filesystem scan
+      - release image vulnerability scan
+      - High/Critical failure threshold with reports retained
+    release:
+      - target-specific archive
+      - version and commit metadata
+      - CycloneDX SBOM
+      - SHA-256 checksums
+      - GitHub provenance attestation on version tags
+
+execution_constraints:
+  branch_or_worktree: current main branch
+  allowed_files:
+    - .github/**
+    - scripts/ci/**
+    - scripts/release/**
+    - Makefile
+    - go.mod
+    - go.sum
+    - package.json
+    - README.md
+    - SECURITY.md
+    - tests/repository/ci_contract_test.go
+    - .tool-versions
+    - deploy/local/Dockerfile
+    - tests/repository/repository_contract_test.go
+    - pnpm-lock.yaml
+    - pnpm-workspace.yaml
+  forbidden_changes:
+    - Do not edit application, domain, database, migration, Web, SDK, prototype or Compose behavior.
+    - Dockerfile changes are limited to aligning the Go builder patch version with the approved 1.26.5 repository baseline.
+    - Do not add a hosted security, registry, signing or release service dependency.
+    - Do not use mutable action references, floating scanner tags, repository write permissions or pull_request_target.
+    - Do not suppress, ignore or auto-accept High/Critical findings.
+    - Do not publish artifacts, push a branch, create a repository or manufacture a CI run URL.
+    - Do not weaken existing T001 through T006 validation to meet the ten-minute target; repository contract changes are limited to the approved Go patch alignment.
+  ownership_notes:
+    - Existing accepted P001 through T006 changes are user-approved and must not be reverted.
+    - Makefile, package.json, README, SECURITY.md, go.mod and go.sum contain accepted earlier task work; preserve it and add only T007 command/governance changes.
+    - Governance status and evidence files are maintained by the orchestrator outside implementation scope.
+    - Direct execution is used because delegation was not requested and implicit sub-agents are disabled.
+
+tdd_plan:
+  required: true
+  exception: null
+  red:
+    preparation:
+      - Add a repository CI contract that parses workflow YAML and checks gate coverage, local Make mapping, pinned actions, least privilege, release outputs and dependency monitoring.
+    command: go test ./tests/repository -run CI -count=1
+    expected_failure: The contract fails because workflows, aggregate Make targets, security scripts and release scripts do not exist.
+  green:
+    command: go test ./tests/repository -run CI -count=1
+    expected_signal: All workflow, permission, action pin, local mapping, scan and release contracts pass.
+  refactor:
+    command: make check && make security-check && make sbom
+    expected_signal: The local aggregate remains green while CI jobs are split for parallel runtime and produce diagnosable reports/artifacts.
+
+validation_loop:
+  commands:
+    - make check
+    - make security-check
+    - make build
+    - make sbom
+    - make release
+    - go test ./tests/repository
+    - git diff --check
+  runtime_checks:
+    - make check executes every required pull-request gate through stable named Make targets.
+    - CI, security and release workflow validation steps call Make rather than duplicating shell logic.
+    - Security reports contain no unaccepted High or Critical finding.
+    - Release metadata records version, complete commit SHA, target OS/architecture and SBOM/checksum paths.
+    - A checksum verification command succeeds for the generated archive and SBOM.
+    - Required workflow jobs expose duration evidence and are designed to run source, smoke and security in parallel.
+  retry_budget: 2
+  failure_policy:
+    first_failure: Fix only T007 tests, commands, workflows, scanner integration, caching or release packaging.
+    second_failure: Determine whether a finding belongs to an accepted dependency/image or requires a separately approved upgrade.
+    beyond_budget: Stop and record blocked evidence without weakening scan thresholds, permissions or required gates.
+
+evidence_contract:
+  summary: docs/evidence/T007/summary.md
+  diff: docs/evidence/T007/diff.patch
+  test_results: docs/evidence/T007/test-results.md
+  required:
+    - changed files
+    - RED, GREEN and full local check results
+    - source, smoke and security durations
+    - dependency, secret and container scan reports
+    - SBOM, release metadata and checksum samples
+    - workflow permission and pinned-action review
+    - CI run URL or an explicit external blocker
+    - diff summary, rollback notes and residual risks
+
+review_contract:
+  required_passes:
+    - spec_compliance
+    - bug_code_quality
+    - qa_acceptance
+  focus:
+    - Complete mapping between make check and pull-request gates
+    - Action and scanner immutability plus workflow least privilege
+    - Failure visibility and cleanup behavior
+    - High/Critical finding handling without implicit acceptance
+    - Release metadata, SBOM and checksum correctness
+    - Ten-minute required CI critical path without validation loss
+  acceptance_rule: >-
+    T007 can move to Needs_Review only after local evidence, three review passes and at least one complete remote green CI run exist;
+    it can move to Accepted only after explicit user acceptance.
+
+handoff:
+  external_issue: No Git remote is configured, so a GitHub Actions run URL cannot be produced in this checkout after local validation.
+  pull_request: null
+  finish_options:
+    - keep locally validated changes on main until a remote is configured
+    - run the workflows after explicit commit/push authorization
+    - request founder acceptance only after the remote green-run gate is satisfied
+
+stop_conditions:
+  - Required validation needs application, database, migration, Web, SDK, Compose or Dockerfile behavior changes.
+  - A High/Critical finding cannot be resolved inside T007 allowed files.
+  - A workflow requires repository write permissions or an unpinned remote action.
+  - The complete local check cannot be made reproducible through Make.
+  - Release outputs omit version, commit, SBOM or checksum evidence.
+  - Remote CI evidence remains unavailable after local validation; record this as the sole external completion blocker.

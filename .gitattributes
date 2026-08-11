@@ -1,0 +1,2 @@
+# Evidence patches preserve the original diff bytes, including whitespace findings.
+docs/evidence/**/*.patch -whitespace
