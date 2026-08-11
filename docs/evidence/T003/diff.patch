@@ -1,0 +1,1081 @@
+diff --git a/Makefile b/Makefile
+index ddf4b38..e1e19a6 100644
+--- a/Makefile
++++ b/Makefile
+@@ -4,13 +4,15 @@ SHELL := /usr/bin/env bash
+ GO ?= go
+ PNPM ?= pnpm
+ 
+-.PHONY: help bootstrap contracts contracts-check doctor clean prototype prototype-build test-contracts test-repository
++.PHONY: help bootstrap build server contracts contracts-check doctor clean prototype prototype-build test-contracts test-repository
+ 
+ help:
+ 	@printf '%s\n' \
+ 		'Semlia development commands:' \
+ 		'  make doctor          Check required tools and local capabilities' \
+ 		'  make bootstrap       Install dependencies from lockfiles' \
++		'  make build           Build the Semlia control-plane binary' \
++		'  make server          Run the Semlia control-plane server' \
+ 		'  make contracts       Generate Go and TypeScript contract artifacts' \
+ 		'  make contracts-check Verify committed contract artifacts are current' \
+ 		'  make prototype       Start the inspectable product prototype' \
+@@ -26,6 +28,12 @@ bootstrap:
+ doctor:
+ 	@./scripts/doctor.sh
+ 
++build:
++	$(GO) build -o build/semlia ./cmd/semlia
++
++server: build
++	./build/semlia server
++
+ contracts:
+ 	@./scripts/generate-contracts.sh --write
+ 
+diff --git a/go.mod b/go.mod
+index b9fb3da..e10eda5 100644
+--- a/go.mod
++++ b/go.mod
+@@ -9,7 +9,12 @@ tool (
+ 	github.com/oasdiff/oasdiff
+ )
+ 
+-require github.com/getkin/kin-openapi v0.146.0
++require (
++	github.com/getkin/kin-openapi v0.146.0
++	go.opentelemetry.io/otel v1.36.0
++	go.opentelemetry.io/otel/sdk v1.36.0
++	go.opentelemetry.io/otel/trace v1.36.0
++)
+ 
+ require (
+ 	cloud.google.com/go v0.123.0 // indirect
+@@ -18,9 +23,12 @@ require (
+ 	github.com/buger/jsonparser v1.1.2 // indirect
+ 	github.com/dprotaso/go-yit v0.0.0-20220510233725-9ba8df137936 // indirect
+ 	github.com/fsnotify/fsnotify v1.9.0 // indirect
++	github.com/go-logr/logr v1.4.3 // indirect
++	github.com/go-logr/stdr v1.2.2 // indirect
+ 	github.com/go-openapi/jsonpointer v0.23.1 // indirect
+ 	github.com/go-openapi/swag/jsonname v0.26.0 // indirect
+ 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
++	github.com/google/uuid v1.6.0 // indirect
+ 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
+ 	github.com/invopop/jsonschema v0.14.0 // indirect
+ 	github.com/oapi-codegen/oapi-codegen/v2 v2.8.0 // indirect
+@@ -47,6 +55,8 @@ require (
+ 	github.com/wI2L/jsondiff v0.7.1 // indirect
+ 	github.com/yargevad/filepathx v1.0.0 // indirect
+ 	github.com/yuin/goldmark v1.8.5 // indirect
++	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
++	go.opentelemetry.io/otel/metric v1.36.0 // indirect
+ 	go.yaml.in/yaml/v3 v3.0.5 // indirect
+ 	go.yaml.in/yaml/v4 v4.0.0-rc.2 // indirect
+ 	golang.org/x/mod v0.38.0 // indirect
+diff --git a/go.sum b/go.sum
+index ecb0914..3e79e11 100644
+--- a/go.sum
++++ b/go.sum
+@@ -27,6 +27,11 @@ github.com/fsnotify/fsnotify v1.9.0 h1:2Ml+OJNzbYCTzsxtv8vKSFD9PbJjmhYF14k/jKC7S
+ github.com/fsnotify/fsnotify v1.9.0/go.mod h1:8jBTzvmWwFyi3Pb8djgCCO5IBqzKJ/Jwo8TRcHyHii0=
+ github.com/getkin/kin-openapi v0.146.0 h1:RA/1RdxrSJW4oc1+6IfnYB6AO9CaGy8GTKPh0k4Ordo=
+ github.com/getkin/kin-openapi v0.146.0/go.mod h1:3BH9M9XDe/y9M5DSvEocVYAYq1w0qrhJHjC/vZi0AaY=
++github.com/go-logr/logr v1.2.2/go.mod h1:jdQByPbusPIv2/zmleS9BjJVeZ6kBagPoEUsqbVz/1A=
++github.com/go-logr/logr v1.4.3 h1:CjnDlHq8ikf6E492q6eKboGOC0T8CDaOvkHCIg8idEI=
++github.com/go-logr/logr v1.4.3/go.mod h1:9T104GzyrTigFIr8wt5mBrctHMim0Nb2HLGrmQ40KvY=
++github.com/go-logr/stdr v1.2.2 h1:hSWxHoqTgW2S2qGc0LTAI563KZ5YKYRhT3MFKZMbjag=
++github.com/go-logr/stdr v1.2.2/go.mod h1:mMo/vtBO5dYbehREoey6XUKy/eSumjCCveDpRre4VKE=
+ github.com/go-openapi/jsonpointer v0.23.1 h1:1HBACs7XIwR2RcmItfdSFlALhGbe6S92p0ry4d1GWg4=
+ github.com/go-openapi/jsonpointer v0.23.1/go.mod h1:iWRmZTrGn7XwYhtPt/fvdSFj1OfNBngqRT2UG3BxSqY=
+ github.com/go-openapi/swag/jsonname v0.26.0 h1:gV1NFX9M8avo0YSpmWogqfQISigCmpaiNci8cGECU5w=
+@@ -52,6 +57,8 @@ github.com/google/go-cmp v0.5.5/go.mod h1:v8dTdLbMG2kIc/vJvl+f65V22dbkXbowE6jgT/
+ github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=
+ github.com/google/go-cmp v0.7.0/go.mod h1:pXiqmnSA92OHEEa9HXL2W4E7lf9JzCmGVUdgjX3N/iU=
+ github.com/google/pprof v0.0.0-20210407192527-94a9f03dee38/go.mod h1:kpwsk12EmLew5upagYY7GY0pfYCcupk39gWOCRROcvE=
++github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
++github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
+ github.com/hpcloud/tail v1.0.0/go.mod h1:ab1qPbhIpdTxEkNHXyeSf5vhxWSCs/tWer42PpOxQnU=
+ github.com/ianlancetaylor/demangle v0.0.0-20200824232613-28f6c0f3b639/go.mod h1:aSSvb/t6k1mPoxDqO4vJh6VOCGPwU4O0C2/Eqndh1Sc=
+ github.com/inconshreveable/mousetrap v1.1.0 h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2s0bqwp9tc8=
+@@ -146,6 +153,18 @@ github.com/yargevad/filepathx v1.0.0/go.mod h1:BprfX/gpYNJHJfc35GjRRpVcwWXS89gGu
+ github.com/yuin/goldmark v1.2.1/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
+ github.com/yuin/goldmark v1.8.5 h1:r6N5afV5qj/5S4UTch8agZHJ8UxNCMwX7WjkkJam2NA=
+ github.com/yuin/goldmark v1.8.5/go.mod h1:ip/1k0VRfGynBgxOz0yCqHrbZXhcjxyuS66Brc7iBKg=
++go.opentelemetry.io/auto/sdk v1.1.0 h1:cH53jehLUN6UFLY71z+NDOiNJqDdPRaXzTel0sJySYA=
++go.opentelemetry.io/auto/sdk v1.1.0/go.mod h1:3wSPjt5PWp2RhlCcmmOial7AvC4DQqZb7a7wCow3W8A=
++go.opentelemetry.io/otel v1.36.0 h1:UumtzIklRBY6cI/lllNZlALOF5nNIzJVb16APdvgTXg=
++go.opentelemetry.io/otel v1.36.0/go.mod h1:/TcFMXYjyRNh8khOAO9ybYkqaDBb/70aVwkNML4pP8E=
++go.opentelemetry.io/otel/metric v1.36.0 h1:MoWPKVhQvJ+eeXWHFBOPoBOi20jh6Iq2CcCREuTYufE=
++go.opentelemetry.io/otel/metric v1.36.0/go.mod h1:zC7Ks+yeyJt4xig9DEw9kuUFe5C3zLbVjV2PzT6qzbs=
++go.opentelemetry.io/otel/sdk v1.36.0 h1:b6SYIuLRs88ztox4EyrvRti80uXIFy+Sqzoh9kFULbs=
++go.opentelemetry.io/otel/sdk v1.36.0/go.mod h1:+lC+mTgD+MUWfjJubi2vvXWcVxyr9rmlshZni72pXeY=
++go.opentelemetry.io/otel/trace v1.36.0 h1:ahxWNuqZjpdiFAyrIoQ4GIiAIhxAunQR6MUoKrsNd4w=
++go.opentelemetry.io/otel/trace v1.36.0/go.mod h1:gQ+OnDZzrybY4k4seLzPAWNwVBBVlF2szhehOBB/tGA=
++go.uber.org/goleak v1.3.0 h1:2K3zAYmnTNqV73imy9J1T3WC+gmCePx2hEGkimedGto=
++go.uber.org/goleak v1.3.0/go.mod h1:CoHD4mav9JJNrW/WLlf7HGZPjdw8EucARQHekz1X6bE=
+ go.yaml.in/yaml/v3 v3.0.4/go.mod h1:DhzuOOF2ATzADvBadXxruRBLzYTpT36CKvDb3+aBEFg=
+ go.yaml.in/yaml/v3 v3.0.5 h1:N6y/pJk8buWs9NY5ERU2HSMfm+IuD/OtfdAnq6kESPw=
+ go.yaml.in/yaml/v3 v3.0.5/go.mod h1:HVTZu1O7/Vkt2N+BFy8Zza+lnLsABggaTM2ZpNIGuKg=
+diff --git a/cmd/semlia/main.go b/cmd/semlia/main.go
+new file mode 100644
+index 0000000..2610067
+--- /dev/null
++++ b/cmd/semlia/main.go
+@@ -0,0 +1,117 @@
++package main
++
++import (
++	"context"
++	"errors"
++	"fmt"
++	"io"
++	"log/slog"
++	"net/http"
++	"os"
++	"os/signal"
++	"syscall"
++	"time"
++
++	"github.com/semlia/semlia/internal/application"
++	"github.com/semlia/semlia/internal/domain"
++	"github.com/semlia/semlia/internal/platform/config"
++	httpapi "github.com/semlia/semlia/internal/platform/http"
++	"go.opentelemetry.io/otel/sdk/trace"
++)
++
++const (
++	apiVersion    = "v1"
++	schemaVersion = "0.1.0"
++)
++
++func main() {
++	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
++	defer stop()
++	os.Exit(run(ctx, os.Args[1:], os.LookupEnv, os.Stdout, os.Stderr))
++}
++
++func run(ctx context.Context, args []string, lookup config.LookupEnv, stdout, stderr io.Writer) int {
++	if len(args) != 1 {
++		printUsage(stderr)
++		return 2
++	}
++
++	cfg, err := config.Load(lookup)
++	if err != nil {
++		fmt.Fprintf(stderr, "configuration error: %v\n", err)
++		return 1
++	}
++
++	switch args[0] {
++	case "doctor":
++		fmt.Fprintln(stdout, "configuration ok")
++		return 0
++	case "server":
++		if err := serve(ctx, cfg, stderr); err != nil {
++			fmt.Fprintf(stderr, "server error: %v\n", err)
++			return 1
++		}
++		return 0
++	default:
++		printUsage(stderr)
++		return 2
++	}
++}
++
++func serve(ctx context.Context, cfg config.Config, output io.Writer) error {
++	logger := newLogger(cfg.LogFormat, output)
++	provider := trace.NewTracerProvider()
++	defer func() {
++		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
++		defer cancel()
++		if err := provider.Shutdown(shutdownCtx); err != nil {
++			logger.Error("telemetry shutdown failed", "error", err)
++		}
++	}()
++
++	service := application.NewSystemService(application.UnavailableReadinessProbe{}, domain.SystemInfo{
++		APIVersion:    apiVersion,
++		SchemaVersion: schemaVersion,
++		BuildVersion:  cfg.BuildVersion,
++	})
++	server := &http.Server{
++		Addr:              cfg.HTTPAddress,
++		Handler:           httpapi.NewHandler(service, logger, provider.Tracer("github.com/semlia/semlia")),
++		ReadHeaderTimeout: 5 * time.Second,
++		ReadTimeout:       10 * time.Second,
++		WriteTimeout:      10 * time.Second,
++		IdleTimeout:       60 * time.Second,
++	}
++
++	result := make(chan error, 1)
++	go func() {
++		logger.Info("server starting", "address", cfg.HTTPAddress, "environment", cfg.Environment)
++		result <- server.ListenAndServe()
++	}()
++
++	select {
++	case err := <-result:
++		if errors.Is(err, http.ErrServerClosed) {
++			return nil
++		}
++		return err
++	case <-ctx.Done():
++		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
++		defer cancel()
++		if err := server.Shutdown(shutdownCtx); err != nil {
++			return fmt.Errorf("graceful shutdown: %w", err)
++		}
++		return nil
++	}
++}
++
++func newLogger(format config.LogFormat, output io.Writer) *slog.Logger {
++	if format == config.LogFormatJSON {
++		return slog.New(slog.NewJSONHandler(output, nil))
++	}
++	return slog.New(slog.NewTextHandler(output, nil))
++}
++
++func printUsage(output io.Writer) {
++	fmt.Fprintln(output, "usage: semlia <server|doctor>")
++}
+diff --git a/cmd/semlia/main_test.go b/cmd/semlia/main_test.go
+new file mode 100644
+index 0000000..d3dbc4d
+--- /dev/null
++++ b/cmd/semlia/main_test.go
+@@ -0,0 +1,60 @@
++package main
++
++import (
++	"bytes"
++	"context"
++	"strings"
++	"testing"
++)
++
++func TestDoctorValidatesConfiguration(t *testing.T) {
++	var stdout bytes.Buffer
++	var stderr bytes.Buffer
++	code := run(context.Background(), []string{"doctor"}, emptyEnvironment, &stdout, &stderr)
++	if code != 0 {
++		t.Fatalf("exit = %d, stderr = %s", code, stderr.String())
++	}
++	if stdout.String() != "configuration ok\n" {
++		t.Errorf("stdout = %q", stdout.String())
++	}
++}
++
++func TestDoctorDoesNotEchoInvalidProductionSecrets(t *testing.T) {
++	values := map[string]string{
++		"SEMLIA_ENV":          "production",
++		"SEMLIA_DATABASE_URL": "postgres://user:database-secret@example.internal/semlia?sslmode=disable",
++		"SEMLIA_SECRET_KEY":   "secret-value",
++	}
++	lookup := func(key string) (string, bool) {
++		value, ok := values[key]
++		return value, ok
++	}
++	var stderr bytes.Buffer
++	code := run(context.Background(), []string{"doctor"}, lookup, ioDiscard{}, &stderr)
++	if code != 1 {
++		t.Fatalf("exit = %d, stderr = %s", code, stderr.String())
++	}
++	for _, leaked := range []string{"database-secret", "secret-value"} {
++		if strings.Contains(stderr.String(), leaked) {
++			t.Errorf("stderr leaked %q: %s", leaked, stderr.String())
++		}
++	}
++}
++
++func TestUnknownCommandPrintsUsage(t *testing.T) {
++	var stderr bytes.Buffer
++	code := run(context.Background(), []string{"unknown"}, emptyEnvironment, ioDiscard{}, &stderr)
++	if code != 2 || !strings.Contains(stderr.String(), "server|doctor") {
++		t.Fatalf("exit = %d, stderr = %s", code, stderr.String())
++	}
++}
++
++func emptyEnvironment(string) (string, bool) {
++	return "", false
++}
++
++type ioDiscard struct{}
++
++func (ioDiscard) Write(body []byte) (int, error) {
++	return len(body), nil
++}
+diff --git a/internal/application/system.go b/internal/application/system.go
+new file mode 100644
+index 0000000..632fa83
+--- /dev/null
++++ b/internal/application/system.go
+@@ -0,0 +1,46 @@
++package application
++
++import (
++	"context"
++	"errors"
++
++	"github.com/semlia/semlia/internal/domain"
++)
++
++var ErrDependencyUnavailable = errors.New("required dependency is unavailable")
++
++type ReadinessProbe interface {
++	Check(context.Context) error
++}
++
++type ReadinessProbeFunc func(context.Context) error
++
++func (fn ReadinessProbeFunc) Check(ctx context.Context) error {
++	return fn(ctx)
++}
++
++type UnavailableReadinessProbe struct{}
++
++func (UnavailableReadinessProbe) Check(context.Context) error {
++	return ErrDependencyUnavailable
++}
++
++type SystemService struct {
++	probe ReadinessProbe
++	info  domain.SystemInfo
++}
++
++func NewSystemService(probe ReadinessProbe, info domain.SystemInfo) *SystemService {
++	if probe == nil {
++		probe = UnavailableReadinessProbe{}
++	}
++	return &SystemService{probe: probe, info: info}
++}
++
++func (service *SystemService) CheckReadiness(ctx context.Context) error {
++	return service.probe.Check(ctx)
++}
++
++func (service *SystemService) Info() domain.SystemInfo {
++	return service.info
++}
+diff --git a/internal/domain/system.go b/internal/domain/system.go
+new file mode 100644
+index 0000000..091a5c0
+--- /dev/null
++++ b/internal/domain/system.go
+@@ -0,0 +1,8 @@
++package domain
++
++// SystemInfo is the transport-independent public build identity.
++type SystemInfo struct {
++	APIVersion    string
++	SchemaVersion string
++	BuildVersion  string
++}
+diff --git a/internal/platform/config/config.go b/internal/platform/config/config.go
+new file mode 100644
+index 0000000..deb6a1d
+--- /dev/null
++++ b/internal/platform/config/config.go
+@@ -0,0 +1,177 @@
++package config
++
++import (
++	"fmt"
++	"net"
++	"net/url"
++	"sort"
++	"strconv"
++	"strings"
++)
++
++type Environment string
++
++const (
++	Development Environment = "development"
++	Test        Environment = "test"
++	Production  Environment = "production"
++)
++
++type LogFormat string
++
++const (
++	LogFormatText LogFormat = "text"
++	LogFormatJSON LogFormat = "json"
++)
++
++type Config struct {
++	Environment    Environment
++	HTTPAddress    string
++	DatabaseURL    string
++	AllowedOrigins []string
++	SecretKey      string
++	BuildVersion   string
++	LogFormat      LogFormat
++}
++
++type LookupEnv func(string) (string, bool)
++
++func Load(lookup LookupEnv) (Config, error) {
++	if lookup == nil {
++		return Config{}, fmt.Errorf("environment lookup is required")
++	}
++
++	environment := Environment(strings.ToLower(valueOrDefault(lookup, "SEMLIA_ENV", string(Development))))
++	logDefault := string(LogFormatText)
++	if environment == Production {
++		logDefault = string(LogFormatJSON)
++	}
++
++	cfg := Config{
++		Environment:    environment,
++		HTTPAddress:    valueOrDefault(lookup, "SEMLIA_HTTP_ADDR", "127.0.0.1:8080"),
++		DatabaseURL:    value(lookup, "SEMLIA_DATABASE_URL"),
++		AllowedOrigins: splitValues(value(lookup, "SEMLIA_ALLOWED_ORIGINS")),
++		SecretKey:      value(lookup, "SEMLIA_SECRET_KEY"),
++		BuildVersion:   valueOrDefault(lookup, "SEMLIA_BUILD_VERSION", "dev"),
++		LogFormat:      LogFormat(strings.ToLower(valueOrDefault(lookup, "SEMLIA_LOG_FORMAT", logDefault))),
++	}
++
++	if fields := invalidFields(cfg); len(fields) > 0 {
++		sort.Strings(fields)
++		return Config{}, fmt.Errorf("invalid configuration: %s", strings.Join(fields, ", "))
++	}
++	return cfg, nil
++}
++
++func value(lookup LookupEnv, key string) string {
++	value, _ := lookup(key)
++	return strings.TrimSpace(value)
++}
++
++func valueOrDefault(lookup LookupEnv, key, fallback string) string {
++	if value := value(lookup, key); value != "" {
++		return value
++	}
++	return fallback
++}
++
++func splitValues(raw string) []string {
++	if raw == "" {
++		return nil
++	}
++	parts := strings.Split(raw, ",")
++	values := make([]string, 0, len(parts))
++	for _, part := range parts {
++		values = append(values, strings.TrimSpace(part))
++	}
++	return values
++}
++
++func invalidFields(cfg Config) []string {
++	var fields []string
++	if cfg.Environment != Development && cfg.Environment != Test && cfg.Environment != Production {
++		fields = append(fields, "SEMLIA_ENV")
++	}
++	if !validAddress(cfg.HTTPAddress) {
++		fields = append(fields, "SEMLIA_HTTP_ADDR")
++	}
++	if cfg.LogFormat != LogFormatText && cfg.LogFormat != LogFormatJSON {
++		fields = append(fields, "SEMLIA_LOG_FORMAT")
++	}
++	if cfg.BuildVersion == "" {
++		fields = append(fields, "SEMLIA_BUILD_VERSION")
++	}
++
++	for _, origin := range cfg.AllowedOrigins {
++		if !validOrigin(origin, cfg.Environment == Production) {
++			fields = append(fields, "SEMLIA_ALLOWED_ORIGINS")
++			break
++		}
++	}
++
++	if cfg.Environment == Production {
++		if !validProductionDatabaseURL(cfg.DatabaseURL) {
++			fields = append(fields, "SEMLIA_DATABASE_URL")
++		}
++		if len(cfg.AllowedOrigins) == 0 {
++			fields = append(fields, "SEMLIA_ALLOWED_ORIGINS")
++		}
++		if len(cfg.SecretKey) < 32 {
++			fields = append(fields, "SEMLIA_SECRET_KEY")
++		}
++	}
++	return unique(fields)
++}
++
++func validAddress(address string) bool {
++	_, port, err := net.SplitHostPort(address)
++	if err != nil {
++		return false
++	}
++	value, err := strconv.Atoi(port)
++	return err == nil && value >= 0 && value <= 65535
++}
++
++func validOrigin(origin string, requireHTTPS bool) bool {
++	if origin == "" || origin == "*" {
++		return false
++	}
++	parsed, err := url.Parse(origin)
++	if err != nil || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
++		return false
++	}
++	if parsed.Path != "" && parsed.Path != "/" {
++		return false
++	}
++	if requireHTTPS {
++		return parsed.Scheme == "https"
++	}
++	return parsed.Scheme == "http" || parsed.Scheme == "https"
++}
++
++func validProductionDatabaseURL(raw string) bool {
++	parsed, err := url.Parse(raw)
++	if err != nil || (parsed.Scheme != "postgres" && parsed.Scheme != "postgresql") || parsed.Hostname() == "" {
++		return false
++	}
++	switch parsed.Query().Get("sslmode") {
++	case "require", "verify-ca", "verify-full":
++		return true
++	default:
++		return false
++	}
++}
++
++func unique(values []string) []string {
++	seen := make(map[string]struct{}, len(values))
++	result := make([]string, 0, len(values))
++	for _, value := range values {
++		if _, ok := seen[value]; ok {
++			continue
++		}
++		seen[value] = struct{}{}
++		result = append(result, value)
++	}
++	return result
++}
+diff --git a/internal/platform/config/config_test.go b/internal/platform/config/config_test.go
+new file mode 100644
+index 0000000..112dfd4
+--- /dev/null
++++ b/internal/platform/config/config_test.go
+@@ -0,0 +1,109 @@
++package config_test
++
++import (
++	"strings"
++	"testing"
++
++	"github.com/semlia/semlia/internal/platform/config"
++)
++
++func TestLoadDevelopmentDefaults(t *testing.T) {
++	cfg, err := config.Load(mapLookup(nil))
++	if err != nil {
++		t.Fatal(err)
++	}
++
++	if cfg.Environment != config.Development {
++		t.Errorf("environment = %q", cfg.Environment)
++	}
++	if cfg.HTTPAddress != "127.0.0.1:8080" {
++		t.Errorf("HTTP address = %q", cfg.HTTPAddress)
++	}
++	if cfg.BuildVersion != "dev" {
++		t.Errorf("build version = %q", cfg.BuildVersion)
++	}
++	if cfg.LogFormat != config.LogFormatText {
++		t.Errorf("log format = %q", cfg.LogFormat)
++	}
++}
++
++func TestLoadProductionFailsClosedWithoutRequiredSecurityConfiguration(t *testing.T) {
++	_, err := config.Load(mapLookup(map[string]string{
++		"SEMLIA_ENV": "production",
++	}))
++	if err == nil {
++		t.Fatal("expected production configuration to fail")
++	}
++
++	message := err.Error()
++	for _, name := range []string{"SEMLIA_DATABASE_URL", "SEMLIA_ALLOWED_ORIGINS", "SEMLIA_SECRET_KEY"} {
++		if !strings.Contains(message, name) {
++			t.Errorf("error does not name %s: %s", name, message)
++		}
++	}
++}
++
++func TestLoadProductionAcceptsSecureConfiguration(t *testing.T) {
++	cfg, err := config.Load(mapLookup(map[string]string{
++		"SEMLIA_ENV":             "production",
++		"SEMLIA_HTTP_ADDR":       ":8080",
++		"SEMLIA_DATABASE_URL":    "postgres://semlia@example.internal/semlia?sslmode=verify-full",
++		"SEMLIA_ALLOWED_ORIGINS": "https://app.example.com,https://admin.example.com",
++		"SEMLIA_SECRET_KEY":      strings.Repeat("s", 32),
++		"SEMLIA_BUILD_VERSION":   "0.1.0",
++	}))
++	if err != nil {
++		t.Fatal(err)
++	}
++
++	if cfg.LogFormat != config.LogFormatJSON {
++		t.Errorf("production log format = %q", cfg.LogFormat)
++	}
++	if len(cfg.AllowedOrigins) != 2 {
++		t.Fatalf("allowed origins = %v", cfg.AllowedOrigins)
++	}
++}
++
++func TestLoadProductionRejectsUnsafeValuesWithoutEchoingSecrets(t *testing.T) {
++	const databaseURL = "postgres://semlia:database-secret@example.internal/semlia?sslmode=disable"
++	const secretKey = "short-secret"
++	_, err := config.Load(mapLookup(map[string]string{
++		"SEMLIA_ENV":             "production",
++		"SEMLIA_DATABASE_URL":    databaseURL,
++		"SEMLIA_ALLOWED_ORIGINS": "http://app.example.com,*",
++		"SEMLIA_SECRET_KEY":      secretKey,
++	}))
++	if err == nil {
++		t.Fatal("expected unsafe production configuration to fail")
++	}
++
++	message := err.Error()
++	for _, sensitive := range []string{databaseURL, "database-secret", secretKey} {
++		if strings.Contains(message, sensitive) {
++			t.Errorf("configuration error leaked %q: %s", sensitive, message)
++		}
++	}
++}
++
++func TestLoadRejectsInvalidEnvironmentAddressAndLogFormat(t *testing.T) {
++	_, err := config.Load(mapLookup(map[string]string{
++		"SEMLIA_ENV":        "staging",
++		"SEMLIA_HTTP_ADDR":  "not-an-address",
++		"SEMLIA_LOG_FORMAT": "yaml",
++	}))
++	if err == nil {
++		t.Fatal("expected invalid configuration")
++	}
++	for _, name := range []string{"SEMLIA_ENV", "SEMLIA_HTTP_ADDR", "SEMLIA_LOG_FORMAT"} {
++		if !strings.Contains(err.Error(), name) {
++			t.Errorf("error does not name %s: %s", name, err)
++		}
++	}
++}
++
++func mapLookup(values map[string]string) func(string) (string, bool) {
++	return func(key string) (string, bool) {
++		value, ok := values[key]
++		return value, ok
++	}
++}
+diff --git a/internal/platform/http/handler.go b/internal/platform/http/handler.go
+new file mode 100644
+index 0000000..89a5b57
+--- /dev/null
++++ b/internal/platform/http/handler.go
+@@ -0,0 +1,181 @@
++package httpapi
++
++import (
++	"encoding/json"
++	"io"
++	"log/slog"
++	"net/http"
++	"time"
++
++	contract "github.com/semlia/semlia/api/gen/go"
++	"github.com/semlia/semlia/internal/application"
++	"go.opentelemetry.io/otel/propagation"
++	"go.opentelemetry.io/otel/trace"
++)
++
++const (
++	headerTraceID = "X-Trace-ID"
++	retryAfter    = "5"
++)
++
++type Handler struct {
++	service *application.SystemService
++	logger  *slog.Logger
++	tracer  trace.Tracer
++}
++
++func NewHandler(service *application.SystemService, logger *slog.Logger, tracer trace.Tracer) http.Handler {
++	if service == nil {
++		panic("system service is required")
++	}
++	if logger == nil {
++		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
++	}
++	if tracer == nil {
++		panic("tracer is required")
++	}
++	return &Handler{service: service, logger: logger, tracer: tracer}
++}
++
++func (handler *Handler) ServeHTTP(response http.ResponseWriter, request *http.Request) {
++	started := time.Now()
++	route := routeLabel(request.URL.Path)
++	ctx := propagation.TraceContext{}.Extract(request.Context(), propagation.HeaderCarrier(request.Header))
++	ctx, span := handler.tracer.Start(ctx, request.Method+" "+route, trace.WithSpanKind(trace.SpanKindServer))
++	defer span.End()
++
++	traceID := span.SpanContext().TraceID().String()
++	response.Header().Set(headerTraceID, traceID)
++	response.Header().Set("Cache-Control", "no-store")
++	response.Header().Set("X-Content-Type-Options", "nosniff")
++	recorder := &statusRecorder{ResponseWriter: response}
++	errorCode := ""
++
++	defer func() {
++		if recovered := recover(); recovered != nil {
++			errorCode = "INTERNAL_ERROR"
++			if !recorder.wroteHeader {
++				writeError(recorder, http.StatusInternalServerError, errorCode, "the request could not be completed", traceID, false)
++			}
++			handler.logger.ErrorContext(ctx, "request panic recovered", "trace_id", traceID, "route", route, "error_code", errorCode)
++		}
++
++		attributes := []any{
++			"method", request.Method,
++			"route", route,
++			"status", recorder.statusCode(),
++			"duration_ms", time.Since(started).Milliseconds(),
++			"trace_id", traceID,
++		}
++		if errorCode != "" {
++			attributes = append(attributes, "error_code", errorCode)
++		}
++		handler.logger.InfoContext(ctx, "request completed", attributes...)
++	}()
++
++	errorCode = handler.route(recorder, request.WithContext(ctx), traceID)
++}
++
++func (handler *Handler) route(response http.ResponseWriter, request *http.Request, traceID string) string {
++	if !knownRoute(request.URL.Path) {
++		writeError(response, http.StatusNotFound, "NOT_FOUND", "the requested resource was not found", traceID, false)
++		return "NOT_FOUND"
++	}
++	if request.Method != http.MethodGet {
++		response.Header().Set("Allow", http.MethodGet)
++		writeError(response, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "the request method is not allowed", traceID, false)
++		return "METHOD_NOT_ALLOWED"
++	}
++
++	switch request.URL.Path {
++	case "/health/live":
++		writeJSON(response, http.StatusOK, contract.HealthResponse{Status: contract.Live, TraceId: traceID})
++		return ""
++	case "/health/ready":
++		if err := handler.service.CheckReadiness(request.Context()); err != nil {
++			response.Header().Set("Retry-After", retryAfter)
++			writeError(response, http.StatusServiceUnavailable, "DEPENDENCY_UNAVAILABLE", "a required dependency is unavailable", traceID, true)
++			return "DEPENDENCY_UNAVAILABLE"
++		}
++		writeJSON(response, http.StatusOK, contract.HealthResponse{Status: contract.Ready, TraceId: traceID})
++		return ""
++	case "/api/v1/system/info":
++		info := handler.service.Info()
++		writeJSON(response, http.StatusOK, contract.SystemInfo{
++			Service:       contract.Semlia,
++			ApiVersion:    info.APIVersion,
++			SchemaVersion: info.SchemaVersion,
++			BuildVersion:  info.BuildVersion,
++			TraceId:       traceID,
++		})
++		return ""
++	default:
++		panic("known route is not handled")
++	}
++}
++
++func writeError(response http.ResponseWriter, status int, code, message, traceID string, retryable bool) {
++	payload := contract.ErrorResponse{
++		Code:      code,
++		Message:   message,
++		TraceId:   traceID,
++		Details:   map[string]interface{}{},
++		Retryable: &retryable,
++	}
++	writeJSON(response, status, payload)
++}
++
++func writeJSON(response http.ResponseWriter, status int, payload any) {
++	encoded, err := json.Marshal(payload)
++	if err != nil {
++		panic(err)
++	}
++	response.Header().Set("Content-Type", "application/json")
++	response.WriteHeader(status)
++	_, _ = response.Write(append(encoded, '\n'))
++}
++
++func knownRoute(path string) bool {
++	switch path {
++	case "/health/live", "/health/ready", "/api/v1/system/info":
++		return true
++	default:
++		return false
++	}
++}
++
++func routeLabel(path string) string {
++	if knownRoute(path) {
++		return path
++	}
++	return "unmatched"
++}
++
++type statusRecorder struct {
++	http.ResponseWriter
++	status      int
++	wroteHeader bool
++}
++
++func (recorder *statusRecorder) WriteHeader(status int) {
++	if recorder.wroteHeader {
++		return
++	}
++	recorder.status = status
++	recorder.wroteHeader = true
++	recorder.ResponseWriter.WriteHeader(status)
++}
++
++func (recorder *statusRecorder) Write(body []byte) (int, error) {
++	if !recorder.wroteHeader {
++		recorder.WriteHeader(http.StatusOK)
++	}
++	return recorder.ResponseWriter.Write(body)
++}
++
++func (recorder *statusRecorder) statusCode() int {
++	if recorder.status == 0 {
++		return http.StatusOK
++	}
++	return recorder.status
++}
+diff --git a/internal/platform/http/handler_test.go b/internal/platform/http/handler_test.go
+new file mode 100644
+index 0000000..2827f64
+--- /dev/null
++++ b/internal/platform/http/handler_test.go
+@@ -0,0 +1,217 @@
++package httpapi_test
++
++import (
++	"bytes"
++	"context"
++	"encoding/json"
++	"errors"
++	"log/slog"
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"sync/atomic"
++	"testing"
++
++	"github.com/semlia/semlia/internal/application"
++	"github.com/semlia/semlia/internal/domain"
++	httpapi "github.com/semlia/semlia/internal/platform/http"
++	"go.opentelemetry.io/otel/sdk/trace"
++)
++
++const incomingTraceID = "4bf92f3577b34da6a3ce929d0e0e4736"
++
++func TestLivenessDoesNotCallDependencyProbe(t *testing.T) {
++	var calls atomic.Int32
++	handler, _ := newHandler(t, application.ReadinessProbeFunc(func(context.Context) error {
++		calls.Add(1)
++		return errors.New("database down")
++	}))
++
++	response := request(t, handler, http.MethodGet, "/health/live", "")
++	if response.Code != http.StatusOK {
++		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
++	}
++	if calls.Load() != 0 {
++		t.Fatalf("liveness called dependency probe %d times", calls.Load())
++	}
++	assertTraceCorrelation(t, response)
++	assertJSONField(t, response.Body.Bytes(), "status", "live")
++}
++
++func TestReadinessReportsReadyOnlyAfterSuccessfulProbe(t *testing.T) {
++	handler, _ := newHandler(t, application.ReadinessProbeFunc(func(context.Context) error { return nil }))
++	response := request(t, handler, http.MethodGet, "/health/ready", "")
++
++	if response.Code != http.StatusOK {
++		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
++	}
++	assertTraceCorrelation(t, response)
++	assertJSONField(t, response.Body.Bytes(), "status", "ready")
++}
++
++func TestReadinessUsesStableSafeErrorEnvelope(t *testing.T) {
++	handler, _ := newHandler(t, application.ReadinessProbeFunc(func(context.Context) error {
++		return errors.New("postgres://user:secret@database.internal/semlia refused connection")
++	}))
++	response := request(t, handler, http.MethodGet, "/health/ready", "")
++
++	if response.Code != http.StatusServiceUnavailable {
++		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
++	}
++	if response.Header().Get("Retry-After") != "5" {
++		t.Errorf("Retry-After = %q", response.Header().Get("Retry-After"))
++	}
++	assertTraceCorrelation(t, response)
++	assertJSONField(t, response.Body.Bytes(), "code", "DEPENDENCY_UNAVAILABLE")
++	for _, leaked := range []string{"user:secret", "database.internal", "refused connection"} {
++		if strings.Contains(response.Body.String(), leaked) {
++			t.Errorf("response leaked %q: %s", leaked, response.Body.String())
++		}
++	}
++}
++
++func TestTraceParentIsPropagatedIntoHeaderAndBody(t *testing.T) {
++	handler, _ := newHandler(t, application.ReadinessProbeFunc(func(context.Context) error { return nil }))
++	response := request(t, handler, http.MethodGet, "/api/v1/system/info", "00-"+incomingTraceID+"-00f067aa0ba902b7-01")
++
++	if response.Code != http.StatusOK {
++		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
++	}
++	if got := response.Header().Get("X-Trace-ID"); got != incomingTraceID {
++		t.Errorf("trace header = %q", got)
++	}
++	assertJSONField(t, response.Body.Bytes(), "traceId", incomingTraceID)
++}
++
++func TestSystemInfoContainsOnlyPublicBuildFields(t *testing.T) {
++	handler, _ := newHandler(t, application.ReadinessProbeFunc(func(context.Context) error { return nil }))
++	response := request(t, handler, http.MethodGet, "/api/v1/system/info", "")
++	if response.Code != http.StatusOK {
++		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
++	}
++
++	var payload map[string]any
++	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
++		t.Fatal(err)
++	}
++	if len(payload) != 5 {
++		t.Fatalf("system info fields = %v", payload)
++	}
++	for key, want := range map[string]string{
++		"service":       "semlia",
++		"apiVersion":    "v1",
++		"schemaVersion": "0.1.0",
++		"buildVersion":  "test-build",
++	} {
++		if payload[key] != want {
++			t.Errorf("%s = %v, want %s", key, payload[key], want)
++		}
++	}
++}
++
++func TestRoutingErrorsUseThePublicErrorEnvelope(t *testing.T) {
++	handler, _ := newHandler(t, application.ReadinessProbeFunc(func(context.Context) error { return nil }))
++	tests := []struct {
++		method string
++		path   string
++		status int
++		code   string
++	}{
++		{http.MethodPost, "/health/live", http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED"},
++		{http.MethodGet, "/missing", http.StatusNotFound, "NOT_FOUND"},
++	}
++
++	for _, test := range tests {
++		t.Run(test.code, func(t *testing.T) {
++			response := request(t, handler, test.method, test.path, "")
++			if response.Code != test.status {
++				t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
++			}
++			assertTraceCorrelation(t, response)
++			assertJSONField(t, response.Body.Bytes(), "code", test.code)
++		})
++	}
++}
++
++func TestUnexpectedFailuresUseASafeInternalError(t *testing.T) {
++	handler, logs := newHandler(t, application.ReadinessProbeFunc(func(context.Context) error {
++		panic("database-secret")
++	}))
++	response := request(t, handler, http.MethodGet, "/health/ready", "")
++
++	if response.Code != http.StatusInternalServerError {
++		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
++	}
++	assertTraceCorrelation(t, response)
++	assertJSONField(t, response.Body.Bytes(), "code", "INTERNAL_ERROR")
++	if strings.Contains(response.Body.String(), "database-secret") || strings.Contains(logs.String(), "database-secret") {
++		t.Fatal("panic detail leaked into response or log")
++	}
++}
++
++func TestRequestLogsContainSafeOperationalFieldsOnly(t *testing.T) {
++	handler, logs := newHandler(t, application.ReadinessProbeFunc(func(context.Context) error {
++		return errors.New("postgres://user:database-secret@database.internal/semlia")
++	}))
++	recorder := httptest.NewRecorder()
++	req := httptest.NewRequest(http.MethodGet, "/health/ready?token=query-secret", nil)
++	req.Header.Set("Authorization", "Bearer authorization-secret")
++	handler.ServeHTTP(recorder, req)
++
++	output := logs.String()
++	for _, required := range []string{"request completed", "DEPENDENCY_UNAVAILABLE", "/health/ready", "trace_id"} {
++		if !strings.Contains(output, required) {
++			t.Errorf("log missing %q: %s", required, output)
++		}
++	}
++	for _, leaked := range []string{"query-secret", "authorization-secret", "database-secret", "database.internal"} {
++		if strings.Contains(output, leaked) {
++			t.Errorf("log leaked %q: %s", leaked, output)
++		}
++	}
++}
++
++func newHandler(t *testing.T, probe application.ReadinessProbe) (http.Handler, *bytes.Buffer) {
++	t.Helper()
++	var logs bytes.Buffer
++	logger := slog.New(slog.NewJSONHandler(&logs, nil))
++	provider := trace.NewTracerProvider()
++	t.Cleanup(func() { _ = provider.Shutdown(context.Background()) })
++	service := application.NewSystemService(probe, domain.SystemInfo{
++		APIVersion:    "v1",
++		SchemaVersion: "0.1.0",
++		BuildVersion:  "test-build",
++	})
++	return httpapi.NewHandler(service, logger, provider.Tracer("semlia-test")), &logs
++}
++
++func request(t *testing.T, handler http.Handler, method, path, traceparent string) *httptest.ResponseRecorder {
++	t.Helper()
++	recorder := httptest.NewRecorder()
++	req := httptest.NewRequest(method, path, nil)
++	if traceparent != "" {
++		req.Header.Set("traceparent", traceparent)
++	}
++	handler.ServeHTTP(recorder, req)
++	return recorder
++}
++
++func assertTraceCorrelation(t *testing.T, response *httptest.ResponseRecorder) {
++	t.Helper()
++	traceID := response.Header().Get("X-Trace-ID")
++	if len(traceID) != 32 {
++		t.Fatalf("trace header = %q", traceID)
++	}
++	assertJSONField(t, response.Body.Bytes(), "traceId", traceID)
++}
++
++func assertJSONField(t *testing.T, body []byte, field, want string) {
++	t.Helper()
++	var payload map[string]any
++	if err := json.Unmarshal(body, &payload); err != nil {
++		t.Fatalf("decode JSON: %v\n%s", err, body)
++	}
++	if payload[field] != want {
++		t.Errorf("%s = %v, want %s", field, payload[field], want)
++	}
++}

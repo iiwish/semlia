@@ -1,0 +1,15 @@
+version: "2"
+sql:
+  - engine: postgresql
+    schema:
+      - ../migrations/000001_m0_foundation.up.sql
+    queries:
+      - queries
+    gen:
+      go:
+        package: dbgen
+        out: ../internal/adapters/postgres/sqlc
+        sql_package: pgx/v5
+        emit_json_tags: true
+        emit_interface: false
+        emit_empty_slices: true

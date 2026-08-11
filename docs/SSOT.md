@@ -4,14 +4,14 @@
 
 | 字段 | 值 |
 | --- | --- |
-| 文档版本 | 0.2.0 |
+| 文档版本 | 0.3.0 |
 | 状态 | Confirmed |
-| 最后更新 | 2026-08-08 |
+| 最后更新 | 2026-08-10 |
 | 产品名称 | Semlia |
-| 产品类别 | AI-first 语义资产管理与控制平台 |
+| 产品类别 | AI-first 数据语义中台 |
 | 主要语言 | 英文产品标识，中文与英文文档 |
 | 维护者 | 创始人和 Semlia Core Maintainers |
-| 审核状态 | 2026-08-08 经创始人确认 |
+| 审核状态 | 2026-08-10 经创始人确认 |
 | 更新触发 | 产品边界、核心领域模型、发布治理、数据架构、安全承诺或开源策略发生实质变化 |
 
 本文档是 Semlia 的项目级单一事实来源。它定义产品是什么、为谁服务、哪些能力属于核心、系统如何构建，以及达到世界一流开源产品所必须满足的质量标准。
@@ -20,7 +20,11 @@
 
 ### 1.1 一句话定义
 
-Semlia 是一个 AI-first 的语义资产控制平台，帮助团队发现、定义、验证、审核、发布和消费可信的业务语义，并让应用、分析工具与 AI Agent 使用同一套可追溯、可版本化的语义事实。
+Semlia 是一个以 Cube Core 为可执行语义内核、以 LLM Wiki 为知识组织与协作范式的 AI-first 数据语义中台。
+
+**Semlia is an AI-first data semantics platform built on Cube's executable semantic layer and a living wiki for organizational meaning.**
+
+Semlia 把指标、维度、业务概念、关系、证据和消费契约组织成可执行、可验证、可版本化，并可由人、应用与 AI Agent 共同维护和使用的语义资产。
 
 ### 1.2 使命
 
@@ -38,9 +42,9 @@ Semlia 成为语义资产领域的开放控制平面和事实协议：
 
 ### 1.4 产品本质
 
-Semlia 不是一个聊天入口，而是一套围绕语义资产生命周期构建的控制系统。对话和 Agent 是交互方式，资产图谱、治理工作流、不可变发布与消费契约才是产品核心。
+Semlia 以 Cube Core 提供可执行语义，以 LLM Wiki 组织企业含义，并以语义资产生命周期连接二者。对话和 Agent 是交互方式，资产图谱、权威页面、治理工作流、不可变发布与消费契约才是产品核心。
 
-Semlia 的核心体验是“活的语义 Wiki”：每个资产都有一个权威页面，集中呈现定义、计算口径、所有者、血缘、证据、测试、变更历史、使用情况、风险和适合 AI 使用的上下文。
+LLM Wiki 是由人类与 AI 协作维护的活语义知识系统，不是由模型自由改写的文档集合。每个资产都有一个权威页面，集中呈现定义、计算口径、所有者、血缘、证据、测试、变更历史、使用情况、风险和适合 AI 使用的上下文。AI 负责发现缺口、建立候选关系和生成结构化提案，发布事实仍由验证、策略和审核决定。
 
 ## 2. 战略定位
 
@@ -68,6 +72,7 @@ Semlia 的差异化不来自更强的 NL2SQL，而来自以下闭环：
 
 Semlia 是：
 
+- 以 Cube Core 可执行语义层和 LLM Wiki 为基础的 AI-first 数据语义中台。
 - 语义资产注册表和关系图谱。
 - AI 辅助的语义工程工作台。
 - 语义治理、验证、审核、发布和回滚系统。
@@ -87,9 +92,18 @@ Semlia 不是：
 
 | 产品 | 定位 | 关系 |
 | --- | --- | --- |
-| Semlia | 语义资产控制平面和开源核心 | 管理并服务可信语义 |
-| Cube Core | 首选查询执行与预聚合引擎 | 执行 Semlia 发布的兼容语义模型 |
+| Semlia | AI-first 数据语义中台和开源语义治理层 | 组织企业含义，管理语义资产的发现、验证、审核、发布与消费 |
+| Cube Core | 首选可执行语义内核 | 负责编译、查询执行、访问控制和预聚合，执行 Semlia 发布的兼容语义模型 |
 | Fluxale | Agent BI 和参考消费端 | 作为 Semlia 的首个真实消费者和体验验证场 |
+
+### 2.5 Cube 集成边界
+
+- Cube Core 负责语义模型编译、查询规划、查询执行、执行期访问控制和预聚合；Semlia 不复制这些运行时能力。
+- Semlia 负责稳定语义资产身份、LLM Wiki、发现、证据、关系、AI 提案、验证编排、审核策略、不可变 release、消费者 binding 和审计。
+- Semlia 通过公开 Cube 合约和模型工件集成，不 fork Cube，也不依赖 Cube 私有实现。
+- Agent 请求指标结果时，Semlia 解析已发布资产、release、证据和策略上下文，再通过适配器将执行委托给 Cube Core。
+- Cube 的 BI、Dashboard、Workbook、对话分析和执行运维界面不属于 Semlia 产品范围。
+- Cube Core 是第一优先级集成。Semlia 的核心领域模型保持引擎无关，其他语义运行时只在真实需求出现后通过明确适配器接入。
 
 ## 3. 产品原则
 
@@ -458,8 +472,10 @@ Web / CLI / SDK / MCP / Integrations
         |
  Cube adapter / dbt adapter / warehouse metadata adapters
         |
- Cube Core and customer data platforms
+ Cube Core executable semantic kernel and customer data platforms
 ```
+
+Semlia 的控制平面不进入 Cube Core 的查询执行路径。Cube adapter 将 Semlia 的语义 release、验证请求和运行上下文映射到公开 Cube 模型与 API，并把编译、查询和评测结果作为可追溯证据返回 Semlia。
 
 ### 10.2 技术基线
 

@@ -1,0 +1,207 @@
+schema_version: 1
+packet_id: M0-T006-A001
+task_id: T006
+feature_id: m0-foundation
+mode: execute_one_task
+adapter: codex
+
+governance_inputs:
+  product_contract: docs/SSOT.md
+  project_instructions: AGENTS.md
+  requirements_checklist: docs/specs/m0-foundation/checklists/requirements.md
+  technical_decisions: docs/adr/0001-m0-technical-foundation.md
+  feature_plan: docs/specs/m0-foundation/plan.md
+  work_graph: docs/specs/m0-foundation/tasks.md
+  analysis: docs/specs/m0-foundation/analysis.md
+  approval_gates:
+    product_contract: Confirmed by founder
+    technical_plan_and_work_graph: Confirmed by founder
+    dependencies_t003_t005: Accepted by founder
+    continued_execution: Explicitly authorized by founder on 2026-08-10
+    analysis: Clear for T006 execution
+
+work_unit:
+  title: 组装本地完整运行环境
+  goal: >-
+    用可重复的 Docker Compose 和根命令启动 PostgreSQL、显式 migration、control server 与 worker，
+    由同一个 Go release image 同源运行 server/worker/migrate，并从 server 提供嵌入的 Web system-status UI。
+  epic: E001
+  stories:
+    - M0-US-001
+  requirements:
+    - M0-FR-003
+    - M0-FR-004
+    - M0-FR-005
+    - M0-FR-006
+    - M0-FR-007
+    - M0-NFR-004
+  priority: P0
+  depends_on:
+    - T003
+    - T004
+    - T005
+  blocks:
+    - T007
+    - T008
+  parallel: false
+
+codebase_context:
+  repository_state:
+    branch: main
+    baseline_commit: 2e53e6f plus accepted uncommitted P001 through T005 work
+    implementation_state: >-
+      API, Web status UI, PostgreSQL migration and worker foundations exist independently; no Compose stack,
+      embedded Web handler, database-backed readiness or end-to-end local smoke suite exists.
+  architecture_boundaries:
+    - One release image contains one Go executable plus migration files; Compose runs migrate, server and worker roles from that same image.
+    - Web assets are built from the accepted web package and embedded into the Go executable at build time; no Node.js runtime ships.
+    - Migration remains an explicit one-shot Compose service. Server and worker startup never execute DDL.
+    - Liveness is process-only. Readiness checks PostgreSQL connectivity and clean migration version 1.
+    - PostgreSQL stop must not stop the server or static Web; readiness becomes 503 and recovers after PostgreSQL restarts.
+    - Local credentials are generated into ignored .semlia/dev.env with restrictive permissions; no usable password is committed.
+    - PostgreSQL publishes only to loopback on host port 5433 by default; the app publishes only to loopback on 8080.
+    - Compose logs are the M0 local observability output and use structured JSON for app processes.
+    - The existing host service on port 5432 is never accessed or modified.
+  compose_contract:
+    services:
+      postgres:
+        image: postgres:18-alpine
+        health: pg_isready
+        persistence: named volume
+      migrate:
+        command: semlia migrate up
+        dependency: postgres healthy
+        restart: no
+      server:
+        command: semlia server
+        dependency: migrate completed successfully
+        health: semlia healthcheck ready
+      worker:
+        command: semlia worker
+        dependency: migrate completed successfully
+    root_commands:
+      - make dev
+      - make dev-down
+      - make smoke
+  smoke_contract:
+    - Embedded Web root, liveness, readiness and system info respond from one server port.
+    - Compose reports postgres, server and worker running; migrate completed successfully.
+    - Worker restart preserves a database-backed job record.
+    - PostgreSQL stop leaves liveness and Web available while readiness returns DEPENDENCY_UNAVAILABLE.
+    - PostgreSQL start restores readiness without image rebuild or volume recreation.
+    - Clean shutdown removes containers and network but preserves the named data volume.
+
+execution_constraints:
+  branch_or_worktree: current main branch
+  allowed_files:
+    - compose.yaml
+    - compose.override.yaml
+    - .env.example
+    - deploy/local/**
+    - cmd/semlia/**
+    - internal/platform/web/**
+    - scripts/dev/**
+    - tests/smoke/**
+    - Makefile
+    - README.md
+  forbidden_changes:
+    - Do not edit T003 internal/platform/config or internal/platform/http behavior.
+    - Do not edit T004 web source, package manifest or visual design.
+    - Do not edit T005 migrations, repositories, job/outbox application semantics, go.mod or go.sum.
+    - Do not add Kubernetes, Helm, cloud deployment, Redis, Kafka, Temporal, a reverse proxy or external observability backend.
+    - Do not commit generated local credentials, database data, host-specific paths or fixed production passwords.
+    - Do not bind PostgreSQL or app ports to non-loopback host interfaces.
+    - Do not access localhost:5432.
+  ownership_notes:
+    - Existing accepted P001 through T005 changes are user-approved and must not be reverted.
+    - cmd/semlia, Makefile and README contain accepted earlier task changes; preserve them and make only T006 integration edits.
+    - Governance status and evidence files are maintained by the orchestrator.
+    - Direct execution is used because delegation was not requested and implicit sub-agents are disabled.
+
+tdd_plan:
+  required: true
+  exception: null
+  red:
+    preparation:
+      - Add smoke tests for stack structure, HTTP integration, worker restart persistence and PostgreSQL stop/recovery before Compose or Web embedding exists.
+    command: go test ./tests/smoke/...
+    expected_failure: Smoke tests fail because compose.yaml, embedded Web stack and running local services do not exist.
+  green:
+    command: make dev && make smoke
+    expected_signal: Compose builds one release image and all fresh-start, HTTP, persistence and dependency recovery smoke tests pass.
+  refactor:
+    command: docker compose restart worker && make smoke && make dev-down
+    expected_signal: Worker restart is harmless, recovery remains green, and shutdown leaves no project containers running.
+
+validation_loop:
+  commands:
+    - make dev
+    - make smoke
+    - docker compose --env-file .semlia/dev.env restart worker
+    - make smoke
+    - docker compose --env-file .semlia/dev.env config --quiet
+    - docker compose --env-file .semlia/dev.env images
+    - make dev-down
+    - go test ./...
+    - go vet ./...
+    - make build
+    - make contracts-check
+    - git diff --check
+  runtime_checks:
+    - Fresh start reaches readiness without manual migration or seed commands.
+    - GET / serves the embedded T004 Web artifact from the Go server.
+    - GET /health/live remains 200 while PostgreSQL is stopped.
+    - GET /health/ready becomes 503 DEPENDENCY_UNAVAILABLE while PostgreSQL is stopped.
+    - Starting the same PostgreSQL container restores readiness without rebuild.
+    - Worker restart preserves the smoke job row in the PostgreSQL volume.
+    - Compose configuration contains no host-specific absolute path, non-loopback published address or committed credential value.
+  retry_budget: 2
+  failure_policy:
+    first_failure: Fix only T006 Compose, local scripts, Web embed/serve integration, command composition or smoke infrastructure.
+    second_failure: Determine whether the accepted runtime boundaries require a task or TDR update.
+    beyond_budget: Stop and create blocked evidence without weakening readiness, credential or dependency-failure assertions.
+
+evidence_contract:
+  summary: docs/evidence/T006/summary.md
+  diff: docs/evidence/T006/diff.patch
+  test_results: docs/evidence/T006/test-results.md
+  required:
+    - changed files
+    - RED, GREEN and restart results
+    - fresh start and restart durations
+    - container status, image and resource summary
+    - embedded Web and API response evidence
+    - PostgreSQL failure and recovery evidence
+    - credential and host-path safety evidence
+    - diff summary and residual risks
+
+review_contract:
+  required_passes:
+    - spec_compliance
+    - bug_code_quality
+    - qa_acceptance
+  focus:
+    - One-image multi-role build and embedded Web correctness
+    - Explicit migration ordering and absence of startup DDL
+    - Liveness/readiness behavior during PostgreSQL failure and recovery
+    - Local credential generation and loopback-only exposure
+    - Persistent worker/job state across restart
+    - Cross-platform Compose commands without personal paths
+  acceptance_rule: T006 can move to Needs_Review after evidence and to Accepted only after explicit user acceptance.
+
+handoff:
+  external_issue: null
+  pull_request: null
+  finish_options:
+    - keep changes on main for user review
+    - commit after explicit acceptance
+    - push and create PR after explicit request
+
+stop_conditions:
+  - Docker Compose cannot build or start the isolated Semlia stack.
+  - A required published port is occupied and cannot be safely overridden without changing the task contract.
+  - Correct integration requires modifying T003 HTTP/config, T004 Web source or T005 migration/job semantics.
+  - The release image requires a Node.js runtime.
+  - PostgreSQL dependency failure stops liveness or cannot recover without volume recreation.
+  - Smoke tests would need localhost:5432, committed credentials or personal absolute paths.
+  - An unresolved Critical or High finding appears.

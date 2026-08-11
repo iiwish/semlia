@@ -1,0 +1,229 @@
+schema_version: 1
+packet_id: M0-T004-A001
+task_id: T004
+feature_id: m0-foundation
+mode: execute_one_task
+adapter: codex
+
+governance_inputs:
+  product_contract: docs/SSOT.md
+  project_instructions: AGENTS.md
+  requirements_checklist: docs/specs/m0-foundation/checklists/requirements.md
+  technical_decisions: docs/adr/0001-m0-technical-foundation.md
+  feature_plan: docs/specs/m0-foundation/plan.md
+  work_graph: docs/specs/m0-foundation/tasks.md
+  analysis: docs/specs/m0-foundation/analysis.md
+  approval_gates:
+    product_contract: Confirmed by founder
+    positioning_and_technical_selection: Reaffirmed by founder on 2026-08-10
+    dependencies_t001_t002: Accepted by founder
+    product_prototype_p001: Accepted by founder on 2026-08-10
+    control_api_t003: Accepted by founder on 2026-08-10
+    continued_execution: Explicitly authorized by founder on 2026-08-10
+    analysis: Clear for T004 execution
+
+work_unit:
+  title: 实现 Web system-status 纵向基础
+  goal: >-
+    交付一个克制、可访问、只读真实控制面响应的 React 系统状态页，
+    覆盖 loading、ready、dependency unavailable 和 configuration error。
+  epic: E001
+  story: M0-US-002
+  requirements:
+    - M0-FR-004
+    - M0-NFR-004
+  priority: P0
+  depends_on:
+    - T001
+    - T002
+    - P001 product review ordering
+  blocks:
+    - T006
+    - T007
+    - T008
+  parallel: true
+  conflicts_with:
+    - T003 is accepted; T004 consumes only its committed public OpenAPI client surface.
+
+codebase_context:
+  repository_state:
+    branch: main
+    baseline_commit: 2e53e6f plus accepted uncommitted P001 and T003 work
+    implementation_state: web package does not exist; generated TypeScript SDK client is available
+  local_instructions:
+    - Follow AGENTS.md: desktop-only product, minimum supported viewport 1024px.
+    - Use pnpm workspace and the pinned React/Vite/testing versions already used by prototypes/product.
+    - Use lucide-react for familiar status and refresh icons.
+    - Use apply_patch for manual source edits.
+  architecture_boundaries:
+    - Production Web consumes @semlia/sdk-typescript and never duplicates API DTOs.
+    - Browser requests use same-origin paths; Vite proxies /health and /api to the local control plane in development.
+    - Tests may inject loaders or intercept network requests, but production code has no mock or static success fallback.
+    - Error presentation exposes only stable error code, safe message and trace ID.
+    - Web contains only M0 system status, not prototype navigation or M1 semantic asset pages.
+  design_contract:
+    classification: Product surface
+    intensity: Standard
+    audience: Contributor or self-hosted operator verifying a Semlia instance
+    thesis: A quiet diagnostic console should make process, dependency and contract health legible in one scan.
+    first_viewport_signal: Semlia System status heading, current state banner and live service path are all visible without scrolling.
+    signature_move: >-
+      Service Signal Line connects Browser, Control API and Persistence as one code-native operational diagram;
+      state color, icon and text update together without becoming a decorative dashboard.
+    crafted_interactions:
+      - Refresh command changes to a stable loading state without resizing the toolbar.
+      - State banner and signal nodes transition with opacity only; keyboard focus remains visible.
+    tokens:
+      canvas: '#F5F7F8'
+      surface: '#FFFFFF'
+      surface_subtle: '#EEF1F3'
+      ink: '#18202B'
+      muted: '#5D6978'
+      border: '#D9DEE5'
+      accent: '#2F5FCE'
+      success: '#167C62'
+      warning: '#A76414'
+      danger: '#B33B4A'
+    typography:
+      family: Inter, SF Pro Text, PingFang SC, Microsoft YaHei, sans-serif
+      page_title: 28px/1.2 650
+      section_heading: 15px/1.35 650
+      body: 14px/1.55 400
+      metadata: 12px/1.45 SFMono-Regular, JetBrains Mono, Consolas, monospace
+      letter_spacing: 0
+    layout:
+      header_height: 56px
+      content_max_width: 1120px
+      content_padding: 32px at 1440; 24px at 1024
+      status_grid: three minmax(0, 1fr) tracks at supported viewports
+      radius: 6px controls; 8px repeated status cards
+    states:
+      - loading
+      - ready
+      - dependency_unavailable
+      - configuration_error
+      - hover
+      - focus_visible
+      - disabled_refresh
+    motion:
+      state_transition: 160ms opacity ease-out
+      spinner: 800ms linear rotation
+      reduced_motion: disable rotation and transitions
+    assets:
+      - Lucide status and refresh icons
+      - Code-native HTML/CSS Service Signal Line with text fallback in DOM
+    mandatory:
+      - Real API state only
+      - Stable dimensions and no layout shift between states
+      - Status communicated by icon, label and color
+      - Trace ID uses monospace and wraps safely
+      - Visible focus and semantic live regions
+    forbidden:
+      - Marketing hero, product navigation or fake semantic assets
+      - Gradients, decorative blobs, nested cards or dark sidebar
+      - Mobile-specific navigation or acceptance tests
+      - Remote fonts, images or runtime assets
+  state_mapping:
+    loading: Request in flight; aria-live announces checking.
+    ready: Liveness, readiness and system info all return valid success payloads.
+    dependency_unavailable: Readiness returns the contract ErrorResponse, typically DEPENDENCY_UNAVAILABLE.
+    configuration_error: Network failure, invalid response or incomplete public system information.
+
+execution_constraints:
+  branch_or_worktree: current main branch
+  allowed_files:
+    - web/**
+    - sdk/typescript/**
+    - package.json
+    - pnpm-workspace.yaml
+    - pnpm-lock.yaml
+    - Makefile
+  test_targets:
+    - web/src/**/*.test.tsx
+    - web/e2e/system-status.spec.ts
+  ownership_notes:
+    - Existing accepted P001 and T003 changes are user-approved work and must not be reverted.
+    - package.json, pnpm-workspace.yaml, pnpm-lock.yaml and Makefile already contain accepted task changes; preserve them.
+    - Governance status and evidence files are updated by the orchestrator.
+    - Direct execution is used because delegation was not requested and implicit sub-agents are disabled.
+
+tdd_plan:
+  required: true
+  exception: null
+  red:
+    preparation:
+      - Scaffold test configuration and add component tests for all four states before App and loader implementation.
+    command: pnpm --filter @semlia/web test
+    expected_failure: Tests fail because the App, state loader and production package implementation do not exist.
+  green:
+    command: pnpm --filter @semlia/web test
+    expected_signal: Loading, ready, dependency unavailable, configuration error and refresh behavior pass.
+  refactor:
+    command: pnpm --filter @semlia/web lint && pnpm --filter @semlia/web typecheck && pnpm --filter @semlia/web build && pnpm --filter @semlia/web test:e2e
+    expected_signal: Code quality, generated-client integration, desktop behavior and visual contracts pass.
+
+validation_loop:
+  commands:
+    - pnpm install --frozen-lockfile
+    - pnpm --filter @semlia/web lint
+    - pnpm --filter @semlia/web typecheck
+    - pnpm --filter @semlia/web test
+    - pnpm --filter @semlia/web build
+    - pnpm --filter @semlia/web test:e2e
+    - pnpm --filter @semlia/sdk-typescript test
+    - make contracts-check
+    - git diff --check
+  browser_checks:
+    - 1440x900 ready and dependency unavailable states
+    - 1024x768 ready and configuration error states
+    - keyboard refresh and visible focus
+    - no horizontal overflow, overlap or clipped trace ID
+    - prefers-reduced-motion disables nonessential motion
+  retry_budget: 2
+  failure_policy:
+    first_failure: Fix only an issue directly caused by T004 files or pinned frontend tool compatibility.
+    second_failure: Determine whether the issue requires a contract, task-scope or design-contract update.
+    beyond_budget: Stop and create blocked evidence without adding a mock production fallback or weakening accessibility assertions.
+
+evidence_contract:
+  summary: docs/evidence/T004/summary.md
+  diff: docs/evidence/T004/diff.patch
+  test_results: docs/evidence/T004/test-results.md
+  screenshots: docs/evidence/T004/screenshots/
+  required:
+    - changed files
+    - RED, GREEN and REFACTOR results
+    - four state results
+    - desktop and compact-desktop screenshots
+    - keyboard, semantic and reduced-motion checks
+    - design rubric
+    - diff summary
+    - residual risks
+
+review_contract:
+  required_passes:
+    - spec_compliance
+    - bug_code_quality
+    - qa_acceptance
+  focus:
+    - No mock production fallback or handwritten DTO duplication
+    - All four states are truthful and distinguishable without color
+    - Stable API code and trace ID are safe and visible
+    - Desktop layouts remain coherent at 1440x900 and 1024x768
+    - No M1 product surface leakage
+  acceptance_rule: T004 can move to Needs_Review after evidence and to Accepted only after explicit user acceptance.
+
+handoff:
+  external_issue: null
+  pull_request: null
+  finish_options:
+    - keep changes on main for user review
+    - commit after explicit acceptance
+    - push and create PR after explicit request
+
+stop_conditions:
+  - An allowed file has unrelated user changes that cannot be preserved.
+  - The generated client cannot model the four required states without a public contract change.
+  - Implementation requires a fake production success response, authentication or M1 product behavior.
+  - Supported desktop viewports have unresolved overlap or inaccessible actions.
+  - An unresolved Critical or High finding appears.

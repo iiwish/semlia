@@ -35,3 +35,9 @@ Please allow maintainers a reasonable opportunity to investigate and release a f
 ## Security Scope
 
 The security process covers Semlia-owned source code, release artifacts, containers, dependency configuration, authentication and authorization boundaries, secret handling, tenant isolation, Agent tool permissions, and published deployment guidance.
+
+## Automated Security Gates
+
+`make security-check` runs the same dependency, secret, and release-container scans required for pull requests and the scheduled GitHub Actions security workflow. High or Critical findings fail the command and are retained in `build/security/` for diagnosis; findings are not silently ignored or accepted by configuration.
+
+Remote actions and the Trivy scanner image use immutable commit or image-digest references. Dependabot monitors Go modules, pnpm packages, Docker bases, and GitHub Actions. Release bundles include a CycloneDX SBOM and SHA-256 checksum subjects suitable for provenance attestation and signing.

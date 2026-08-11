@@ -1,0 +1,16 @@
+.git
+.cache
+.semlia
+build
+coverage
+data
+dist
+docs/evidence
+logs
+node_modules
+prototypes
+web/dist
+web/node_modules
+web/test-results
+*.log
+coverage.out

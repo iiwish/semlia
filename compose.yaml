@@ -1,0 +1,84 @@
+name: semlia-local
+
+x-semlia-app: &semlia-app
+  image: semlia:local
+  build:
+    context: .
+    dockerfile: deploy/local/Dockerfile
+  environment: &semlia-environment
+    SEMLIA_ENV: development
+    SEMLIA_DATABASE_URL: postgresql://semlia:${SEMLIA_POSTGRES_PASSWORD:?SEMLIA_POSTGRES_PASSWORD is required}@postgres:5432/semlia?sslmode=disable
+    SEMLIA_SECRET_KEY: ${SEMLIA_SECRET_KEY:?SEMLIA_SECRET_KEY is required}
+    SEMLIA_BUILD_VERSION: ${SEMLIA_BUILD_VERSION:-local}
+    SEMLIA_LOG_FORMAT: json
+  networks:
+    - backend
+  init: true
+  read_only: true
+  tmpfs:
+    - /tmp:size=16m,mode=1777
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: semlia
+      POSTGRES_USER: semlia
+      POSTGRES_PASSWORD: ${SEMLIA_POSTGRES_PASSWORD:?SEMLIA_POSTGRES_PASSWORD is required}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U semlia -d semlia"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+    networks:
+      - backend
+    restart: unless-stopped
+    shm_size: 128mb
+    stop_grace_period: 20s
+    volumes:
+      - postgres-data:/var/lib/postgresql
+
+  migrate:
+    <<: *semlia-app
+    command: ["migrate", "up"]
+    environment:
+      <<: *semlia-environment
+      SEMLIA_MIGRATIONS_PATH: /app/migrations
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  server:
+    <<: *semlia-app
+    command: ["server"]
+    environment:
+      <<: *semlia-environment
+      SEMLIA_HTTP_ADDR: 0.0.0.0:8080
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "/app/semlia", "healthcheck", "ready"]
+      interval: 3s
+      timeout: 4s
+      retries: 30
+      start_period: 3s
+    restart: unless-stopped
+    stop_grace_period: 15s
+
+  worker:
+    <<: *semlia-app
+    command: ["worker"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    stop_grace_period: 15s
+
+networks:
+  backend:
+
+volumes:
+  postgres-data:

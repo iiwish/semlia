@@ -1,0 +1,8 @@
+services:
+  postgres:
+    ports:
+      - "127.0.0.1:${SEMLIA_POSTGRES_PORT:-5433}:5432"
+
+  server:
+    ports:
+      - "127.0.0.1:${SEMLIA_HTTP_PORT:-8080}:8080"

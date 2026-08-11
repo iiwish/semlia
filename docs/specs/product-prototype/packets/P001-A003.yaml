@@ -1,0 +1,54 @@
+schema_version: 1
+packet_id: PRODUCT-P001-A003
+task_id: P001
+feature_id: product-prototype
+mode: direct_retry
+adapter: codex
+
+trigger:
+  source: Founder journey completeness review on 2026-08-09
+  request: Audit and complete the full Semlia user journey in the frontend prototype.
+
+governance_inputs:
+  product_contract: docs/SSOT.md sections 5 and 6
+  product_design: docs/specs/product-prototype/product-design.md
+  journey_audit: docs/specs/product-prototype/journey-audit.md
+  requirements_checklist: docs/specs/product-prototype/checklists/requirements.md
+  dependencies: T001 and T002 Accepted
+
+work_unit:
+  title: 完成端到端语义资产生命周期原型
+  goal: >-
+    将 workspace readiness、source discovery、asset definition、proposal review、release candidate、
+    publish or rollback、consumer binding 和 feedback governance 连接为一条可点击、可验证、明确 mock 的旅程。
+
+execution_constraints:
+  branch_or_worktree: current main branch
+  allowed_files:
+    - prototypes/product/**
+    - docs/specs/product-prototype/**
+    - docs/evidence/P001/**
+    - docs/specs/m0-foundation/tasks.md
+  forbidden:
+    - production web, backend, OpenAPI, generated SDK or M1 schema changes
+    - network requests, persistence or real credentials
+
+tdd_plan:
+  red:
+    command: pnpm --filter @semlia/product-prototype test
+    expected_failure: Journey tests cannot find Sources, discovery, Consumers, candidate handoff or session state.
+  green:
+    command: pnpm --filter @semlia/product-prototype test
+    expected_signal: The seven-stage session journey passes without implying durable writes.
+  refactor:
+    command: pnpm --filter @semlia/product-prototype lint && pnpm --filter @semlia/product-prototype typecheck && pnpm --filter @semlia/product-prototype test:e2e
+    expected_signal: Desktop, medium, tablet, mobile and keyboard journeys pass with no page overflow.
+
+evidence_contract:
+  summary: docs/evidence/P001/summary.md
+  diff: docs/evidence/P001/diff.patch
+  tests: docs/evidence/P001/test-results.md
+  before_audit: docs/evidence/P001/journey-audit-before/
+  after_screenshots: docs/evidence/P001/screenshots/
+
+acceptance_rule: P001 returns to Needs_Review only after the complete browser journey passes and still requires explicit founder acceptance before commit.

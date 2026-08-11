@@ -1,0 +1,1482 @@
+diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
+index c180ef0..a06f376 100644
+--- a/pnpm-lock.yaml
++++ b/pnpm-lock.yaml
+@@ -88,6 +88,73 @@ importers:
+         specifier: 5.9.3
+         version: 5.9.3
+ 
++  web:
++    dependencies:
++      '@semlia/sdk-typescript':
++        specifier: workspace:*
++        version: link:../sdk/typescript
++      lucide-react:
++        specifier: 1.30.0
++        version: 1.30.0(react@19.2.8)
++      react:
++        specifier: 19.2.8
++        version: 19.2.8
++      react-dom:
++        specifier: 19.2.8
++        version: 19.2.8(react@19.2.8)
++    devDependencies:
++      '@eslint/js':
++        specifier: 10.0.1
++        version: 10.0.1(eslint@10.8.1)
++      '@playwright/test':
++        specifier: 1.62.1
++        version: 1.62.1
++      '@testing-library/jest-dom':
++        specifier: 7.0.0
++        version: 7.0.0(@testing-library/dom@10.4.1)
++      '@testing-library/react':
++        specifier: 16.3.2
++        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
++      '@testing-library/user-event':
++        specifier: 14.6.3
++        version: 14.6.3(@testing-library/dom@10.4.1)
++      '@types/node':
++        specifier: 26.2.0
++        version: 26.2.0
++      '@types/react':
++        specifier: 19.2.18
++        version: 19.2.18
++      '@types/react-dom':
++        specifier: 19.2.4
++        version: 19.2.4(@types/react@19.2.18)
++      '@vitejs/plugin-react':
++        specifier: 6.0.5
++        version: 6.0.5(vite@8.2.1(@types/node@26.2.0))
++      eslint:
++        specifier: 10.8.1
++        version: 10.8.1
++      eslint-plugin-react-hooks:
++        specifier: 7.1.1
++        version: 7.1.1(eslint@10.8.1)
++      eslint-plugin-react-refresh:
++        specifier: 0.5.3
++        version: 0.5.3(eslint@10.8.1)
++      jsdom:
++        specifier: 30.0.1
++        version: 30.0.1
++      typescript:
++        specifier: 5.9.3
++        version: 5.9.3
++      typescript-eslint:
++        specifier: 8.66.0
++        version: 8.66.0(eslint@10.8.1)(typescript@5.9.3)
++      vite:
++        specifier: 8.2.1
++        version: 8.2.1(@types/node@26.2.0)
++      vitest:
++        specifier: 4.1.10
++        version: 4.1.10(@types/node@26.2.0)(jsdom@30.0.1)(vite@8.2.1(@types/node@26.2.0))
++
+ packages:
+ 
+   '@adobe/css-tools@4.5.0':
+@@ -497,9 +564,6 @@ packages:
+   '@types/json-schema@7.0.15':
+     resolution: {integrity: sha512-5+fP8P8MFNC+AyZCDxrB2pkZFPGzqQWUzpSeuuVLvm8VMcorNYavBqoFcxK8bQz4Qsbn4oUEEem4wDLfcysGHA==}
+ 
+-  '@types/node@26.1.2':
+-    resolution: {integrity: sha512-Vu4a5UFA9rIIFJ7rB/Vaafh9lrCQszopTCx6KjFboXTGQbPNasehVR5TEiithSDGyd1DEiUByggTZsg8jukeIg==}
+-
+   '@types/node@26.2.0':
+     resolution: {integrity: sha512-5IviulTZeRNp2vAJ514cc/HUlY5nZ9fCbq9DMyC52BrhFZACo3nI0R7qBxhQmo/d27NFe96ur/b7Wwxklda+kg==}
+ 
+@@ -1810,7 +1874,7 @@ snapshots:
+     dependencies:
+       '@types/istanbul-lib-coverage': 2.0.6
+       '@types/istanbul-reports': 3.0.4
+-      '@types/node': 26.1.2
++      '@types/node': 26.2.0
+       '@types/yargs': 16.0.11
+       chalk: 4.0.0
+ 
+@@ -1985,10 +2049,6 @@ snapshots:
+ 
+   '@types/json-schema@7.0.15': {}
+ 
+-  '@types/node@26.1.2':
+-    dependencies:
+-      undici-types: 8.3.0
+-
+   '@types/node@26.2.0':
+     dependencies:
+       undici-types: 8.3.0
+diff --git a/web/e2e/system-status.spec.ts b/web/e2e/system-status.spec.ts
+new file mode 100644
+index 0000000..b2086b4
+--- /dev/null
++++ b/web/e2e/system-status.spec.ts
+@@ -0,0 +1,113 @@
++import { expect, test, type Page, type Route } from "@playwright/test";
++
++const traceId = "4bf92f3577b34da6a3ce929d0e0e4736";
++
++test("renders the real ready contract without overflow", async ({ page }, testInfo) => {
++  await routeReady(page);
++  await page.goto("/");
++
++  await expect(page.getByText("Control plane ready")).toBeVisible();
++  await expect(page.getByText("test-build")).toBeVisible();
++  await expect(page.getByText(traceId).first()).toBeVisible();
++  await expectNoOverflow(page);
++  await page.screenshot({ path: testInfo.outputPath("ready.png"), fullPage: true });
++});
++
++test("shows dependency error code and trace", async ({ page }, testInfo) => {
++  await routeDependencyUnavailable(page);
++  await page.goto("/");
++
++  await expect(page.getByRole("alert")).toContainText("Dependency unavailable");
++  await expect(page.getByText("DEPENDENCY_UNAVAILABLE")).toBeVisible();
++  await expect(page.getByText(traceId).first()).toBeVisible();
++  await expectNoOverflow(page);
++  await page.screenshot({ path: testInfo.outputPath("dependency-unavailable.png"), fullPage: true });
++});
++
++test("shows a safe configuration error when the API is unreachable", async ({ page }, testInfo) => {
++  await page.route("**/health/live", (route) => route.abort("connectionrefused"));
++  await page.goto("/");
++
++  await expect(page.getByRole("alert")).toContainText("Control API unreachable");
++  await expect(page.getByText("CONFIGURATION_ERROR")).toBeVisible();
++  await expect(page.getByText("Not available")).toBeVisible();
++  await expectNoOverflow(page);
++  await page.screenshot({ path: testInfo.outputPath("configuration-error.png"), fullPage: true });
++});
++
++test("supports keyboard refresh and reduced motion", async ({ page }) => {
++  await page.emulateMedia({ reducedMotion: "reduce" });
++  let livenessRequests = 0;
++  await page.route("**/health/live", async (route) => {
++    livenessRequests += 1;
++    await new Promise((resolve) => setTimeout(resolve, livenessRequests === 1 ? 0 : 160));
++    await json(route, 200, { status: "live", traceId });
++  });
++  await routeReadyRemainder(page);
++  await page.goto("/");
++  await expect(page.getByText("Control plane ready")).toBeVisible();
++  const initialRequests = livenessRequests;
++
++  const refresh = page.getByRole("button", { name: "Refresh status" });
++  await refresh.focus();
++  await expect(refresh).toBeFocused();
++  const outline = await refresh.evaluate((element) => getComputedStyle(element).outlineStyle);
++  expect(outline).not.toBe("none");
++  await page.keyboard.press("Enter");
++  await expect(page.getByText("Checking control plane")).toBeVisible();
++  await expect(page.locator(".is-spinning")).toHaveCSS("animation-name", "none");
++  await expect(page.getByText("Control plane ready")).toBeVisible();
++  expect(livenessRequests).toBe(initialRequests + 1);
++});
++
++async function routeReady(page: Page) {
++  await page.route("**/health/live", (route) => json(route, 200, { status: "live", traceId }));
++  await routeReadyRemainder(page);
++}
++
++async function routeReadyRemainder(page: Page) {
++  await page.route("**/health/ready", (route) => json(route, 200, { status: "ready", traceId }));
++  await page.route("**/api/v1/system/info", (route) =>
++    json(route, 200, {
++      service: "semlia",
++      apiVersion: "v1",
++      schemaVersion: "0.1.0",
++      buildVersion: "test-build",
++      traceId,
++    }),
++  );
++}
++
++async function routeDependencyUnavailable(page: Page) {
++  await page.route("**/health/live", (route) => json(route, 200, { status: "live", traceId }));
++  await page.route("**/health/ready", (route) =>
++    json(route, 503, {
++      code: "DEPENDENCY_UNAVAILABLE",
++      message: "A required dependency is unavailable.",
++      traceId,
++      details: {},
++      retryable: true,
++    }),
++  );
++  await page.route("**/api/v1/system/info", (route) =>
++    json(route, 200, {
++      service: "semlia",
++      apiVersion: "v1",
++      schemaVersion: "0.1.0",
++      buildVersion: "test-build",
++      traceId,
++    }),
++  );
++}
++
++async function json(route: Route, status: number, body: object) {
++  await route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
++}
++
++async function expectNoOverflow(page: Page) {
++  const dimensions = await page.evaluate(() => ({
++    viewport: document.documentElement.clientWidth,
++    content: document.documentElement.scrollWidth,
++  }));
++  expect(dimensions.content).toBeLessThanOrEqual(dimensions.viewport);
++}
+diff --git a/web/eslint.config.js b/web/eslint.config.js
+new file mode 100644
+index 0000000..fabaeb0
+--- /dev/null
++++ b/web/eslint.config.js
+@@ -0,0 +1,21 @@
++import eslint from "@eslint/js";
++import reactHooks from "eslint-plugin-react-hooks";
++import reactRefresh from "eslint-plugin-react-refresh";
++import tseslint from "typescript-eslint";
++
++export default tseslint.config(
++  { ignores: ["dist", "playwright-report", "test-results"] },
++  eslint.configs.recommended,
++  ...tseslint.configs.recommended,
++  {
++    files: ["**/*.{ts,tsx}"],
++    plugins: {
++      "react-hooks": reactHooks,
++      "react-refresh": reactRefresh,
++    },
++    rules: {
++      ...reactHooks.configs.recommended.rules,
++      "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
++    },
++  },
++);
+diff --git a/web/index.html b/web/index.html
+new file mode 100644
+index 0000000..4ba2ebf
+--- /dev/null
++++ b/web/index.html
+@@ -0,0 +1,13 @@
++<!doctype html>
++<html lang="en">
++  <head>
++    <meta charset="UTF-8" />
++    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
++    <meta name="theme-color" content="#f5f7f8" />
++    <title>Semlia System Status</title>
++  </head>
++  <body>
++    <div id="root"></div>
++    <script type="module" src="/src/main.tsx"></script>
++  </body>
++</html>
+diff --git a/web/package.json b/web/package.json
+new file mode 100644
+index 0000000..4ea3676
+--- /dev/null
++++ b/web/package.json
+@@ -0,0 +1,40 @@
++{
++  "name": "@semlia/web",
++  "version": "0.0.0",
++  "private": true,
++  "type": "module",
++  "scripts": {
++    "dev": "vite --host 127.0.0.1",
++    "build": "tsc --noEmit && vite build",
++    "preview": "vite preview --host 127.0.0.1",
++    "lint": "eslint .",
++    "typecheck": "tsc --noEmit",
++    "test": "vitest run",
++    "test:e2e": "playwright test"
++  },
++  "dependencies": {
++    "@semlia/sdk-typescript": "workspace:*",
++    "lucide-react": "1.30.0",
++    "react": "19.2.8",
++    "react-dom": "19.2.8"
++  },
++  "devDependencies": {
++    "@eslint/js": "10.0.1",
++    "@playwright/test": "1.62.1",
++    "@testing-library/jest-dom": "7.0.0",
++    "@testing-library/react": "16.3.2",
++    "@testing-library/user-event": "14.6.3",
++    "@types/node": "26.2.0",
++    "@types/react": "19.2.18",
++    "@types/react-dom": "19.2.4",
++    "@vitejs/plugin-react": "6.0.5",
++    "eslint": "10.8.1",
++    "eslint-plugin-react-hooks": "7.1.1",
++    "eslint-plugin-react-refresh": "0.5.3",
++    "jsdom": "30.0.1",
++    "typescript": "5.9.3",
++    "typescript-eslint": "8.66.0",
++    "vite": "8.2.1",
++    "vitest": "4.1.10"
++  }
++}
+diff --git a/web/playwright.config.ts b/web/playwright.config.ts
+new file mode 100644
+index 0000000..6ede765
+--- /dev/null
++++ b/web/playwright.config.ts
+@@ -0,0 +1,24 @@
++import { defineConfig } from "@playwright/test";
++
++export default defineConfig({
++  testDir: "./e2e",
++  fullyParallel: true,
++  retries: 0,
++  reporter: "list",
++  outputDir: "test-results",
++  use: {
++    baseURL: "http://127.0.0.1:4174",
++    colorScheme: "light",
++    trace: "retain-on-failure",
++  },
++  projects: [
++    { name: "desktop", use: { viewport: { width: 1440, height: 900 } } },
++    { name: "compact-desktop", use: { viewport: { width: 1024, height: 768 } } },
++  ],
++  webServer: {
++    command: "pnpm dev --port 4174",
++    url: "http://127.0.0.1:4174",
++    reuseExistingServer: true,
++    timeout: 30_000,
++  },
++});
+diff --git a/web/src/App.test.tsx b/web/src/App.test.tsx
+new file mode 100644
+index 0000000..4f57ef6
+--- /dev/null
++++ b/web/src/App.test.tsx
+@@ -0,0 +1,85 @@
++import { render, screen } from "@testing-library/react";
++import userEvent from "@testing-library/user-event";
++import { vi } from "vitest";
++
++import { App } from "./App";
++import type { SystemStatus } from "./status";
++
++const traceId = "4bf92f3577b34da6a3ce929d0e0e4736";
++
++const readyStatus: SystemStatus = {
++  kind: "ready",
++  traceId,
++  info: {
++    service: "semlia",
++    apiVersion: "v1",
++    schemaVersion: "0.1.0",
++    buildVersion: "test-build",
++    traceId,
++  },
++};
++
++const dependencyStatus: SystemStatus = {
++  kind: "dependency_unavailable",
++  code: "DEPENDENCY_UNAVAILABLE",
++  message: "A required dependency is unavailable.",
++  traceId,
++  retryable: true,
++};
++
++const configurationStatus: SystemStatus = {
++  kind: "configuration_error",
++  code: "CONFIGURATION_ERROR",
++  message: "Unable to reach the control API.",
++  traceId: null,
++};
++
++describe("system status", () => {
++  it("announces the loading state without inventing a result", () => {
++    const pending = new Promise<SystemStatus>(() => undefined);
++    render(<App loadStatus={() => pending} />);
++
++    expect(screen.getByRole("heading", { name: "System status" })).toBeVisible();
++    expect(screen.getByRole("status")).toHaveTextContent("Checking control plane");
++    expect(screen.getByRole("button", { name: "Refresh status" })).toBeDisabled();
++  });
++
++  it("renders ready system and contract information", async () => {
++    render(<App loadStatus={() => Promise.resolve(readyStatus)} />);
++
++    expect(await screen.findByText("Control plane ready")).toBeVisible();
++    expect(screen.getByText("test-build")).toBeVisible();
++    expect(screen.getByText("v1 / 0.1.0")).toBeVisible();
++    expect(screen.getAllByText(traceId).length).toBeGreaterThan(0);
++  });
++
++  it("shows a stable dependency error and trace ID", async () => {
++    render(<App loadStatus={() => Promise.resolve(dependencyStatus)} />);
++
++    expect(await screen.findByRole("alert")).toHaveTextContent("Dependency unavailable");
++    expect(screen.getByText("DEPENDENCY_UNAVAILABLE")).toBeVisible();
++    expect(screen.getAllByText(traceId).length).toBeGreaterThan(0);
++  });
++
++  it("separates configuration failure from dependency health", async () => {
++    render(<App loadStatus={() => Promise.resolve(configurationStatus)} />);
++
++    expect(await screen.findByRole("alert")).toHaveTextContent("Control API unreachable");
++    expect(screen.getByText("CONFIGURATION_ERROR")).toBeVisible();
++    expect(screen.getByText("Not available")).toBeVisible();
++  });
++
++  it("refreshes through a stable loading state", async () => {
++    const user = userEvent.setup();
++    const loadStatus = vi
++      .fn<() => Promise<SystemStatus>>()
++      .mockResolvedValueOnce(readyStatus)
++      .mockResolvedValueOnce(dependencyStatus);
++    render(<App loadStatus={loadStatus} />);
++
++    await screen.findByText("Control plane ready");
++    await user.click(screen.getByRole("button", { name: "Refresh status" }));
++    expect(await screen.findByText("Dependency unavailable")).toBeVisible();
++    expect(loadStatus).toHaveBeenCalledTimes(2);
++  });
++});
+diff --git a/web/src/App.tsx b/web/src/App.tsx
+new file mode 100644
+index 0000000..b6ad702
+--- /dev/null
++++ b/web/src/App.tsx
+@@ -0,0 +1,330 @@
++import { useEffect, useState } from "react";
++import {
++  Activity,
++  Check,
++  CircleAlert,
++  Database,
++  LoaderCircle,
++  RefreshCw,
++  Server,
++  ShieldAlert,
++} from "lucide-react";
++
++import {
++  loadSystemStatus,
++  loadingStatus,
++  type StatusLoader,
++  type SystemStatus,
++} from "./status";
++import "./styles.css";
++
++interface AppProps {
++  loadStatus?: StatusLoader;
++}
++
++type Tone = "loading" | "ready" | "warning" | "danger" | "neutral";
++
++export function App({ loadStatus = loadSystemStatus }: AppProps) {
++  const [status, setStatus] = useState<SystemStatus>(loadingStatus);
++  const [requestVersion, setRequestVersion] = useState(0);
++
++  useEffect(() => {
++    const controller = new AbortController();
++    loadStatus(controller.signal)
++      .then((result) => {
++        if (!controller.signal.aborted) {
++          setStatus(result);
++        }
++      })
++      .catch(() => {
++        if (!controller.signal.aborted) {
++          setStatus({
++            kind: "configuration_error",
++            code: "CONFIGURATION_ERROR",
++            message: "Unable to reach the control API.",
++            traceId: null,
++          });
++        }
++      });
++    return () => controller.abort();
++  }, [loadStatus, requestVersion]);
++
++  const refresh = () => {
++    setStatus(loadingStatus);
++    setRequestVersion((version) => version + 1);
++  };
++
++  const presentation = present(status);
++  const info = status.kind === "ready" ? status.info : status.kind === "dependency_unavailable" ? status.info : undefined;
++
++  return (
++    <div className="app-shell" data-state={status.kind}>
++      <header className="topbar">
++        <div className="topbar-inner">
++          <a className="brand" href="/" aria-label="Semlia system status">
++            <span className="brand-mark" aria-hidden="true">S</span>
++            <span>Semlia</span>
++          </a>
++          <span className="environment-label">Control plane</span>
++        </div>
++      </header>
++
++      <main className="status-page">
++        <div className="page-heading">
++          <div>
++            <p className="eyebrow">Instance diagnostics</p>
++            <h1>System status</h1>
++            <p className="page-description">Live health and contract information from this Semlia instance.</p>
++          </div>
++          <button
++            className="refresh-button"
++            type="button"
++            onClick={refresh}
++            disabled={status.kind === "loading"}
++            aria-label="Refresh status"
++          >
++            <RefreshCw size={16} aria-hidden="true" />
++            <span>Refresh</span>
++          </button>
++        </div>
++
++        <section
++          className={`state-banner tone-${presentation.tone}`}
++          role={presentation.problem ? "alert" : "status"}
++          aria-live="polite"
++          aria-atomic="true"
++        >
++          <StateIcon status={status} />
++          <div className="state-copy">
++            <strong>{presentation.title}</strong>
++            <span>{presentation.description}</span>
++          </div>
++          <span className="state-code">{presentation.code}</span>
++        </section>
++
++        <section className="signal-section" aria-labelledby="service-path-title">
++          <div className="section-heading-row">
++            <div>
++              <p className="section-kicker">Runtime path</p>
++              <h2 id="service-path-title">Service Signal Line</h2>
++            </div>
++            <span className="last-check">On demand</span>
++          </div>
++
++          <div className="signal-line" data-tone={presentation.tone}>
++            <SignalNode
++              icon={<Activity size={18} aria-hidden="true" />}
++              label="Browser"
++              value="Connected"
++              tone="ready"
++            />
++            <span className="signal-connector" aria-hidden="true" />
++            <SignalNode
++              icon={<Server size={18} aria-hidden="true" />}
++              label="Control API"
++              value={apiSignal(status)}
++              tone={apiTone(status)}
++            />
++            <span className="signal-connector" aria-hidden="true" />
++            <SignalNode
++              icon={<Database size={18} aria-hidden="true" />}
++              label="Persistence"
++              value={dependencySignal(status)}
++              tone={dependencyTone(status)}
++            />
++          </div>
++        </section>
++
++        <section className="details-section" aria-labelledby="details-title">
++          <div className="section-heading-row">
++            <div>
++              <p className="section-kicker">Current reading</p>
++              <h2 id="details-title">Instance details</h2>
++            </div>
++          </div>
++
++          <div className="status-grid">
++            <StatusCard
++              label="Process"
++              value={processValue(status)}
++              detail={status.kind === "configuration_error" ? "No live response" : "Liveness endpoint"}
++              tone={processTone(status)}
++            />
++            <StatusCard
++              label="Dependency"
++              value={dependencySignal(status)}
++              detail={status.kind === "dependency_unavailable" && status.retryable ? "Retry is supported" : "Readiness endpoint"}
++              tone={dependencyTone(status)}
++            />
++            <StatusCard
++              label="Contract"
++              value={info ? `${info.apiVersion} / ${info.schemaVersion}` : status.kind === "loading" ? "Checking" : "Unavailable"}
++              detail={info ? info.buildVersion : "Build information"}
++              tone={info ? "ready" : status.kind === "loading" ? "loading" : "neutral"}
++              mono
++            />
++          </div>
++        </section>
++
++        <section className="trace-section" aria-labelledby="trace-title">
++          <div>
++            <p className="section-kicker">Support context</p>
++            <h2 id="trace-title">Trace ID</h2>
++          </div>
++          <code>{traceValue(status)}</code>
++        </section>
++      </main>
++    </div>
++  );
++}
++
++function StateIcon({ status }: { status: SystemStatus }) {
++  if (status.kind === "loading") {
++    return <LoaderCircle className="state-icon is-spinning" size={22} aria-hidden="true" />;
++  }
++  if (status.kind === "ready") {
++    return <Check className="state-icon" size={22} aria-hidden="true" />;
++  }
++  if (status.kind === "dependency_unavailable") {
++    return <CircleAlert className="state-icon" size={22} aria-hidden="true" />;
++  }
++  return <ShieldAlert className="state-icon" size={22} aria-hidden="true" />;
++}
++
++function SignalNode({
++  icon,
++  label,
++  value,
++  tone,
++}: {
++  icon: React.ReactNode;
++  label: string;
++  value: string;
++  tone: Tone;
++}) {
++  return (
++    <div className="signal-node" data-tone={tone}>
++      <span className="node-icon">{icon}</span>
++      <span className="node-copy">
++        <strong>{label}</strong>
++        <span>{value}</span>
++      </span>
++      <span className="node-indicator" aria-hidden="true" />
++    </div>
++  );
++}
++
++function StatusCard({
++  label,
++  value,
++  detail,
++  tone,
++  mono = false,
++}: {
++  label: string;
++  value: string;
++  detail: string;
++  tone: Tone;
++  mono?: boolean;
++}) {
++  return (
++    <article className="status-card" data-tone={tone}>
++      <div className="card-label-row">
++        <span className="card-indicator" aria-hidden="true" />
++        <span>{label}</span>
++      </div>
++      <strong className={mono ? "mono" : undefined}>{value}</strong>
++      <span className="card-detail">{detail}</span>
++    </article>
++  );
++}
++
++function present(status: SystemStatus): {
++  title: string;
++  description: string;
++  code: string;
++  tone: Tone;
++  problem: boolean;
++} {
++  switch (status.kind) {
++    case "loading":
++      return {
++        title: "Checking control plane",
++        description: "Reading process, dependency and contract health.",
++        code: "CHECKING",
++        tone: "loading",
++        problem: false,
++      };
++    case "ready":
++      return {
++        title: "Control plane ready",
++        description: "The process and required dependencies report healthy.",
++        code: "READY",
++        tone: "ready",
++        problem: false,
++      };
++    case "dependency_unavailable":
++      return {
++        title: "Dependency unavailable",
++        description: status.message,
++        code: status.code,
++        tone: "warning",
++        problem: true,
++      };
++    case "configuration_error":
++      return {
++        title: "Control API unreachable",
++        description: status.message,
++        code: status.code,
++        tone: "danger",
++        problem: true,
++      };
++  }
++}
++
++function apiSignal(status: SystemStatus): string {
++  if (status.kind === "loading") return "Checking";
++  if (status.kind === "configuration_error") return "Unreachable";
++  return "Live";
++}
++
++function apiTone(status: SystemStatus): Tone {
++  if (status.kind === "loading") return "loading";
++  if (status.kind === "configuration_error") return "danger";
++  return "ready";
++}
++
++function dependencySignal(status: SystemStatus): string {
++  switch (status.kind) {
++    case "loading": return "Checking";
++    case "ready": return "Ready";
++    case "dependency_unavailable": return "Unavailable";
++    case "configuration_error": return "Unknown";
++  }
++}
++
++function dependencyTone(status: SystemStatus): Tone {
++  switch (status.kind) {
++    case "loading": return "loading";
++    case "ready": return "ready";
++    case "dependency_unavailable": return "warning";
++    case "configuration_error": return "neutral";
++  }
++}
++
++function processValue(status: SystemStatus): string {
++  if (status.kind === "loading") return "Checking";
++  if (status.kind === "configuration_error") return "Unknown";
++  return "Live";
++}
++
++function processTone(status: SystemStatus): Tone {
++  if (status.kind === "loading") return "loading";
++  if (status.kind === "configuration_error") return "neutral";
++  return "ready";
++}
++
++function traceValue(status: SystemStatus): string {
++  if (status.kind === "loading") return "Pending response";
++  return status.traceId ?? "Not available";
++}
+diff --git a/web/src/main.tsx b/web/src/main.tsx
+new file mode 100644
+index 0000000..e362003
+--- /dev/null
++++ b/web/src/main.tsx
+@@ -0,0 +1,15 @@
++import { StrictMode } from "react";
++import { createRoot } from "react-dom/client";
++
++import { App } from "./App";
++
++const root = document.getElementById("root");
++if (!root) {
++  throw new Error("root element is required");
++}
++
++createRoot(root).render(
++  <StrictMode>
++    <App />
++  </StrictMode>,
++);
+diff --git a/web/src/status.ts b/web/src/status.ts
+new file mode 100644
+index 0000000..bd5114b
+--- /dev/null
++++ b/web/src/status.ts
+@@ -0,0 +1,112 @@
++import {
++  createSemliaClient,
++  type components,
++  type SemliaClient,
++} from "@semlia/sdk-typescript";
++
++type SystemInfo = components["schemas"]["SystemInfo"];
++type ErrorResponse = components["schemas"]["ErrorResponse"];
++
++export type SystemStatus =
++  | { kind: "loading" }
++  | { kind: "ready"; traceId: string; info: SystemInfo }
++  | {
++      kind: "dependency_unavailable";
++      code: string;
++      message: string;
++      traceId: string;
++      retryable: boolean;
++      info?: SystemInfo;
++    }
++  | {
++      kind: "configuration_error";
++      code: string;
++      message: string;
++      traceId: string | null;
++    };
++
++export type StatusLoader = (signal?: AbortSignal) => Promise<SystemStatus>;
++
++export const loadingStatus: SystemStatus = { kind: "loading" };
++
++const browserClient = createSemliaClient({ baseUrl: "" });
++
++export const loadSystemStatus: StatusLoader = (signal) =>
++  loadSystemStatusWithClient(browserClient, signal);
++
++export async function loadSystemStatusWithClient(
++  client: SemliaClient,
++  signal?: AbortSignal,
++): Promise<SystemStatus> {
++  try {
++    const liveness = await client.GET("/health/live", { signal });
++    if (!liveness.data || liveness.data.status !== "live") {
++      return configurationError(liveness.error);
++    }
++
++    const [readiness, systemInfo] = await Promise.all([
++      client.GET("/health/ready", { signal }),
++      client.GET("/api/v1/system/info", { signal }),
++    ]);
++
++    if (readiness.error && isErrorResponse(readiness.error)) {
++      return {
++        kind: "dependency_unavailable",
++        code: readiness.error.code,
++        message: readiness.error.message,
++        traceId: readiness.error.traceId,
++        retryable: readiness.error.retryable ?? false,
++        ...(systemInfo.data === undefined ? {} : { info: systemInfo.data }),
++      };
++    }
++
++    if (
++      !readiness.data ||
++      readiness.data.status !== "ready" ||
++      !systemInfo.data
++    ) {
++      return configurationError(systemInfo.error ?? readiness.error);
++    }
++
++    return {
++      kind: "ready",
++      traceId: systemInfo.data.traceId,
++      info: systemInfo.data,
++    };
++  } catch (error) {
++    if (signal?.aborted) {
++      throw error;
++    }
++    return configurationError(error);
++  }
++}
++
++function configurationError(value: unknown): SystemStatus {
++  if (isErrorResponse(value)) {
++    return {
++      kind: "configuration_error",
++      code: value.code,
++      message: value.message,
++      traceId: value.traceId,
++    };
++  }
++  return {
++    kind: "configuration_error",
++    code: "CONFIGURATION_ERROR",
++    message: "Unable to reach the control API.",
++    traceId: null,
++  };
++}
++
++function isErrorResponse(value: unknown): value is ErrorResponse {
++  if (!value || typeof value !== "object") {
++    return false;
++  }
++  const candidate = value as Partial<ErrorResponse>;
++  return (
++    typeof candidate.code === "string" &&
++    typeof candidate.message === "string" &&
++    typeof candidate.traceId === "string" &&
++    candidate.details !== undefined
++  );
++}
+diff --git a/web/src/styles.css b/web/src/styles.css
+new file mode 100644
+index 0000000..23ddcc8
+--- /dev/null
++++ b/web/src/styles.css
+@@ -0,0 +1,502 @@
++:root {
++  color: #18202b;
++  background: #f5f7f8;
++  font-family: Inter, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
++  font-synthesis: none;
++  text-rendering: optimizeLegibility;
++  letter-spacing: 0;
++  --canvas: #f5f7f8;
++  --surface: #ffffff;
++  --surface-subtle: #eef1f3;
++  --ink: #18202b;
++  --muted: #5d6978;
++  --border: #d9dee5;
++  --accent: #2f5fce;
++  --success: #167c62;
++  --warning: #a76414;
++  --danger: #b33b4a;
++}
++
++* {
++  box-sizing: border-box;
++}
++
++html,
++body,
++#root {
++  min-height: 100%;
++  margin: 0;
++}
++
++body {
++  min-width: 0;
++  background: var(--canvas);
++}
++
++button,
++a {
++  font: inherit;
++}
++
++button:focus-visible,
++a:focus-visible {
++  outline: 3px solid rgba(47, 95, 206, 0.34);
++  outline-offset: 3px;
++}
++
++.app-shell {
++  min-height: 100vh;
++  background: var(--canvas);
++}
++
++.topbar {
++  height: 56px;
++  border-bottom: 1px solid var(--border);
++  background: rgba(255, 255, 255, 0.96);
++}
++
++.topbar-inner {
++  width: min(100%, 1184px);
++  height: 100%;
++  margin: 0 auto;
++  padding: 0 32px;
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++}
++
++.brand {
++  color: var(--ink);
++  display: inline-flex;
++  align-items: center;
++  gap: 10px;
++  font-size: 15px;
++  font-weight: 700;
++  text-decoration: none;
++}
++
++.brand-mark {
++  width: 28px;
++  height: 28px;
++  display: inline-grid;
++  place-items: center;
++  border-radius: 6px;
++  color: #ffffff;
++  background: var(--ink);
++  font-size: 13px;
++  line-height: 1;
++}
++
++.environment-label,
++.last-check {
++  color: var(--muted);
++  font-size: 12px;
++  line-height: 1.4;
++}
++
++.environment-label {
++  padding-left: 12px;
++  border-left: 1px solid var(--border);
++}
++
++.status-page {
++  width: min(100%, 1184px);
++  margin: 0 auto;
++  padding: 42px 32px 48px;
++}
++
++.page-heading {
++  min-height: 78px;
++  display: flex;
++  align-items: flex-start;
++  justify-content: space-between;
++  gap: 24px;
++}
++
++.eyebrow,
++.section-kicker {
++  margin: 0 0 6px;
++  color: var(--accent);
++  font-size: 11px;
++  font-weight: 700;
++  line-height: 1.4;
++  text-transform: uppercase;
++}
++
++h1,
++h2,
++p {
++  letter-spacing: 0;
++}
++
++h1 {
++  margin: 0;
++  color: var(--ink);
++  font-size: 28px;
++  font-weight: 650;
++  line-height: 1.2;
++}
++
++h2 {
++  margin: 0;
++  color: var(--ink);
++  font-size: 15px;
++  font-weight: 650;
++  line-height: 1.35;
++}
++
++.page-description {
++  margin: 8px 0 0;
++  color: var(--muted);
++  font-size: 14px;
++  line-height: 1.55;
++}
++
++.refresh-button {
++  width: 104px;
++  height: 36px;
++  border: 1px solid #cbd2dc;
++  border-radius: 6px;
++  color: var(--ink);
++  background: var(--surface);
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  gap: 8px;
++  font-size: 13px;
++  font-weight: 600;
++  cursor: pointer;
++  transition: border-color 120ms ease-out, background-color 120ms ease-out;
++}
++
++.refresh-button:hover:not(:disabled) {
++  border-color: #9eabbc;
++  background: #f9fafb;
++}
++
++.refresh-button:disabled {
++  color: #8893a2;
++  background: var(--surface-subtle);
++  cursor: wait;
++}
++
++.state-banner {
++  min-height: 76px;
++  margin-top: 30px;
++  padding: 16px 18px;
++  border: 1px solid var(--border);
++  border-left-width: 4px;
++  border-radius: 8px;
++  background: var(--surface);
++  display: grid;
++  grid-template-columns: 24px minmax(0, 1fr) auto;
++  align-items: center;
++  gap: 14px;
++  animation: state-enter 160ms ease-out;
++}
++
++.tone-loading {
++  border-left-color: var(--accent);
++}
++
++.tone-ready {
++  border-left-color: var(--success);
++}
++
++.tone-warning {
++  border-left-color: var(--warning);
++}
++
++.tone-danger {
++  border-left-color: var(--danger);
++}
++
++.state-icon {
++  color: var(--muted);
++}
++
++.tone-loading .state-icon {
++  color: var(--accent);
++}
++
++.tone-ready .state-icon {
++  color: var(--success);
++}
++
++.tone-warning .state-icon {
++  color: var(--warning);
++}
++
++.tone-danger .state-icon {
++  color: var(--danger);
++}
++
++.is-spinning {
++  animation: spin 800ms linear infinite;
++}
++
++.state-copy {
++  min-width: 0;
++  display: grid;
++  gap: 3px;
++}
++
++.state-copy strong {
++  font-size: 14px;
++  line-height: 1.4;
++}
++
++.state-copy span {
++  color: var(--muted);
++  font-size: 13px;
++  line-height: 1.45;
++}
++
++.state-code,
++.mono,
++.trace-section code {
++  font-family: "SFMono-Regular", "JetBrains Mono", Consolas, monospace;
++  letter-spacing: 0;
++}
++
++.state-code {
++  max-width: 240px;
++  padding: 5px 8px;
++  border-radius: 5px;
++  color: var(--muted);
++  background: var(--surface-subtle);
++  font-size: 11px;
++  line-height: 1.35;
++  overflow-wrap: anywhere;
++}
++
++.signal-section,
++.details-section {
++  margin-top: 34px;
++}
++
++.section-heading-row {
++  min-height: 42px;
++  display: flex;
++  align-items: flex-start;
++  justify-content: space-between;
++  gap: 16px;
++}
++
++.signal-line {
++  min-height: 112px;
++  margin-top: 12px;
++  padding: 20px 24px;
++  border: 1px solid var(--border);
++  border-radius: 8px;
++  background: var(--surface);
++  display: grid;
++  grid-template-columns: minmax(180px, 1fr) minmax(40px, 0.45fr) minmax(180px, 1fr) minmax(40px, 0.45fr) minmax(180px, 1fr);
++  align-items: center;
++}
++
++.signal-node {
++  min-width: 0;
++  display: grid;
++  grid-template-columns: 36px minmax(0, 1fr) 10px;
++  align-items: center;
++  gap: 10px;
++}
++
++.node-icon {
++  width: 36px;
++  height: 36px;
++  display: grid;
++  place-items: center;
++  border: 1px solid var(--border);
++  border-radius: 6px;
++  color: var(--muted);
++  background: var(--surface-subtle);
++}
++
++.node-copy {
++  min-width: 0;
++  display: grid;
++  gap: 2px;
++}
++
++.node-copy strong {
++  font-size: 13px;
++  line-height: 1.4;
++}
++
++.node-copy span {
++  color: var(--muted);
++  font-size: 12px;
++  line-height: 1.4;
++}
++
++.node-indicator,
++.card-indicator {
++  border-radius: 50%;
++  background: #9aa4b1;
++}
++
++.node-indicator {
++  width: 8px;
++  height: 8px;
++}
++
++[data-tone="ready"] > .node-indicator,
++.status-card[data-tone="ready"] .card-indicator {
++  background: var(--success);
++}
++
++[data-tone="warning"] > .node-indicator,
++.status-card[data-tone="warning"] .card-indicator {
++  background: var(--warning);
++}
++
++[data-tone="danger"] > .node-indicator,
++.status-card[data-tone="danger"] .card-indicator {
++  background: var(--danger);
++}
++
++[data-tone="loading"] > .node-indicator,
++.status-card[data-tone="loading"] .card-indicator {
++  background: var(--accent);
++}
++
++.signal-connector {
++  height: 1px;
++  margin: 0 16px;
++  background: var(--border);
++  position: relative;
++}
++
++.signal-connector::after {
++  content: "";
++  width: 6px;
++  height: 6px;
++  border-top: 1px solid #9aa4b1;
++  border-right: 1px solid #9aa4b1;
++  position: absolute;
++  top: -3px;
++  right: 0;
++  transform: rotate(45deg);
++}
++
++.status-grid {
++  margin-top: 12px;
++  display: grid;
++  grid-template-columns: repeat(3, minmax(0, 1fr));
++  gap: 12px;
++}
++
++.status-card {
++  min-width: 0;
++  min-height: 132px;
++  padding: 16px;
++  border: 1px solid var(--border);
++  border-radius: 8px;
++  background: var(--surface);
++  display: flex;
++  flex-direction: column;
++  justify-content: space-between;
++  gap: 10px;
++}
++
++.card-label-row {
++  color: var(--muted);
++  display: flex;
++  align-items: center;
++  gap: 8px;
++  font-size: 12px;
++  line-height: 1.4;
++}
++
++.card-indicator {
++  width: 7px;
++  height: 7px;
++}
++
++.status-card > strong {
++  min-width: 0;
++  font-size: 18px;
++  font-weight: 650;
++  line-height: 1.3;
++  overflow-wrap: anywhere;
++}
++
++.status-card > strong.mono {
++  font-size: 15px;
++}
++
++.card-detail {
++  color: var(--muted);
++  font-size: 12px;
++  line-height: 1.4;
++}
++
++.trace-section {
++  min-height: 68px;
++  margin-top: 24px;
++  padding-top: 18px;
++  border-top: 1px solid var(--border);
++  display: grid;
++  grid-template-columns: minmax(160px, 0.5fr) minmax(0, 1.5fr);
++  align-items: start;
++  gap: 24px;
++}
++
++.trace-section code {
++  min-width: 0;
++  color: #3f4c5e;
++  font-size: 12px;
++  line-height: 1.55;
++  overflow-wrap: anywhere;
++  text-align: right;
++}
++
++@keyframes spin {
++  to {
++    transform: rotate(360deg);
++  }
++}
++
++@keyframes state-enter {
++  from {
++    opacity: 0.3;
++  }
++  to {
++    opacity: 1;
++  }
++}
++
++@media (max-width: 1180px) {
++  .topbar-inner {
++    padding: 0 24px;
++  }
++
++  .status-page {
++    padding: 36px 24px 40px;
++  }
++
++  .signal-line {
++    padding: 18px 20px;
++  }
++
++  .signal-connector {
++    margin: 0 10px;
++  }
++}
++
++@media (prefers-reduced-motion: reduce) {
++  *,
++  *::before,
++  *::after {
++    scroll-behavior: auto !important;
++    animation-duration: 0.01ms !important;
++    animation-iteration-count: 1 !important;
++    transition-duration: 0.01ms !important;
++  }
++
++  .is-spinning {
++    animation: none;
++  }
++}
+diff --git a/web/src/test/setup.ts b/web/src/test/setup.ts
+new file mode 100644
+index 0000000..f149f27
+--- /dev/null
++++ b/web/src/test/setup.ts
+@@ -0,0 +1 @@
++import "@testing-library/jest-dom/vitest";
+diff --git a/web/tsconfig.json b/web/tsconfig.json
+new file mode 100644
+index 0000000..a749ac0
+--- /dev/null
++++ b/web/tsconfig.json
+@@ -0,0 +1,21 @@
++{
++  "compilerOptions": {
++    "target": "ES2022",
++    "useDefineForClassFields": true,
++    "lib": ["ES2022", "DOM", "DOM.Iterable"],
++    "allowJs": false,
++    "skipLibCheck": true,
++    "esModuleInterop": true,
++    "allowSyntheticDefaultImports": true,
++    "strict": true,
++    "forceConsistentCasingInFileNames": true,
++    "module": "ESNext",
++    "moduleResolution": "Bundler",
++    "resolveJsonModule": true,
++    "isolatedModules": true,
++    "noEmit": true,
++    "jsx": "react-jsx",
++    "types": ["vitest/globals", "@testing-library/jest-dom"]
++  },
++  "include": ["src", "vite.config.ts", "playwright.config.ts", "eslint.config.js"]
++}
+diff --git a/web/vite.config.ts b/web/vite.config.ts
+new file mode 100644
+index 0000000..ec07bdf
+--- /dev/null
++++ b/web/vite.config.ts
+@@ -0,0 +1,19 @@
++import react from "@vitejs/plugin-react";
++import { defineConfig } from "vitest/config";
++
++export default defineConfig({
++  plugins: [react()],
++  server: {
++    proxy: {
++      "/api": "http://127.0.0.1:8080",
++      "/health": "http://127.0.0.1:8080",
++    },
++  },
++  test: {
++    environment: "jsdom",
++    setupFiles: "./src/test/setup.ts",
++    globals: true,
++    css: true,
++    include: ["src/**/*.test.tsx"],
++  },
++});

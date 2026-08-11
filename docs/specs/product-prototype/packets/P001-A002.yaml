@@ -1,0 +1,48 @@
+schema_version: 1
+packet_id: PRODUCT-P001-A002
+task_id: P001
+feature_id: product-prototype
+mode: direct_retry
+adapter: codex
+
+trigger:
+  source: Founder visual review on 2026-08-08
+  finding: The first P001 visual direction was rejected as unattractive.
+  direction: Use the local Zhizhu project as a structural UI reference.
+
+reference_contract:
+  source: /Users/iiwish/self/zhizhu
+  inherit:
+    - 56px activity rail plus 264px contextual navigator and task canvas
+    - quiet neutral surfaces with a cobalt focus line
+    - compact desktop knowledge-work density and low elevation
+  do_not_copy:
+    - Zhizhu brand, logo, copy, knowledge objects or proprietary identity
+  semlia_replacement:
+    - semantic assets, lineage, validation, proposals, releases and bindings
+  exceed:
+    - retain responsive mobile review and persistent mock-data disclosure
+
+execution_constraints:
+  branch_or_worktree: current main branch
+  allowed_files:
+    - prototypes/product/**
+    - docs/specs/product-prototype/**
+    - docs/evidence/P001/**
+    - docs/specs/m0-foundation/tasks.md
+  forbidden:
+    - production web, backend, OpenAPI, generated SDK or M1 schema changes
+    - edits to /Users/iiwish/self/zhizhu
+
+tdd_plan:
+  red:
+    command: pnpm --filter @semlia/product-prototype test
+    expected_failure: A new workspace-structure test fails before the activity rail, contextual navigator and task canvas exist.
+  green:
+    command: pnpm --filter @semlia/product-prototype test
+    expected_signal: The three-layer workspace and existing product journeys pass.
+  refactor:
+    command: pnpm --filter @semlia/product-prototype lint && pnpm --filter @semlia/product-prototype typecheck && pnpm --filter @semlia/product-prototype test:e2e
+    expected_signal: Desktop, tablet, mobile and keyboard flows pass with no page overflow.
+
+acceptance_rule: P001 returns to Needs_Review after browser QA and requires explicit founder acceptance before commit.

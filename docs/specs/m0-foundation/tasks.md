@@ -5,9 +5,9 @@
 | 字段 | 值 |
 | --- | --- |
 | Feature | m0-foundation |
-| 版本 | 0.3.0 |
+| 版本 | 0.6.0 |
 | 状态 | Confirmed |
-| 最后更新 | 2026-08-08 |
+| 最后更新 | 2026-08-10 |
 | Source | `docs/SSOT.md`, `docs/specs/m0-foundation/plan.md` |
 | TDR | `docs/adr/0001-m0-technical-foundation.md` |
 
@@ -62,13 +62,13 @@ Stories:
 
 Tasks:
 
-- [ ] P001 [Product Review] 建立可检查的产品原型
+- [x] P001 [Product Review] 建立可检查的产品原型
 - [x] T001 [M0-US-001] 建立仓库与工具链基线
 - [x] T002 [M0-US-002] 建立版本化公共契约
-- [ ] T003 [M0-US-002] 实现控制面 API 纵向基础
-- [ ] T004 [P] [M0-US-002] 实现 Web system-status 纵向基础
-- [ ] T005 [M0-US-003, M0-US-004] 实现 PostgreSQL 迁移、job 与 outbox
-- [ ] T006 [M0-US-001] 组装本地完整运行环境
+- [x] T003 [M0-US-002] 实现控制面 API 纵向基础
+- [x] T004 [P] [M0-US-002] 实现 Web system-status 纵向基础
+- [x] T005 [M0-US-003, M0-US-004] 实现 PostgreSQL 迁移、job 与 outbox
+- [x] T006 [M0-US-001] 组装本地完整运行环境
 
 ### Epic E002 Quality and Distribution
 
@@ -90,7 +90,7 @@ Tasks:
 
 ### P001 建立可检查的产品原型
 
-Status: Running
+Status: Accepted
 Priority: P0
 Depends on: T001, T002
 Blocks: T003, T004 product review ordering
@@ -108,6 +108,7 @@ Allowed files:
 - `package.json`
 - `pnpm-workspace.yaml`
 - `pnpm-lock.yaml`
+- `pnpm-workspace.yaml`
 - `Makefile`
 - `docs/specs/product-prototype/**`
 - `docs/evidence/P001/**`
@@ -124,22 +125,22 @@ Test targets:
 Deliverables:
 
 - 产品原型 design contract、页面与状态清单。
-- Overview、Assets、Proposals 和 Releases 可点击视图。
+- Sources、Overview、Assets、Proposals、Releases 和 Consumers 可点击视图。
 - 资产 master-detail、关系图、证据、结构化 diff、验证结果和 release binding。
-- 桌面与移动视觉证据。
+- 普通桌面与紧凑桌面视觉证据。
 
 Acceptance criteria:
 
 - 首屏直接展示语义资产控制工作，不是营销页或聊天页。
 - 所有 mock data 和本地模拟动作持续、明确标识，不产生真实写入错觉。
-- 用户可以完成查找资产、检查来源、打开提案、查看 diff 与验证、模拟审核、检查 release 绑定的完整路径。
+- 用户可以完成接入来源、运行 discovery、查找资产、创建或打开提案、查看 diff 与验证、模拟审核、形成 candidate、模拟发布或回滚、创建消费 binding 和处理反馈信号的完整路径。
 - 主要导航、筛选、tabs、drawer/dialog 和关键操作支持键盘与可见焦点。
-- 1440x900 与 390x844 无文本溢出、控件遮挡或不可达操作。
+- 1440x900 与 1024x768 无文本溢出、控件遮挡或不可达操作。
 
 Definition of Done:
 
 - lint、typecheck、unit test、build 和 Playwright 主路径通过。
-- 设计 review 和 desktop/mobile screenshot evidence 存在。
+- 设计 review 和 desktop/compact-desktop screenshot evidence 存在。
 - 用户接受后才能把原型决策转入生产 Web 或 M1 specification。
 
 Validation commands:
@@ -159,13 +160,19 @@ TDD plan:
 
 Packet path:
 
-- `docs/specs/product-prototype/packets/P001.yaml`
+- `docs/specs/product-prototype/packets/P001-A004.yaml`
 
 Evidence required:
 
 - Changed files、RED/GREEN results 和 browser interaction results。
-- Desktop/mobile screenshots、design rubric 和 accessibility results。
+- Desktop/compact-desktop screenshots、design rubric 和 accessibility results。
 - Diff summary、mock boundary 和 residual risks。
+
+Acceptance:
+
+- Founder accepted the product direction and technical selection on 2026-08-10.
+- Review is founder-direct; no Figma review board or multi-reviewer workflow is required.
+- P001 no longer blocks the execution ordering of T003 and T004.
 
 ### T001 建立仓库与工具链基线
 
@@ -325,7 +332,7 @@ Evidence required:
 
 ### T003 实现控制面 API 纵向基础
 
-Status: Draft
+Status: Accepted
 Priority: P0
 Depends on: T001, T002
 Blocks: T005, T006, T007, T008
@@ -396,9 +403,13 @@ Evidence required:
 - 示例成功与失败响应。
 - 日志脱敏证据、diff summary、residual risks。
 
+Acceptance:
+
+- Founder accepted T003 on 2026-08-10 and authorized continued execution of subsequent tasks.
+
 ### T004 实现 Web system-status 纵向基础
 
-Status: Draft
+Status: Accepted
 Priority: P0
 Depends on: T001, T002
 Blocks: T006, T007, T008
@@ -441,7 +452,7 @@ Acceptance criteria:
 Definition of Done:
 
 - 组件、可访问性、构建和 Playwright 路径通过。
-- 桌面与移动 viewport 截图无溢出和重叠。
+- 1440x900 与 1024x768 viewport 截图无溢出和重叠。
 
 Validation commands:
 
@@ -465,12 +476,16 @@ Evidence required:
 
 - Changed files。
 - RED/GREEN results。
-- Desktop/mobile screenshots。
+- Desktop/compact-desktop screenshots。
 - Accessibility results、diff summary、residual risks。
+
+Acceptance:
+
+- Founder accepted T004 on 2026-08-10 and authorized continued execution.
 
 ### T005 实现 PostgreSQL 迁移、job 与 outbox
 
-Status: Draft
+Status: Accepted
 Priority: P0
 Depends on: T001, T003
 Blocks: T006, T007, T008
@@ -547,9 +562,15 @@ Evidence required:
 - `EXPLAIN` 或索引依据。
 - Diff summary、rollback notes、residual risks。
 
+Review:
+
+- Spec compliance、bug/code-quality 与 technical QA 均已通过，无 blocking finding。
+- Evidence: `docs/evidence/T005/summary.md`, `docs/evidence/T005/test-results.md`, `docs/evidence/T005/diff.patch`。
+- Founder 于 2026-08-10 明确接受 T005，并授权继续 T006。
+
 ### T006 组装本地完整运行环境
 
-Status: Draft
+Status: Accepted
 Priority: P0
 Depends on: T003, T004, T005
 Blocks: T007, T008
@@ -602,7 +623,7 @@ Validation commands:
 
 - `make dev`
 - `make smoke`
-- `docker compose restart worker`
+- `docker compose --env-file .semlia/dev.env restart worker`
 - `make smoke`
 - `make dev-down`
 
@@ -623,9 +644,17 @@ Evidence required:
 - Smoke test results。
 - 容器状态与资源摘要、diff summary、residual risks。
 
+Review notes:
+
+- Direct execution M0-T006-A001 只修改 packet 允许的本地集成 surface；T003 HTTP/config、T004 Web source/design、T005 migration/job/outbox semantics 和 Go modules 未修改。
+- RED、完整启动、重复 smoke、独立 worker restart、PostgreSQL failure/recovery、clean shutdown、全仓 test/vet/build/contract checks 均通过。
+- Spec compliance、bug/code-quality 与 QA acceptance review 无 blocking finding。
+- Evidence: `docs/evidence/T006/summary.md`, `docs/evidence/T006/test-results.md`, `docs/evidence/T006/diff.patch`。
+- Founder 于 2026-08-10 明确接受 T006，并授权继续 T007。
+
 ### T007 建立 CI、安全与供应链门禁
 
-Status: Draft
+Status: Blocked
 Priority: P0
 Depends on: T001, T002, T003, T004, T005, T006
 Blocks: T008
@@ -648,6 +677,11 @@ Allowed files:
 - `package.json`
 - `README.md`
 - `SECURITY.md`
+- `tests/repository/ci_contract_test.go`
+- `.tool-versions`
+- `deploy/local/Dockerfile`
+- `tests/repository/repository_contract_test.go`
+- `pnpm-lock.yaml`
 
 Test targets:
 
@@ -698,6 +732,15 @@ Evidence required:
 - Local check results 和 CI run URL。
 - Job durations、scan reports、SBOM/checksum samples。
 - Diff summary、residual risks。
+
+Execution notes:
+
+- M0-T007-A001 已完成 CI contract RED/GREEN、source gate 和 integrated smoke gate；首轮真实扫描识别并修复 `google.golang.org/grpc` High finding。
+- Founder 于 2026-08-10 批准 Go 1.26.5 与 transitive `js-yaml` 4.3.1 安全修复；`.tool-versions`、`deploy/local/Dockerfile`、`tests/repository/repository_contract_test.go`、`pnpm-lock.yaml` 和 pnpm 11 的 canonical override 配置 `pnpm-workspace.yaml` 纳入 T007。
+- 当前 checkout 没有 Git remote，完整绿色 GitHub Actions run URL 仍是独立外部门禁。
+- Evidence: `docs/evidence/T007/summary.md`, `docs/evidence/T007/test-results.md`。
+- Go/pnpm/secret/container High/Critical findings 均为 0；`make check`、`make security-check`、`make build`、`make sbom`、`make release` 和 repository contract 全部通过。
+- Spec compliance、bug/code-quality 和本地 QA acceptance review 无 blocking finding；T007 仅因尚无真实 GitHub Actions 绿色 run URL 保持 Blocked。
 
 ### T008 完成 fresh-clone 验收与 M0 交付证据
 

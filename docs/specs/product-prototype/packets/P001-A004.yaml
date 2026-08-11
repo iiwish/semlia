@@ -1,0 +1,53 @@
+schema_version: 1
+packet_id: PRODUCT-P001-A004
+task_id: P001
+feature_id: product-prototype
+mode: direct_retry
+adapter: codex
+
+trigger:
+  source: Founder visual review on 2026-08-09
+  request: Make the product desktop-only, remove ruled main-canvas backgrounds and prefer card-based object grouping.
+
+governance_inputs:
+  product_contract: docs/SSOT.md sections 5 and 6
+  product_design: docs/specs/product-prototype/product-design.md
+  project_instructions: AGENTS.md
+  dependencies: T001 and T002 Accepted; P001 A003 in founder review
+
+work_unit:
+  title: 收敛桌面产品边界并强化卡片层级
+  goal: >-
+    将桌面支持范围固化为项目级 Codex 指令，删除主画布横线背景，
+    并把指标、来源、通道、binding 和反馈事件调整为独立卡片。
+
+execution_constraints:
+  branch_or_worktree: current main branch
+  allowed_files:
+    - AGENTS.md
+    - prototypes/product/**
+    - docs/specs/product-prototype/**
+    - docs/specs/m0-foundation/tasks.md
+    - docs/evidence/P001/**
+  forbidden:
+    - production web, backend, OpenAPI, generated SDK or M1 schema changes
+    - new mobile-specific behavior, tests or product requirements
+
+tdd_plan:
+  red:
+    command: pnpm --filter @semlia/product-prototype test:e2e --project=desktop --grep "core semantic governance journey"
+    expected_failure: Main workspace still reports a linear-gradient background and metric objects are not independent cards.
+  green:
+    command: pnpm --filter @semlia/product-prototype test:e2e
+    expected_signal: Desktop and compact-desktop journeys pass with a plain canvas and card-based metrics.
+  refactor:
+    command: pnpm --filter @semlia/product-prototype lint && pnpm --filter @semlia/product-prototype typecheck && pnpm --filter @semlia/product-prototype build
+    expected_signal: Visual changes introduce no lint, type or build regressions.
+
+evidence_contract:
+  summary: docs/evidence/P001/summary.md
+  diff: docs/evidence/P001/diff.patch
+  tests: docs/evidence/P001/test-results.md
+  screenshots: docs/evidence/P001/screenshots/
+
+acceptance_rule: P001 returns to Needs_Review after desktop visual QA and still requires explicit founder acceptance before commit.
