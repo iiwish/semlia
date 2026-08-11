@@ -118,6 +118,48 @@ func TestCIWorkflowsMapValidationToMake(t *testing.T) {
 	}
 }
 
+func TestCISmokeJobPreparesWebToolchain(t *testing.T) {
+	workflow := readWorkflow(t, "ci.yml")
+	smoke, ok := workflow.Jobs["smoke"]
+	if !ok {
+		t.Fatal("ci.yml must define the smoke job")
+	}
+
+	var uses, runs []string
+	for _, step := range smoke.Steps {
+		uses = append(uses, step.Uses)
+		if step.Run != "" {
+			runs = append(runs, strings.TrimSpace(step.Run))
+		}
+	}
+
+	for _, action := range []string{"pnpm/action-setup@", "actions/setup-node@", "actions/setup-go@"} {
+		found := false
+		for _, value := range uses {
+			if strings.HasPrefix(value, action) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("smoke job must prepare %s", strings.TrimSuffix(action, "@"))
+		}
+	}
+
+	bootstrapIndex, smokeIndex := -1, -1
+	for index, command := range runs {
+		switch command {
+		case "make bootstrap":
+			bootstrapIndex = index
+		case "make check-smoke":
+			smokeIndex = index
+		}
+	}
+	if bootstrapIndex < 0 || smokeIndex < 0 || bootstrapIndex >= smokeIndex {
+		t.Errorf("smoke job must run make bootstrap before make check-smoke; got %v", runs)
+	}
+}
+
 func TestCIWorkflowsPinActionsAndUseLeastPrivilege(t *testing.T) {
 	fullSHA := regexp.MustCompile(`^[^@]+@[0-9a-f]{40}$`)
 	for _, name := range []string{"ci.yml", "security.yml", "release.yml"} {
