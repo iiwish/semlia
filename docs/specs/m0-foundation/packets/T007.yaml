@@ -19,6 +19,7 @@ governance_inputs:
     dependencies_t001_t006: Accepted by founder
     continued_execution: Explicitly authorized by founder on 2026-08-10
     security_scope_expansion: Explicitly approved by founder on 2026-08-10
+    remote_publication: Explicitly authorized by founder on 2026-08-11
     analysis: Clear for T007 local execution
 
 work_unit:
@@ -56,10 +57,11 @@ codebase_context:
   repository_state:
     branch: main
     baseline_commit: 2e53e6f plus accepted uncommitted P001 through T006 work
-    remote: absent
+    remote: https://github.com/iiwish/semlia
+    final_remote_commit: 44b0f49d8db1227e9c6c0d4dc1342fb20fd75dc3
     implementation_state: >-
-      Root build, contract generation, real PostgreSQL integration tests, Web checks, Compose smoke tests and one release image exist,
-      but there are no GitHub workflows, aggregate quality/security commands, repository CI contract, SBOM or release bundle scripts.
+      At attempt start, root build, contract generation, real PostgreSQL integration tests, Web checks, Compose smoke tests and one release image existed,
+      but GitHub workflows, aggregate quality/security commands, repository CI contract, SBOM and release bundle scripts did not.
   architecture_boundaries:
     - Every workflow validation command maps to a named root Make target; make check is the local superset of required pull-request gates.
     - Pull-request source, smoke and security jobs may run in parallel so the required path can remain below ten minutes.
@@ -118,7 +120,7 @@ execution_constraints:
     - Do not add a hosted security, registry, signing or release service dependency.
     - Do not use mutable action references, floating scanner tags, repository write permissions or pull_request_target.
     - Do not suppress, ignore or auto-accept High/Critical findings.
-    - Do not publish artifacts, push a branch, create a repository or manufacture a CI run URL.
+    - The implementation attempt does not publish artifacts or create repository state; the orchestrator may commit, create the repository and push only after explicit founder authorization.
     - Do not weaken existing T001 through T006 validation to meet the ten-minute target; repository contract changes are limited to the approved Go patch alignment.
   ownership_notes:
     - Existing accepted P001 through T006 changes are user-approved and must not be reverted.
@@ -194,12 +196,17 @@ review_contract:
     it can move to Accepted only after explicit user acceptance.
 
 handoff:
-  external_issue: No Git remote is configured, so a GitHub Actions run URL cannot be produced in this checkout after local validation.
+  external_issue: null
+  repository: https://github.com/iiwish/semlia
+  final_commit: 44b0f49d8db1227e9c6c0d4dc1342fb20fd75dc3
+  hosted_runs:
+    ci: https://github.com/iiwish/semlia/actions/runs/31453327615
+    security: https://github.com/iiwish/semlia/actions/runs/31453335446
+    release: https://github.com/iiwish/semlia/actions/runs/31453335512
   pull_request: null
   finish_options:
-    - keep locally validated changes on main until a remote is configured
-    - run the workflows after explicit commit/push authorization
-    - request founder acceptance only after the remote green-run gate is satisfied
+    - request founder acceptance for T007
+    - begin T008 only after T007 is explicitly Accepted
 
 stop_conditions:
   - Required validation needs application, database, migration, Web, SDK, Compose or Dockerfile behavior changes.
@@ -207,4 +214,3 @@ stop_conditions:
   - A workflow requires repository write permissions or an unpinned remote action.
   - The complete local check cannot be made reproducible through Make.
   - Release outputs omit version, commit, SBOM or checksum evidence.
-  - Remote CI evidence remains unavailable after local validation; record this as the sole external completion blocker.

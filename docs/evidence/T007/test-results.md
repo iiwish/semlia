@@ -21,6 +21,7 @@
 | `make build` | Pass | Final explicit run 1.30s. |
 | `make sbom` | Pass | Final run 4.07s; CycloneDX 1.7 with 21 components. |
 | `make release` | Pass | Final run 7.30s; metadata, archive members, SBOM and checksums verified. |
+| Cross release `GOOS=linux GOARCH=amd64 make release` from Darwin arm64 host | Pass | Host manifest tool ran on `GOHOSTOS/GOHOSTARCH`; target archive, SBOM and checksums verified. |
 | `go test ./tests/repository -count=1` | Pass | Repository and CI contracts passed. |
 | `git diff --check` | Pass | No whitespace errors. |
 | `make dev-down` via smoke cleanup | Pass | No Semlia project container or network remains. |
@@ -35,7 +36,12 @@
 | transitive `js-yaml` 4.3.0 High | pnpm 11 workspace override fixed the frozen graph at 4.3.1. |
 | Container scanner Docker socket denial | Scanner alone uses a read-only socket mount; application containers remain unchanged. |
 
-## Not Available
+## Hosted Validation
 
-- GitHub Actions run URL and hosted job durations: no Git remote is configured.
-- A remote complete green run remains the only unmet T007 Definition of Done item.
+| Workflow | Commit | Result | Duration / evidence |
+| --- | --- | --- | --- |
+| [CI](https://github.com/iiwish/semlia/actions/runs/31453327615) | `44b0f49` | Pass | Source approximately 2m28s；integrated smoke approximately 2m09s。 |
+| [Security](https://github.com/iiwish/semlia/actions/runs/31453335446) | `44b0f49` | Pass | Approximately 58s；dependency、secret、Debian image and Go binary High/Critical findings all zero。 |
+| [Release Build](https://github.com/iiwish/semlia/actions/runs/31453335512) | `44b0f49` | Pass | Linux/Darwin x amd64/arm64 all built and uploaded；longest job approximately 1m17s。 |
+
+Initial hosted failures were retained as regression evidence: smoke lacked its Web toolchain, and cross-target release leaked target `GOOS/GOARCH` into a host helper. Commits `8f8842d` and `44b0f49` fixed them and added repository contracts before the final green runs.

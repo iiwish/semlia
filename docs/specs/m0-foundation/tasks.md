@@ -654,7 +654,7 @@ Review notes:
 
 ### T007 建立 CI、安全与供应链门禁
 
-Status: Blocked
+Status: Needs_Review
 Priority: P0
 Depends on: T001, T002, T003, T004, T005, T006
 Blocks: T008
@@ -737,10 +737,14 @@ Execution notes:
 
 - M0-T007-A001 已完成 CI contract RED/GREEN、source gate 和 integrated smoke gate；首轮真实扫描识别并修复 `google.golang.org/grpc` High finding。
 - Founder 于 2026-08-10 批准 Go 1.26.5 与 transitive `js-yaml` 4.3.1 安全修复；`.tool-versions`、`deploy/local/Dockerfile`、`tests/repository/repository_contract_test.go`、`pnpm-lock.yaml` 和 pnpm 11 的 canonical override 配置 `pnpm-workspace.yaml` 纳入 T007。
-- 当前 checkout 没有 Git remote，完整绿色 GitHub Actions run URL 仍是独立外部门禁。
+- Public repository: `https://github.com/iiwish/semlia`；最终远端验证提交为 `44b0f49d8db1227e9c6c0d4dc1342fb20fd75dc3`。
+- GitHub Actions CI 完整绿色：`https://github.com/iiwish/semlia/actions/runs/31453327615`；source 与 smoke job 分别约 2m28s 和 2m09s。
+- GitHub Actions Security 完整绿色：`https://github.com/iiwish/semlia/actions/runs/31453335446`；dependency、secret 与 container scan job 约 58s，High/Critical 为 0。
+- GitHub Actions Release Build 完整绿色：`https://github.com/iiwish/semlia/actions/runs/31453335512`；Linux/Darwin 的 amd64/arm64 四个构建与 artifact upload 全部通过，最慢约 1m17s。
+- 首轮托管验证发现 smoke job 未准备 pnpm/Node，以及交叉发布的目标 `GOOS/GOARCH` 泄漏到宿主 manifest tool；提交 `8f8842d` 与 `44b0f49` 修复并增加 repository contract。
 - Evidence: `docs/evidence/T007/summary.md`, `docs/evidence/T007/test-results.md`。
 - Go/pnpm/secret/container High/Critical findings 均为 0；`make check`、`make security-check`、`make build`、`make sbom`、`make release` 和 repository contract 全部通过。
-- Spec compliance、bug/code-quality 和本地 QA acceptance review 无 blocking finding；T007 仅因尚无真实 GitHub Actions 绿色 run URL 保持 Blocked。
+- Spec compliance、bug/code-quality 和本地/托管 QA acceptance review 无 blocking finding；T007 已满足 Definition of Done 的技术证据并进入 Needs_Review，仍需创始人明确接受后才能解除 T008 依赖。
 
 ### T008 完成 fresh-clone 验收与 M0 交付证据
 
