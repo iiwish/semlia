@@ -7,6 +7,8 @@ readonly SEMLIA_VERSION="${SEMLIA_VERSION:-0.0.0-dev}"
 readonly SEMLIA_COMMIT="${SEMLIA_COMMIT:-$(git -C "${ROOT}" rev-parse HEAD)}"
 readonly TARGET_OS="${GOOS:-$(${GO_COMMAND} env GOOS)}"
 readonly TARGET_ARCH="${GOARCH:-$(${GO_COMMAND} env GOARCH)}"
+readonly HOST_OS="$(${GO_COMMAND} env GOHOSTOS)"
+readonly HOST_ARCH="$(${GO_COMMAND} env GOHOSTARCH)"
 readonly OUTPUT_DIR="${SEMLIA_RELEASE_DIR:-${ROOT}/build/release}"
 
 if [[ ! "${SEMLIA_VERSION}" =~ ^[0-9A-Za-z][0-9A-Za-z._+-]*$ ]]; then
@@ -38,7 +40,8 @@ CGO_ENABLED=0 GOOS="${TARGET_OS}" GOARCH="${TARGET_ARCH}" \
 cp migrations/*.sql "${staging}/migrations/"
 cp LICENSE NOTICE SECURITY.md "${staging}/"
 
-"${GO_COMMAND}" run ./scripts/release/manifest.go manifest \
+CGO_ENABLED=0 GOOS="${HOST_OS}" GOARCH="${HOST_ARCH}" \
+  "${GO_COMMAND}" run ./scripts/release/manifest.go manifest \
   -output "${staging}/release.json" \
   -version "${SEMLIA_VERSION}" \
   -commit "${SEMLIA_COMMIT}" \
@@ -62,7 +65,8 @@ else
 fi
 
 cd "${ROOT}"
-"${GO_COMMAND}" run ./scripts/release/manifest.go verify -manifest "${staging}/release.json" \
+CGO_ENABLED=0 GOOS="${HOST_OS}" GOARCH="${HOST_ARCH}" \
+  "${GO_COMMAND}" run ./scripts/release/manifest.go verify -manifest "${staging}/release.json" \
   -sbom "${external_sbom}" \
   -checksums "${OUTPUT_DIR}/SHA256SUMS" \
   -archive "${archive}" \
