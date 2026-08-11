@@ -4,10 +4,10 @@
 
 | 字段 | 值 |
 | --- | --- |
-| 版本 | 0.14.0 |
+| 版本 | 0.15.0 |
 | 状态 | Completed |
 | Scope | m0-foundation |
-| 最后更新 | 2026-08-10 |
+| 最后更新 | 2026-08-11 |
 
 ## 1. Inputs
 
@@ -17,7 +17,7 @@
 - Requirements checklist: `docs/specs/m0-foundation/checklists/requirements.md` v0.3.0 Completed
 - Work graph: `docs/specs/m0-foundation/tasks.md` v0.4.0 Confirmed
 - Product prototype design: `docs/specs/product-prototype/product-design.md` v0.1.0 Confirmed
-- Execution packets: T001、T002、P001、T003、T004、T005、T006 已 Accepted；T007 本地 implementation、evidence 和三轮 review 完成，M0-T007-A001 因 remote CI gate 状态为 Blocked
+- Execution packets: T001、T002、P001、T003、T004、T005、T006 已 Accepted；T007 本地与托管验证、evidence 和三轮 review 完成，M0-T007-A001 状态为 Needs_Review
 
 ## 2. Coverage
 
@@ -124,8 +124,9 @@ Gaps: None blocking M0 execution.
 
 ## 7. Execute Gate
 
-- Result: Blocked only by the external T007 CI run gate.
+- Result: Clear for T007 founder review; the external CI run gate is satisfied.
 - Local completion: CI contract RED/GREEN、完整 `make check`、独立 security/build/SBOM/release/repository validation 和三轮 review 均通过；缓存态完整本地 gate 为 61.33 秒。
 - Security result: Trivy 0.73.0 immutable-digest scan 对 Go modules、production/development pnpm dependencies、repository secrets、container OS 和 Go binary 均报告 0 个 High/Critical finding。
 - Artifact result: 4.2 MB archive 包含 version、完整 commit、migrations、notices 和 21-component CycloneDX 1.7 SBOM；archive 与外部 SBOM 的 SHA-256 校验通过。
-- External gate: 当前 checkout 没有 Git remote，无法生成真实 GitHub Actions run URL 或测量 hosted job durations；T007 在至少完成一次远端完整绿色运行前不得进入 `Needs_Review` 或 `Accepted`，T008 保持 Draft。
+- Hosted gate: Public repository `https://github.com/iiwish/semlia` 在提交 `source-revision-redacted` 上完成 CI、Security 与 Linux/Darwin x amd64/arm64 Release Build 绿色运行；最长必需 CI job 约 2m28s。
+- Acceptance gate: T007 已进入 `Needs_Review`；只有创始人明确接受后才能进入 `Accepted`，T008 在此之前保持 Draft。
