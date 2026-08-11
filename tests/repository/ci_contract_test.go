@@ -234,7 +234,7 @@ func TestCISecurityScannerAndReleaseArtifactContracts(t *testing.T) {
 	}
 
 	release := read(t, "scripts/release/build.sh") + read(t, "scripts/release/sbom.sh")
-	for _, required := range []string{"CycloneDX", "SHA256SUMS", "SEMLIA_VERSION", "SEMLIA_COMMIT", "rootfs", "verify -manifest"} {
+	for _, required := range []string{"CycloneDX", "SHA256SUMS", "SEMLIA_VERSION", "SEMLIA_COMMIT", "GOHOSTOS", "GOHOSTARCH", "rootfs", "verify -manifest"} {
 		if !strings.Contains(release, required) {
 			t.Errorf("release tooling missing %q", required)
 		}
