@@ -5,7 +5,7 @@
 | 字段 | 值 |
 | --- | --- |
 | Feature | m0-foundation |
-| 版本 | 0.7.0 |
+| 版本 | 0.8.0 |
 | 状态 | Confirmed |
 | 最后更新 | 2026-08-12 |
 | Source | `docs/SSOT.md`, `docs/specs/m0-foundation/plan.md` |
@@ -15,8 +15,8 @@
 
 - `Draft`：task 已具备审核信息，但工作图尚未获得用户确认。
 - `Ready`：依赖满足、checklist 和 analysis 完成、execution packet 已生成。
-- `Running`：一个执行 attempt 正在进行。
-- `Needs_Review`：实现和证据存在，等待规格、质量和 QA 评审。
+- `Running`：一个执行 attempt 或其必需的规格、质量与 QA 独立评审正在进行。
+- `Needs_Review`：实现、证据和三轮独立评审均已通过，等待创始人验收。
 - `Accepted`：评审通过且用户明确接受。
 - `Blocked`：依赖、环境或需求问题阻止推进。
 
@@ -771,6 +771,7 @@ Allowed files:
 - `docs/specs/m0-foundation/analysis.md`
 - `docs/specs/m0-foundation/release-report.md`
 - `tests/acceptance/**`
+- `scripts/acceptance/m0-fresh-clone.sh`
 - `scripts/doctor.sh`
 - `tests/repository/repository_contract_test.go`
 - `go.mod`
@@ -785,6 +786,7 @@ Allowed files:
 - `tests/integration/db/database_test.go`
 - `tests/integration/worker/worker_test.go`
 - `tests/smoke/local_stack_test.go`
+- `web/e2e/system-status.spec.ts`
 
 Test targets:
 
@@ -792,6 +794,7 @@ Test targets:
 - `tests/acceptance/m0_scenarios_test.go`
 - `tests/repository/repository_contract_test.go`
 - `tests/smoke/local_stack_test.go`
+- `web/e2e/system-status.spec.ts`
 
 Deliverables:
 
@@ -824,6 +827,7 @@ Validation commands:
 - `make check`
 - `make smoke`
 - `go test ./tests/acceptance/...`
+- `SEMLIA_ACCEPTANCE_SOURCE=<repository-path> SEMLIA_ACCEPTANCE_REF=<exact-commit> ./scripts/acceptance/m0-fresh-clone.sh`
 - `go test ./tests/repository`
 - `go list -m`
 - `go mod tidy -diff`
@@ -847,10 +851,19 @@ Evidence required:
 - Review findings 与 resolution。
 - Release report、diff summary、residual risks。
 
+Execution notes:
+
+- Exact baseline `source-revision-redacted`; validated implementation `source-revision-redacted`。
+- Final isolated clone acceptance passed in 1,209.434s. Cold bootstrap was 7m58.859s, warm bootstrap 293ms, clone-to-first-request 8m40.844s and the complete pull-request gate 7m31.246s。
+- Real PostgreSQL failure/recovery、migration up/down/up、concurrent worker lease/retry/dead-letter、contract drift reject/recover、production fail-closed、security scan and release verification all passed。
+- Two corrective failures are retained in `docs/evidence/T008/test-results.md`; neither security thresholds nor ignore rules were weakened。
+- Evidence: `docs/evidence/T008/summary.md`, `docs/evidence/T008/test-results.md`, `docs/evidence/T008/diff.patch`, `docs/specs/m0-foundation/release-report.md`。
+- Current gate: implementation and evidence are Review Candidate; T008 remains Running until spec-compliance、bug/code-quality and QA-acceptance reviews all pass。
+
 ## 5. 用户审核闸门
 
 - Approval: Confirmed by founder on 2026-08-08
 - Accepted graph: E001、E002 和 T001 至 T008 的范围、依赖、并行边界、验证命令与 Definition of Done。
-- Current execution: T008 packet 已生成，执行状态为 Running；其余里程碑不得与 T008 并行实现。
+- Current execution: T008 exact-ref isolation、full gate and release evidence 已通过，执行状态保持 Running 直到三轮 review 完成；其余里程碑不得与 T008 并行实现。
 - Next gate: T008 完成三轮 review 和 M0 release report 后由 founder 明确接受，随后才生成 M1 work graph 与 Ready packet。
 - Execution rule: 没有已审核 packet、干净 worktree 和明确执行授权时，不开始任何 task。
