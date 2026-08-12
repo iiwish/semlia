@@ -13,13 +13,13 @@ import (
 	"syscall"
 	"time"
 
-	pgstore "github.com/semlia/semlia/internal/adapters/postgres"
-	"github.com/semlia/semlia/internal/application"
-	"github.com/semlia/semlia/internal/application/jobs"
-	"github.com/semlia/semlia/internal/domain"
-	"github.com/semlia/semlia/internal/platform/config"
-	httpapi "github.com/semlia/semlia/internal/platform/http"
-	webui "github.com/semlia/semlia/internal/platform/web"
+	pgstore "github.com/iiwish/semlia/internal/adapters/postgres"
+	"github.com/iiwish/semlia/internal/application"
+	"github.com/iiwish/semlia/internal/application/jobs"
+	"github.com/iiwish/semlia/internal/domain"
+	"github.com/iiwish/semlia/internal/platform/config"
+	httpapi "github.com/iiwish/semlia/internal/platform/http"
+	webui "github.com/iiwish/semlia/internal/platform/web"
 	"go.opentelemetry.io/otel/sdk/trace"
 )
 
@@ -216,7 +216,7 @@ func serve(ctx context.Context, cfg config.Config, output io.Writer) error {
 		SchemaVersion: schemaVersion,
 		BuildVersion:  cfg.BuildVersion,
 	})
-	apiHandler := httpapi.NewHandler(service, logger, provider.Tracer("github.com/semlia/semlia"))
+	apiHandler := httpapi.NewHandler(service, logger, provider.Tracer("github.com/iiwish/semlia"))
 	server := &http.Server{
 		Addr:              cfg.HTTPAddress,
 		Handler:           webui.NewHandler(apiHandler),

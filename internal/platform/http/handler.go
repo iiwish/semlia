@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	contract "github.com/semlia/semlia/api/gen/go"
-	"github.com/semlia/semlia/internal/application"
+	contract "github.com/iiwish/semlia/api/gen/go"
+	"github.com/iiwish/semlia/internal/application"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 )

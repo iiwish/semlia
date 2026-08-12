@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/semlia/semlia/internal/domain"
+	"github.com/iiwish/semlia/internal/domain"
 )
 
 var ErrDependencyUnavailable = errors.New("required dependency is unavailable")

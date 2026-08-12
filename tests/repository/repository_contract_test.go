@@ -93,7 +93,7 @@ func TestToolVersionsArePinnedAndConsistent(t *testing.T) {
 
 	goMod := read(t, "go.mod")
 	for label, pattern := range map[string]string{
-		"module":    `(?m)^module github\.com/semlia/semlia$`,
+		"module":    `(?m)^module github\.com/iiwish/semlia$`,
 		"language":  `(?m)^go 1\.26\.0$`,
 		"toolchain": `(?m)^toolchain go1\.26\.5$`,
 	} {
@@ -122,6 +122,84 @@ func TestToolVersionsArePinnedAndConsistent(t *testing.T) {
 	}
 	if packageJSON.Scripts["check:repository"] != "go test ./tests/repository" {
 		t.Errorf("unexpected repository check: %q", packageJSON.Scripts["check:repository"])
+	}
+}
+
+func TestDoctorVersionMatchesPinnedToolchain(t *testing.T) {
+	toolVersions := map[string]string{}
+	for _, line := range strings.Split(read(t, ".tool-versions"), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 2 && !strings.HasPrefix(fields[0], "#") {
+			toolVersions[fields[0]] = fields[1]
+		}
+	}
+
+	match := regexp.MustCompile(`(?m)^readonly REQUIRED_GO="([^"]+)"$`).FindStringSubmatch(read(t, "scripts/doctor.sh"))
+	if len(match) != 2 {
+		t.Fatal("scripts/doctor.sh must declare REQUIRED_GO")
+	}
+	if got, want := match[1], toolVersions["golang"]; got != want {
+		t.Fatalf("doctor Go version = %s, want pinned .tool-versions value %s", got, want)
+	}
+}
+
+func TestModuleNamespaceMatchesControlledRepository(t *testing.T) {
+	const controlledModule = "github.com/iiwish/semlia"
+	goMod := read(t, "go.mod")
+	if !regexp.MustCompile(`(?m)^module ` + regexp.QuoteMeta(controlledModule) + `$`).MatchString(goMod) {
+		t.Errorf("go.mod module must be %s", controlledModule)
+	}
+
+	legacyModule := "github.com/semlia/semlia"
+	var legacyImports []string
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			switch entry.Name() {
+			case ".git", ".semlia", "build", "node_modules":
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if filepath.Ext(path) != ".go" {
+			return nil
+		}
+		relative, relErr := filepath.Rel(root, path)
+		if relErr != nil {
+			return relErr
+		}
+		if filepath.ToSlash(relative) == "tests/repository/repository_contract_test.go" {
+			return nil
+		}
+		content, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		if strings.Contains(string(content), legacyModule) {
+			legacyImports = append(legacyImports, filepath.ToSlash(relative))
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sort.Strings(legacyImports)
+	if len(legacyImports) > 0 {
+		t.Errorf("live Go source still imports %s: %s", legacyModule, strings.Join(legacyImports, ", "))
+	}
+}
+
+func TestSmokeJourneyUsesActiveComposeProject(t *testing.T) {
+	smoke := read(t, "tests/smoke/local_stack_test.go")
+	if strings.Contains(smoke, "com.docker.compose.project=semlia-local") {
+		t.Error("smoke cleanup must not target the default Compose project literally")
+	}
+	for _, fragment := range []string{"composeProject(t)", "COMPOSE_PROJECT_NAME=", `"label=com.docker.compose.project="+project`} {
+		if !strings.Contains(smoke, fragment) {
+			t.Errorf("smoke journey missing active-project contract %q", fragment)
+		}
 	}
 }
 

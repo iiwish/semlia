@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/semlia/semlia/internal/application"
+	"github.com/iiwish/semlia/internal/application"
 )
 
 func TestConfiguredReadinessProbeWithoutDatabaseIsUnavailable(t *testing.T) {

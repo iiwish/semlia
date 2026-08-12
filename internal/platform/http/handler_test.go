@@ -12,9 +12,9 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/semlia/semlia/internal/application"
-	"github.com/semlia/semlia/internal/domain"
-	httpapi "github.com/semlia/semlia/internal/platform/http"
+	"github.com/iiwish/semlia/internal/application"
+	"github.com/iiwish/semlia/internal/domain"
+	httpapi "github.com/iiwish/semlia/internal/platform/http"
 	"go.opentelemetry.io/otel/sdk/trace"
 )
 

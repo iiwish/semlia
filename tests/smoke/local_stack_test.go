@@ -61,6 +61,25 @@ func Test00LocalStackContract(t *testing.T) {
 	}
 }
 
+func TestComposeProjectNameValidation(t *testing.T) {
+	for _, input := range []struct {
+		name string
+		want bool
+	}{
+		{"semlia-local", true},
+		{"semlia_acceptance_123", true},
+		{"_semlia", true},
+		{"-semlia", false},
+		{"Semlia", false},
+		{"semlia;other", false},
+		{"", false},
+	} {
+		if got := validComposeProjectName(input.name); got != input.want {
+			t.Errorf("validComposeProjectName(%q) = %t, want %t", input.name, got, input.want)
+		}
+	}
+}
+
 func Test01EmbeddedWebAndAPI(t *testing.T) {
 	requireRuntimeSmoke(t)
 
@@ -151,7 +170,8 @@ func Test05ShutdownPreservesDataVolume(t *testing.T) {
 			'4bf92f3577b34da6a3ce929d0e0e4736'
 		);`, workspaceID, jobID))
 
-	volume := docker(t, "volume", "ls", "--filter", "label=com.docker.compose.project=semlia-local", "--filter", "label=com.docker.compose.volume=postgres-data", "--quiet")
+	project := composeProject(t)
+	volume := docker(t, "volume", "ls", "--filter", "label=com.docker.compose.project="+project, "--filter", "label=com.docker.compose.volume=postgres-data", "--quiet")
 	volume = strings.TrimSpace(volume)
 	if volume == "" {
 		t.Fatal("compose data volume was not found")
@@ -160,7 +180,7 @@ func Test05ShutdownPreservesDataVolume(t *testing.T) {
 	if containers := strings.TrimSpace(compose(t, "ps", "--all", "--quiet")); containers != "" {
 		t.Fatalf("containers remain after shutdown: %s", containers)
 	}
-	if networks := strings.TrimSpace(docker(t, "network", "ls", "--filter", "label=com.docker.compose.project=semlia-local", "--quiet")); networks != "" {
+	if networks := strings.TrimSpace(docker(t, "network", "ls", "--filter", "label=com.docker.compose.project="+project, "--quiet")); networks != "" {
 		t.Fatalf("project networks remain after shutdown: %s", networks)
 	}
 	if preserved := strings.TrimSpace(docker(t, "volume", "inspect", "--format", "{{.Name}}", volume)); preserved != volume {
@@ -203,6 +223,32 @@ func compose(t *testing.T, args ...string) string {
 	t.Helper()
 	root := repositoryRoot(t)
 	return command(t, root, filepath.Join(root, "scripts", "dev", "compose.sh"), args...)
+}
+
+func composeProject(t *testing.T) string {
+	t.Helper()
+	root := repositoryRoot(t)
+	content := readFile(t, filepath.Join(root, ".semlia", "dev.env"))
+	for _, line := range strings.Split(content, "\n") {
+		if project, found := strings.CutPrefix(line, "COMPOSE_PROJECT_NAME="); found && validComposeProjectName(project) {
+			return project
+		}
+	}
+	t.Fatal(".semlia/dev.env does not declare a safe COMPOSE_PROJECT_NAME")
+	return ""
+}
+
+func validComposeProjectName(value string) bool {
+	if value == "" || (value[0] != '_' && (value[0] < 'a' || value[0] > 'z') && (value[0] < '0' || value[0] > '9')) {
+		return false
+	}
+	for index := 1; index < len(value); index++ {
+		character := value[index]
+		if character != '_' && character != '-' && (character < 'a' || character > 'z') && (character < '0' || character > '9') {
+			return false
+		}
+	}
+	return true
 }
 
 func composeWithoutFailure(t *testing.T, args ...string) {

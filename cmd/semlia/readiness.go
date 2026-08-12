@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
+	"github.com/iiwish/semlia/internal/application"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/semlia/semlia/internal/application"
 )
 
 const requiredMigrationVersion = 1

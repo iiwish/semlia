@@ -144,6 +144,13 @@ Gaps: None blocking M0 execution.
 - Resolution: Historical hosted evidence remains labeled with its validation-time visibility; current product and operations docs describe Private incubation and retain public-release features as gates.
 - Status: Documentation alignment is part of T008 and governance integration.
 
+### Medium: Smoke resource assertions bind to the default Compose project
+
+- Location: `tests/smoke/local_stack_test.go`, preserved-volume and network label assertions.
+- Impact: A fresh or parallel checkout using a unique `COMPOSE_PROJECT_NAME` inspects `semlia-local` resources instead of its own project, causing false failures or cross-project reads.
+- Resolution: T008 derives the expected label from the active task-owned environment and keeps cleanup scoped to that project; Compose topology and runtime behavior remain unchanged.
+- Status: Discovered by the isolated acceptance design and added to the T008 packet before implementation.
+
 ## 7. Execute Gate
 
 - Result: Clear for T008 execution under packet `M0-T008-A001`; no other governed task may execute in parallel.

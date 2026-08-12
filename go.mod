@@ -1,4 +1,4 @@
-module github.com/semlia/semlia
+module github.com/iiwish/semlia
 
 go 1.26.0
 
