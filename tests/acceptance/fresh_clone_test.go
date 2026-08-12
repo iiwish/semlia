@@ -176,7 +176,7 @@ func isolatedEnvironmentFrom(base []string, scratch, project string, httpPort, p
 func filterAcceptanceEnvironment(environment []string) []string {
 	blockedExact := map[string]struct{}{
 		"GO": {}, "GOARCH": {}, "GOCACHE": {}, "GOENV": {}, "GOFLAGS": {}, "GOMODCACHE": {}, "GOOS": {}, "GOPATH": {}, "GOWORK": {},
-		"BASH_ENV": {}, "ENV": {}, "GNUMAKEFLAGS": {}, "MAKE": {}, "MAKEFILES": {}, "MAKEFLAGS": {}, "MAKELEVEL": {}, "MAKEOVERRIDES": {}, "MFLAGS": {}, "PNPM": {},
+		"BASHOPTS": {}, "BASH_ENV": {}, "ENV": {}, "SHELLOPTS": {}, "GNUMAKEFLAGS": {}, "MAKE": {}, "MAKEFILES": {}, "MAKEFLAGS": {}, "MAKELEVEL": {}, "MAKEOVERRIDES": {}, "MFLAGS": {}, "PNPM": {},
 		"PNPM_CONFIG_STORE_DIR": {}, "PNPM_HOME": {}, "PNPM_STORE_DIR": {}, "XDG_CACHE_HOME": {},
 		"npm_config_store_dir": {}, "pnpm_config_store_dir": {},
 	}
@@ -262,7 +262,7 @@ func TestAcceptanceEnvironmentRejectsPoisonedControls(t *testing.T) {
 		"COMPOSE_PROFILES=wrong", "COMPOSE_PATH_SEPARATOR=;", "GIT_DIR=/outside/git", "GIT_CONFIG_COUNT=1",
 		"GOENV=/outside/go.env", "GOFLAGS=-run=^$", "GOWORK=/outside/go.work", "GOCACHE=/outside/go-cache",
 		"GOPATH=/outside/go-path", "GOMODCACHE=/outside/go-mod", "GO=false", "GOOS=plan9", "GOARCH=386",
-		"BASH_ENV=/outside/bash-env", "ENV=/outside/env", "GNUMAKEFLAGS=-i", "MAKE=true", "MAKEFILES=/outside/makefile",
+		"BASHOPTS=extdebug", "BASH_ENV=/outside/bash-env", "ENV=/outside/env", "SHELLOPTS=noexec", "GNUMAKEFLAGS=-i", "MAKE=true", "MAKEFILES=/outside/makefile",
 		"MAKEFLAGS=-i", "MAKELEVEL=99", "MAKEOVERRIDES=ACCEPTANCE_SENTINEL=poisoned", "MFLAGS=-k", "PNPM=false", "PNPM_CONFIG_STORE_DIR=/outside/pnpm",
 		"PNPM_STORE_DIR=/outside/legacy-pnpm", "npm_config_store_dir=/outside/npm", "pnpm_config_store_dir=/outside/lower-pnpm",
 		"TESTCONTAINERS_RYUK_DISABLED=true",
@@ -276,7 +276,7 @@ func TestAcceptanceEnvironmentRejectsPoisonedControls(t *testing.T) {
 func TestAcceptanceEnvironmentPinsGoControls(t *testing.T) {
 	poisoned := []string{
 		"PATH=/usr/bin", "GOENV=/outside/go.env", "GOFLAGS=-run=^$", "GOWORK=/outside/go.work",
-		"GO=false", "GOOS=plan9", "GOARCH=386", "BASH_ENV=/outside/bash-env", "ENV=/outside/env",
+		"GO=false", "GOOS=plan9", "GOARCH=386", "BASHOPTS=extdebug", "BASH_ENV=/outside/bash-env", "ENV=/outside/env", "SHELLOPTS=noexec",
 		"GNUMAKEFLAGS=-i", "MAKE=true", "MAKEFILES=/outside/makefile", "MAKELEVEL=99", "MAKEOVERRIDES=poisoned", "PNPM=false",
 	}
 	environment := isolatedEnvironmentFrom(poisoned, t.TempDir(), "semlia-accept-a1b2c3d4-000000000001", 38080, 35432)
@@ -290,7 +290,7 @@ func TestAcceptanceEnvironmentPinsGoControls(t *testing.T) {
 			t.Errorf("%s values = %v, want exactly %q", name, values, want)
 		}
 	}
-	for _, name := range []string{"GO", "GOOS", "GOARCH", "BASH_ENV", "ENV", "GNUMAKEFLAGS", "MAKE", "MAKEFILES", "MAKEFLAGS", "MAKELEVEL", "MAKEOVERRIDES", "MFLAGS", "PNPM"} {
+	for _, name := range []string{"GO", "GOOS", "GOARCH", "BASHOPTS", "BASH_ENV", "ENV", "SHELLOPTS", "GNUMAKEFLAGS", "MAKE", "MAKEFILES", "MAKEFLAGS", "MAKELEVEL", "MAKEOVERRIDES", "MFLAGS", "PNPM"} {
 		if values := environmentValues(environment, name); len(values) != 0 {
 			t.Errorf("%s must not be inherited: %v", name, values)
 		}
@@ -393,6 +393,25 @@ func TestFreshCloneLauncherRejectsInvalidInputsBeforeBashEnvironmentCanExit(t *t
 	output, err := command.CombinedOutput()
 	if err == nil {
 		t.Fatalf("canonical launcher falsely accepted invalid source/ref through BASH_ENV: %s", output)
+	}
+	if !strings.Contains(string(output), "SEMLIA_ACCEPTANCE_SOURCE") {
+		t.Fatalf("launcher failure does not identify invalid source: %v: %s", err, output)
+	}
+}
+
+func TestFreshCloneLauncherRejectsInvalidInputsBeforeShellOptionsCanSkipBody(t *testing.T) {
+	command := exec.Command(filepath.Join(repositoryRoot, "scripts", "acceptance", "m0-fresh-clone.sh"))
+	command.Env = []string{
+		"PATH=" + os.Getenv("PATH"),
+		"HOME=" + os.Getenv("HOME"),
+		"SHELLOPTS=noexec",
+		"BASHOPTS=extdebug",
+		"SEMLIA_ACCEPTANCE_SOURCE=",
+		"SEMLIA_ACCEPTANCE_REF=not-a-commit",
+	}
+	output, err := command.CombinedOutput()
+	if err == nil {
+		t.Fatalf("canonical launcher falsely accepted invalid source/ref through inherited shell options: %s", output)
 	}
 	if !strings.Contains(string(output), "SEMLIA_ACCEPTANCE_SOURCE") {
 		t.Fatalf("launcher failure does not identify invalid source: %v: %s", err, output)
