@@ -25,6 +25,7 @@ const (
 	outerAcceptanceTimeout        = 70 * time.Minute // Journey plus worst-case diagnostics, cleanup phases, and shutdown margin.
 	coldBootstrapLimit            = 10 * time.Minute
 	warmBootstrapLimit            = 2 * time.Minute
+	pullRequestGateLimit          = 10 * time.Minute
 	developmentDiagnosticsTimeout = 30 * time.Second
 	dockerTeardownTimeout         = 2 * time.Minute
 	dockerInspectionTimeout       = 30 * time.Second
@@ -42,6 +43,12 @@ type freshCloneConfig struct {
 
 type cleanupCommandExecutor func(context.Context, string, []string, string, ...string) ([]byte, error)
 
+type cleanupResourceKind struct {
+	label      string
+	listArgs   []string
+	removeArgs []string
+}
+
 type freshCloneRun struct {
 	t               *testing.T
 	root            string
@@ -49,6 +56,38 @@ type freshCloneRun struct {
 	project         string
 	baseURL         string
 	cleanupExecutor cleanupCommandExecutor
+}
+
+type cleanupReport struct {
+	dockerProblems map[string]error
+	otherProblems  []error
+}
+
+func (report *cleanupReport) addOther(err error) {
+	if err != nil {
+		report.otherProblems = append(report.otherProblems, err)
+	}
+}
+
+func (report *cleanupReport) setDockerProblem(label string, err error) {
+	if report.dockerProblems == nil {
+		report.dockerProblems = make(map[string]error)
+	}
+	if err == nil {
+		delete(report.dockerProblems, label)
+	} else {
+		report.dockerProblems[label] = err
+	}
+}
+
+func (report *cleanupReport) err() error {
+	problems := append([]error{}, report.otherProblems...)
+	for _, label := range []string{"containers", "networks", "volumes"} {
+		if problem := report.dockerProblems[label]; problem != nil {
+			problems = append(problems, problem)
+		}
+	}
+	return errors.Join(problems...)
 }
 
 func TestFreshCloneAcceptance(t *testing.T) {
@@ -100,7 +139,7 @@ func TestFreshCloneAcceptance(t *testing.T) {
 	run.verifyMigrationJourney(ctx)
 	run.verifyContractDrift(ctx)
 	run.verifyProductionFailClosed(ctx)
-	run.timedCommand(ctx, "complete pull-request gate", "make", "check")
+	run.timedCommandWithLimit(ctx, "complete pull-request gate", pullRequestGateLimit, "make", "check")
 	run.timedCommand(ctx, "release bundle", "make", "release")
 	run.verifyReleaseBundle(ctx)
 
@@ -468,6 +507,9 @@ func TestAcceptanceSleepingCommandHelper(t *testing.T) {
 	if os.Getenv("SEMLIA_ACCEPTANCE_SLEEP_HELPER") != "1" {
 		return
 	}
+	if phase := os.Getenv("SEMLIA_ACCEPTANCE_SLEEP_PHASE"); phase != "" {
+		fmt.Printf("==> %s\n", phase)
+	}
 	time.Sleep(30 * time.Second)
 }
 
@@ -504,6 +546,32 @@ func TestTimedCommandWithLimitCancelsHungCommand(t *testing.T) {
 	}
 	if duration > 2*time.Second || elapsed > 2*time.Second {
 		t.Fatalf("command cancellation was not prompt: duration=%s elapsed=%s", duration, elapsed)
+	}
+}
+
+func TestTimedCommandWithLimitReportsLastMakeCheckPhase(t *testing.T) {
+	run := &freshCloneRun{
+		t:    t,
+		root: t.TempDir(),
+		environment: append(
+			filteredEnvironment(os.Environ(), "SEMLIA_ACCEPTANCE_SLEEP_HELPER", "SEMLIA_ACCEPTANCE_SLEEP_PHASE"),
+			"SEMLIA_ACCEPTANCE_SLEEP_HELPER=1",
+			"SEMLIA_ACCEPTANCE_SLEEP_PHASE=dependency and secret scan",
+		),
+	}
+	_, err := run.executeTimedCommandWithLimit(
+		context.Background(),
+		"complete pull-request gate",
+		75*time.Millisecond,
+		os.Args[0],
+		"-test.run=^TestAcceptanceSleepingCommandHelper$",
+		"-test.count=1",
+	)
+	if err == nil {
+		t.Fatal("hung pull-request gate was not cancelled")
+	}
+	if !strings.Contains(err.Error(), "last reported phase: dependency and secret scan") {
+		t.Fatalf("pull-request timeout did not identify its last phase: %v", err)
 	}
 }
 
@@ -688,8 +756,8 @@ func TestCleanupUsesIndependentPhaseBudgets(t *testing.T) {
 			t.Errorf("cleanup failure missing %q: %v", fragment, err)
 		}
 	}
-	if len(calls) != 6 {
-		t.Fatalf("cleanup calls = %d, want 6: %#v", len(calls), calls)
+	if len(calls) != 9 {
+		t.Fatalf("cleanup calls = %d, want 9: %#v", len(calls), calls)
 	}
 	if calls[4].name != "go" || calls[4].arguments != "clean -modcache" {
 		t.Fatalf("Go cache cleanup did not run after Docker timeout: %#v", calls)
@@ -704,11 +772,180 @@ func TestCleanupUsesIndependentPhaseBudgets(t *testing.T) {
 		dockerInspectionTimeout,
 		goModCacheCleanupTimeout,
 		checkoutCleanupTimeout,
+		dockerInspectionTimeout,
+		dockerInspectionTimeout,
+		dockerInspectionTimeout,
 	}
 	for index, current := range calls {
 		if current.remaining <= expected[index]-time.Second || current.remaining > expected[index] {
 			t.Errorf("cleanup call %d budget = %s, want fresh budget near %s", index+1, current.remaining, expected[index])
 		}
+	}
+}
+
+func TestCleanupRunsAfterJourneyContextExpires(t *testing.T) {
+	var calls []string
+	run := &freshCloneRun{
+		root:    t.TempDir(),
+		project: "semlia-accept-a1b2c3d4-000000000001",
+		cleanupExecutor: func(ctx context.Context, _ string, _ []string, name string, args ...string) ([]byte, error) {
+			if err := ctx.Err(); err != nil {
+				t.Fatalf("cleanup inherited canceled parent context: %v", err)
+			}
+			if _, ok := ctx.Deadline(); !ok {
+				t.Fatal("cleanup command has no independent deadline")
+			}
+			calls = append(calls, name+" "+strings.Join(args, " "))
+			return nil, nil
+		},
+	}
+	parentContext, cancelParent := context.WithCancel(context.Background())
+	deferredCleanup := func() error { return run.cleanup() }
+	cancelParent()
+	if !errors.Is(parentContext.Err(), context.Canceled) {
+		t.Fatal("test did not expire its parent acceptance context")
+	}
+	if err := deferredCleanup(); err != nil {
+		t.Fatalf("cleanup after journey cancellation: %v", err)
+	}
+	logText := strings.Join(calls, "\n")
+	for _, command := range []string{
+		"compose.sh down --volumes --remove-orphans",
+		"docker ps --all --filter label=com.docker.compose.project=semlia-accept-a1b2c3d4-000000000001",
+		"docker network ls --filter label=com.docker.compose.project=semlia-accept-a1b2c3d4-000000000001",
+		"docker volume ls --filter label=com.docker.compose.project=semlia-accept-a1b2c3d4-000000000001",
+		"go clean -modcache",
+		"make clean",
+	} {
+		if !strings.Contains(logText, command) {
+			t.Errorf("cleanup did not run %q after journey cancellation:\n%s", command, logText)
+		}
+	}
+}
+
+func TestCleanupFallbackRemovesOnlyProjectLabeledResources(t *testing.T) {
+	type call struct {
+		name string
+		args []string
+	}
+	var calls []call
+	listed := map[string]bool{"containers": false, "networks": false, "volumes": false}
+	run := &freshCloneRun{
+		root:    t.TempDir(),
+		project: "semlia-accept-a1b2c3d4-000000000001",
+		cleanupExecutor: func(_ context.Context, _ string, _ []string, name string, args ...string) ([]byte, error) {
+			calls = append(calls, call{name: name, args: append([]string{}, args...)})
+			joined := strings.Join(args, " ")
+			switch {
+			case name == "docker" && strings.HasPrefix(joined, "ps --all"):
+				if !listed["containers"] {
+					listed["containers"] = true
+					return []byte("abcdef123456\n"), nil
+				}
+			case name == "docker" && strings.HasPrefix(joined, "network ls"):
+				if !listed["networks"] {
+					listed["networks"] = true
+					return []byte("task-network\n"), nil
+				}
+			case name == "docker" && strings.HasPrefix(joined, "volume ls"):
+				if !listed["volumes"] {
+					listed["volumes"] = true
+					return []byte("task-volume\n"), nil
+				}
+			case name == "docker" && (strings.HasPrefix(joined, "rm ") || strings.HasPrefix(joined, "network rm ") || strings.HasPrefix(joined, "volume rm ")):
+				if strings.Contains(joined, "unrelated-") {
+					t.Fatalf("cleanup targeted unrelated resource: %s", joined)
+				}
+			}
+			return nil, nil
+		},
+	}
+	if err := run.removeRemainingTaskDockerResources(&cleanupReport{}); err != nil {
+		t.Fatal(err)
+	}
+	allCalls := make([]string, 0, len(calls))
+	for _, current := range calls {
+		joined := current.name + " " + strings.Join(current.args, " ")
+		allCalls = append(allCalls, joined)
+		if strings.Contains(joined, "unrelated") {
+			t.Fatalf("cleanup targeted an unrelated resource: %s", joined)
+		}
+	}
+	commands := strings.Join(allCalls, "\n")
+	for _, expected := range []string{
+		"docker ps --all --filter label=com.docker.compose.project=semlia-accept-a1b2c3d4-000000000001 --format {{.ID}}",
+		"docker rm --force abcdef123456",
+		"docker network rm task-network",
+		"docker volume rm --force task-volume",
+	} {
+		if !strings.Contains(commands, expected) {
+			t.Errorf("cleanup fallback missing %q:\n%s", expected, commands)
+		}
+	}
+}
+
+func TestCleanupRecoversFromInitialDockerTimeout(t *testing.T) {
+	var listCalls int
+	volumeRemoved := false
+	run := &freshCloneRun{
+		root:    t.TempDir(),
+		project: "semlia-accept-a1b2c3d4-000000000001",
+		cleanupExecutor: func(_ context.Context, _ string, _ []string, name string, args ...string) ([]byte, error) {
+			joined := strings.Join(args, " ")
+			switch {
+			case strings.HasSuffix(name, "compose.sh"):
+				return nil, context.DeadlineExceeded
+			case name != "docker":
+				return nil, nil
+			case strings.HasPrefix(joined, "ps --all") || strings.HasPrefix(joined, "network ls") || strings.HasPrefix(joined, "volume ls"):
+				listCalls++
+				if listCalls <= 3 {
+					return nil, context.DeadlineExceeded
+				}
+				if strings.HasPrefix(joined, "volume ls") && !volumeRemoved {
+					return []byte("task-volume\n"), nil
+				}
+				return nil, nil
+			case strings.HasPrefix(joined, "volume rm --force task-volume"):
+				volumeRemoved = true
+				return nil, nil
+			default:
+				return nil, nil
+			}
+		},
+	}
+
+	err := run.cleanup()
+	if err == nil {
+		t.Fatal("compose timeout was incorrectly erased after exact fallback")
+	}
+	if !strings.Contains(err.Error(), "compose down: context deadline exceeded") {
+		t.Fatalf("cleanup lost the compose timeout: %v", err)
+	}
+	for _, resolved := range []string{"inspect task-owned containers", "inspect task-owned networks", "inspect task-owned volumes", "task-owned volumes remain"} {
+		if strings.Contains(err.Error(), resolved) {
+			t.Errorf("cleanup retained a resolved Docker resource error %q: %v", resolved, err)
+		}
+	}
+}
+
+func TestCleanupFallbackRejectsInvalidDockerIdentifiers(t *testing.T) {
+	run := &freshCloneRun{
+		root:    t.TempDir(),
+		project: "semlia-accept-a1b2c3d4-000000000001",
+		cleanupExecutor: func(_ context.Context, _ string, _ []string, name string, args ...string) ([]byte, error) {
+			if name == "docker" && len(args) > 0 && args[0] == "ps" {
+				return []byte("not-a-container-id\n"), nil
+			}
+			if name == "docker" && len(args) > 0 && args[0] == "rm" {
+				t.Fatalf("cleanup attempted removal using an invalid identifier: %v", args)
+			}
+			return nil, nil
+		},
+	}
+	err := run.removeRemainingTaskDockerResources(&cleanupReport{})
+	if err == nil || !strings.Contains(err.Error(), `invalid identifier "not-a-container-id"`) {
+		t.Fatalf("invalid Docker identifier was not rejected: %v", err)
 	}
 }
 
@@ -983,11 +1220,14 @@ func (run *freshCloneRun) executeTimedCommandWithLimit(ctx context.Context, labe
 	limitedContext, cancel := context.WithTimeoutCause(ctx, limit, errCommandDurationLimit)
 	defer cancel()
 	started := time.Now()
-	_, commandErr := run.executeCommand(limitedContext, name, args...)
+	output, commandErr := run.executeCommandOutput(limitedContext, name, args...)
 	duration := time.Since(started)
 
 	if errors.Is(context.Cause(limitedContext), errCommandDurationLimit) {
 		thresholdErr := fmt.Errorf("%s exceeded %s after %s; command cancelled: %w", label, limit, duration, context.DeadlineExceeded)
+		if phase := lastReportedPhase(output); phase != "" {
+			thresholdErr = fmt.Errorf("%w; last reported phase: %s", thresholdErr, phase)
+		}
 		return duration, errors.Join(thresholdErr, commandErr)
 	}
 	if commandErr != nil {
@@ -1013,12 +1253,17 @@ func (run *freshCloneRun) command(ctx context.Context, name string, args ...stri
 }
 
 func (run *freshCloneRun) executeCommand(ctx context.Context, name string, args ...string) (string, error) {
+	output, err := run.executeCommandOutput(ctx, name, args...)
+	return string(output), err
+}
+
+func (run *freshCloneRun) executeCommandOutput(ctx context.Context, name string, args ...string) ([]byte, error) {
 	command := acceptanceCommandContext(ctx, name, args...)
 	command.Dir = run.root
 	command.Env = run.environment
 	output, err := command.CombinedOutput()
 	if err == nil {
-		return string(output), nil
+		return output, nil
 	}
 
 	details := strings.TrimSpace(run.redactTaskSecrets(string(output)))
@@ -1028,7 +1273,18 @@ func (run *freshCloneRun) executeCommand(ctx context.Context, name string, args 
 	if name == "make" && len(args) == 1 && args[0] == "dev" {
 		details += "\n\nCompose diagnostics (redacted):\n" + run.developmentDiagnostics()
 	}
-	return "", fmt.Errorf("%s %s: %w%s", name, strings.Join(args, " "), err, details)
+	return output, fmt.Errorf("%s %s: %w%s", name, strings.Join(args, " "), err, details)
+}
+
+func lastReportedPhase(output []byte) string {
+	lines := strings.Split(strings.ReplaceAll(string(output), "\r", "\n"), "\n")
+	for index := len(lines) - 1; index >= 0; index-- {
+		line := strings.TrimSpace(lines[index])
+		if phase, found := strings.CutPrefix(line, "==> "); found {
+			return strings.TrimSpace(phase)
+		}
+	}
+	return ""
 }
 
 func (run *freshCloneRun) developmentDiagnostics() string {
@@ -1117,31 +1373,23 @@ func (run *freshCloneRun) compose(ctx context.Context, args ...string) string {
 }
 
 func (run *freshCloneRun) cleanup() error {
-	var problems []error
+	report := &cleanupReport{}
 	if output, err := run.cleanupCommand(
 		dockerTeardownTimeout,
 		filepath.Join(run.root, "scripts", "dev", "compose.sh"),
 		"down", "--volumes", "--remove-orphans",
 	); err != nil {
-		problems = append(problems, fmt.Errorf("compose down: %w: %s", err, strings.TrimSpace(run.redactTaskSecrets(string(output)))))
+		report.addOther(fmt.Errorf("compose down: %w: %s", err, strings.TrimSpace(run.redactTaskSecrets(string(output)))))
 	}
 
-	checks := []struct {
-		label string
-		args  []string
-	}{
-		{"containers", []string{"ps", "--all", "--filter", "label=com.docker.compose.project=" + run.project, "--format", "{{.ID}}"}},
-		{"networks", []string{"network", "ls", "--filter", "label=com.docker.compose.project=" + run.project, "--format", "{{.ID}}"}},
-		{"volumes", []string{"volume", "ls", "--filter", "label=com.docker.compose.project=" + run.project, "--format", "{{.Name}}"}},
-	}
-	for _, check := range checks {
-		output, err := run.cleanupCommand(dockerInspectionTimeout, "docker", check.args...)
+	for _, resource := range run.cleanupResourceKinds() {
+		output, err := run.cleanupCommand(dockerInspectionTimeout, "docker", resource.listArgs...)
 		if err != nil {
-			problems = append(problems, fmt.Errorf("inspect task-owned %s: %w: %s", check.label, err, strings.TrimSpace(run.redactTaskSecrets(string(output)))))
+			report.setDockerProblem(resource.label, fmt.Errorf("inspect task-owned %s: %w: %s", resource.label, err, strings.TrimSpace(run.redactTaskSecrets(string(output)))))
 			continue
 		}
 		if remaining := strings.TrimSpace(string(output)); remaining != "" {
-			problems = append(problems, fmt.Errorf("task-owned %s remain: %s", check.label, remaining))
+			report.setDockerProblem(resource.label, fmt.Errorf("task-owned %s remain: %s", resource.label, remaining))
 		}
 	}
 	for _, cleanup := range []struct {
@@ -1154,8 +1402,70 @@ func (run *freshCloneRun) cleanup() error {
 		{"generated checkout state", checkoutCleanupTimeout, "make", []string{"clean"}},
 	} {
 		if output, err := run.cleanupCommand(cleanup.timeout, cleanup.name, cleanup.args...); err != nil {
-			problems = append(problems, fmt.Errorf("clean %s: %w: %s", cleanup.label, err, strings.TrimSpace(run.redactTaskSecrets(string(output)))))
+			report.addOther(fmt.Errorf("clean %s: %w: %s", cleanup.label, err, strings.TrimSpace(run.redactTaskSecrets(string(output)))))
 		}
+	}
+	if err := run.removeRemainingTaskDockerResources(report); err != nil {
+		report.addOther(err)
+	}
+	return report.err()
+}
+
+func (run *freshCloneRun) cleanupResourceKinds() []cleanupResourceKind {
+	projectLabel := "label=com.docker.compose.project=" + run.project
+	return []cleanupResourceKind{
+		{label: "containers", listArgs: []string{"ps", "--all", "--filter", projectLabel, "--format", "{{.ID}}"}, removeArgs: []string{"rm", "--force"}},
+		{label: "networks", listArgs: []string{"network", "ls", "--filter", projectLabel, "--format", "{{.ID}}"}, removeArgs: []string{"network", "rm"}},
+		{label: "volumes", listArgs: []string{"volume", "ls", "--filter", projectLabel, "--format", "{{.Name}}"}, removeArgs: []string{"volume", "rm", "--force"}},
+	}
+}
+
+func validateDockerResourceIdentifiers(resource cleanupResourceKind, output []byte) ([]string, error) {
+	identifiers := strings.Fields(string(output))
+	for _, identifier := range identifiers {
+		valid := regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]*$`).MatchString(identifier)
+		if resource.label == "containers" {
+			valid = regexp.MustCompile(`^[a-f0-9]{12,64}$`).MatchString(identifier)
+		}
+		if !valid {
+			return nil, fmt.Errorf("inspect task-owned %s returned invalid identifier %q", resource.label, identifier)
+		}
+	}
+	return identifiers, nil
+}
+
+func (run *freshCloneRun) removeRemainingTaskDockerResources(report *cleanupReport) error {
+	var problems []error
+	for _, resource := range run.cleanupResourceKinds() {
+		output, err := run.cleanupCommand(dockerInspectionTimeout, "docker", resource.listArgs...)
+		if err != nil {
+			problems = append(problems, fmt.Errorf("reinspect task-owned %s: %w: %s", resource.label, err, strings.TrimSpace(run.redactTaskSecrets(string(output)))))
+			continue
+		}
+		identifiers, identifierErr := validateDockerResourceIdentifiers(resource, output)
+		if identifierErr != nil {
+			problems = append(problems, identifierErr)
+			continue
+		}
+		if len(identifiers) == 0 {
+			report.setDockerProblem(resource.label, nil)
+			continue
+		}
+		removeArgs := append(append([]string{}, resource.removeArgs...), identifiers...)
+		if removeOutput, removeErr := run.cleanupCommand(dockerTeardownTimeout, "docker", removeArgs...); removeErr != nil {
+			problems = append(problems, fmt.Errorf("remove task-owned %s %s: %w: %s", resource.label, strings.Join(identifiers, ","), removeErr, strings.TrimSpace(run.redactTaskSecrets(string(removeOutput)))))
+			continue
+		}
+		verifyOutput, verifyErr := run.cleanupCommand(dockerInspectionTimeout, "docker", resource.listArgs...)
+		if verifyErr != nil {
+			problems = append(problems, fmt.Errorf("verify task-owned %s cleanup: %w: %s", resource.label, verifyErr, strings.TrimSpace(run.redactTaskSecrets(string(verifyOutput)))))
+			continue
+		}
+		if remaining := strings.TrimSpace(string(verifyOutput)); remaining != "" {
+			problems = append(problems, fmt.Errorf("task-owned %s remain after exact removal: %s", resource.label, remaining))
+			continue
+		}
+		report.setDockerProblem(resource.label, nil)
 	}
 	return errors.Join(problems...)
 }

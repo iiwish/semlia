@@ -45,6 +45,8 @@ func TestM0AcceptanceScenarioContract(t *testing.T) {
 		},
 		"AC-M0-006 complete delivery gate": {
 			"complete pull-request gate",
+			"pullRequestGateLimit          = 10 * time.Minute",
+			`"complete pull-request gate", pullRequestGateLimit`,
 			"make\", \"check",
 			"release bundle",
 			"make\", \"release",
