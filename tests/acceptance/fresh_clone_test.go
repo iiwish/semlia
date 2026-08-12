@@ -165,14 +165,14 @@ func isolatedEnvironment(scratch, project string, httpPort, postgresPort int) []
 }
 
 func filterAcceptanceEnvironment(environment []string) []string {
-	blockedGit := map[string]struct{}{
-		"GIT_DIR": {}, "GIT_WORK_TREE": {}, "GIT_COMMON_DIR": {}, "GIT_INDEX_FILE": {}, "GIT_OBJECT_DIRECTORY": {},
+	blockedExact := map[string]struct{}{
+		"GOFLAGS": {}, "GOWORK": {}, "MAKEFLAGS": {}, "MFLAGS": {},
 	}
 	filtered := make([]string, 0, len(environment))
 	for _, entry := range environment {
 		key, _, _ := strings.Cut(entry, "=")
-		_, gitBlocked := blockedGit[key]
-		if strings.HasPrefix(key, "SEMLIA_") || strings.HasPrefix(key, "COMPOSE_") || gitBlocked {
+		_, exactBlocked := blockedExact[key]
+		if strings.HasPrefix(key, "SEMLIA_") || strings.HasPrefix(key, "COMPOSE_") || strings.HasPrefix(key, "GIT_") || strings.HasPrefix(key, "TESTCONTAINERS_") || exactBlocked {
 			continue
 		}
 		filtered = append(filtered, entry)
@@ -223,7 +223,8 @@ func TestAcceptanceEnvironmentRejectsPoisonedControls(t *testing.T) {
 	poisoned := []string{
 		"PATH=/usr/bin", "HOME=/tmp/home", "SEMLIA_RUN_SMOKE=1", "SEMLIA_RELEASE_DIR=/outside",
 		"SEMLIA_SECURITY_IMAGE=wrong", "SEMLIA_POSTGRES_PASSWORD=wrong", "COMPOSE_FILE=/outside/compose.yaml",
-		"COMPOSE_PROFILES=wrong", "COMPOSE_PATH_SEPARATOR=;", "GIT_DIR=/outside/git", "GIT_WORK_TREE=/outside/tree",
+		"COMPOSE_PROFILES=wrong", "COMPOSE_PATH_SEPARATOR=;", "GIT_DIR=/outside/git", "GIT_CONFIG_COUNT=1",
+		"GOFLAGS=-run=^$", "GOWORK=/outside/go.work", "MAKEFLAGS=-i", "MFLAGS=-k", "TESTCONTAINERS_RYUK_DISABLED=true",
 	}
 	got := filterAcceptanceEnvironment(poisoned)
 	if strings.Join(got, "\n") != "PATH=/usr/bin\nHOME=/tmp/home" {
