@@ -84,7 +84,7 @@ Signature move: **Semantic Focus Line**。一级导航、上下文对象和主�
 
 Reference intent:
 
-- 参考 `/workspace/local/self/zhizhu` 的安静桌面工作台与三层信息架构。
+- 参考创始人提供的本地 Zhizhu 项目的安静桌面工作台与三层信息架构。
 - 继承 56px activity rail、264px contextual navigator、纯净中性任务画布、紧凑字号和明确 focus line。
 - 不复制 Zhizhu 的铁砧标志、知识对象、文案、页面构图或专有产品身份。
 - 使用 Semlia 的资产目录、定义、血缘、validation、proposal 和 immutable release 替代参考项目对象。

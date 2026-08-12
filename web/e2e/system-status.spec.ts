@@ -38,9 +38,16 @@ test("shows a safe configuration error when the API is unreachable", async ({ pa
 test("supports keyboard refresh and reduced motion", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   let livenessRequests = 0;
+  let holdRefresh = false;
+  let releaseRefresh!: () => void;
+  const refreshBarrier = new Promise<void>((resolve) => {
+    releaseRefresh = resolve;
+  });
   await page.route("**/health/live", async (route) => {
     livenessRequests += 1;
-    await new Promise((resolve) => setTimeout(resolve, livenessRequests === 1 ? 0 : 160));
+    if (holdRefresh) {
+      await refreshBarrier;
+    }
     await json(route, 200, { status: "live", traceId });
   });
   await routeReadyRemainder(page);
@@ -53,9 +60,11 @@ test("supports keyboard refresh and reduced motion", async ({ page }) => {
   await expect(refresh).toBeFocused();
   const outline = await refresh.evaluate((element) => getComputedStyle(element).outlineStyle);
   expect(outline).not.toBe("none");
+  holdRefresh = true;
   await page.keyboard.press("Enter");
   await expect(page.getByText("Checking control plane")).toBeVisible();
   await expect(page.locator(".is-spinning")).toHaveCSS("animation-name", "none");
+  releaseRefresh();
   await expect(page.getByText("Control plane ready")).toBeVisible();
   expect(livenessRequests).toBe(initialRequests + 1);
 });

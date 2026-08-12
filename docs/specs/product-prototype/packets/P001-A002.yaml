@@ -11,7 +11,7 @@ trigger:
   direction: Use the local Zhizhu project as a structural UI reference.
 
 reference_contract:
-  source: /workspace/local/self/zhizhu
+  source: founder-provided local Zhizhu reference project
   inherit:
     - 56px activity rail plus 264px contextual navigator and task canvas
     - quiet neutral surfaces with a cobalt focus line
@@ -32,7 +32,7 @@ execution_constraints:
     - docs/specs/m0-foundation/tasks.md
   forbidden:
     - production web, backend, OpenAPI, generated SDK or M1 schema changes
-    - edits to /workspace/local/self/zhizhu
+    - edits to the founder-provided local Zhizhu reference project
 
 tdd_plan:
   red:

@@ -92,6 +92,7 @@ execution_constraints:
     - docs/specs/m0-foundation/analysis.md
     - docs/specs/m0-foundation/release-report.md
     - tests/acceptance/**
+    - scripts/acceptance/m0-fresh-clone.sh
     - scripts/doctor.sh
     - tests/repository/repository_contract_test.go
     - go.mod
@@ -106,8 +107,10 @@ execution_constraints:
     - tests/integration/db/database_test.go
     - tests/integration/worker/worker_test.go
     - tests/smoke/local_stack_test.go
+    - web/e2e/system-status.spec.ts
   forbidden_changes:
     - Do not edit runtime behavior, migrations, generated API artifacts, Web UI, prototype, Compose topology or release workflow behavior.
+    - The Web end-to-end edit is limited to replacing a timing race with an explicit request barrier; product behavior and assertions remain unchanged.
     - Smoke-test edits are limited to deriving the expected Compose project label from the task-owned environment instead of the literal semlia-local value.
     - Do not add a new framework, service, SaaS dependency, telemetry exporter or package dependency.
     - Do not rewrite historical evidence patches when migrating the module namespace.
@@ -125,6 +128,10 @@ execution_constraints:
     - docs/specs/m0-foundation/packets/T008.yaml
     - docs/specs/m0-foundation/release-report.md
     - docs/evidence/T008/**
+    - docs/README.md
+    - docs/SSOT.md
+    - docs/specs/product-prototype/product-design.md
+    - docs/specs/product-prototype/packets/P001-A002.yaml
 
 tdd_plan:
   required: true
@@ -166,8 +173,8 @@ validation_loop:
     - make dev-down
     - git diff --check
   isolated_checkout_command: >-
-    SEMLIA_RUN_FRESH_CLONE=1 SEMLIA_ACCEPTANCE_SOURCE=<repository-path>
-    SEMLIA_ACCEPTANCE_REF=<exact-commit> go test -v -timeout=45m ./tests/acceptance/... -count=1
+    SEMLIA_ACCEPTANCE_SOURCE=<repository-path> SEMLIA_ACCEPTANCE_REF=<exact-commit>
+    ./scripts/acceptance/m0-fresh-clone.sh
   runtime_checks:
     - make doctor succeeds with exactly the versions in .tool-versions.
     - go list -m prints github.com/iiwish/semlia and no live source imports github.com/semlia/semlia.
@@ -179,7 +186,7 @@ validation_loop:
   retry_budget: 2
   failure_policy:
     first_failure: Fix only documentation, acceptance automation, module imports or the doctor version when the failure maps directly to T008.
-    second_failure: Classify the failure as a pre-existing M0 defect, host constraint or external registry/GitHub limitation and record exact evidence.
+    second_failure: Classify the failure as a pre-existing M0 defect, acceptance-isolation defect, host constraint or external registry/GitHub limitation and record exact evidence.
     beyond_budget: Stop with Blocked evidence; never weaken a security, reliability, performance or clean-tree assertion.
 
 evidence_contract:
