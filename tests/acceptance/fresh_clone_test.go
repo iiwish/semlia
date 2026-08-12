@@ -22,6 +22,7 @@ import (
 
 const (
 	freshCloneTimeout             = 45 * time.Minute
+	outerAcceptanceTimeout        = 70 * time.Minute // Journey plus worst-case diagnostics, cleanup phases, and shutdown margin.
 	coldBootstrapLimit            = 10 * time.Minute
 	warmBootstrapLimit            = 2 * time.Minute
 	developmentDiagnosticsTimeout = 30 * time.Second
@@ -32,6 +33,7 @@ const (
 )
 
 var acceptanceHostLock = filepath.Join(os.TempDir(), "semlia-t008-acceptance.lock")
+var errCommandDurationLimit = errors.New("command duration limit exceeded")
 
 type freshCloneConfig struct {
 	source string
@@ -219,7 +221,11 @@ func validateFreshCloneInvocation() error {
 			return fmt.Errorf("fresh-clone acceptance requires %s=%q; use scripts/acceptance/m0-fresh-clone.sh", check.name, check.want)
 		}
 	}
-	for name, want := range map[string]string{"test.run": "^TestFreshCloneAcceptance$", "test.count": "1"} {
+	for name, want := range map[string]string{
+		"test.run":     "^TestFreshCloneAcceptance$",
+		"test.count":   "1",
+		"test.timeout": outerAcceptanceTimeout.String(),
+	} {
 		value := flag.Lookup(name)
 		if value == nil || value.Value.String() != want {
 			return fmt.Errorf("fresh-clone acceptance requires -%s=%q; use scripts/acceptance/m0-fresh-clone.sh", strings.TrimPrefix(name, "test."), want)
@@ -455,6 +461,83 @@ func TestAcceptanceBootstrapPerformanceThresholds(t *testing.T) {
 				t.Fatalf("threshold failure is not actionable: %v", err)
 			}
 		})
+	}
+}
+
+func TestAcceptanceSleepingCommandHelper(t *testing.T) {
+	if os.Getenv("SEMLIA_ACCEPTANCE_SLEEP_HELPER") != "1" {
+		return
+	}
+	time.Sleep(30 * time.Second)
+}
+
+func TestTimedCommandWithLimitCancelsHungCommand(t *testing.T) {
+	run := &freshCloneRun{
+		t:           t,
+		root:        t.TempDir(),
+		environment: append(filteredEnvironment(os.Environ(), "SEMLIA_ACCEPTANCE_SLEEP_HELPER"), "SEMLIA_ACCEPTANCE_SLEEP_HELPER=1"),
+	}
+	limit := 75 * time.Millisecond
+	started := time.Now()
+	duration, err := run.executeTimedCommandWithLimit(
+		context.Background(),
+		"cold bootstrap",
+		limit,
+		os.Args[0],
+		"-test.run=^TestAcceptanceSleepingCommandHelper$",
+		"-test.count=1",
+	)
+	elapsed := time.Since(started)
+	if err == nil {
+		t.Fatal("hung bootstrap command was not cancelled at its NFR limit")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("cancellation error = %v, want context deadline exceeded", err)
+	}
+	for _, fragment := range []string{"cold bootstrap", limit.String(), "command cancelled"} {
+		if !strings.Contains(err.Error(), fragment) {
+			t.Errorf("cancellation error missing %q: %v", fragment, err)
+		}
+	}
+	if duration < limit || elapsed < limit {
+		t.Fatalf("command cancelled too early: duration=%s elapsed=%s limit=%s", duration, elapsed, limit)
+	}
+	if duration > 2*time.Second || elapsed > 2*time.Second {
+		t.Fatalf("command cancellation was not prompt: duration=%s elapsed=%s", duration, elapsed)
+	}
+}
+
+func TestFreshCloneLauncherReservesCleanupEnvelope(t *testing.T) {
+	launcher := readRepositoryFile(t, "scripts/acceptance/m0-fresh-clone.sh")
+	if strings.Count(launcher, "-timeout=70m") != 1 {
+		t.Fatalf("canonical launcher must set exactly one 70m outer timeout:\n%s", launcher)
+	}
+	if !strings.Contains(readRepositoryFile(t, "tests/acceptance/fresh_clone_test.go"), `"test.timeout": outerAcceptanceTimeout.String()`) {
+		t.Fatal("fresh-clone invocation validator does not enforce the canonical outer timeout")
+	}
+}
+
+func TestFreshCloneInvocationRejectsNoncanonicalOuterTimeout(t *testing.T) {
+	command := exec.Command(
+		os.Args[0],
+		"-test.run=^TestFreshCloneAcceptance$",
+		"-test.count=1",
+		"-test.timeout=69m",
+	)
+	command.Env = append(
+		filterAcceptanceEnvironment(os.Environ()),
+		"GOENV=off",
+		"GOFLAGS=",
+		"GOWORK=off",
+		"SEMLIA_RUN_FRESH_CLONE=1",
+	)
+	output, err := command.CombinedOutput()
+	if err == nil {
+		t.Fatalf("fresh-clone invocation accepted noncanonical outer timeout:\n%s", output)
+	}
+	want := `fresh-clone acceptance requires -timeout="1h10m0s"`
+	if !strings.Contains(string(output), want) {
+		t.Fatalf("outer-timeout failure is not actionable; want %q:\n%s", want, output)
 	}
 }
 
@@ -889,10 +972,28 @@ func (run *freshCloneRun) timedCommand(ctx context.Context, label, name string, 
 
 func (run *freshCloneRun) timedCommandWithLimit(ctx context.Context, label string, limit time.Duration, name string, args ...string) {
 	run.t.Helper()
-	duration := run.timedCommand(ctx, label, name, args...)
-	if err := validateCommandDuration(label, duration, limit); err != nil {
+	duration, err := run.executeTimedCommandWithLimit(ctx, label, limit, name, args...)
+	run.t.Logf("%s: %s", label, duration.Round(time.Millisecond))
+	if err != nil {
 		run.t.Fatal(err)
 	}
+}
+
+func (run *freshCloneRun) executeTimedCommandWithLimit(ctx context.Context, label string, limit time.Duration, name string, args ...string) (time.Duration, error) {
+	limitedContext, cancel := context.WithTimeoutCause(ctx, limit, errCommandDurationLimit)
+	defer cancel()
+	started := time.Now()
+	_, commandErr := run.executeCommand(limitedContext, name, args...)
+	duration := time.Since(started)
+
+	if errors.Is(context.Cause(limitedContext), errCommandDurationLimit) {
+		thresholdErr := fmt.Errorf("%s exceeded %s after %s; command cancelled: %w", label, limit, duration, context.DeadlineExceeded)
+		return duration, errors.Join(thresholdErr, commandErr)
+	}
+	if commandErr != nil {
+		return duration, commandErr
+	}
+	return duration, validateCommandDuration(label, duration, limit)
 }
 
 func validateCommandDuration(label string, duration, limit time.Duration) error {
