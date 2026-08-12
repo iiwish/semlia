@@ -10,6 +10,8 @@ func TestM0AcceptanceScenarioContract(t *testing.T) {
 	required := map[string][]string{
 		"AC-M0-001 fresh checkout": {
 			"git\", \"clone",
+			"outerAcceptanceTimeout        = 70 * time.Minute",
+			`"test.timeout": outerAcceptanceTimeout.String()`,
 			"cold bootstrap",
 			"coldBootstrapLimit            = 10 * time.Minute",
 			"\"cold bootstrap\", coldBootstrapLimit",
