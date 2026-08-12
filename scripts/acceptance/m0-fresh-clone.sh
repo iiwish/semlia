@@ -1,7 +1,9 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/sh
+set -eu
 
-readonly ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+unset BASH_ENV ENV GNUMAKEFLAGS MAKE MAKEFILES MAKEFLAGS MAKELEVEL MAKEOVERRIDES MFLAGS
+
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 
 : "${SEMLIA_ACCEPTANCE_SOURCE:?set SEMLIA_ACCEPTANCE_SOURCE to a local repository path}"
 : "${SEMLIA_ACCEPTANCE_REF:?set SEMLIA_ACCEPTANCE_REF to an exact 40-character commit}"
