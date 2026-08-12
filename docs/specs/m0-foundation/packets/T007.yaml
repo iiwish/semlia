@@ -20,6 +20,8 @@ governance_inputs:
     continued_execution: Explicitly authorized by founder on 2026-08-10
     security_scope_expansion: Explicitly approved by founder on 2026-08-10
     remote_publication: Explicitly authorized by founder on 2026-08-11
+    founder_acceptance: Existing evidence reviewed and continuation explicitly authorized by founder on 2026-08-12
+    current_visibility: Private incubation after the hosted validation runs
     analysis: Clear for T007 local execution
 
 work_unit:
@@ -205,8 +207,8 @@ handoff:
     release: https://github.com/iiwish/semlia/actions/runs/31453335512
   pull_request: null
   finish_options:
-    - request founder acceptance for T007
-    - begin T008 only after T007 is explicitly Accepted
+    - T007 Accepted by founder on 2026-08-12
+    - packetize and execute T008 under its independent acceptance gate
 
 stop_conditions:
   - Required validation needs application, database, migration, Web, SDK, Compose or Dockerfile behavior changes.

@@ -5,13 +5,13 @@
 | 字段 | 值 |
 | --- | --- |
 | Feature ID | m0-foundation |
-| 版本 | 0.3.0 |
+| 版本 | 0.4.0 |
 | 状态 | Confirmed |
-| 最后更新 | 2026-08-08 |
-| 产品合同 | `docs/SSOT.md` v0.2.0 Confirmed |
+| 最后更新 | 2026-08-12 |
+| 产品合同 | `docs/SSOT.md` v0.4.0 Confirmed |
 | 技术决策 | `docs/adr/0001-m0-technical-foundation.md` |
 | 工作图 | `docs/specs/m0-foundation/tasks.md` |
-| 审核 | 2026-08-08 经创始人确认 |
+| 审核 | 2026-08-12 经创始人确认继续完成文档、fresh-clone 验收和核心产品闭环 |
 
 ## 1. 目标
 
@@ -24,7 +24,7 @@ M0 的成功不是创建大量目录，而是证明以下事实：
 - PostgreSQL 迁移可以从空库升级并通过回滚验证。
 - 一个后台任务可以被可靠领取、重试并产生 outbox 事件。
 - 本地 `make check` 与 CI 使用相同质量门禁。
-- 仓库满足公开开源项目的许可证、安全和贡献基本要求。
+- 仓库在 Private incubation 期间具备 Apache-2.0、供应链、安全与贡献基础，并明确公开发布前仍需通过的社区和 GitHub 安全门槛。
 
 ## 2. 用户故事
 
@@ -203,6 +203,6 @@ CI 从空 PostgreSQL 执行全部 upgrade，检查当前 revision，执行 M0 �
 
 ## 10. 审核闸门
 
-- Approval: Confirmed by founder on 2026-08-08
+- Approval: Confirmed by founder on 2026-08-08; T008 continuation and release-readiness remediation reconfirmed on 2026-08-12
 - Accepted scope: M0-FR-001 至 M0-FR-008、M0-NFR-001 至 M0-NFR-007、AC-M0-001 至 AC-M0-006。
 - Execution rule: 实现任务必须遵循已确认工作图、checklist、analysis 和 execution packet。

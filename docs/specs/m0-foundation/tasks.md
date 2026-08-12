@@ -5,9 +5,9 @@
 | 字段 | 值 |
 | --- | --- |
 | Feature | m0-foundation |
-| 版本 | 0.6.0 |
+| 版本 | 0.7.0 |
 | 状态 | Confirmed |
-| 最后更新 | 2026-08-10 |
+| 最后更新 | 2026-08-12 |
 | Source | `docs/SSOT.md`, `docs/specs/m0-foundation/plan.md` |
 | TDR | `docs/adr/0001-m0-technical-foundation.md` |
 
@@ -83,7 +83,7 @@ Stories:
 
 Tasks:
 
-- [ ] T007 [M0-US-005] 建立 CI、安全与供应链门禁
+- [x] T007 [M0-US-005] 建立 CI、安全与供应链门禁
 - [ ] T008 [M0-US-001, M0-US-005] 完成 fresh-clone 验收与 M0 交付证据
 
 ## 4. Task Details
@@ -654,7 +654,7 @@ Review notes:
 
 ### T007 建立 CI、安全与供应链门禁
 
-Status: Needs_Review
+Status: Accepted
 Priority: P0
 Depends on: T001, T002, T003, T004, T005, T006
 Blocks: T008
@@ -737,18 +737,19 @@ Execution notes:
 
 - M0-T007-A001 已完成 CI contract RED/GREEN、source gate 和 integrated smoke gate；首轮真实扫描识别并修复 `google.golang.org/grpc` High finding。
 - Founder 于 2026-08-10 批准 Go 1.26.5 与 transitive `js-yaml` 4.3.1 安全修复；`.tool-versions`、`deploy/local/Dockerfile`、`tests/repository/repository_contract_test.go`、`pnpm-lock.yaml` 和 pnpm 11 的 canonical override 配置 `pnpm-workspace.yaml` 纳入 T007。
-- Public repository: `https://github.com/iiwish/semlia`；最终远端验证提交为 `44b0f49d8db1227e9c6c0d4dc1342fb20fd75dc3`。
+- 托管验证执行时 `https://github.com/iiwish/semlia` 为 Public；当前仓库处于 Private incubation，最终托管验证提交为 `44b0f49d8db1227e9c6c0d4dc1342fb20fd75dc3`。
 - GitHub Actions CI 完整绿色：`https://github.com/iiwish/semlia/actions/runs/31453327615`；source 与 smoke job 分别约 2m28s 和 2m09s。
 - GitHub Actions Security 完整绿色：`https://github.com/iiwish/semlia/actions/runs/31453335446`；dependency、secret 与 container scan job 约 58s，High/Critical 为 0。
 - GitHub Actions Release Build 完整绿色：`https://github.com/iiwish/semlia/actions/runs/31453335512`；Linux/Darwin 的 amd64/arm64 四个构建与 artifact upload 全部通过，最慢约 1m17s。
 - 首轮托管验证发现 smoke job 未准备 pnpm/Node，以及交叉发布的目标 `GOOS/GOARCH` 泄漏到宿主 manifest tool；提交 `8f8842d` 与 `44b0f49` 修复并增加 repository contract。
 - Evidence: `docs/evidence/T007/summary.md`, `docs/evidence/T007/test-results.md`。
 - Go/pnpm/secret/container High/Critical findings 均为 0；`make check`、`make security-check`、`make build`、`make sbom`、`make release` 和 repository contract 全部通过。
-- Spec compliance、bug/code-quality 和本地/托管 QA acceptance review 无 blocking finding；T007 已满足 Definition of Done 的技术证据并进入 Needs_Review，仍需创始人明确接受后才能解除 T008 依赖。
+- Spec compliance、bug/code-quality 和本地/托管 QA acceptance review 无 blocking finding。
+- Founder 于 2026-08-12 复核既有分析与证据，并明确要求继续完善文档和完成核心产品闭环；T007 因此进入 Accepted，T008 依赖解除。
 
 ### T008 完成 fresh-clone 验收与 M0 交付证据
 
-Status: Draft
+Status: Running
 Priority: P0
 Depends on: T001, T002, T003, T004, T005, T006, T007
 Blocks: M1 planning
@@ -763,21 +764,37 @@ Goal:
 Allowed files:
 
 - `README.md`
+- `SECURITY.md`
 - `docs/quickstart.md`
 - `docs/operations/local-development.md`
 - `docs/operations/troubleshooting.md`
 - `docs/specs/m0-foundation/analysis.md`
 - `docs/specs/m0-foundation/release-report.md`
 - `tests/acceptance/**`
+- `scripts/doctor.sh`
+- `tests/repository/repository_contract_test.go`
+- `go.mod`
+- `cmd/semlia/main.go`
+- `cmd/semlia/readiness.go`
+- `cmd/semlia/readiness_test.go`
+- `internal/adapters/postgres/store.go`
+- `internal/application/system.go`
+- `internal/platform/config/config_test.go`
+- `internal/platform/http/handler.go`
+- `internal/platform/http/handler_test.go`
+- `tests/integration/db/database_test.go`
+- `tests/integration/worker/worker_test.go`
 
 Test targets:
 
 - `tests/acceptance/fresh_clone_test.go`
 - `tests/acceptance/m0_scenarios_test.go`
+- `tests/repository/repository_contract_test.go`
 
 Deliverables:
 
 - Quickstart、故障诊断和本地运行文档。
+- `make doctor` 与锁定工具链一致，Go module 与受控 GitHub repository identity 一致。
 - AC-M0-001 至 AC-M0-006 的独立证据。
 - M0 spec compliance、engineering quality 和 QA review。
 - M0 release report 和 M1 readiness 判断。
@@ -786,6 +803,7 @@ Acceptance criteria:
 
 - 新贡献者在 15 分钟内完成从 clone 到首个成功请求。
 - Bootstrap、CI 和响应时间目标有真实测量。
+- `go list -m` 返回 `github.com/iiwish/semlia`，内部 import 不再引用未受控的 `github.com/semlia/semlia`。
 - 所有故障场景提供稳定错误和恢复步骤。
 - 文档中的每条命令在干净环境执行成功。
 
@@ -798,17 +816,21 @@ Definition of Done:
 Validation commands:
 
 - `make clean`
+- `make doctor`
 - `make bootstrap`
 - `make dev`
 - `make check`
 - `make smoke`
 - `go test ./tests/acceptance/...`
+- `go test ./tests/repository`
+- `go list -m`
+- `go mod tidy -diff`
 - `make dev-down`
 
 TDD plan:
 
-- RED: 在隔离 clone 中执行 acceptance harness，记录缺失文档或行为失败。
-- GREEN: 只修复 M0 验收直接发现的问题并补回归测试。
+- RED: 添加文档、工具链和 module identity contract，在隔离 clone 中执行 acceptance harness，记录缺失文档、Go patch 漂移和未受控 module namespace 失败。
+- GREEN: 修复 M0 验收直接发现的问题、迁移内部 import，并补回归测试。
 - REFACTOR: 整理文档和诊断输出，不扩大 M0 功能范围。
 
 Packet path:
@@ -818,6 +840,7 @@ Packet path:
 Evidence required:
 
 - Fresh-clone 环境说明和命令记录。
+- Module namespace 与 doctor toolchain RED/GREEN 记录。
 - Acceptance、performance 和 failure-recovery results。
 - Review findings 与 resolution。
 - Release report、diff summary、residual risks。
@@ -826,5 +849,6 @@ Evidence required:
 
 - Approval: Confirmed by founder on 2026-08-08
 - Accepted graph: E001、E002 和 T001 至 T008 的范围、依赖、并行边界、验证命令与 Definition of Done。
-- Next gate: 完成 requirements checklist 和一致性 analysis；只为第一个可执行任务 T001 生成 packet。
+- Current execution: T008 packet 已生成，执行状态为 Running；其余里程碑不得与 T008 并行实现。
+- Next gate: T008 完成三轮 review 和 M0 release report 后由 founder 明确接受，随后才生成 M1 work graph 与 Ready packet。
 - Execution rule: 没有已审核 packet、干净 worktree 和明确执行授权时，不开始任何 task。

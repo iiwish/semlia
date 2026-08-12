@@ -25,7 +25,7 @@
 | `go test ./tests/repository -count=1` | Pass | Repository and CI contracts passed. |
 | `git diff --check` | Pass | No whitespace errors. |
 | `make dev-down` via smoke cleanup | Pass | No Semlia project container or network remains. |
-| Governor generic artifact validator | Layout mismatch | The generic script only recognizes `.ai-platform/**` and reported its five default documents plus default evidence directory as missing. Semlia uses `docs/specs/**` and `docs/evidence/**`; direct checks confirmed packet, Blocked task state, summary, test results, patch hash and reverse applicability. |
+| Governor generic artifact validator | Layout mismatch | The generic script only recognizes `.ai-platform/**` and reported its five default documents plus default evidence directory as missing. Semlia uses `docs/specs/**` and `docs/evidence/**`; direct checks confirmed packet, task state, summary, test results, patch hash and reverse applicability. |
 
 ## Security Remediation Trail
 
