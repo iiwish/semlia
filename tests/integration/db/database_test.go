@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	pgstore "github.com/semlia/semlia/internal/adapters/postgres"
+	pgstore "github.com/iiwish/semlia/internal/adapters/postgres"
 	"github.com/testcontainers/testcontainers-go"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 )

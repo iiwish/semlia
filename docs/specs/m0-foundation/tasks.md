@@ -784,12 +784,14 @@ Allowed files:
 - `internal/platform/http/handler_test.go`
 - `tests/integration/db/database_test.go`
 - `tests/integration/worker/worker_test.go`
+- `tests/smoke/local_stack_test.go`
 
 Test targets:
 
 - `tests/acceptance/fresh_clone_test.go`
 - `tests/acceptance/m0_scenarios_test.go`
 - `tests/repository/repository_contract_test.go`
+- `tests/smoke/local_stack_test.go`
 
 Deliverables:
 
@@ -829,8 +831,8 @@ Validation commands:
 
 TDD plan:
 
-- RED: 添加文档、工具链和 module identity contract，在隔离 clone 中执行 acceptance harness，记录缺失文档、Go patch 漂移和未受控 module namespace 失败。
-- GREEN: 修复 M0 验收直接发现的问题、迁移内部 import，并补回归测试。
+- RED: 添加文档、工具链和 module identity contract，在隔离 clone 中执行 acceptance harness，记录缺失文档、Go patch 漂移、未受控 module namespace 和写死 Compose project identity 的失败。
+- GREEN: 修复 M0 验收直接发现的问题、迁移内部 import，让 smoke test 从当前 project 环境解析资源标签，并补回归测试。
 - REFACTOR: 整理文档和诊断输出，不扩大 M0 功能范围。
 
 Packet path:

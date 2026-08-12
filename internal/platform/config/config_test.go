@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/semlia/semlia/internal/platform/config"
+	"github.com/iiwish/semlia/internal/platform/config"
 )
 
 func TestLoadDevelopmentDefaults(t *testing.T) {

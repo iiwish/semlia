@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"time"
 
+	dbgen "github.com/iiwish/semlia/internal/adapters/postgres/sqlc"
+	"github.com/iiwish/semlia/internal/application/jobs"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-	dbgen "github.com/semlia/semlia/internal/adapters/postgres/sqlc"
-	"github.com/semlia/semlia/internal/application/jobs"
 )
 
 var ErrLeaseLost = errors.New("lease ownership was lost")

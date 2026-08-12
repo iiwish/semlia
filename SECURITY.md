@@ -10,7 +10,9 @@ No Semlia version currently receives production security support. This section w
 
 Do not report a vulnerability through a public issue, pull request, discussion, or social channel.
 
-Use GitHub private vulnerability reporting for the Semlia repository. Include:
+GitHub private vulnerability reporting is not enabled while the repository is in Private incubation, so there is currently no public intake channel for external vulnerability reports. Do not open a public issue or disclose vulnerability details in repository discussions. This limitation must be resolved before the repository becomes public or publishes a release candidate.
+
+Once GitHub private vulnerability reporting is enabled, include:
 
 - The affected commit, version, component, and configuration.
 - Reproduction steps or a minimal proof of concept.
@@ -18,7 +20,7 @@ Use GitHub private vulnerability reporting for the Semlia repository. Include:
 - Known mitigations or workarounds.
 - Whether the issue is already public or under active exploitation.
 
-Private vulnerability reporting must be enabled before the repository accepts external security reports or publishes a release candidate. Until then, the repository is not presented as production-ready.
+Private vulnerability reporting must be enabled before the repository accepts external security reports or publishes a release candidate. Until then, the repository is not production-ready.
 
 ## Response Targets
 

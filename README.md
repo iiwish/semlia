@@ -12,7 +12,7 @@ It combines three product ideas:
 - **A living semantic wiki:** every semantic asset has an authoritative page for its meaning, calculation, owner, lineage, evidence, tests, history, consumers, and AI context.
 - **An AI-first governance lifecycle:** AI discovers gaps and proposes structured changes; policy, validation, evidence, and review determine what becomes published truth.
 
-> Project status: pre-alpha. The product contract is confirmed; the first implementation milestone is in progress. The current product prototype uses repository-local mock data and is isolated from the production runtime.
+> Project status: pre-alpha, under Private incubation. The M0 engineering foundation is implemented and is undergoing fresh-clone acceptance; M1 product capabilities are not implemented. The product prototype uses repository-local mock data and is isolated from the production runtime. This repository is not production-ready and does not yet operate as an active public community project.
 
 ## Product Positioning
 
@@ -58,6 +58,8 @@ Cube Core is the first-priority integration, while Semlia's domain model remains
 The canonical product and architecture contract lives in [docs/SSOT.md](docs/SSOT.md). The confirmed M0 plan and task graph are indexed in [docs/README.md](docs/README.md).
 
 ## Development
+
+For a first local run, follow the [quickstart](docs/quickstart.md). Maintainers should also read the [local development runbook](docs/operations/local-development.md) and [troubleshooting guide](docs/operations/troubleshooting.md).
 
 Prerequisites are pinned in `.tool-versions`:
 
@@ -129,7 +131,7 @@ Release output is written to the ignored `build/release/` directory. Each bundle
 
 ## Contributing
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md), and [SECURITY.md](SECURITY.md) before opening a contribution. Contributions use the Developer Certificate of Origin sign-off.
+Semlia is in Private incubation, so the repository is not currently accepting public contributions. The contribution contract is prepared for the future public phase: read [CONTRIBUTING.md](CONTRIBUTING.md), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md), and [SECURITY.md](SECURITY.md) before participating once the repository opens. Contributions use the Developer Certificate of Origin sign-off.
 
 ## License
 

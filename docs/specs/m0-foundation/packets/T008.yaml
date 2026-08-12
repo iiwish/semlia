@@ -105,8 +105,10 @@ execution_constraints:
     - internal/platform/http/handler_test.go
     - tests/integration/db/database_test.go
     - tests/integration/worker/worker_test.go
+    - tests/smoke/local_stack_test.go
   forbidden_changes:
     - Do not edit runtime behavior, migrations, generated API artifacts, Web UI, prototype, Compose topology or release workflow behavior.
+    - Smoke-test edits are limited to deriving the expected Compose project label from the task-owned environment instead of the literal semlia-local value.
     - Do not add a new framework, service, SaaS dependency, telemetry exporter or package dependency.
     - Do not rewrite historical evidence patches when migrating the module namespace.
     - Do not claim public vulnerability reporting, branch protection, code scanning, secret scanning or private tag attestation is enabled.
@@ -125,6 +127,7 @@ tdd_plan:
     preparation:
       - Add repository assertions that doctor versions equal .tool-versions and the module path equals the controlled GitHub repository.
       - Add acceptance contracts for the quickstart, operations, troubleshooting, private-incubation wording and opt-in fresh-clone journey.
+      - Add a repository assertion that rejects a literal Compose project label in smoke resource lookup.
     command: >-
       go test ./tests/repository ./tests/acceptance/...
       -run 'TestDoctorVersionMatchesPinnedToolchain|TestModuleNamespaceMatchesControlledRepository|TestM0DocumentationContract' -count=1

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly REQUIRED_GO="1.26.3"
+readonly REQUIRED_GO="1.26.5"
 readonly REQUIRED_NODE="24.15.0"
 readonly REQUIRED_PNPM="11.1.3"
 readonly DEFAULT_PORTS="4173 8080 5433"
