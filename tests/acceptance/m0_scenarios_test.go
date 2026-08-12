@@ -13,6 +13,8 @@ func TestM0AcceptanceScenarioContract(t *testing.T) {
 			"cold bootstrap",
 			"warm bootstrap",
 			"development readiness",
+			"clone to first successful request",
+			"15*time.Minute",
 		},
 		"AC-M0-002 runtime and recovery": {
 			"100 sequential system-info requests",

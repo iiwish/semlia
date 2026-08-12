@@ -27,7 +27,7 @@ make smoke
 make dev-down
 ```
 
-`make bootstrap` is safe to repeat and uses `go.mod`, `go.sum`, and `pnpm-lock.yaml`. `make dev` waits up to four minutes for the full dependency chain. `make smoke` expects an already-running stack and verifies the embedded Web surface, API, trace IDs, migration completion, worker persistence, PostgreSQL failure and recovery, and shutdown persistence.
+`make bootstrap` is safe to repeat and uses `go.mod`, `go.sum`, and `pnpm-lock.yaml`. `make dev` waits up to four minutes for the full dependency chain. `make smoke` expects an already-running stack and verifies the embedded Web surface, API, trace IDs, migration completion, worker persistence, PostgreSQL failure and recovery, and shutdown persistence. The smoke journey is disruptive: it briefly stops PostgreSQL and recreates this checkout's containers and network while preserving the data volume. Never run it against a shared project identity.
 
 Inspect state and logs with:
 
@@ -85,6 +85,6 @@ make release
 make sbom
 ```
 
-`make check-source` verifies formatting, repository and API contracts, generated artifacts, lint, types, unit and integration tests, and builds. `make check-smoke` owns stack startup and cleanup. `make security-check` scans dependencies, secrets, and the release container. `make release` writes checksummed, cross-platform bundles under ignored `build/release/`.
+`make check-source` verifies formatting, repository and API contracts, generated artifacts, lint, types, unit and integration tests, and builds. `make check-smoke` owns stack startup and cleanup. `make security-check` scans dependencies, secrets, and the release container. `make release` writes a checksummed bundle for the selected target platform under ignored `build/release/`; the hosted workflow runs the supported platform matrix.
 
 Security reports, protected branches, hosted code scanning, and tagged provenance are public-release gates. Their presence must not be inferred from successful local commands during Private incubation.

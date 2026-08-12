@@ -42,6 +42,8 @@ func TestM0DocumentationContract(t *testing.T) {
 			"not production-ready",
 		},
 		"docs/quickstart.md": {
+			"git clone https://github.com/iiwish/semlia.git",
+			"cd semlia",
 			"make doctor",
 			"make bootstrap",
 			"make dev",
@@ -50,6 +52,7 @@ func TestM0DocumentationContract(t *testing.T) {
 			"http://127.0.0.1:8080/api/v1/system/info",
 			"make dev-down",
 			"mock data",
+			"disruptive",
 		},
 		"docs/operations/local-development.md": {
 			"migrate",
@@ -58,6 +61,7 @@ func TestM0DocumentationContract(t *testing.T) {
 			".semlia/dev.env",
 			"COMPOSE_PROJECT_NAME",
 			"down --volumes",
+			"disruptive",
 		},
 		"docs/operations/troubleshooting.md": {
 			"DEPENDENCY_UNAVAILABLE",
@@ -81,5 +85,8 @@ func TestM0DocumentationContract(t *testing.T) {
 	security := readRepositoryFile(t, "SECURITY.md")
 	if strings.Contains(security, "Use GitHub private vulnerability reporting for the Semlia repository.") {
 		t.Error("SECURITY.md must not direct reporters to a feature that is not enabled")
+	}
+	if strings.Contains(security, "Dependabot monitors") {
+		t.Error("SECURITY.md must distinguish version updates from disabled vulnerability alerts")
 	}
 }

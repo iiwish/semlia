@@ -127,7 +127,7 @@ SEMLIA_VERSION=0.1.0 make release
 make sbom
 ```
 
-Release output is written to the ignored `build/release/` directory. Each bundle records the complete source commit and target platform, includes migrations, notices, and its SBOM, and is accompanied by `SHA256SUMS` for verification and signing. Tagged GitHub release builds also create a provenance attestation.
+Release output is written to the ignored `build/release/` directory. Each bundle records the complete source commit and target platform, includes migrations, notices, and its SBOM, and is accompanied by `SHA256SUMS` for verification and signing. The GitHub workflow is configured to request provenance attestation for tags; a successful tagged attestation under the current Private repository plan is not yet claimed and remains a public-release gate.
 
 ## Contributing
 

@@ -61,22 +61,32 @@ func Test00LocalStackContract(t *testing.T) {
 	}
 }
 
-func TestComposeProjectNameValidation(t *testing.T) {
+func TestComposeProjectResolution(t *testing.T) {
 	for _, input := range []struct {
-		name string
-		want bool
+		name        string
+		environment string
+		file        string
+		want        string
+		wantError   bool
 	}{
-		{"semlia-local", true},
-		{"semlia_acceptance_123", true},
-		{"_semlia", true},
-		{"-semlia", false},
-		{"Semlia", false},
-		{"semlia;other", false},
-		{"", false},
+		{"environment precedence", "semlia-override", "COMPOSE_PROJECT_NAME=semlia-file\n", "semlia-override", false},
+		{"file fallback", "", "COMPOSE_PROJECT_NAME=semlia-file\n", "semlia-file", false},
+		{"single character", "a", "", "a", false},
+		{"leading underscore", "_semlia", "COMPOSE_PROJECT_NAME=valid-file\n", "", true},
+		{"leading hyphen", "-semlia", "", "", true},
+		{"uppercase", "Semlia", "", "", true},
+		{"shell separator", "semlia;other", "", "", true},
+		{"missing", "", "", "", true},
 	} {
-		if got := validComposeProjectName(input.name); got != input.want {
-			t.Errorf("validComposeProjectName(%q) = %t, want %t", input.name, got, input.want)
-		}
+		t.Run(input.name, func(t *testing.T) {
+			got, err := resolveComposeProject(input.environment, input.file)
+			if (err != nil) != input.wantError {
+				t.Fatalf("resolveComposeProject() error = %v, wantError %t", err, input.wantError)
+			}
+			if got != input.want {
+				t.Errorf("resolveComposeProject() = %q, want %q", got, input.want)
+			}
+		})
 	}
 }
 
@@ -229,26 +239,38 @@ func composeProject(t *testing.T) string {
 	t.Helper()
 	root := repositoryRoot(t)
 	content := readFile(t, filepath.Join(root, ".semlia", "dev.env"))
-	for _, line := range strings.Split(content, "\n") {
-		if project, found := strings.CutPrefix(line, "COMPOSE_PROJECT_NAME="); found && validComposeProjectName(project) {
-			return project
-		}
+	project, err := resolveComposeProject(os.Getenv("COMPOSE_PROJECT_NAME"), content)
+	if err != nil {
+		t.Fatal(err)
 	}
-	t.Fatal(".semlia/dev.env does not declare a safe COMPOSE_PROJECT_NAME")
-	return ""
+	return project
 }
 
-func validComposeProjectName(value string) bool {
-	if value == "" || (value[0] != '_' && (value[0] < 'a' || value[0] > 'z') && (value[0] < '0' || value[0] > '9')) {
-		return false
-	}
-	for index := 1; index < len(value); index++ {
-		character := value[index]
-		if character != '_' && character != '-' && (character < 'a' || character > 'z') && (character < '0' || character > '9') {
-			return false
+func resolveComposeProject(environmentValue, fileContent string) (string, error) {
+	project := environmentValue
+	if project == "" {
+		for _, line := range strings.Split(fileContent, "\n") {
+			if value, found := strings.CutPrefix(line, "COMPOSE_PROJECT_NAME="); found {
+				project = value
+				break
+			}
 		}
 	}
-	return true
+	if project == "" {
+		return "", fmt.Errorf("COMPOSE_PROJECT_NAME is missing")
+	}
+	for index, character := range []byte(project) {
+		if index == 0 {
+			if (character < 'a' || character > 'z') && (character < '0' || character > '9') {
+				return "", fmt.Errorf("COMPOSE_PROJECT_NAME %q must start with a lowercase letter or digit", project)
+			}
+			continue
+		}
+		if character != '_' && character != '-' && (character < 'a' || character > 'z') && (character < '0' || character > '9') {
+			return "", fmt.Errorf("COMPOSE_PROJECT_NAME %q contains an unsupported character", project)
+		}
+	}
+	return project, nil
 }
 
 func composeWithoutFailure(t *testing.T, args ...string) {

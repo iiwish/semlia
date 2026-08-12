@@ -13,7 +13,7 @@ Semlia requires the exact Go, Node.js, and pnpm versions in `.tool-versions`. Ac
 
 ## A Default Port Is Busy
 
-Stop the other listener or edit `SEMLIA_HTTP_PORT` and `SEMLIA_POSTGRES_PORT` in `.semlia/dev.env` after running `make dev-down`. Do not change the container-side ports in Compose. Run `make doctor` again to confirm that the defaults are no longer relevant to the chosen configuration.
+Stop the other listener or edit `SEMLIA_HTTP_PORT` and `SEMLIA_POSTGRES_PORT` in `.semlia/dev.env` after running `make dev-down`. Do not change the container-side ports in Compose. `make doctor` always checks the defaults, so it can continue to warn after an override. Verify the chosen ports directly, for example with `lsof -nP -iTCP:<port> -sTCP:LISTEN`, before restarting.
 
 ## Local Environment File Is Rejected
 

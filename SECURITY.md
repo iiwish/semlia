@@ -24,6 +24,8 @@ Private vulnerability reporting must be enabled before the repository accepts ex
 
 ## Response Targets
 
+These targets take effect once the private reporting channel is enabled:
+
 - Acknowledge a complete report within 3 business days.
 - Provide an initial severity and next-step assessment within 7 business days.
 - Coordinate disclosure timing with the reporter after a fix and supported upgrade path exist.
@@ -42,4 +44,4 @@ The security process covers Semlia-owned source code, release artifacts, contain
 
 `make security-check` runs the same dependency, secret, and release-container scans required for pull requests and the scheduled GitHub Actions security workflow. High or Critical findings fail the command and are retained in `build/security/` for diagnosis; findings are not silently ignored or accepted by configuration.
 
-Remote actions and the Trivy scanner image use immutable commit or image-digest references. Dependabot monitors Go modules, pnpm packages, Docker bases, and GitHub Actions. Release bundles include a CycloneDX SBOM and SHA-256 checksum subjects suitable for provenance attestation and signing.
+Remote actions and the Trivy scanner image use immutable commit or image-digest references. Dependabot version-update PRs are configured for Go modules, pnpm packages, Docker bases, and GitHub Actions; Dependabot vulnerability alerts remain a public-release gate. Release bundles include a CycloneDX SBOM and SHA-256 checksum subjects suitable for provenance attestation and signing.
