@@ -39,7 +39,7 @@ type freshCloneRun struct {
 
 func TestFreshCloneAcceptance(t *testing.T) {
 	if os.Getenv("SEMLIA_RUN_FRESH_CLONE") != "1" {
-		t.Skip("set SEMLIA_RUN_FRESH_CLONE=1 with SEMLIA_ACCEPTANCE_SOURCE and SEMLIA_ACCEPTANCE_REF")
+		t.Skip("set SEMLIA_ACCEPTANCE_SOURCE and SEMLIA_ACCEPTANCE_REF, then run scripts/acceptance/m0-fresh-clone.sh")
 	}
 	if err := validateFreshCloneInvocation(); err != nil {
 		t.Fatal(err)
@@ -164,8 +164,7 @@ func isolatedEnvironmentFrom(base []string, scratch, project string, httpPort, p
 		"GOPATH="+filepath.Join(scratch, "go-path"),
 		"GOMODCACHE="+filepath.Join(scratch, "go-mod"),
 		"PNPM_HOME="+filepath.Join(scratch, "pnpm-home"),
-		"PNPM_STORE_DIR="+filepath.Join(scratch, "pnpm-store"),
-		"npm_config_store_dir="+filepath.Join(scratch, "pnpm-store"),
+		"pnpm_config_store_dir="+filepath.Join(scratch, "pnpm-store"),
 		"XDG_CACHE_HOME="+filepath.Join(scratch, "cache"),
 		"COMPOSE_PROJECT_NAME="+project,
 		"SEMLIA_SECURITY_IMAGE=semlia:security",
@@ -178,7 +177,8 @@ func filterAcceptanceEnvironment(environment []string) []string {
 	blockedExact := map[string]struct{}{
 		"GO": {}, "GOARCH": {}, "GOCACHE": {}, "GOENV": {}, "GOFLAGS": {}, "GOMODCACHE": {}, "GOOS": {}, "GOPATH": {}, "GOWORK": {},
 		"MAKE": {}, "MAKEFLAGS": {}, "MFLAGS": {}, "PNPM": {},
-		"PNPM_HOME": {}, "PNPM_STORE_DIR": {}, "XDG_CACHE_HOME": {}, "npm_config_store_dir": {},
+		"PNPM_CONFIG_STORE_DIR": {}, "PNPM_HOME": {}, "PNPM_STORE_DIR": {}, "XDG_CACHE_HOME": {},
+		"npm_config_store_dir": {}, "pnpm_config_store_dir": {},
 	}
 	filtered := make([]string, 0, len(environment))
 	for _, entry := range environment {
@@ -262,7 +262,9 @@ func TestAcceptanceEnvironmentRejectsPoisonedControls(t *testing.T) {
 		"COMPOSE_PROFILES=wrong", "COMPOSE_PATH_SEPARATOR=;", "GIT_DIR=/outside/git", "GIT_CONFIG_COUNT=1",
 		"GOENV=/outside/go.env", "GOFLAGS=-run=^$", "GOWORK=/outside/go.work", "GOCACHE=/outside/go-cache",
 		"GOPATH=/outside/go-path", "GOMODCACHE=/outside/go-mod", "GO=false", "GOOS=plan9", "GOARCH=386",
-		"MAKE=true", "MAKEFLAGS=-i", "MFLAGS=-k", "PNPM=false", "TESTCONTAINERS_RYUK_DISABLED=true",
+		"MAKE=true", "MAKEFLAGS=-i", "MFLAGS=-k", "PNPM=false", "PNPM_CONFIG_STORE_DIR=/outside/pnpm",
+		"PNPM_STORE_DIR=/outside/legacy-pnpm", "npm_config_store_dir=/outside/npm", "pnpm_config_store_dir=/outside/lower-pnpm",
+		"TESTCONTAINERS_RYUK_DISABLED=true",
 	}
 	got := filterAcceptanceEnvironment(poisoned)
 	if strings.Join(got, "\n") != "PATH=/usr/bin\nHOME=/tmp/home" {
@@ -298,7 +300,7 @@ func TestAcceptanceToolCachesStayOutsideCheckout(t *testing.T) {
 	environment := isolatedEnvironment(scratch, "semlia-accept-a1b2c3d4-000000000001", 38080, 35432)
 	checkout := filepath.Join(scratch, "checkout") + string(os.PathSeparator)
 
-	for _, name := range []string{"GOCACHE", "GOPATH", "GOMODCACHE", "PNPM_HOME", "PNPM_STORE_DIR", "npm_config_store_dir", "XDG_CACHE_HOME"} {
+	for _, name := range []string{"GOCACHE", "GOPATH", "GOMODCACHE", "PNPM_HOME", "pnpm_config_store_dir", "XDG_CACHE_HOME"} {
 		value := environmentValue(environment, name)
 		if value == "" {
 			t.Errorf("%s is not isolated", name)
@@ -307,6 +309,34 @@ func TestAcceptanceToolCachesStayOutsideCheckout(t *testing.T) {
 		if strings.HasPrefix(value+string(os.PathSeparator), checkout) {
 			t.Errorf("%s=%q is inside the source checkout and can contaminate source/security gates", name, value)
 		}
+	}
+}
+
+func TestAcceptancePnpmStoreUsesTaskCache(t *testing.T) {
+	scratch := t.TempDir()
+	environment := isolatedEnvironmentFrom(
+		[]string{"PATH=" + os.Getenv("PATH"), "HOME=" + os.Getenv("HOME"), "pnpm_config_store_dir=/outside/pnpm"},
+		scratch,
+		"semlia-accept-a1b2c3d4-000000000001",
+		38080,
+		35432,
+	)
+	command := exec.Command("pnpm", "store", "path")
+	command.Stdin = strings.NewReader("y\n")
+	command.Env = environment
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("resolve isolated pnpm store: %v: %s", err, output)
+	}
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	got := filepath.Clean(strings.TrimSpace(lines[len(lines)-1]))
+	wantRoot := filepath.Clean(filepath.Join(scratch, "pnpm-store"))
+	if got != wantRoot && !strings.HasPrefix(got, wantRoot+string(os.PathSeparator)) {
+		t.Fatalf("pnpm store = %q, want task cache below %q", got, wantRoot)
+	}
+	checkout := filepath.Join(scratch, "checkout") + string(os.PathSeparator)
+	if strings.HasPrefix(got+string(os.PathSeparator), checkout) {
+		t.Fatalf("pnpm store %q contaminates the source checkout", got)
 	}
 }
 
