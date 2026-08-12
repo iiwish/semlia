@@ -49,7 +49,7 @@ func TestFreshCloneAcceptance(t *testing.T) {
 		t.Fatal(err)
 	}
 	releaseLock := acquireAcceptanceLock(t)
-	defer releaseLock()
+	t.Cleanup(releaseLock)
 
 	ctx, cancel := context.WithTimeout(context.Background(), freshCloneTimeout)
 	defer cancel()
