@@ -20,7 +20,16 @@ import (
 	"time"
 )
 
-const freshCloneTimeout = 45 * time.Minute
+const (
+	freshCloneTimeout             = 45 * time.Minute
+	coldBootstrapLimit            = 10 * time.Minute
+	warmBootstrapLimit            = 2 * time.Minute
+	developmentDiagnosticsTimeout = 30 * time.Second
+	dockerTeardownTimeout         = 2 * time.Minute
+	dockerInspectionTimeout       = 30 * time.Second
+	goModCacheCleanupTimeout      = 10 * time.Minute
+	checkoutCleanupTimeout        = 3 * time.Minute
+)
 
 var acceptanceHostLock = filepath.Join(os.TempDir(), "semlia-t008-acceptance.lock")
 
@@ -29,12 +38,15 @@ type freshCloneConfig struct {
 	ref    string
 }
 
+type cleanupCommandExecutor func(context.Context, string, []string, string, ...string) ([]byte, error)
+
 type freshCloneRun struct {
-	t           *testing.T
-	root        string
-	environment []string
-	project     string
-	baseURL     string
+	t               *testing.T
+	root            string
+	environment     []string
+	project         string
+	baseURL         string
+	cleanupExecutor cleanupCommandExecutor
 }
 
 func TestFreshCloneAcceptance(t *testing.T) {
@@ -72,8 +84,8 @@ func TestFreshCloneAcceptance(t *testing.T) {
 
 	run.timedCommand(ctx, "clean", "make", "clean")
 	run.timedCommand(ctx, "doctor", "make", "doctor")
-	run.timedCommand(ctx, "cold bootstrap", "make", "bootstrap")
-	run.timedCommand(ctx, "warm bootstrap", "make", "bootstrap")
+	run.timedCommandWithLimit(ctx, "cold bootstrap", coldBootstrapLimit, "make", "bootstrap")
+	run.timedCommandWithLimit(ctx, "warm bootstrap", warmBootstrapLimit, "make", "bootstrap")
 	if module := strings.TrimSpace(run.command(ctx, "go", "list", "-m")); module != "github.com/iiwish/semlia" {
 		t.Fatalf("module = %q, want github.com/iiwish/semlia", module)
 	}
@@ -418,6 +430,205 @@ func TestFreshCloneLauncherRejectsInvalidInputsBeforeShellOptionsCanSkipBody(t *
 	}
 }
 
+func TestAcceptanceBootstrapPerformanceThresholds(t *testing.T) {
+	tests := []struct {
+		name     string
+		label    string
+		duration time.Duration
+		limit    time.Duration
+		wantErr  bool
+	}{
+		{name: "cold below limit", label: "cold bootstrap", duration: 9*time.Minute + 59*time.Second, limit: coldBootstrapLimit},
+		{name: "cold at limit", label: "cold bootstrap", duration: 10 * time.Minute, limit: coldBootstrapLimit},
+		{name: "cold above limit", label: "cold bootstrap", duration: 10*time.Minute + time.Nanosecond, limit: coldBootstrapLimit, wantErr: true},
+		{name: "warm below limit", label: "warm bootstrap", duration: 90 * time.Second, limit: warmBootstrapLimit},
+		{name: "warm at limit", label: "warm bootstrap", duration: 2 * time.Minute, limit: warmBootstrapLimit},
+		{name: "warm above limit", label: "warm bootstrap", duration: 2*time.Minute + time.Nanosecond, limit: warmBootstrapLimit, wantErr: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := validateCommandDuration(test.label, test.duration, test.limit)
+			if (err != nil) != test.wantErr {
+				t.Fatalf("validateCommandDuration() error = %v, wantErr %t", err, test.wantErr)
+			}
+			if err != nil && (!strings.Contains(err.Error(), test.label) || !strings.Contains(err.Error(), test.limit.String())) {
+				t.Fatalf("threshold failure is not actionable: %v", err)
+			}
+		})
+	}
+}
+
+func TestDevelopmentReadinessFailureCapturesRedactedComposeDiagnostics(t *testing.T) {
+	root := t.TempDir()
+	bin := filepath.Join(root, "bin")
+	composeDir := filepath.Join(root, "scripts", "dev")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(composeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, ".semlia"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	makeStub := "#!/bin/sh\nprintf 'primary failure secret=%s\\n' \"$SEMLIA_SECRET_KEY\"\nexit 17\n"
+	if err := os.WriteFile(filepath.Join(bin, "make"), []byte(makeStub), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	composeStub := `#!/bin/sh
+case "$*" in
+  "ps --all")
+    printf 'migrate exited postgres unhealthy secret=%s\n' "$SEMLIA_SECRET_KEY"
+    ;;
+  "logs --no-color migrate postgres")
+    cat .semlia/dev.env
+    printf 'migrate failed postgres rejected secret=%s\n' "$SEMLIA_SECRET_KEY"
+    ;;
+  *)
+    printf 'unexpected compose arguments: %s\n' "$*" >&2
+    exit 64
+    ;;
+esac
+`
+	if err := os.WriteFile(filepath.Join(composeDir, "compose.sh"), []byte(composeStub), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".semlia", "dev.env"), []byte("SEMLIA_POSTGRES_PASSWORD=file-secret-value\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	path := bin + string(os.PathListSeparator) + os.Getenv("PATH")
+	t.Setenv("PATH", path)
+	run := &freshCloneRun{
+		t:           t,
+		root:        root,
+		environment: []string{"PATH=" + path, "SEMLIA_SECRET_KEY=task-secret-value"},
+		project:     "semlia-accept-a1b2c3d4-000000000001",
+	}
+	_, err := run.executeCommand(context.Background(), "make", "dev")
+	if err == nil {
+		t.Fatal("make dev failure was converted to success after diagnostics")
+	}
+	var exitError *exec.ExitError
+	if !errors.As(err, &exitError) || exitError.ExitCode() != 17 {
+		t.Fatalf("original make dev exit was not preserved: %T %v", err, err)
+	}
+	message := err.Error()
+	for _, fragment := range []string{
+		"make dev: exit status 17",
+		"primary failure",
+		"compose ps --all",
+		"migrate exited postgres unhealthy",
+		"compose logs --no-color migrate postgres",
+		"migrate failed postgres rejected",
+		"[REDACTED]",
+	} {
+		if !strings.Contains(message, fragment) {
+			t.Errorf("development failure missing %q:\n%s", fragment, message)
+		}
+	}
+	for _, secret := range []string{"task-secret-value", "file-secret-value"} {
+		if strings.Contains(message, secret) {
+			t.Errorf("development diagnostics leaked task secret %q:\n%s", secret, message)
+		}
+	}
+}
+
+func TestDevelopmentDiagnosticsFailurePreservesPrimaryExit(t *testing.T) {
+	root := t.TempDir()
+	bin := filepath.Join(root, "bin")
+	composeDir := filepath.Join(root, "scripts", "dev")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(composeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bin, "make"), []byte("#!/bin/sh\nexit 17\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(composeDir, "compose.sh"), []byte("#!/bin/sh\nprintf 'diagnostic failure\\n' >&2\nexit 23\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	path := bin + string(os.PathListSeparator) + os.Getenv("PATH")
+	t.Setenv("PATH", path)
+	run := &freshCloneRun{t: t, root: root, environment: []string{"PATH=" + path}}
+	_, err := run.executeCommand(context.Background(), "make", "dev")
+	if err == nil {
+		t.Fatal("make dev failure was converted to success when diagnostics failed")
+	}
+	var exitError *exec.ExitError
+	if !errors.As(err, &exitError) || exitError.ExitCode() != 17 {
+		t.Fatalf("diagnostic failure replaced primary exit: %T %v", err, err)
+	}
+	if got := strings.Count(err.Error(), "diagnostic command failed: exit status 23"); got != 2 {
+		t.Fatalf("diagnostic failures = %d, want 2:\n%s", got, err)
+	}
+}
+
+func TestCleanupUsesIndependentPhaseBudgets(t *testing.T) {
+	type call struct {
+		name      string
+		arguments string
+		remaining time.Duration
+	}
+	var calls []call
+	run := &freshCloneRun{
+		root:    t.TempDir(),
+		project: "semlia-accept-a1b2c3d4-000000000001",
+		cleanupExecutor: func(ctx context.Context, dir string, environment []string, name string, args ...string) ([]byte, error) {
+			deadline, ok := ctx.Deadline()
+			if !ok {
+				t.Fatalf("cleanup command %s %s has no deadline", name, strings.Join(args, " "))
+			}
+			if err := ctx.Err(); err != nil {
+				t.Fatalf("cleanup command %s %s inherited an exhausted context: %v", name, strings.Join(args, " "), err)
+			}
+			calls = append(calls, call{name: name, arguments: strings.Join(args, " "), remaining: time.Until(deadline)})
+			switch len(calls) {
+			case 1:
+				return nil, context.DeadlineExceeded
+			case 5:
+				return []byte("large cache cleanup failed"), errors.New("cache failure")
+			default:
+				return nil, nil
+			}
+		},
+	}
+	err := run.cleanup()
+	if err == nil {
+		t.Fatal("cleanup failures were not reported")
+	}
+	for _, fragment := range []string{"compose down", "context deadline exceeded", "clean Go module cache", "cache failure", "large cache cleanup failed"} {
+		if !strings.Contains(err.Error(), fragment) {
+			t.Errorf("cleanup failure missing %q: %v", fragment, err)
+		}
+	}
+	if len(calls) != 6 {
+		t.Fatalf("cleanup calls = %d, want 6: %#v", len(calls), calls)
+	}
+	if calls[4].name != "go" || calls[4].arguments != "clean -modcache" {
+		t.Fatalf("Go cache cleanup did not run after Docker timeout: %#v", calls)
+	}
+	if calls[5].name != "make" || calls[5].arguments != "clean" {
+		t.Fatalf("checkout cleanup did not run after Go cache failure: %#v", calls)
+	}
+	expected := []time.Duration{
+		dockerTeardownTimeout,
+		dockerInspectionTimeout,
+		dockerInspectionTimeout,
+		dockerInspectionTimeout,
+		goModCacheCleanupTimeout,
+		checkoutCleanupTimeout,
+	}
+	for index, current := range calls {
+		if current.remaining <= expected[index]-time.Second || current.remaining > expected[index] {
+			t.Errorf("cleanup call %d budget = %s, want fresh budget near %s", index+1, current.remaining, expected[index])
+		}
+	}
+}
+
 func (run *freshCloneRun) clone(ctx context.Context, config freshCloneConfig) {
 	run.t.Helper()
 	clone := exec.CommandContext(ctx, "git", "clone", "--no-checkout", "--", config.source, run.root)
@@ -667,23 +878,136 @@ func (run *freshCloneRun) waitForStatus(ctx context.Context, client *http.Client
 	return ""
 }
 
-func (run *freshCloneRun) timedCommand(ctx context.Context, label, name string, args ...string) {
+func (run *freshCloneRun) timedCommand(ctx context.Context, label, name string, args ...string) time.Duration {
 	run.t.Helper()
 	started := time.Now()
 	run.command(ctx, name, args...)
-	run.t.Logf("%s: %s", label, time.Since(started).Round(time.Millisecond))
+	duration := time.Since(started)
+	run.t.Logf("%s: %s", label, duration.Round(time.Millisecond))
+	return duration
+}
+
+func (run *freshCloneRun) timedCommandWithLimit(ctx context.Context, label string, limit time.Duration, name string, args ...string) {
+	run.t.Helper()
+	duration := run.timedCommand(ctx, label, name, args...)
+	if err := validateCommandDuration(label, duration, limit); err != nil {
+		run.t.Fatal(err)
+	}
+}
+
+func validateCommandDuration(label string, duration, limit time.Duration) error {
+	if duration > limit {
+		return fmt.Errorf("%s exceeded %s: %s", label, limit, duration)
+	}
+	return nil
 }
 
 func (run *freshCloneRun) command(ctx context.Context, name string, args ...string) string {
 	run.t.Helper()
+	output, err := run.executeCommand(ctx, name, args...)
+	if err != nil {
+		run.t.Fatal(err)
+	}
+	return output
+}
+
+func (run *freshCloneRun) executeCommand(ctx context.Context, name string, args ...string) (string, error) {
 	command := exec.CommandContext(ctx, name, args...)
 	command.Dir = run.root
 	command.Env = run.environment
 	output, err := command.CombinedOutput()
-	if err != nil {
-		run.t.Fatalf("%s %s: %v\n%s", name, strings.Join(args, " "), err, output)
+	if err == nil {
+		return string(output), nil
 	}
-	return string(output)
+
+	details := strings.TrimSpace(run.redactTaskSecrets(string(output)))
+	if details != "" {
+		details = "\n" + details
+	}
+	if name == "make" && len(args) == 1 && args[0] == "dev" {
+		details += "\n\nCompose diagnostics (redacted):\n" + run.developmentDiagnostics()
+	}
+	return "", fmt.Errorf("%s %s: %w%s", name, strings.Join(args, " "), err, details)
+}
+
+func (run *freshCloneRun) developmentDiagnostics() string {
+	type diagnostic struct {
+		label string
+		args  []string
+	}
+	diagnostics := []diagnostic{
+		{label: "compose ps --all", args: []string{"ps", "--all"}},
+		{label: "compose logs --no-color migrate postgres", args: []string{"logs", "--no-color", "migrate", "postgres"}},
+	}
+	var report strings.Builder
+	for index, diagnostic := range diagnostics {
+		if index > 0 {
+			report.WriteString("\n")
+		}
+		fmt.Fprintf(&report, "$ %s\n", diagnostic.label)
+		ctx, cancel := context.WithTimeout(context.Background(), developmentDiagnosticsTimeout)
+		output, err := executeSubprocess(
+			ctx,
+			run.root,
+			run.environment,
+			filepath.Join(run.root, "scripts", "dev", "compose.sh"),
+			diagnostic.args...,
+		)
+		cancel()
+		redacted := strings.TrimSpace(run.redactTaskSecrets(string(output)))
+		if redacted != "" {
+			report.WriteString(redacted)
+			report.WriteString("\n")
+		}
+		if err != nil {
+			fmt.Fprintf(&report, "diagnostic command failed: %v\n", err)
+		}
+	}
+	return strings.TrimSpace(report.String())
+}
+
+func (run *freshCloneRun) redactTaskSecrets(output string) string {
+	secrets := make(map[string]struct{})
+	collect := func(entries []string) {
+		for _, entry := range entries {
+			entry = strings.TrimSpace(entry)
+			if entry == "" || strings.HasPrefix(entry, "#") {
+				continue
+			}
+			key, value, found := strings.Cut(entry, "=")
+			if !found || !isSensitiveEnvironmentKey(key) {
+				continue
+			}
+			value = strings.Trim(strings.TrimSpace(value), `"'`)
+			if value != "" {
+				secrets[value] = struct{}{}
+			}
+		}
+	}
+	collect(run.environment)
+	if content, err := os.ReadFile(filepath.Join(run.root, ".semlia", "dev.env")); err == nil {
+		collect(strings.Split(string(content), "\n"))
+	}
+
+	values := make([]string, 0, len(secrets))
+	for secret := range secrets {
+		values = append(values, secret)
+	}
+	sort.Slice(values, func(i, j int) bool { return len(values[i]) > len(values[j]) })
+	for _, secret := range values {
+		output = strings.ReplaceAll(output, secret, "[REDACTED]")
+	}
+	return output
+}
+
+func isSensitiveEnvironmentKey(key string) bool {
+	upper := strings.ToUpper(strings.TrimSpace(key))
+	for _, marker := range []string{"PASSWORD", "SECRET", "TOKEN", "CREDENTIAL", "DATABASE_URL", "PRIVATE_KEY", "API_KEY"} {
+		if strings.Contains(upper, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func (run *freshCloneRun) compose(ctx context.Context, args ...string) string {
@@ -692,14 +1016,13 @@ func (run *freshCloneRun) compose(ctx context.Context, args ...string) string {
 }
 
 func (run *freshCloneRun) cleanup() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
 	var problems []error
-	command := exec.CommandContext(ctx, filepath.Join(run.root, "scripts", "dev", "compose.sh"), "down", "--volumes", "--remove-orphans")
-	command.Dir = run.root
-	command.Env = run.environment
-	if output, err := command.CombinedOutput(); err != nil {
-		problems = append(problems, fmt.Errorf("compose down: %w: %s", err, strings.TrimSpace(string(output))))
+	if output, err := run.cleanupCommand(
+		dockerTeardownTimeout,
+		filepath.Join(run.root, "scripts", "dev", "compose.sh"),
+		"down", "--volumes", "--remove-orphans",
+	); err != nil {
+		problems = append(problems, fmt.Errorf("compose down: %w: %s", err, strings.TrimSpace(run.redactTaskSecrets(string(output)))))
 	}
 
 	checks := []struct {
@@ -711,12 +1034,9 @@ func (run *freshCloneRun) cleanup() error {
 		{"volumes", []string{"volume", "ls", "--filter", "label=com.docker.compose.project=" + run.project, "--format", "{{.Name}}"}},
 	}
 	for _, check := range checks {
-		inspect := exec.CommandContext(ctx, "docker", check.args...)
-		inspect.Dir = run.root
-		inspect.Env = run.environment
-		output, err := inspect.CombinedOutput()
+		output, err := run.cleanupCommand(dockerInspectionTimeout, "docker", check.args...)
 		if err != nil {
-			problems = append(problems, fmt.Errorf("inspect task-owned %s: %w: %s", check.label, err, strings.TrimSpace(string(output))))
+			problems = append(problems, fmt.Errorf("inspect task-owned %s: %w: %s", check.label, err, strings.TrimSpace(run.redactTaskSecrets(string(output)))))
 			continue
 		}
 		if remaining := strings.TrimSpace(string(output)); remaining != "" {
@@ -724,21 +1044,36 @@ func (run *freshCloneRun) cleanup() error {
 		}
 	}
 	for _, cleanup := range []struct {
-		label string
-		name  string
-		args  []string
+		label   string
+		timeout time.Duration
+		name    string
+		args    []string
 	}{
-		{"Go module cache", "go", []string{"clean", "-modcache"}},
-		{"generated checkout state", "make", []string{"clean"}},
+		{"Go module cache", goModCacheCleanupTimeout, "go", []string{"clean", "-modcache"}},
+		{"generated checkout state", checkoutCleanupTimeout, "make", []string{"clean"}},
 	} {
-		command := exec.CommandContext(ctx, cleanup.name, cleanup.args...)
-		command.Dir = run.root
-		command.Env = run.environment
-		if output, err := command.CombinedOutput(); err != nil {
-			problems = append(problems, fmt.Errorf("clean %s: %w: %s", cleanup.label, err, strings.TrimSpace(string(output))))
+		if output, err := run.cleanupCommand(cleanup.timeout, cleanup.name, cleanup.args...); err != nil {
+			problems = append(problems, fmt.Errorf("clean %s: %w: %s", cleanup.label, err, strings.TrimSpace(run.redactTaskSecrets(string(output)))))
 		}
 	}
 	return errors.Join(problems...)
+}
+
+func (run *freshCloneRun) cleanupCommand(timeout time.Duration, name string, args ...string) ([]byte, error) {
+	executor := run.cleanupExecutor
+	if executor == nil {
+		executor = executeSubprocess
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return executor(ctx, run.root, run.environment, name, args...)
+}
+
+func executeSubprocess(ctx context.Context, dir string, environment []string, name string, args ...string) ([]byte, error) {
+	command := exec.CommandContext(ctx, name, args...)
+	command.Dir = dir
+	command.Env = environment
+	return command.CombinedOutput()
 }
 
 func filteredEnvironment(environment []string, remove ...string) []string {
