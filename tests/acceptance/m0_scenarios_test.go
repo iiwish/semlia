@@ -11,7 +11,11 @@ func TestM0AcceptanceScenarioContract(t *testing.T) {
 		"AC-M0-001 fresh checkout": {
 			"git\", \"clone",
 			"cold bootstrap",
+			"coldBootstrapLimit            = 10 * time.Minute",
+			"\"cold bootstrap\", coldBootstrapLimit",
 			"warm bootstrap",
+			"warmBootstrapLimit            = 2 * time.Minute",
+			"\"warm bootstrap\", warmBootstrapLimit",
 			"development readiness",
 			"clone to first successful request",
 			"15*time.Minute",
