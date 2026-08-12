@@ -2,6 +2,9 @@ package acceptance
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -17,6 +20,8 @@ import (
 )
 
 const freshCloneTimeout = 45 * time.Minute
+
+var acceptanceHostLock = filepath.Join(os.TempDir(), "semlia-t008-acceptance.lock")
 
 type freshCloneConfig struct {
 	source string
@@ -43,13 +48,23 @@ func TestFreshCloneAcceptance(t *testing.T) {
 	if err := config.validate(); err != nil {
 		t.Fatal(err)
 	}
+	releaseLock := acquireAcceptanceLock(t)
+	defer releaseLock()
 
 	ctx, cancel := context.WithTimeout(context.Background(), freshCloneTimeout)
 	defer cancel()
+	onboardingStarted := time.Now()
 	run := newFreshCloneRun(t, config)
 	run.clone(ctx, config)
 	run.configure(ctx)
-	t.Cleanup(func() { run.cleanup() })
+	cleaned := false
+	t.Cleanup(func() {
+		if !cleaned {
+			if err := run.cleanup(); err != nil {
+				t.Errorf("clean task-owned resources after failure: %v", err)
+			}
+		}
+	})
 
 	run.timedCommand(ctx, "clean", "make", "clean")
 	run.timedCommand(ctx, "doctor", "make", "doctor")
@@ -60,7 +75,7 @@ func TestFreshCloneAcceptance(t *testing.T) {
 	}
 
 	run.timedCommand(ctx, "development readiness", "make", "dev")
-	run.measureHTTP(ctx)
+	run.measureHTTP(ctx, onboardingStarted)
 	run.verifyDependencyFailureAndRecovery(ctx)
 	run.timedCommand(ctx, "smoke", "make", "smoke")
 	run.verifyWorkerJourney(ctx)
@@ -73,6 +88,11 @@ func TestFreshCloneAcceptance(t *testing.T) {
 
 	if status := strings.TrimSpace(run.command(ctx, "git", "status", "--short")); status != "" {
 		t.Fatalf("fresh checkout was mutated:\n%s", status)
+	}
+	cleanupErr := run.cleanup()
+	cleaned = true
+	if cleanupErr != nil {
+		t.Fatalf("clean task-owned resources: %v", cleanupErr)
 	}
 }
 
@@ -95,20 +115,40 @@ func (config freshCloneConfig) validate() error {
 
 func newFreshCloneRun(t *testing.T, config freshCloneConfig) *freshCloneRun {
 	t.Helper()
-	scratch := t.TempDir()
-	project := "semlia-acceptance-" + config.ref[:12]
-	httpPort := reserveLocalPort(t)
-	postgresPort := reserveLocalPort(t)
+	return newFreshCloneRunWithID(t, config, randomRunID(t))
+}
 
-	environment := filteredEnvironment(os.Environ(),
-		"COMPOSE_PROJECT_NAME",
-		"SEMLIA_ACCEPTANCE_REF",
-		"SEMLIA_ACCEPTANCE_SOURCE",
-		"SEMLIA_RUN_FRESH_CLONE",
-		"SEMLIA_HTTP_PORT",
-		"SEMLIA_POSTGRES_PORT",
-	)
-	environment = append(environment,
+func newFreshCloneRunWithID(t *testing.T, config freshCloneConfig, runID string) *freshCloneRun {
+	t.Helper()
+	scratch := t.TempDir()
+	httpPort, postgresPort := reserveLocalPorts(t)
+	project := acceptanceProjectName(config.ref, runID)
+	environment := isolatedEnvironment(scratch, project, httpPort, postgresPort)
+	return &freshCloneRun{
+		t:           t,
+		root:        filepath.Join(scratch, "checkout"),
+		environment: environment,
+		project:     project,
+		baseURL:     fmt.Sprintf("http://127.0.0.1:%d", httpPort),
+	}
+}
+
+func acceptanceProjectName(ref, runID string) string {
+	return "semlia-accept-" + ref[:8] + "-" + strings.ToLower(runID)
+}
+
+func randomRunID(t *testing.T) string {
+	t.Helper()
+	value := make([]byte, 6)
+	if _, err := rand.Read(value); err != nil {
+		t.Fatalf("generate acceptance run identity: %v", err)
+	}
+	return hex.EncodeToString(value)
+}
+
+func isolatedEnvironment(scratch, project string, httpPort, postgresPort int) []string {
+	environment := filterAcceptanceEnvironment(os.Environ())
+	return append(environment,
 		"GOCACHE="+filepath.Join(scratch, "go-build"),
 		"GOPATH="+filepath.Join(scratch, "go-path"),
 		"GOMODCACHE="+filepath.Join(scratch, "go-mod"),
@@ -117,16 +157,77 @@ func newFreshCloneRun(t *testing.T, config freshCloneConfig) *freshCloneRun {
 		"npm_config_store_dir="+filepath.Join(scratch, "pnpm-store"),
 		"XDG_CACHE_HOME="+filepath.Join(scratch, "cache"),
 		"COMPOSE_PROJECT_NAME="+project,
+		"SEMLIA_SECURITY_IMAGE=semlia:security",
+		"SEMLIA_RELEASE_DIR="+filepath.Join(scratch, "checkout", "build", "release"),
 		fmt.Sprintf("SEMLIA_HTTP_PORT=%d", httpPort),
 		fmt.Sprintf("SEMLIA_POSTGRES_PORT=%d", postgresPort),
 	)
+}
 
-	return &freshCloneRun{
-		t:           t,
-		root:        filepath.Join(scratch, "checkout"),
-		environment: environment,
-		project:     project,
-		baseURL:     fmt.Sprintf("http://127.0.0.1:%d", httpPort),
+func filterAcceptanceEnvironment(environment []string) []string {
+	blockedGit := map[string]struct{}{
+		"GIT_DIR": {}, "GIT_WORK_TREE": {}, "GIT_COMMON_DIR": {}, "GIT_INDEX_FILE": {}, "GIT_OBJECT_DIRECTORY": {},
+	}
+	filtered := make([]string, 0, len(environment))
+	for _, entry := range environment {
+		key, _, _ := strings.Cut(entry, "=")
+		_, gitBlocked := blockedGit[key]
+		if strings.HasPrefix(key, "SEMLIA_") || strings.HasPrefix(key, "COMPOSE_") || gitBlocked {
+			continue
+		}
+		filtered = append(filtered, entry)
+	}
+	return filtered
+}
+
+func acquireAcceptanceLock(t *testing.T) func() {
+	t.Helper()
+	file, err := os.OpenFile(acceptanceHostLock, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		t.Fatalf("another T008 acceptance run is active on this Docker host (%s): %v", acceptanceHostLock, err)
+	}
+	if _, err := fmt.Fprintf(file, "pid=%d\n", os.Getpid()); err != nil {
+		_ = file.Close()
+		_ = os.Remove(acceptanceHostLock)
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		_ = os.Remove(acceptanceHostLock)
+		t.Fatal(err)
+	}
+	return func() {
+		if err := os.Remove(acceptanceHostLock); err != nil && !os.IsNotExist(err) {
+			t.Errorf("remove T008 host lock: %v", err)
+		}
+	}
+}
+
+func TestAcceptanceProjectNameUsesPerRunIdentity(t *testing.T) {
+	config := freshCloneConfig{ref: strings.Repeat("a", 40)}
+	first := newFreshCloneRunWithID(t, config, "000000000001")
+	second := newFreshCloneRunWithID(t, config, "000000000002")
+	if first.project == second.project {
+		t.Fatalf("parallel runs share Compose project %q", first.project)
+	}
+	for _, project := range []string{first.project, second.project} {
+		if !regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`).MatchString(project) {
+			t.Errorf("invalid Compose project %q", project)
+		}
+	}
+	if environmentValue(first.environment, "SEMLIA_HTTP_PORT") == environmentValue(first.environment, "SEMLIA_POSTGRES_PORT") {
+		t.Error("HTTP and PostgreSQL received the same host port")
+	}
+}
+
+func TestAcceptanceEnvironmentRejectsPoisonedControls(t *testing.T) {
+	poisoned := []string{
+		"PATH=/usr/bin", "HOME=/tmp/home", "SEMLIA_RUN_SMOKE=1", "SEMLIA_RELEASE_DIR=/outside",
+		"SEMLIA_SECURITY_IMAGE=wrong", "SEMLIA_POSTGRES_PASSWORD=wrong", "COMPOSE_FILE=/outside/compose.yaml",
+		"COMPOSE_PROFILES=wrong", "COMPOSE_PATH_SEPARATOR=;", "GIT_DIR=/outside/git", "GIT_WORK_TREE=/outside/tree",
+	}
+	got := filterAcceptanceEnvironment(poisoned)
+	if strings.Join(got, "\n") != "PATH=/usr/bin\nHOME=/tmp/home" {
+		t.Fatalf("filtered environment retained control variables: %v", got)
 	}
 }
 
@@ -137,7 +238,9 @@ func (run *freshCloneRun) clone(ctx context.Context, config freshCloneConfig) {
 	if output, err := clone.CombinedOutput(); err != nil {
 		run.t.Fatalf("clone isolated checkout: %v\n%s", err, output)
 	}
-	if reachable := exec.CommandContext(ctx, "git", "-C", config.source, "merge-base", "--is-ancestor", config.ref, "HEAD").Run(); reachable != nil {
+	ancestor := exec.CommandContext(ctx, "git", "-C", config.source, "merge-base", "--is-ancestor", config.ref, "HEAD")
+	ancestor.Env = run.environment
+	if reachable := ancestor.Run(); reachable != nil {
 		run.t.Fatalf("SEMLIA_ACCEPTANCE_REF must be reachable from source HEAD: %v", reachable)
 	}
 	run.command(ctx, "git", "checkout", "--detach", config.ref)
@@ -176,12 +279,17 @@ func (run *freshCloneRun) configure(ctx context.Context) {
 	}
 }
 
-func (run *freshCloneRun) measureHTTP(ctx context.Context) {
+func (run *freshCloneRun) measureHTTP(ctx context.Context, onboardingStarted time.Time) {
 	run.t.Helper()
 	client := &http.Client{Timeout: 5 * time.Second}
 	started := time.Now()
 	run.request(ctx, client, "/api/v1/system/info", http.StatusOK)
 	run.t.Logf("first successful request: %s", time.Since(started).Round(time.Millisecond))
+	onboardingDuration := time.Since(onboardingStarted)
+	run.t.Logf("clone to first successful request: %s", onboardingDuration.Round(time.Millisecond))
+	if onboardingDuration > 15*time.Minute {
+		run.t.Fatalf("clone to first successful request exceeded 15 minutes: %s", onboardingDuration)
+	}
 
 	for range 5 {
 		run.request(ctx, client, "/api/v1/system/info", http.StatusOK)
@@ -217,35 +325,21 @@ func (run *freshCloneRun) verifyDependencyFailureAndRecovery(ctx context.Context
 
 func (run *freshCloneRun) verifyMigrationJourney(ctx context.Context) {
 	run.t.Helper()
-	baseEnvironment := run.environment
-	run.environment = append(filteredEnvironment(baseEnvironment, "SEMLIA_DATABASE_URL"),
-		"SEMLIA_DATABASE_URL="+run.databaseURL(),
+	run.timedCommand(
+		ctx,
+		"migration upgrade, migration downgrade, migration re-upgrade (isolated PostgreSQL)",
+		"go", "test", "./tests/integration/db/...", "-run", "^TestMigrationLifecycleAndTenantSchema$", "-count=1",
 	)
-	defer func() { run.environment = baseEnvironment }()
-
-	run.timedCommand(ctx, "migration upgrade", "make", "db-migrate-up")
-	before := strings.TrimSpace(run.command(ctx, "make", "db-migrate-version"))
-	run.timedCommand(ctx, "migration downgrade", "make", "db-migrate-down")
-	afterDown := strings.TrimSpace(run.command(ctx, "make", "db-migrate-version"))
-	if before == afterDown {
-		run.t.Fatalf("migration version did not change after downgrade: %q", before)
-	}
-	run.timedCommand(ctx, "migration re-upgrade", "make", "db-migrate-up")
-	afterUp := strings.TrimSpace(run.command(ctx, "make", "db-migrate-version"))
-	if afterUp != before {
-		run.t.Fatalf("migration version after re-upgrade = %q, want %q", afterUp, before)
-	}
 }
 
 func (run *freshCloneRun) verifyWorkerJourney(ctx context.Context) {
 	run.t.Helper()
-	baseEnvironment := run.environment
-	run.environment = append(filteredEnvironment(baseEnvironment, "SEMLIA_RUN_POSTGRES_INTEGRATION", "SEMLIA_TEST_DATABASE_URL"),
-		"SEMLIA_RUN_POSTGRES_INTEGRATION=1",
-		"SEMLIA_TEST_DATABASE_URL="+run.databaseURL(),
+	run.timedCommand(
+		ctx,
+		"worker lease retry dead-letter (isolated PostgreSQL)",
+		"go", "test", "./tests/integration/worker/...",
+		"-run", "^(TestConcurrentClaimCreatesOneLease|TestWorkerRetriesThenDeadLettersWithStableErrorCode)$", "-count=1",
 	)
-	defer func() { run.environment = baseEnvironment }()
-	run.timedCommand(ctx, "worker lease retry dead-letter", "go", "test", "./tests/integration/worker/...", "-count=1")
 }
 
 func (run *freshCloneRun) verifyContractDrift(ctx context.Context) {
@@ -343,26 +437,6 @@ func (run *freshCloneRun) verifyReleaseBundle(ctx context.Context) {
 	run.t.Log("release output contains archive, standalone CycloneDX SBOM and checksum subjects")
 }
 
-func (run *freshCloneRun) databaseURL() string {
-	run.t.Helper()
-	port := environmentValue(run.environment, "SEMLIA_POSTGRES_PORT")
-	content, err := os.ReadFile(filepath.Join(run.root, ".semlia", "dev.env"))
-	if err != nil {
-		run.t.Fatal(err)
-	}
-	password := ""
-	for _, line := range strings.Split(string(content), "\n") {
-		if value, found := strings.CutPrefix(line, "SEMLIA_POSTGRES_PASSWORD="); found {
-			password = value
-			break
-		}
-	}
-	if password == "" {
-		run.t.Fatal("PostgreSQL password was empty")
-	}
-	return fmt.Sprintf("postgresql://semlia:%s@127.0.0.1:%s/semlia?sslmode=disable", password, port)
-}
-
 func (run *freshCloneRun) request(ctx context.Context, client *http.Client, path string, wantStatus int) string {
 	run.t.Helper()
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, run.baseURL+path, nil)
@@ -430,15 +504,39 @@ func (run *freshCloneRun) compose(ctx context.Context, args ...string) string {
 	return run.command(ctx, filepath.Join(run.root, "scripts", "dev", "compose.sh"), args...)
 }
 
-func (run *freshCloneRun) cleanup() {
+func (run *freshCloneRun) cleanup() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
+	var problems []error
 	command := exec.CommandContext(ctx, filepath.Join(run.root, "scripts", "dev", "compose.sh"), "down", "--volumes", "--remove-orphans")
 	command.Dir = run.root
 	command.Env = run.environment
 	if output, err := command.CombinedOutput(); err != nil {
-		run.t.Logf("task-owned cleanup failed: %v\n%s", err, output)
+		problems = append(problems, fmt.Errorf("compose down: %w: %s", err, strings.TrimSpace(string(output))))
 	}
+
+	checks := []struct {
+		label string
+		args  []string
+	}{
+		{"containers", []string{"ps", "--all", "--filter", "label=com.docker.compose.project=" + run.project, "--format", "{{.ID}}"}},
+		{"networks", []string{"network", "ls", "--filter", "label=com.docker.compose.project=" + run.project, "--format", "{{.ID}}"}},
+		{"volumes", []string{"volume", "ls", "--filter", "label=com.docker.compose.project=" + run.project, "--format", "{{.Name}}"}},
+	}
+	for _, check := range checks {
+		inspect := exec.CommandContext(ctx, "docker", check.args...)
+		inspect.Dir = run.root
+		inspect.Env = run.environment
+		output, err := inspect.CombinedOutput()
+		if err != nil {
+			problems = append(problems, fmt.Errorf("inspect task-owned %s: %w: %s", check.label, err, strings.TrimSpace(string(output))))
+			continue
+		}
+		if remaining := strings.TrimSpace(string(output)); remaining != "" {
+			problems = append(problems, fmt.Errorf("task-owned %s remain: %s", check.label, remaining))
+		}
+	}
+	return errors.Join(problems...)
 }
 
 func filteredEnvironment(environment []string, remove ...string) []string {
@@ -466,12 +564,17 @@ func environmentValue(environment []string, name string) string {
 	return ""
 }
 
-func reserveLocalPort(t *testing.T) int {
+func reserveLocalPorts(t *testing.T) (int, int) {
 	t.Helper()
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	first, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer listener.Close()
-	return listener.Addr().(*net.TCPAddr).Port
+	defer first.Close()
+	second, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer second.Close()
+	return first.Addr().(*net.TCPAddr).Port, second.Addr().(*net.TCPAddr).Port
 }

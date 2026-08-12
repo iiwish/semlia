@@ -11,13 +11,20 @@ Install the exact tool versions from `.tool-versions`:
 - pnpm 11.1.3
 - Git, GNU Make, and a running Docker engine with Compose
 
+The repository is private during incubation, so an authenticated GitHub account with repository access is required. Start from a clean clone:
+
+```bash
+git clone https://github.com/iiwish/semlia.git
+cd semlia
+```
+
 Check the host from the repository root:
 
 ```bash
 make doctor
 ```
 
-Warnings about occupied default ports must be resolved before starting the stack. The default HTTP and PostgreSQL host ports are `8080` and `5433`.
+The supported quickstart uses the default HTTP and PostgreSQL host ports `8080` and `5433`; resolve an occupied default before starting. Port overrides are an advanced local-development option documented in the [runbook](operations/local-development.md), not part of the commands below.
 
 ## Start Semlia
 
@@ -42,6 +49,8 @@ make smoke
 curl --fail --show-error http://127.0.0.1:8080/health/ready
 curl --fail --show-error http://127.0.0.1:8080/api/v1/system/info
 ```
+
+`make smoke` is disruptive: it briefly stops PostgreSQL and recreates this checkout's containers and network while preserving its data volume. Do not run it against a shared development stack or while another command is using the same `COMPOSE_PROJECT_NAME`.
 
 Open `http://127.0.0.1:8080` to inspect the embedded status application. A healthy readiness response includes a 32-character `traceId`. The system-info response reports the build and runtime identity.
 

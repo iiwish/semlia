@@ -196,7 +196,7 @@ func TestSmokeJourneyUsesActiveComposeProject(t *testing.T) {
 	if strings.Contains(smoke, "com.docker.compose.project=semlia-local") {
 		t.Error("smoke cleanup must not target the default Compose project literally")
 	}
-	for _, fragment := range []string{"composeProject(t)", "COMPOSE_PROJECT_NAME=", `"label=com.docker.compose.project="+project`} {
+	for _, fragment := range []string{"composeProject(t)", `os.Getenv("COMPOSE_PROJECT_NAME")`, "COMPOSE_PROJECT_NAME=", `"label=com.docker.compose.project="+project`} {
 		if !strings.Contains(smoke, fragment) {
 			t.Errorf("smoke journey missing active-project contract %q", fragment)
 		}

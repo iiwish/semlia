@@ -62,7 +62,7 @@ work_unit:
 codebase_context:
   repository_state:
     branch: codex/core-product-loop
-    baseline_commit: 1e48594
+    baseline_commit: 9d3608e
     remote: https://github.com/iiwish/semlia
     visibility: Private incubation
     implementation_state: >-
@@ -78,7 +78,7 @@ codebase_context:
     - T008 does not implement Cube, semantic assets, Agent behavior, authentication, MCP or any M1 product feature.
     - The module migration is a literal replacement to the controlled repository path; package names, APIs and runtime behavior remain unchanged.
     - Fresh-clone automation is opt-in so make check and ordinary go test do not recursively clone or invoke themselves.
-    - Isolation uses task-owned temporary caches and a unique Compose project; cleanup never prunes global Docker state.
+    - Isolation uses task-owned temporary caches and a unique Compose project; cleanup never prunes global Docker state. The complete host acceptance is serialized because existing release/security image tags are shared.
     - Documentation describes the current private-incubation state and does not present Semlia as production-ready or as an active public community.
 
 execution_constraints:
@@ -119,6 +119,12 @@ execution_constraints:
     - Governance status, packet metadata and final evidence are maintained by the delivery orchestrator.
     - Preserve all accepted T001 through T007 behavior and user work.
     - An implementation worker must execute only this packet and must not delegate further.
+  orchestrator_only_files:
+    - docs/specs/m0-foundation/tasks.md
+    - docs/specs/m0-foundation/analysis.md
+    - docs/specs/m0-foundation/packets/T008.yaml
+    - docs/specs/m0-foundation/release-report.md
+    - docs/evidence/T008/**
 
 tdd_plan:
   required: true
@@ -133,6 +139,11 @@ tdd_plan:
       -run 'TestDoctorVersionMatchesPinnedToolchain|TestModuleNamespaceMatchesControlledRepository|TestM0DocumentationContract' -count=1
     expected_failure: >-
       The contract reports Go 1.26.3 in doctor, github.com/semlia/semlia in go.mod and missing quickstart/operations documents.
+    corrective_command: >-
+      go test ./tests/repository
+      -run 'TestSmokeJourneyUsesActiveComposeProject' -count=1
+    corrective_expected_failure: >-
+      The contract rejects the literal semlia-local resource label before smoke lookup is changed to the active Compose project.
   green:
     command: go test ./tests/repository ./tests/acceptance/... -count=1
     expected_signal: Toolchain, module identity, documentation and non-expensive acceptance contracts pass.
