@@ -536,6 +536,21 @@ func (run *freshCloneRun) cleanup() error {
 			problems = append(problems, fmt.Errorf("task-owned %s remain: %s", check.label, remaining))
 		}
 	}
+	for _, cleanup := range []struct {
+		label string
+		name  string
+		args  []string
+	}{
+		{"Go module cache", "go", []string{"clean", "-modcache"}},
+		{"generated checkout state", "make", []string{"clean"}},
+	} {
+		command := exec.CommandContext(ctx, cleanup.name, cleanup.args...)
+		command.Dir = run.root
+		command.Env = run.environment
+		if output, err := command.CombinedOutput(); err != nil {
+			problems = append(problems, fmt.Errorf("clean %s: %w: %s", cleanup.label, err, strings.TrimSpace(string(output))))
+		}
+	}
 	return errors.Join(problems...)
 }
 
