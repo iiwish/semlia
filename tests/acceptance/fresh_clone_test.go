@@ -714,12 +714,12 @@ func TestCleanupUsesIndependentPhaseBudgets(t *testing.T) {
 
 func (run *freshCloneRun) clone(ctx context.Context, config freshCloneConfig) {
 	run.t.Helper()
-	clone := exec.CommandContext(ctx, "git", "clone", "--no-checkout", "--", config.source, run.root)
+	clone := acceptanceCommandContext(ctx, "git", "clone", "--no-checkout", "--", config.source, run.root)
 	clone.Env = run.environment
 	if output, err := clone.CombinedOutput(); err != nil {
 		run.t.Fatalf("clone isolated checkout: %v\n%s", err, output)
 	}
-	ancestor := exec.CommandContext(ctx, "git", "-C", config.source, "merge-base", "--is-ancestor", config.ref, "HEAD")
+	ancestor := acceptanceCommandContext(ctx, "git", "-C", config.source, "merge-base", "--is-ancestor", config.ref, "HEAD")
 	ancestor.Env = run.environment
 	if reachable := ancestor.Run(); reachable != nil {
 		run.t.Fatalf("SEMLIA_ACCEPTANCE_REF must be reachable from source HEAD: %v", reachable)
@@ -840,7 +840,7 @@ func (run *freshCloneRun) verifyContractDrift(ctx context.Context) {
 		}
 	}()
 
-	command := exec.CommandContext(ctx, "make", "contracts-check")
+	command := acceptanceCommandContext(ctx, "make", "contracts-check")
 	command.Dir = run.root
 	command.Env = run.environment
 	output, err := command.CombinedOutput()
@@ -876,7 +876,7 @@ func (run *freshCloneRun) verifyProductionFailClosed(ctx context.Context) {
 	)
 	defer func() { run.environment = baseEnvironment }()
 
-	command := exec.CommandContext(ctx, "go", "run", "./cmd/semlia", "server")
+	command := acceptanceCommandContext(ctx, "go", "run", "./cmd/semlia", "server")
 	command.Dir = run.root
 	command.Env = run.environment
 	output, err := command.CombinedOutput()
@@ -1013,7 +1013,7 @@ func (run *freshCloneRun) command(ctx context.Context, name string, args ...stri
 }
 
 func (run *freshCloneRun) executeCommand(ctx context.Context, name string, args ...string) (string, error) {
-	command := exec.CommandContext(ctx, name, args...)
+	command := acceptanceCommandContext(ctx, name, args...)
 	command.Dir = run.root
 	command.Env = run.environment
 	output, err := command.CombinedOutput()
@@ -1171,7 +1171,7 @@ func (run *freshCloneRun) cleanupCommand(timeout time.Duration, name string, arg
 }
 
 func executeSubprocess(ctx context.Context, dir string, environment []string, name string, args ...string) ([]byte, error) {
-	command := exec.CommandContext(ctx, name, args...)
+	command := acceptanceCommandContext(ctx, name, args...)
 	command.Dir = dir
 	command.Env = environment
 	return command.CombinedOutput()
