@@ -4,14 +4,14 @@
 
 | 字段 | 值 |
 | --- | --- |
-| 文档版本 | 0.3.0 |
+| 文档版本 | 0.4.0 |
 | 状态 | Confirmed |
-| 最后更新 | 2026-08-10 |
+| 最后更新 | 2026-08-12 |
 | 产品名称 | Semlia |
 | 产品类别 | AI-first 数据语义中台 |
 | 主要语言 | 英文产品标识，中文与英文文档 |
 | 维护者 | 创始人和 Semlia Core Maintainers |
-| 审核状态 | 2026-08-10 经创始人确认 |
+| 审核状态 | 2026-08-12 经创始人确认数据飞轮、私有孵化与完整核心产品闭环方向 |
 | 更新触发 | 产品边界、核心领域模型、发布治理、数据架构、安全承诺或开源策略发生实质变化 |
 
 本文档是 Semlia 的项目级单一事实来源。它定义产品是什么、为谁服务、哪些能力属于核心、系统如何构建，以及达到世界一流开源产品所必须满足的质量标准。
@@ -45,6 +45,19 @@ Semlia 成为语义资产领域的开放控制平面和事实协议：
 Semlia 以 Cube Core 提供可执行语义，以 LLM Wiki 组织企业含义，并以语义资产生命周期连接二者。对话和 Agent 是交互方式，资产图谱、权威页面、治理工作流、不可变发布与消费契约才是产品核心。
 
 LLM Wiki 是由人类与 AI 协作维护的活语义知识系统，不是由模型自由改写的文档集合。每个资产都有一个权威页面，集中呈现定义、计算口径、所有者、血缘、证据、测试、变更历史、使用情况、风险和适合 AI 使用的上下文。AI 负责发现缺口、建立候选关系和生成结构化提案，发布事实仍由验证、策略和审核决定。
+
+### 1.5 可信学习飞轮
+
+Semlia 不把“收集更多数据”本身当作产品优势。它把每次发现、解析、搜索、验证、审核、发布、消费、失败、回滚和事故转换为可归因、可解释、可重算的语义质量信号：
+
+```text
+发现与证据 -> 语义资产 -> 提案与验证 -> 不可变发布
+      ^                                      |
+      |                                      v
+新的治理提案 <- 质量观测与待办 <- 消费、反馈与事故
+```
+
+飞轮的长期资产是可追溯的人类治理决策、消费影响和纠错证据，不是绑定某个模型供应商的黑盒分数。模型可以更换，事件、证据、策略版本和人类决策必须可以独立复核。
 
 ## 2. 战略定位
 
@@ -143,6 +156,10 @@ Semlia 默认只读取元数据、语义定义和受控样本，不复制客户�
 
 视觉质量重要，但可信度来自确定性、性能、可观测性、兼容性、文档、测试、故障恢复和长期维护承诺。
 
+### P-010 飞轮信号必须可归因、可解释并默认保护隐私
+
+质量信号必须关联到明确的 workspace 和发生时间，并在相关能力存在时关联 asset、revision、release、consumer；zero-result 等无法归因的结果保留稳定 reason code，不伪造关联。信号保留产生质量结论所需的规则版本和证据窗口。默认不采集客户事实明细、完整查询结果、原始 Prompt 或可恢复敏感业务逻辑的原始 SQL。确定性规则先产生可重算特征，AI 只解释信号或生成受治理的 Proposal。
+
 ## 4. 目标用户
 
 ### U-001 语义负责人
@@ -214,10 +231,12 @@ Semlia 默认只读取元数据、语义定义和受控样本，不复制客户�
 
 ### J-006 反馈与持续治理
 
-1. Semlia 采集资产解析、使用、失败、变更影响和消费者反馈事件。
-2. 系统识别无人负责、长期未验证、低使用、高冲突和高风险资产。
-3. AI 生成修复、合并、废弃或补充验证建议。
-4. 负责人通过治理流程处理建议并发布新版本。
+1. Semlia 采集资产发现、解析、搜索、使用、失败、变更影响、回滚、事故和消费者反馈事件。
+2. 每个事件在能力存在时归因到 asset、revision、release 和 consumer；无法归因时记录稳定 reason code，不伪造关联。
+3. 系统使用版本化规则产生定义完整度、owner 覆盖、evidence 新鲜度、validation 覆盖、消费健康、变更稳定性和事故风险观测。
+4. 观测按可解释的优先级规则形成 Attention Item，而不是直接改写语义事实。
+5. AI 基于观测、证据和现行 revision 生成修复、合并、废弃或补充验证 Proposal。
+6. 负责人通过治理流程处理 Proposal 并发布新版本，决策结果再成为飞轮的可审计输入。
 
 成功结果：语义资产质量随使用持续提高，而不是导入后逐渐失真。
 
@@ -284,10 +303,11 @@ Semlia 默认只读取元数据、语义定义和受控样本，不复制客户�
 
 ### C-008 可观测性与反馈
 
-- 资产使用、解析和错误事件。
+- 资产发现、解析、搜索、使用、错误、反馈和事故事件。
 - 变更影响、废弃进度和消费者健康。
 - Agent 工具调用与结果追踪。
-- 质量趋势、所有权覆盖率和语义债务。
+- 可重算质量观测、可解释 Attention Item、所有权覆盖率和语义债务。
+- 信号、观测、待办、Proposal 和最终人类决策之间的全链路证据。
 - OpenTelemetry 指标、日志和链路。
 
 ## 7. 领域模型
@@ -309,7 +329,9 @@ Semlia 默认只读取元数据、语义定义和受控样本，不复制客户�
 | Release | 一组不可变资产版本及其兼容性和策略结果 |
 | Consumer | 使用 Semlia 语义的应用、Agent、团队或服务 |
 | Binding | 消费者与特定 release 或版本范围之间的契约 |
-| UsageEvent | 语义解析、读取、失败或反馈事件 |
+| UsageEvent | 在真实产品操作中产生、append-only 且带版本归因的读取、搜索、解析、失败或反馈信号 |
+| QualitySnapshot | 在明确截止时间、统计窗口和特征集版本下生成的可重建质量特征快照 |
+| AttentionItem | 由确定性规则从质量快照生成、指向明确资产与治理动作的可解释待办 |
 | Incident | 与错误语义、发布或消费影响相关的治理事件 |
 
 ### 7.2 资产类型
@@ -544,7 +566,7 @@ semantic_assets, asset_revisions, asset_relations
 evidence, proposals, proposal_changes, reviews
 validation_runs, validation_results
 releases, release_assets
-consumers, bindings, usage_events, incidents
+consumers, bindings, usage_events, quality_snapshots, attention_items, incidents
 agent_runs, agent_steps
 jobs, outbox_events, audit_events
 ```
@@ -567,6 +589,16 @@ jobs, outbox_events, audit_events
 - 使用事件按租户和时间分区，并支持聚合后删除明细。
 - 删除工作区执行可验证的异步删除流程，并保留合规要求允许的最小审计证明。
 
+### 11.5 飞轮事件与派生数据
+
+- AuditEvent 记录写入、权限、审核、发布和 Agent 工具调用；OutboxEvent 只保证领域事件投递；UsageEvent 记录产品使用与反馈信号；OpenTelemetry 记录系统运行状态。四者职责分离，不从 outbox、日志或 trace 反向拼装产品指标。
+- 复用版本化 EventEnvelope：`specVersion`、`id`、`type`、`source`、`subject`、`workspaceId`、`time`、`traceId` 和 `data`。每个事件类型拥有独立 `data` schema；公共归因字段按能力包含 `dataVersion`、`actorId`、`assetId`、`revisionId`、`releaseId`、`consumerId`、`bindingId`、`channel`、`outcome`、`reasonCode` 和 `idempotencyKey`。
+- M1 UsageEvent 只实现真实服务端操作产生的 `catalog.asset.read` 与 `catalog.search.completed`。搜索事件只保存 workspace-scoped HMAC 查询指纹、筛选维度、结果数量区间和 `matched | zero_result | failed` 结果，默认不保存原始搜索文本。
+- Discovery、import、revision 创建和 evidence 新鲜度属于领域、审计或规范状态，不伪装为使用事件；M1 直接展示 definition、owner、evidence、source health 和 provenance 等状态事实，不发布综合质量分。
+- UsageEvent 在保留期内不可修改；QualitySnapshot、聚合和 AttentionItem 是带特征集或规则版本与证据窗口的派生数据，必须可以由规范状态和保留信号重算。
+- 产品内的租户治理信号与 Semlia 项目自身的产品遥测严格分离；自身遥测默认关闭，不得成为开源自托管核心闭环的前置条件。
+- 不用单一黑盒分数取代质量维度；Quality、Impact 和 Risk 分开展示。治理优先级必须公开输入、窗口、规则版本和解释。
+
 ## 12. 安全、隐私与合规
 
 ### S-001 身份和授权
@@ -585,6 +617,7 @@ jobs, outbox_events, audit_events
 ### S-003 数据访问
 
 - 默认不采集客户事实明细。
+- 默认不持久化完整查询结果、原始 Prompt、模型隐藏推理或可恢复敏感业务逻辑的原始 SQL；调试例外必须由工作区策略明确启用、脱敏并限期保留。
 - 数据验证优先使用聚合、采样、脱敏和仓库内执行。
 - 每次跨边界读取记录目的、主体、资产、策略和结果摘要。
 
@@ -709,11 +742,23 @@ jobs, outbox_events, audit_events
 
 ### 15.3 生态飞轮
 
-1. 高质量 Cube 集成带来第一批真实语义资产。
-2. MCP 和 SDK 让 AI 与应用获得稳定价值。
-3. 消费事件反哺资产质量和影响分析。
-4. 社区贡献更多连接器、策略包、验证器和模板。
-5. 更丰富的生态提高 Semlia 作为开放语义控制面的标准价值。
+1. 高质量 Cube 集成带来第一批真实语义资产、来源证据和 discovery 信号。
+2. Proposal、Validation 和 Review 累积可审计的人类纠错决策。
+3. MCP、REST、CLI 和 SDK 让 AI 与应用获得稳定价值，并产生可归因消费信号。
+4. 消费、失败、回滚、反馈与事故反哺资产质量、影响分析和新的治理 Proposal。
+5. 社区贡献更多连接器、策略包、验证器和模板，扩大高质量信号和可执行动作范围。
+6. 更丰富且可信的生态提高 Semlia 作为开放语义控制面的标准价值。
+
+### 15.4 私有孵化与公开发布门槛
+
+Semlia 当前使用 Apache License 2.0 进行私有孵化，不把当前 private repository 宣称为已运行的开源社区。转为 public 之前必须同时满足：
+
+- 完成受控的 Go module、包管理器和品牌命名空间，不发布到未掌控的身份下。
+- 至少一条真实 Cube 项目可完成导入、资产浏览、证据追溯和可诊断的失败恢复。
+- Fresh-clone、安装、升级、回滚、备份、故障诊断和贡献者路径经独立验证。
+- Public repository 启用受保护分支、必需 CI、依赖漏洞告警、code scanning、secret scanning 和 private vulnerability reporting。
+- 正式 release 提供可验证来源、签名或 attestation、校验和、完整覆盖 Go 与嵌入 Web 依赖的 SBOM、升级说明和兼容性矩阵。
+- Issue forms、维护者清单、治理模型、支持与安全联系方式和 DCO 检查可用。
 
 ## 16. 成功指标
 
@@ -746,6 +791,13 @@ jobs, outbox_events, audit_events
 - 维护者对可复现缺陷的首次响应中位时间低于 3 个工作日。
 - 至少 5 个非官方连接器或验证器通过 conformance test。
 
+### 16.6 飞轮健康指标
+
+- Trusted Resolution 成功率和 unresolved/zero-result 率分别展示，不用请求量掩盖质量下降。
+- AI 生成 Proposal 的接受率同时报告人工修改幅度、验证失败率和发布后回滚率。
+- 已发布资产的 owner、evidence、validation 和 consumer binding 覆盖率可追溯到具体资产。
+- 每个 Attention Item 说明触发规则、证据窗口、受影响消费者和建议动作；无法解释的黑盒优先级不进入生产治理队列。
+
 ## 17. 路线图
 
 路线图按可验证的产品闭环推进，不按页面或技术层横向堆功能。
@@ -769,8 +821,9 @@ jobs, outbox_events, audit_events
 - 资产页、关系图、搜索、所有权和证据。
 - Git 内容存储与 PostgreSQL 索引。
 - 基础 diff、revision 和审计。
+- 服务端只记录真实发生的 `catalog.asset.read` 与 `catalog.search.completed` 使用信号；definition、owner、evidence、source health 和 provenance 从规范状态计算。
 
-退出标准：真实 Cube 项目可以无手工迁移地形成可浏览资产图谱。
+退出标准：真实 Cube 项目可以无手工迁移地形成可浏览资产图谱；资产读取可归因至 workspace、asset 和 revision，搜索缺口可在不保存原始搜索文本的前提下被量化。
 
 ### M2 Governed AI Authoring
 
@@ -780,6 +833,7 @@ jobs, outbox_events, audit_events
 - 验证器框架与 Cube 编译验证。
 - G0/G1 发布等级、审核工作台和 release manifest。
 - 冲突检测、影响分析和回滚。
+- 记录 AI 建议、人工修改、拒绝原因、验证结果、审核决策和回滚信号。
 
 退出标准：团队可完成“AI 提案、验证、人类审核、发布、回滚”的完整闭环。
 
@@ -791,6 +845,7 @@ jobs, outbox_events, audit_events
 - MCP server 与只读资源。
 - CLI 和 TypeScript SDK。
 - 消费者注册、release 绑定、Webhook 和使用事件。
+- 解析、not-found、失败、显式反馈与 consumer impact 信号可归因至 release 和 binding。
 
 退出标准：Fluxale 和至少一个独立 Agent 在生产式流程中只通过 Semlia 获取语义。
 
@@ -799,6 +854,7 @@ jobs, outbox_events, audit_events
 目标：真实使用数据持续改善资产质量。
 
 - 质量评分、语义债务和负责人队列。
+- 版本化 QualitySnapshot 与可解释 Attention Item，所有派生结果可从规范状态和保留事件重算。
 - 废弃、迁移和消费者通知。
 - Agent 评测集与 G2 发布等级。
 - dbt 适配器和第二类消费端集成。
@@ -827,6 +883,7 @@ jobs, outbox_events, audit_events
 - Schema、引用、Cube 编译和策略验证。
 - G0/G1 审核、不可变 release 和回滚。
 - 只读 REST、MCP 和 CLI 消费路径。
+- 可归因的最小读取、搜索、消费、失败和反馈事件，不采集客户事实明细。
 - 工作区 RBAC、密钥保护和审计。
 - Docker Compose、自托管文档和示例项目。
 
@@ -853,6 +910,8 @@ jobs, outbox_events, audit_events
 | D-007 | 消费者绑定 immutable release，不默认追随未约束 latest | Accepted | 保证可复现和安全升级 |
 | D-008 | 开源核心使用 Apache License 2.0 | Accepted | 促进企业采用、集成和社区贡献 |
 | D-009 | Semlia 是平台名称，Fluxale 是首个 Agent BI 消费端 | Accepted | 保留现有产品资产并验证平台价值 |
+| D-010 | 数据飞轮使用可归因事件、可重算质量观测和受治理 Proposal | Accepted | 让资产随真实使用改善，同时避免黑盒分数、隐私扩张和 AI 绕过审核 |
+| D-011 | 在真实核心纵向闭环与公开发布门槛满足前保持 private incubation | Accepted | 不把只有工程底座的仓库过早包装为顶级开源产品 |
 
 涉及原则变化的新决策必须先更新此表并重新审核，再创建实现计划。
 
@@ -864,10 +923,11 @@ jobs, outbox_events, audit_events
 4. 产品品牌使用 Semlia，公开发布前完成主要市场商标和域名复核。
 5. 首发适配器聚焦 Cube，dbt 在 M4 进入正式支持。
 6. 代码、API 和英文文档优先，核心产品 UI 与入门文档同时提供中文和英文。
+7. 当前仓库为 private incubation；Apache License 2.0 是确定的发布许可证，但只有源码公开且社区与安全入口可用时才对外宣称已运行开源项目。
 
 ## 21. 治理状态
 
 - 本文档是 Semlia 产品与架构的有效项目合同。
-- D-001 至 D-009 是已接受的项目级决策。
-- M0 已获准进入详细技术计划和任务拆分。
-- M0 技术计划和任务图仍需要独立审核，不能从 SSOT 的确认推断实现批准。
+- D-001 至 D-011 是已接受的项目级决策。
+- M0 技术计划和任务图已确认；T007 已接受，T008 负责 fresh-clone 验收和 M0 交付报告。
+- M1 技术方向已确认；只有 T008 和 M0 验收通过后才生成可执行 M1 work graph 与 Ready packet。

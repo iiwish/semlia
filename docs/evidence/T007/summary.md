@@ -6,11 +6,11 @@
 | --- | --- |
 | Task | T007 建立 CI、安全与供应链门禁 |
 | Attempt | M0-T007-A001 |
-| 状态 | Needs_Review |
+| 状态 | Accepted |
 | 执行日期 | 2026-08-10 至 2026-08-11 |
 | Branch | main |
-| Final remote commit | `source-revision-redacted` |
-| Repository | `https://github.com/iiwish/semlia`（Public） |
+| Validated implementation commit | `source-revision-redacted` |
+| Repository | `https://github.com/iiwish/semlia`（托管验证时 Public；当前 Private incubation） |
 | Packet | `docs/specs/m0-foundation/packets/T007.yaml` |
 | Executor | Codex direct execution; delegation was not requested and implicit sub-agents are disabled |
 
@@ -114,6 +114,6 @@ Hosted failure trail:
 - Exact base-image tags are monitored by Dependabot but are not source-pinned to registry digests; Trivy scans the resolved release image on every required security run.
 - Cold builds depend on public Go, npm, Docker and Trivy registries. The hosted critical path remained below 2m30s in the final run, but registry availability remains an external dependency.
 
-## 8. Review Handoff
+## 8. Acceptance And Handoff
 
-The external completion gate is satisfied by complete green CI, Security and Release Build runs on final commit `44b0f49`. T007 has no known blocking finding and is in `Needs_Review`. It becomes `Accepted` only after explicit founder acceptance; T008 remains dependency-blocked until then.
+The external completion gate is satisfied by complete green CI, Security and Release Build runs on validated commit `44b0f49`. Founder reviewed the existing analysis and evidence on 2026-08-12 and explicitly authorized continued delivery of the documentation and core product loop. T007 is Accepted and T008 is unblocked. The repository is currently Private; public security settings and tagged private provenance remain release-readiness gates rather than T007 claims.

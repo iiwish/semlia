@@ -4,10 +4,10 @@
 
 | 字段 | 值 |
 | --- | --- |
-| 版本 | 1.0.0 |
+| 版本 | 1.1.0 |
 | 状态 | Confirmed |
-| 最后更新 | 2026-08-10 |
-| 来源 | `docs/SSOT.md` v0.2.0 Confirmed |
+| 最后更新 | 2026-08-12 |
+| 来源 | `docs/SSOT.md` v0.4.0 Confirmed |
 | 产品合同 | `docs/specs/product-prototype/product-design.md` v0.4.1 Confirmed |
 | 前端基线 | `docs/specs/m1-semantic-registry/frontend-baseline-audit.md` |
 | 审核 | 2026-08-10 经创始人确认前端依赖、Cube Core 边界与后端依赖原则 |
@@ -32,6 +32,7 @@ Cube Core 是独立部署的首选可执行语义内核，不是 Semlia 控制�
 | P-007 开放执行生态 | Cube 位于独立 adapter 边界，核心领域对象不引用 Cube 私有类型 |
 | P-008 默认安全 | 浏览器不直连 Cube；凭据、security context 和业务事实行不进入前端 |
 | P-009 可靠性优先 | 真实 Cube 合约测试、桌面视觉回归、WCAG 2.2 AA 和性能预算进入验收 |
+| P-010 可归因、可解释、保护隐私 | M1 只从真实服务端读取和搜索操作生成最小信号，状态事实可重建，不保存原始搜索文本或客户事实行 |
 
 Constitution violations: None.
 
@@ -43,6 +44,7 @@ M1 includes:
 - 语义资产目录、搜索、筛选、详情、owner、source、evidence、revision 和 audit trace。
 - 有界的一至三跳上游/下游关系视图，以及图形关系的等价文本摘要。
 - Git 内容存储、PostgreSQL 索引和真实 Cube 项目的集成验收。
+- 服务端生成的 `catalog.asset.read` 与 `catalog.search.completed` 信号，以及 definition、owner、evidence、source health 和 provenance 状态事实。
 
 M1 excludes:
 
@@ -50,6 +52,7 @@ M1 excludes:
 - 发布、rollback、consumer binding、MCP 和 Agent 查询消费；这些属于 M2/M3。
 - BI dashboard、Workbook、NL2SQL、聊天主界面和 Cube 运维界面。
 - dbt 正式适配器、通用数据目录、移动端和触控专用体验。
+- 语义 resolution、consumer/release/binding 归因、综合质量评分、Attention Item、通用事件 ingest 和跨租户学习。
 
 ## 4. 前端技术决策
 
@@ -189,6 +192,23 @@ Deferred systems:
 - pgvector 只在已确认检索场景、评测集和数据治理边界存在后采用。
 - 所有直接依赖必须与 Apache License 2.0 项目分发兼容，固定版本，进入 SBOM、漏洞扫描和许可证检查。
 
+### TDR-016 飞轮事实流与 M1 最小信号
+
+Decision:
+
+- `audit_events` 保存写入、权限、审核、发布和 Agent 工具调用的不可抵赖记录；`outbox_events` 只负责领域事件可靠投递；`usage_events` 保存产品使用与反馈信号；OpenTelemetry 保存延迟、错误和队列等运行数据。四类事实不能互相替代。
+- M1 只实现 `catalog.asset.read` 和 `catalog.search.completed` 两个 UsageEvent。前者在服务端真实返回 asset revision 后生成；后者使用 `matched | zero_result | failed` outcome，并记录结果数量区间。
+- M1 不提供任意 `POST /usage-events`。UsageEvent 由可信 application service 产生，使用 `(workspace_id, event_type, idempotency_key)` 去重，并保留 `data_version`、归因 ID、channel、outcome、reason code、trace 和发生/接收时间。
+- 搜索信号默认只保存 workspace-scoped HMAC 指纹、语言、token/count bucket、筛选维度与结果区间，不保存原始搜索文本。产品内租户信号不离开 self-hosted 部署；Semlia 项目遥测是独立且默认关闭的能力。
+- Discovery run、import、revision 创建属于领域或审计事实；definition、owner、evidence、source health 和 provenance 属于规范状态。它们不伪装成 UsageEvent，也不在 M1 组合成黑盒质量分。
+- M1 使用普通 PostgreSQL `usage_events` 表、索引和可验证删除路径。只有 M3 对外消费量与 retention 基准证明需要时才引入时间分区和日聚合；不引入 Kafka、event sourcing、流计算或训练平台。
+
+Rationale:
+
+- 飞轮必须从真实产品行为开始，不能为尚不存在的 release、consumer 或 semantic resolution 伪造归因。
+- 分离审计、投递、产品信号和运维 telemetry 可保持合规语义、retention 和指标口径稳定。
+- 少量严格 schema 的服务端事件比 UI clickstream 或通用 ingest 更容易测试、解释和长期演进。
+
 ## 7. 任务与验收影响
 
 M1 计划必须至少包含以下工作流，但在 M0 验收完成前保持规划态：
@@ -196,10 +216,11 @@ M1 计划必须至少包含以下工作流，但在 M0 验收完成前保持规�
 1. M1 领域 schema、OpenAPI、错误模型和资产 revision 契约。
 2. Cube adapter spike、固定容器 contract test 和增量 discovery 设计。
 3. Git content adapter spike 与 PostgreSQL asset index。
-4. 生产 Web shell、design tokens、Radix/shadcn primitives、router/query 和 i18n 基础。
-5. Source setup、discovery run、资产 catalog/detail、empty/error/running state。
-6. 有界关系图、文本 fallback、性能和无障碍验证。
-7. 真实 Cube fixture 的端到端导入、fresh-workspace 验收和交付证据。
+4. UsageEvent taxonomy、隐私/retention contract、M1 两个服务端 producer 和删除测试。
+5. 生产 Web shell、design tokens、Radix/shadcn primitives、router/query 和 i18n 基础。
+6. Source setup、discovery run、资产 catalog/detail、empty/error/running state。
+7. 有界关系图、文本 fallback、性能和无障碍验证。
+8. 真实 Cube fixture 的端到端导入、fresh-workspace 验收、信号归因和交付证据。
 
 M1 task 不得直接复制 `prototypes/product/**` 到 `web/**`。原型只提供产品合同和交互意图；生产实现必须按 feature 边界重建、使用生成 API 类型，并解决前端基线审计中的阻断问题。
 
@@ -221,4 +242,4 @@ M1 task 不得直接复制 `prototypes/product/**` 到 `web/**`。原型只提�
 
 ## 9. 实现闸门
 
-本 TDR 确认技术方向，不代表 M1 实现已经获准启动。`docs/specs/m0-foundation/tasks.md` 中 T007 仍需真实 GitHub Actions 运行证据，T008 仍需 fresh-clone acceptance；M0 达到退出标准并由创始人明确接受后，才编写并审核 M1 plan、work graph、checklist、analysis 和 Ready execution packets。
+本 TDR 确认技术方向，不代表 M1 实现已经获准启动。T007 已由 founder 接受；T008 正在执行 fresh-clone、module identity、运维文档和 M0 release report 验收。M0 达到退出标准并由 founder 明确接受后，才编写并审核 M1 plan、work graph、checklist、analysis 和 Ready execution packets。

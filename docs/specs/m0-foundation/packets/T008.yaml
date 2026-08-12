@@ -1,0 +1,213 @@
+schema_version: 1
+packet_id: M0-T008-A001
+task_id: T008
+feature_id: m0-foundation
+mode: execute_one_task
+adapter: agent-neutral
+
+governance_inputs:
+  product_contract: docs/SSOT.md
+  project_instructions: AGENTS.md
+  requirements_checklist: docs/specs/m0-foundation/checklists/requirements.md
+  technical_decisions: docs/adr/0001-m0-technical-foundation.md
+  feature_plan: docs/specs/m0-foundation/plan.md
+  work_graph: docs/specs/m0-foundation/tasks.md
+  analysis: docs/specs/m0-foundation/analysis.md
+  approval_gates:
+    product_contract: Confirmed by founder, including the 2026-08-12 private-incubation and data-flywheel decisions
+    technical_plan_and_work_graph: Confirmed by founder
+    dependencies_t001_t007: Accepted by founder
+    t007_acceptance: Founder reviewed existing evidence and explicitly authorized continuation on 2026-08-12
+    t008_scope: Founder explicitly requested documentation completion, project completion and the core product loop on 2026-08-12
+    analysis: Clear for T008 after the doctor and module-namespace blockers were added to this packet
+
+work_unit:
+  title: 完成 fresh-clone 验收与 M0 交付证据
+  goal: >-
+    从隔离 checkout 验证 M0 的安装、启动、请求、故障恢复、迁移、worker、契约漂移和安全旅程，
+    修复直接阻断该验收的工具链与 module identity 漂移，并形成可供 founder 审核的 M0 release report。
+  epic: E002
+  stories:
+    - M0-US-001
+    - M0-US-005
+  requirements:
+    - M0-FR-001
+    - M0-FR-008
+    - M0-NFR-001
+    - M0-NFR-002
+    - M0-NFR-003
+    - M0-NFR-004
+    - M0-NFR-005
+    - M0-NFR-006
+    - M0-NFR-007
+    - AC-M0-001
+    - AC-M0-002
+    - AC-M0-003
+    - AC-M0-004
+    - AC-M0-005
+    - AC-M0-006
+  priority: P0
+  depends_on:
+    - T001
+    - T002
+    - T003
+    - T004
+    - T005
+    - T006
+    - T007
+  blocks:
+    - M1 planning
+  parallel: false
+
+codebase_context:
+  repository_state:
+    branch: codex/core-product-loop
+    baseline_commit: 1e48594
+    remote: https://github.com/iiwish/semlia
+    visibility: Private incubation
+    implementation_state: >-
+      M0 runtime, PostgreSQL lifecycle, job/outbox behavior, generated contracts, local Compose, CI, security scans,
+      SBOM and cross-platform release builds exist and have prior local and hosted green evidence. T008 begins with no quickstart,
+      operations documents, acceptance package or release report.
+  verified_preflight_findings:
+    - scripts/doctor.sh requires Go 1.26.3 while every canonical toolchain source requires Go 1.26.5, so make doctor fails.
+    - go.mod declares github.com/semlia/semlia while the controlled repository is github.com/iiwish/semlia.
+    - The repository is currently private; hosted T007 evidence was produced while it was public and must be described historically.
+    - Private-repository security features and tagged provenance remain public-release gates, not claims of current availability.
+  architecture_boundaries:
+    - T008 does not implement Cube, semantic assets, Agent behavior, authentication, MCP or any M1 product feature.
+    - The module migration is a literal replacement to the controlled repository path; package names, APIs and runtime behavior remain unchanged.
+    - Fresh-clone automation is opt-in so make check and ordinary go test do not recursively clone or invoke themselves.
+    - Isolation uses task-owned temporary caches and a unique Compose project; cleanup never prunes global Docker state.
+    - Documentation describes the current private-incubation state and does not present Semlia as production-ready or as an active public community.
+
+execution_constraints:
+  branch_or_worktree: current codex/core-product-loop branch
+  allowed_files:
+    - README.md
+    - SECURITY.md
+    - docs/quickstart.md
+    - docs/operations/local-development.md
+    - docs/operations/troubleshooting.md
+    - docs/specs/m0-foundation/analysis.md
+    - docs/specs/m0-foundation/release-report.md
+    - tests/acceptance/**
+    - scripts/doctor.sh
+    - tests/repository/repository_contract_test.go
+    - go.mod
+    - cmd/semlia/main.go
+    - cmd/semlia/readiness.go
+    - cmd/semlia/readiness_test.go
+    - internal/adapters/postgres/store.go
+    - internal/application/system.go
+    - internal/platform/config/config_test.go
+    - internal/platform/http/handler.go
+    - internal/platform/http/handler_test.go
+    - tests/integration/db/database_test.go
+    - tests/integration/worker/worker_test.go
+  forbidden_changes:
+    - Do not edit runtime behavior, migrations, generated API artifacts, Web UI, prototype, Compose topology or release workflow behavior.
+    - Do not add a new framework, service, SaaS dependency, telemetry exporter or package dependency.
+    - Do not rewrite historical evidence patches when migrating the module namespace.
+    - Do not claim public vulnerability reporting, branch protection, code scanning, secret scanning or private tag attestation is enabled.
+    - Do not weaken existing source, smoke, security, SBOM, release or repository checks.
+    - Do not use global Docker prune, shared project names or destructive cleanup outside the acceptance run.
+    - Do not mark T008 or M0 Accepted; only founder acceptance after review can do that.
+  ownership_notes:
+    - Governance status, packet metadata and final evidence are maintained by the delivery orchestrator.
+    - Preserve all accepted T001 through T007 behavior and user work.
+    - An implementation worker must execute only this packet and must not delegate further.
+
+tdd_plan:
+  required: true
+  exception: null
+  red:
+    preparation:
+      - Add repository assertions that doctor versions equal .tool-versions and the module path equals the controlled GitHub repository.
+      - Add acceptance contracts for the quickstart, operations, troubleshooting, private-incubation wording and opt-in fresh-clone journey.
+    command: >-
+      go test ./tests/repository ./tests/acceptance/...
+      -run 'TestDoctorVersionMatchesPinnedToolchain|TestModuleNamespaceMatchesControlledRepository|TestM0DocumentationContract' -count=1
+    expected_failure: >-
+      The contract reports Go 1.26.3 in doctor, github.com/semlia/semlia in go.mod and missing quickstart/operations documents.
+  green:
+    command: go test ./tests/repository ./tests/acceptance/... -count=1
+    expected_signal: Toolchain, module identity, documentation and non-expensive acceptance contracts pass.
+  refactor:
+    command: make doctor && go list -m && go mod tidy -diff && make check-source
+    expected_signal: Pinned tools and controlled module identity remain consistent with all source, contract and build gates green.
+
+validation_loop:
+  commands:
+    - make clean
+    - make doctor
+    - make bootstrap
+    - go list -m
+    - go mod tidy -diff
+    - go test ./tests/repository ./tests/acceptance/... -count=1
+    - make dev
+    - make smoke
+    - make check
+    - make release
+    - make dev-down
+    - git diff --check
+  isolated_checkout_command: >-
+    SEMLIA_RUN_FRESH_CLONE=1 SEMLIA_ACCEPTANCE_SOURCE=<repository-path>
+    SEMLIA_ACCEPTANCE_REF=<exact-commit> go test -v -timeout=45m ./tests/acceptance/... -count=1
+  runtime_checks:
+    - make doctor succeeds with exactly the versions in .tool-versions.
+    - go list -m prints github.com/iiwish/semlia and no live source imports github.com/semlia/semlia.
+    - Cold bootstrap, warm bootstrap, development readiness and first successful request durations are recorded.
+    - After five warm-up requests, 100 sequential system-info requests have zero errors; p50, p95 and maximum are recorded with p95 at or below 250 ms and maximum below one second on the acceptance host.
+    - PostgreSQL failure keeps liveness healthy, makes readiness fail with DEPENDENCY_UNAVAILABLE and a trace ID, and recovers after restart.
+    - Migration upgrade/downgrade/upgrade, concurrent worker lease/retry/dead-letter, contract drift and production fail-closed scenarios pass.
+    - Complete source, smoke, security, release, SBOM and checksum gates pass and task-owned resources are removed.
+  retry_budget: 2
+  failure_policy:
+    first_failure: Fix only documentation, acceptance automation, module imports or the doctor version when the failure maps directly to T008.
+    second_failure: Classify the failure as a pre-existing M0 defect, host constraint or external registry/GitHub limitation and record exact evidence.
+    beyond_budget: Stop with Blocked evidence; never weaken a security, reliability, performance or clean-tree assertion.
+
+evidence_contract:
+  summary: docs/evidence/T008/summary.md
+  diff: docs/evidence/T008/diff.patch
+  test_results: docs/evidence/T008/test-results.md
+  release_report: docs/specs/m0-foundation/release-report.md
+  required:
+    - exact source and validation commits, host details and Private visibility
+    - changed files plus module and doctor RED/GREEN evidence
+    - fresh-checkout isolation and command transcript
+    - cold/warm bootstrap, readiness, first-request, HTTP percentile and complete-check durations
+    - AC-M0-001 through AC-M0-006 requirement-to-evidence matrix
+    - failure and recovery output with stable error code and trace ID
+    - security, SBOM, checksum and release limitations
+    - three review passes, diff summary, rollback notes and residual risks
+
+review_contract:
+  required_passes:
+    - spec_compliance
+    - bug_code_quality
+    - qa_acceptance
+  focus:
+    - Every M0 requirement and acceptance scenario maps to real evidence, not documentation claims.
+    - Fresh-checkout automation cannot recurse, mutate source or remove unrelated Docker/cache state.
+    - Quickstart and operations commands match exact root commands, ports, failure semantics and cleanup behavior.
+    - Namespace migration is complete outside immutable historical evidence and creates no behavioral diff.
+    - Private-incubation, security reporting, tag-attestation and public-release limitations are stated consistently.
+    - Performance evidence is reproducible and host-qualified.
+  acceptance_rule: >-
+    T008 moves to Needs_Review only after the isolated checkout, full validation, release report and all three review passes succeed.
+    T008 and M0 move to Accepted only after explicit founder acceptance of that post-execution evidence.
+
+handoff:
+  pull_request: null
+  finish_options:
+    - request founder acceptance for T008 and M0
+    - begin M1 plan only after explicit founder acceptance
+
+stop_conditions:
+  - A fix requires changing application behavior, migrations, Web UI, Compose topology, security thresholds or release workflow semantics.
+  - The controlled module namespace cannot be established as github.com/iiwish/semlia.
+  - An acceptance failure requires a new M0 requirement or changes an accepted product boundary.
+  - Isolation cannot prevent destructive cleanup or recursive invocation.
+  - A Critical or High security finding remains unresolved.

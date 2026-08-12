@@ -4,11 +4,11 @@
 
 | 字段 | 值 |
 | --- | --- |
-| 版本 | 0.3.0 |
+| 版本 | 0.4.0 |
 | 状态 | Completed |
 | Feature | m0-foundation |
-| 最后更新 | 2026-08-08 |
-| Source spec | `docs/specs/m0-foundation/plan.md` v0.3.0 Confirmed |
+| 最后更新 | 2026-08-12 |
+| Source spec | `docs/specs/m0-foundation/plan.md` v0.4.0 Confirmed |
 
 ## 1. Checklist Scope
 
@@ -41,6 +41,8 @@ Reviewed artifacts:
 - [x] Node.js 仅用于 Web 和 TypeScript SDK 构建，生产控制面不依赖 Node.js 运行时。[Deployment clarity]
 - [x] AI、MCP、API、worker 与 CLI 均具有 Go 实现边界，M0 不引入额外语言运行时。[Architecture consistency]
 - [x] 所有高影响决策均已由创始人通过 M0 计划确认。[Readiness]
+- [x] T008 对 fresh-clone 发现的 doctor 版本漂移和未受控 Go module namespace 声明了精确 allowed files、RED/GREEN contract 与停止条件。[Executability]
+- [x] Private incubation、历史 hosted evidence 和公开发布安全门槛在任务与文档契约中可以区分。[Clarity]
 
 ## 3. Coverage Matrix
 
@@ -67,9 +69,10 @@ Reviewed artifacts:
 - 工作图使用 Mermaid 重新表达 T003、T005、T006、T007 的实际依赖，避免 ASCII 连线产生歧义。
 - T001 的 allowed files 包含 `tests/repository/repository_contract_test.go`，使 TDD test target 位于任务所有权范围内。
 - T001 execution packet 把 Go 1.26 或 Node.js 24 LTS 兼容性失败列为 stop condition；任何基线变更先修改并重新审核 TDR。
+- T008 packet 把 Go module identity 与 doctor toolchain 一致性列为 fresh-clone 前置 contract；修复仅允许做路径迁移和锁定版本对齐，不得改变 M0 runtime 行为。
 
 ## 6. User Review Gate
 
-- Approval: Inherited from confirmed M0 plan for requirement scope.
+- Approval: Inherited from confirmed M0 plan and founder's explicit 2026-08-12 continuation for T008 scope.
 - Checklist result: Completed with no unresolved Critical or High finding.
 - Execute condition: 一致性 analysis 必须为 Clear，且目标 task 拥有完整 packet。

@@ -171,10 +171,10 @@ M1 production frontend 只有同时满足以下条件才可接受：
 
 ## 8. 后续顺序
 
-1. 完成 M0 T007 的真实 GitHub Actions 运行证据。
-2. 执行 T008 fresh-clone acceptance，并由创始人明确接受 M0。
+1. T007 的本地与托管证据已由 founder 接受。
+2. 完成正在执行的 T008 fresh-clone、module identity、运维文档和 M0 release report，并由 founder 明确接受 M0。
 3. 编写 M1 plan、requirements checklist、work graph 和 consistency analysis。
-4. 先确认领域/API/Cube/Git 契约，再建立生产 Web foundation。
-5. 依次实现 Sources/discovery、Assets catalog/detail、关系图与完整质量门禁。
+4. 先确认领域/API/Cube/Git/UsageEvent 契约，再建立生产 Web foundation。
+5. 依次实现 Sources/discovery、Assets catalog/detail、关系图、最小服务端信号与完整质量门禁。
 
 本审计是 M1 计划的输入，不创建 Ready task，也不修改已接受的 prototype。
