@@ -151,7 +151,7 @@ func isolatedEnvironment(scratch, project string, httpPort, postgresPort int) []
 	return append(environment,
 		"GOCACHE="+filepath.Join(scratch, "go-build"),
 		"GOPATH="+filepath.Join(scratch, "go-path"),
-		"GOMODCACHE="+filepath.Join(scratch, "checkout", ".cache", "go-mod"),
+		"GOMODCACHE="+filepath.Join(scratch, "go-mod"),
 		"PNPM_HOME="+filepath.Join(scratch, "pnpm-home"),
 		"PNPM_STORE_DIR="+filepath.Join(scratch, "pnpm-store"),
 		"npm_config_store_dir="+filepath.Join(scratch, "pnpm-store"),
@@ -228,6 +228,23 @@ func TestAcceptanceEnvironmentRejectsPoisonedControls(t *testing.T) {
 	got := filterAcceptanceEnvironment(poisoned)
 	if strings.Join(got, "\n") != "PATH=/usr/bin\nHOME=/tmp/home" {
 		t.Fatalf("filtered environment retained control variables: %v", got)
+	}
+}
+
+func TestAcceptanceToolCachesStayOutsideCheckout(t *testing.T) {
+	scratch := t.TempDir()
+	environment := isolatedEnvironment(scratch, "semlia-accept-a1b2c3d4-000000000001", 38080, 35432)
+	checkout := filepath.Join(scratch, "checkout") + string(os.PathSeparator)
+
+	for _, name := range []string{"GOCACHE", "GOPATH", "GOMODCACHE", "PNPM_HOME", "PNPM_STORE_DIR", "npm_config_store_dir", "XDG_CACHE_HOME"} {
+		value := environmentValue(environment, name)
+		if value == "" {
+			t.Errorf("%s is not isolated", name)
+			continue
+		}
+		if strings.HasPrefix(value+string(os.PathSeparator), checkout) {
+			t.Errorf("%s=%q is inside the source checkout and can contaminate source/security gates", name, value)
+		}
 	}
 }
 
