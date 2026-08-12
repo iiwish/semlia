@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"net"
@@ -39,6 +40,9 @@ type freshCloneRun struct {
 func TestFreshCloneAcceptance(t *testing.T) {
 	if os.Getenv("SEMLIA_RUN_FRESH_CLONE") != "1" {
 		t.Skip("set SEMLIA_RUN_FRESH_CLONE=1 with SEMLIA_ACCEPTANCE_SOURCE and SEMLIA_ACCEPTANCE_REF")
+	}
+	if err := validateFreshCloneInvocation(); err != nil {
+		t.Fatal(err)
 	}
 
 	config := freshCloneConfig{
@@ -147,8 +151,15 @@ func randomRunID(t *testing.T) string {
 }
 
 func isolatedEnvironment(scratch, project string, httpPort, postgresPort int) []string {
-	environment := filterAcceptanceEnvironment(os.Environ())
+	return isolatedEnvironmentFrom(os.Environ(), scratch, project, httpPort, postgresPort)
+}
+
+func isolatedEnvironmentFrom(base []string, scratch, project string, httpPort, postgresPort int) []string {
+	environment := filterAcceptanceEnvironment(base)
 	return append(environment,
+		"GOENV=off",
+		"GOFLAGS=",
+		"GOWORK=off",
 		"GOCACHE="+filepath.Join(scratch, "go-build"),
 		"GOPATH="+filepath.Join(scratch, "go-path"),
 		"GOMODCACHE="+filepath.Join(scratch, "go-mod"),
@@ -165,7 +176,9 @@ func isolatedEnvironment(scratch, project string, httpPort, postgresPort int) []
 
 func filterAcceptanceEnvironment(environment []string) []string {
 	blockedExact := map[string]struct{}{
-		"GOFLAGS": {}, "GOWORK": {}, "MAKEFLAGS": {}, "MFLAGS": {},
+		"GO": {}, "GOARCH": {}, "GOCACHE": {}, "GOENV": {}, "GOFLAGS": {}, "GOMODCACHE": {}, "GOOS": {}, "GOPATH": {}, "GOWORK": {},
+		"MAKE": {}, "MAKEFLAGS": {}, "MFLAGS": {}, "PNPM": {},
+		"PNPM_HOME": {}, "PNPM_STORE_DIR": {}, "XDG_CACHE_HOME": {}, "npm_config_store_dir": {},
 	}
 	filtered := make([]string, 0, len(environment))
 	for _, entry := range environment {
@@ -177,6 +190,30 @@ func filterAcceptanceEnvironment(environment []string) []string {
 		filtered = append(filtered, entry)
 	}
 	return filtered
+}
+
+func validateFreshCloneInvocation() error {
+	checks := []struct {
+		name string
+		got  string
+		want string
+	}{
+		{"GOENV", os.Getenv("GOENV"), "off"},
+		{"GOFLAGS", os.Getenv("GOFLAGS"), ""},
+		{"GOWORK", os.Getenv("GOWORK"), "off"},
+	}
+	for _, check := range checks {
+		if check.got != check.want {
+			return fmt.Errorf("fresh-clone acceptance requires %s=%q; use scripts/acceptance/m0-fresh-clone.sh", check.name, check.want)
+		}
+	}
+	for name, want := range map[string]string{"test.run": "^TestFreshCloneAcceptance$", "test.count": "1"} {
+		value := flag.Lookup(name)
+		if value == nil || value.Value.String() != want {
+			return fmt.Errorf("fresh-clone acceptance requires -%s=%q; use scripts/acceptance/m0-fresh-clone.sh", strings.TrimPrefix(name, "test."), want)
+		}
+	}
+	return nil
 }
 
 func acquireAcceptanceLock(t *testing.T) func() {
@@ -223,11 +260,36 @@ func TestAcceptanceEnvironmentRejectsPoisonedControls(t *testing.T) {
 		"PATH=/usr/bin", "HOME=/tmp/home", "SEMLIA_RUN_SMOKE=1", "SEMLIA_RELEASE_DIR=/outside",
 		"SEMLIA_SECURITY_IMAGE=wrong", "SEMLIA_POSTGRES_PASSWORD=wrong", "COMPOSE_FILE=/outside/compose.yaml",
 		"COMPOSE_PROFILES=wrong", "COMPOSE_PATH_SEPARATOR=;", "GIT_DIR=/outside/git", "GIT_CONFIG_COUNT=1",
-		"GOFLAGS=-run=^$", "GOWORK=/outside/go.work", "MAKEFLAGS=-i", "MFLAGS=-k", "TESTCONTAINERS_RYUK_DISABLED=true",
+		"GOENV=/outside/go.env", "GOFLAGS=-run=^$", "GOWORK=/outside/go.work", "GOCACHE=/outside/go-cache",
+		"GOPATH=/outside/go-path", "GOMODCACHE=/outside/go-mod", "GO=false", "GOOS=plan9", "GOARCH=386",
+		"MAKE=true", "MAKEFLAGS=-i", "MFLAGS=-k", "PNPM=false", "TESTCONTAINERS_RYUK_DISABLED=true",
 	}
 	got := filterAcceptanceEnvironment(poisoned)
 	if strings.Join(got, "\n") != "PATH=/usr/bin\nHOME=/tmp/home" {
 		t.Fatalf("filtered environment retained control variables: %v", got)
+	}
+}
+
+func TestAcceptanceEnvironmentPinsGoControls(t *testing.T) {
+	poisoned := []string{
+		"PATH=/usr/bin", "GOENV=/outside/go.env", "GOFLAGS=-run=^$", "GOWORK=/outside/go.work",
+		"GO=false", "GOOS=plan9", "GOARCH=386", "MAKE=true", "PNPM=false",
+	}
+	environment := isolatedEnvironmentFrom(poisoned, t.TempDir(), "semlia-accept-a1b2c3d4-000000000001", 38080, 35432)
+	for name, want := range map[string]string{
+		"GOENV":   "off",
+		"GOFLAGS": "",
+		"GOWORK":  "off",
+	} {
+		values := environmentValues(environment, name)
+		if len(values) != 1 || values[0] != want {
+			t.Errorf("%s values = %v, want exactly %q", name, values, want)
+		}
+	}
+	for _, name := range []string{"GO", "GOOS", "GOARCH", "MAKE", "PNPM"} {
+		if values := environmentValues(environment, name); len(values) != 0 {
+			t.Errorf("%s must not be inherited: %v", name, values)
+		}
 	}
 }
 
@@ -594,6 +656,17 @@ func environmentValue(environment []string, name string) string {
 		}
 	}
 	return ""
+}
+
+func environmentValues(environment []string, name string) []string {
+	prefix := name + "="
+	var values []string
+	for _, entry := range environment {
+		if strings.HasPrefix(entry, prefix) {
+			values = append(values, strings.TrimPrefix(entry, prefix))
+		}
+	}
+	return values
 }
 
 func reserveLocalPorts(t *testing.T) (int, int) {

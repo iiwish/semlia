@@ -246,6 +246,73 @@ func TestDoctorScriptIsExecutableAndPortable(t *testing.T) {
 	}
 }
 
+func TestFreshCloneLauncherDisablesUserProcessControls(t *testing.T) {
+	path := filepath.Join(root, "scripts", "acceptance", "m0-fresh-clone.sh")
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode()&0o100 == 0 {
+		t.Error("fresh-clone launcher must be executable by its owner")
+	}
+
+	script := read(t, "scripts/acceptance/m0-fresh-clone.sh")
+	for _, required := range []string{
+		"GOENV=off",
+		"GOFLAGS=",
+		"GOWORK=off",
+		"SEMLIA_RUN_FRESH_CLONE=1",
+		"-run '^TestFreshCloneAcceptance$'",
+		"-count=1",
+	} {
+		if !strings.Contains(script, required) {
+			t.Errorf("fresh-clone launcher missing %q", required)
+		}
+	}
+}
+
+func TestDocumentationContainsNoPersonalAbsolutePaths(t *testing.T) {
+	patterns := map[string]*regexp.Regexp{
+		"macOS user path": regexp.MustCompile(`/Users/[^/\s]+/`),
+		"Linux user path": regexp.MustCompile(`/home/[^/\s]+/`),
+	}
+	var findings []string
+	err := filepath.WalkDir(filepath.Join(root, "docs"), func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || entry.Name() == "diff.patch" {
+			return nil
+		}
+		switch filepath.Ext(path) {
+		case ".md", ".yaml", ".yml", ".txt":
+		default:
+			return nil
+		}
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		relative, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		for label, pattern := range patterns {
+			if pattern.Match(content) {
+				findings = append(findings, relative+": "+label)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sort.Strings(findings)
+	if len(findings) > 0 {
+		t.Fatalf("documentation contains personal paths: %s", strings.Join(findings, "; "))
+	}
+}
+
 func TestOpenSourcePolicyFilesAreActionable(t *testing.T) {
 	checks := map[string][]string{
 		"LICENSE":            {"Apache License", "Version 2.0, January 2004", "END OF TERMS AND CONDITIONS"},
