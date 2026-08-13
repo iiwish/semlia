@@ -220,6 +220,7 @@ func isolatedEnvironment(scratch, project string, httpPort, postgresPort int) []
 func isolatedEnvironmentFrom(base []string, scratch, project string, httpPort, postgresPort int) []string {
 	environment := filterAcceptanceEnvironment(base)
 	return append(environment,
+		"PATH="+trustedAcceptancePathFrom(base),
 		"GOENV=off",
 		"GOFLAGS=",
 		"GOWORK=off",
@@ -243,6 +244,7 @@ func filterAcceptanceEnvironment(environment []string) []string {
 		"BASHOPTS": {}, "BASH_ENV": {}, "ENV": {}, "SHELLOPTS": {}, "GNUMAKEFLAGS": {}, "MAKE": {}, "MAKEFILES": {}, "MAKEFLAGS": {}, "MAKELEVEL": {}, "MAKEOVERRIDES": {}, "MFLAGS": {}, "PNPM": {},
 		"PNPM_CONFIG_STORE_DIR": {}, "PNPM_HOME": {}, "PNPM_STORE_DIR": {}, "XDG_CACHE_HOME": {},
 		"npm_config_store_dir": {}, "pnpm_config_store_dir": {},
+		"PATH": {},
 	}
 	filtered := make([]string, 0, len(environment))
 	for _, entry := range environment {
@@ -254,6 +256,64 @@ func filterAcceptanceEnvironment(environment []string) []string {
 		filtered = append(filtered, entry)
 	}
 	return filtered
+}
+
+func trustedAcceptancePath() string {
+	return strings.Join([]string{
+		"/usr/local/go/bin",
+		"/opt/homebrew/bin",
+		"/opt/homebrew/sbin",
+		"/home/linuxbrew/.linuxbrew/bin",
+		"/home/linuxbrew/.linuxbrew/sbin",
+		"/opt/local/bin",
+		"/opt/local/sbin",
+		"/usr/local/bin",
+		"/usr/local/sbin",
+		"/usr/bin",
+		"/bin",
+		"/usr/sbin",
+		"/sbin",
+		"/run/current-system/sw/bin",
+		"/nix/var/nix/profiles/default/bin",
+		"/snap/bin",
+		"/var/lib/snapd/snap/bin",
+	}, string(os.PathListSeparator))
+}
+
+func trustedAcceptancePathFrom(environment []string) string {
+	directories := filepath.SplitList(trustedAcceptancePath())
+	seen := make(map[string]struct{}, len(directories))
+	for _, directory := range directories {
+		seen[directory] = struct{}{}
+	}
+	for _, directory := range filepath.SplitList(environmentValue(environment, "PATH")) {
+		directory = filepath.Clean(directory)
+		if !trustedDynamicToolDirectory(directory) {
+			continue
+		}
+		if _, exists := seen[directory]; exists {
+			continue
+		}
+		directories = append(directories, directory)
+		seen[directory] = struct{}{}
+	}
+	return strings.Join(directories, string(os.PathListSeparator))
+}
+
+func trustedDynamicToolDirectory(directory string) bool {
+	if !filepath.IsAbs(directory) {
+		return false
+	}
+	for _, prefix := range []string{
+		"/opt/hostedtoolcache/",
+		"/Users/runner/hostedtoolcache/",
+	} {
+		if strings.HasPrefix(directory, prefix) && strings.HasSuffix(directory, "/bin") {
+			return true
+		}
+	}
+	return directory == "/home/runner/setup-pnpm/node_modules/.bin" ||
+		directory == "/Users/runner/setup-pnpm/node_modules/.bin"
 }
 
 func validateFreshCloneInvocation() error {
@@ -292,31 +352,9 @@ func acquireAcceptanceLock(t *testing.T) func() {
 	}
 	return func() {
 		if err := release(); err != nil {
-			t.Errorf("remove T008 host lock: %v", err)
+			t.Errorf("release T008 host lock: %v", err)
 		}
 	}
-}
-
-func createAcceptanceLock(path string) (func() error, error) {
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := fmt.Fprintf(file, "pid=%d\n", os.Getpid()); err != nil {
-		_ = file.Close()
-		_ = os.Remove(path)
-		return nil, err
-	}
-	if err := file.Close(); err != nil {
-		_ = os.Remove(path)
-		return nil, err
-	}
-	return func() error {
-		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-			return err
-		}
-		return nil
-	}, nil
 }
 
 func TestAcceptanceProjectNameUsesPerRunIdentity(t *testing.T) {
@@ -350,7 +388,7 @@ func TestAcceptanceEnvironmentRejectsPoisonedControls(t *testing.T) {
 		"TESTCONTAINERS_RYUK_DISABLED=true",
 	}
 	got := filterAcceptanceEnvironment(poisoned)
-	if strings.Join(got, "\n") != "PATH=/usr/bin\nHOME=/tmp/home" {
+	if strings.Join(got, "\n") != "HOME=/tmp/home" {
 		t.Fatalf("filtered environment retained control variables: %v", got)
 	}
 }
@@ -384,7 +422,7 @@ func TestAcceptanceEnvironmentRejectsExportedBashFunctionPoisoningInNestedTools(
 			}
 
 			isolated := exec.Command(bash, "-c", tool)
-			isolated.Env = filterAcceptanceEnvironment(poisonedEnvironment)
+			isolated.Env = append(filterAcceptanceEnvironment(poisonedEnvironment), "PATH="+path)
 			isolatedOutput, isolatedErr := isolated.CombinedOutput()
 			var exitError *exec.ExitError
 			if !errors.As(isolatedErr, &exitError) || exitError.ExitCode() != 41 {
@@ -436,23 +474,6 @@ func TestAcceptanceHostLockPathIgnoresTMPDIR(t *testing.T) {
 	}
 }
 
-func TestAcceptanceHostLockUsesExclusiveCreate(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "acceptance.lock")
-	release, err := createAcceptanceLock(path)
-	if err != nil {
-		t.Fatalf("acquire first acceptance lock: %v", err)
-	}
-	if _, err := createAcceptanceLock(path); !errors.Is(err, os.ErrExist) {
-		t.Fatalf("second acceptance lock error = %v, want O_EXCL conflict", err)
-	}
-	if err := release(); err != nil {
-		t.Fatalf("release acceptance lock: %v", err)
-	}
-	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("acceptance lock remains after release: %v", err)
-	}
-}
-
 func TestAcceptanceEnvironmentPinsGoControls(t *testing.T) {
 	poisoned := []string{
 		"PATH=/usr/bin", "GOENV=/outside/go.env", "GOFLAGS=-run=^$", "GOWORK=/outside/go.work",
@@ -474,6 +495,67 @@ func TestAcceptanceEnvironmentPinsGoControls(t *testing.T) {
 		if values := environmentValues(environment, name); len(values) != 0 {
 			t.Errorf("%s must not be inherited: %v", name, values)
 		}
+	}
+}
+
+func TestAcceptanceEnvironmentPinsTrustedToolPath(t *testing.T) {
+	poisonedPath := t.TempDir()
+	environment := isolatedEnvironmentFrom(
+		[]string{"PATH=" + poisonedPath, "HOME=" + os.Getenv("HOME")},
+		t.TempDir(),
+		"semlia-accept-a1b2c3d4-000000000001",
+		38080,
+		35432,
+	)
+	values := environmentValues(environment, "PATH")
+	if len(values) != 1 || values[0] != trustedAcceptancePath() {
+		t.Fatalf("isolated PATH values = %v, want exactly the trusted platform path", values)
+	}
+	if strings.Contains(values[0], poisonedPath) {
+		t.Fatalf("isolated PATH retained ambient directory %q", poisonedPath)
+	}
+	for _, tool := range []string{"make", "go", "docker", "pnpm", "git"} {
+		path, err := acceptanceExecutablePath(environment, tool)
+		if err != nil {
+			t.Errorf("trusted platform path does not provide required %s: %v", tool, err)
+			continue
+		}
+		if !filepath.IsAbs(path) || strings.HasPrefix(path, poisonedPath+string(os.PathSeparator)) {
+			t.Errorf("%s resolved to untrusted path %q", tool, path)
+		}
+	}
+}
+
+func TestAcceptanceEnvironmentAllowsOnlyKnownHostedToolPaths(t *testing.T) {
+	poisoned := t.TempDir()
+	traversal := "/opt/hostedtoolcache/../../" + strings.TrimPrefix(poisoned, string(os.PathSeparator))
+	nonBin := "/opt/hostedtoolcache/go/1.26.5/x64"
+	hostedGo := "/opt/hostedtoolcache/go/1.26.5/x64/bin"
+	hostedPnpm := "/home/runner/setup-pnpm/node_modules/.bin"
+	basePath := strings.Join([]string{poisoned, traversal, nonBin, hostedGo, hostedPnpm, hostedGo}, string(os.PathListSeparator))
+	environment := isolatedEnvironmentFrom(
+		[]string{"PATH=" + basePath},
+		t.TempDir(),
+		"semlia-accept-a1b2c3d4-000000000001",
+		38080,
+		35432,
+	)
+	want := strings.Join([]string{trustedAcceptancePath(), hostedGo, hostedPnpm}, string(os.PathListSeparator))
+	if got := environmentValue(environment, "PATH"); got != want {
+		t.Fatalf("isolated hosted-tool PATH = %q, want %q", got, want)
+	}
+}
+
+func TestAcceptanceCommandResolutionFailsClosed(t *testing.T) {
+	relative := filepath.Join("relative", "bin")
+	if path, err := acceptanceExecutablePath([]string{"PATH=" + relative}, "go"); err == nil {
+		t.Fatalf("relative isolated PATH resolved executable %q", path)
+	}
+	if path, err := acceptanceExecutablePath([]string{"PATH=" + t.TempDir()}, "definitely-not-a-semlia-tool"); !errors.Is(err, exec.ErrNotFound) {
+		t.Fatalf("missing executable resolution = %q, %v; want exec.ErrNotFound", path, err)
+	}
+	if path, err := acceptanceExecutablePath([]string{"PATH=" + trustedAcceptancePath()}, filepath.Join("relative", "tool")); err == nil {
+		t.Fatalf("relative explicit command resolved to %q", path)
 	}
 }
 
@@ -519,9 +601,11 @@ func TestAcceptancePnpmStoreUsesTaskCache(t *testing.T) {
 		38080,
 		35432,
 	)
-	command := exec.Command("pnpm", "store", "path")
+	command, resolveErr := acceptanceCommandContext(context.Background(), environment, "pnpm", "store", "path")
+	if resolveErr != nil {
+		t.Fatalf("resolve isolated pnpm: %v", resolveErr)
+	}
 	command.Stdin = strings.NewReader("y\n")
-	command.Env = environment
 	output, err := command.CombinedOutput()
 	if err != nil {
 		t.Fatalf("resolve isolated pnpm store: %v: %s", err, output)
@@ -559,9 +643,11 @@ func TestAcceptanceMakeIgnoresInheritedMakefiles(t *testing.T) {
 		38080,
 		35432,
 	)
-	command := exec.Command("make", "--no-print-directory", "verify")
+	command, resolveErr := acceptanceCommandContext(context.Background(), environment, "make", "--no-print-directory", "verify")
+	if resolveErr != nil {
+		t.Fatalf("resolve isolated make: %v", resolveErr)
+	}
 	command.Dir = project
-	command.Env = environment
 	output, err := command.CombinedOutput()
 	if err != nil {
 		t.Fatalf("run make with isolated environment: %v: %s", err, output)
@@ -611,6 +697,81 @@ func TestFreshCloneLauncherRejectsInvalidInputsBeforeShellOptionsCanSkipBody(t *
 	}
 	if !strings.Contains(string(output), "SEMLIA_ACCEPTANCE_SOURCE") {
 		t.Fatalf("launcher failure does not identify invalid source: %v: %s", err, output)
+	}
+}
+
+func TestFreshCloneLauncherRejectsInvalidInputsThroughPoisonedPathAndFunctions(t *testing.T) {
+	bin := t.TempDir()
+	for _, tool := range []string{"dirname", "env", "go"} {
+		stub := "#!/bin/sh\nexit 0\n"
+		if err := os.WriteFile(filepath.Join(bin, tool), []byte(stub), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, test := range []struct {
+		name   string
+		source string
+		ref    string
+		want   string
+	}{
+		{name: "invalid source", source: "", ref: "not-a-commit", want: "SEMLIA_ACCEPTANCE_SOURCE is required"},
+		{name: "invalid ref", source: repositoryRoot, ref: "not-a-commit", want: "SEMLIA_ACCEPTANCE_REF must be an exact 40-character lowercase commit"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			command := exec.Command(filepath.Join(repositoryRoot, "scripts", "acceptance", "m0-fresh-clone.sh"))
+			command.Env = []string{
+				"PATH=" + bin,
+				"HOME=" + os.Getenv("HOME"),
+				"BASH_FUNC_cd%%=() { return 0; }",
+				"BASH_FUNC_pwd%%=() { printf '/tmp\\n'; return 0; }",
+				"BASH_FUNC_dirname%%=() { printf '/tmp\\n'; return 0; }",
+				"BASH_FUNC_env%%=() { return 0; }",
+				"BASH_FUNC_go%%=() { return 0; }",
+				"SEMLIA_ACCEPTANCE_SOURCE=" + test.source,
+				"SEMLIA_ACCEPTANCE_REF=" + test.ref,
+			}
+			output, err := command.CombinedOutput()
+			if err == nil {
+				t.Fatalf("canonical launcher falsely accepted invalid source/ref through poisoned commands: %s", output)
+			}
+			if !strings.Contains(string(output), test.want) {
+				t.Fatalf("launcher did not reach the real Go invocation validator: %v\n%s", err, output)
+			}
+		})
+	}
+}
+
+func TestAcceptanceCommandsResolveAgainstProvidedEnvironmentPath(t *testing.T) {
+	ambientBin := t.TempDir()
+	isolatedBin := t.TempDir()
+	t.Setenv("PATH", ambientBin)
+
+	for _, tool := range []string{"make", "go", "docker", "pnpm", "git"} {
+		tool := tool
+		t.Run(tool, func(t *testing.T) {
+			ambientStub := "#!/bin/sh\nprintf 'ambient-" + tool + "\\n'\nexit 0\n"
+			isolatedStub := "#!/bin/sh\nprintf 'isolated-" + tool + "\\n'\nexit 41\n"
+			if err := os.WriteFile(filepath.Join(ambientBin, tool), []byte(ambientStub), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(isolatedBin, tool), []byte(isolatedStub), 0o755); err != nil {
+				t.Fatal(err)
+			}
+
+			output, err := executeSubprocess(
+				context.Background(),
+				t.TempDir(),
+				[]string{"PATH=" + isolatedBin},
+				tool,
+			)
+			var exitError *exec.ExitError
+			if !errors.As(err, &exitError) || exitError.ExitCode() != 41 {
+				t.Fatalf("%s did not execute the failing isolated binary: err=%v output=%q", tool, err, output)
+			}
+			if got := strings.TrimSpace(string(output)); got != "isolated-"+tool {
+				t.Fatalf("%s output = %q, want isolated-path marker", tool, got)
+			}
+		})
 	}
 }
 
@@ -718,6 +879,9 @@ func TestFreshCloneLauncherReservesCleanupEnvelope(t *testing.T) {
 	launcher := readRepositoryFile(t, "scripts/acceptance/m0-fresh-clone.sh")
 	if strings.Count(launcher, "-timeout=100m") != 1 {
 		t.Fatalf("canonical launcher must set exactly one 100m outer timeout:\n%s", launcher)
+	}
+	if !strings.Contains(launcher, "TRUSTED_PATH="+trustedAcceptancePath()) {
+		t.Fatal("canonical launcher and child acceptance environment use different trusted tool paths")
 	}
 	if !strings.Contains(readRepositoryFile(t, "tests/acceptance/fresh_clone_test.go"), `"test.timeout": outerAcceptanceTimeout.String()`) {
 		t.Fatal("fresh-clone invocation validator does not enforce the canonical outer timeout")
@@ -1663,10 +1827,13 @@ func TestDockerCleanupLifecycleProbe(t *testing.T) {
 	}
 	unrelatedID = strings.TrimSpace(unrelatedID)
 
-	foreground := exec.CommandContext(ctx,
+	foreground, resolveErr := acceptanceCommandContext(ctx, dockerProbeEnvironment(),
 		"docker", "run", "--rm", "--label", taskLabel,
 		image, "sh", "-c", "sleep 300",
 	)
+	if resolveErr != nil {
+		t.Fatalf("resolve Docker cleanup probe CLI: %v", resolveErr)
+	}
 	var foregroundOutput strings.Builder
 	foreground.Stdout = &foregroundOutput
 	foreground.Stderr = &foregroundOutput
@@ -1824,9 +1991,16 @@ func waitForDockerProbeContainer(ctx context.Context, label string) (string, err
 }
 
 func dockerProbeOutput(ctx context.Context, args ...string) (string, error) {
-	command := exec.CommandContext(ctx, "docker", args...)
+	command, resolveErr := acceptanceCommandContext(ctx, dockerProbeEnvironment(), "docker", args...)
+	if resolveErr != nil {
+		return "", resolveErr
+	}
 	output, err := command.CombinedOutput()
 	return string(output), err
+}
+
+func dockerProbeEnvironment() []string {
+	return append(filteredEnvironment(os.Environ(), "PATH"), "PATH="+trustedAcceptancePath())
 }
 
 type dockerProbeExecutor func(context.Context, ...string) (string, error)
@@ -1899,13 +2073,17 @@ func argumentAfter(arguments []string, name string) string {
 
 func (run *freshCloneRun) clone(ctx context.Context, config freshCloneConfig) {
 	run.t.Helper()
-	clone := acceptanceCommandContext(ctx, "git", "clone", "--no-checkout", "--", config.source, run.root)
-	clone.Env = run.environment
+	clone, err := acceptanceCommandContext(ctx, run.environment, "git", "clone", "--no-checkout", "--", config.source, run.root)
+	if err != nil {
+		run.t.Fatalf("resolve isolated git clone: %v", err)
+	}
 	if output, err := clone.CombinedOutput(); err != nil {
 		run.t.Fatalf("clone isolated checkout: %v\n%s", err, output)
 	}
-	ancestor := acceptanceCommandContext(ctx, "git", "-C", config.source, "merge-base", "--is-ancestor", config.ref, "HEAD")
-	ancestor.Env = run.environment
+	ancestor, err := acceptanceCommandContext(ctx, run.environment, "git", "-C", config.source, "merge-base", "--is-ancestor", config.ref, "HEAD")
+	if err != nil {
+		run.t.Fatalf("resolve isolated git ancestry check: %v", err)
+	}
 	if reachable := ancestor.Run(); reachable != nil {
 		run.t.Fatalf("SEMLIA_ACCEPTANCE_REF must be reachable from source HEAD: %v", reachable)
 	}
@@ -2025,9 +2203,11 @@ func (run *freshCloneRun) verifyContractDrift(ctx context.Context) {
 		}
 	}()
 
-	command := acceptanceCommandContext(ctx, "make", "contracts-check")
+	command, commandErr := acceptanceCommandContext(ctx, run.environment, "make", "contracts-check")
+	if commandErr != nil {
+		run.t.Fatalf("resolve isolated contract-drift command: %v", commandErr)
+	}
 	command.Dir = run.root
-	command.Env = run.environment
 	output, err := command.CombinedOutput()
 	if err == nil {
 		run.t.Fatal("contract drift gate accepted a modified generated artifact")
@@ -2061,9 +2241,11 @@ func (run *freshCloneRun) verifyProductionFailClosed(ctx context.Context) {
 	)
 	defer func() { run.environment = baseEnvironment }()
 
-	command := acceptanceCommandContext(ctx, "go", "run", "./cmd/semlia", "server")
+	command, commandErr := acceptanceCommandContext(ctx, run.environment, "go", "run", "./cmd/semlia", "server")
+	if commandErr != nil {
+		run.t.Fatalf("resolve isolated production fail-closed command: %v", commandErr)
+	}
 	command.Dir = run.root
-	command.Env = run.environment
 	output, err := command.CombinedOutput()
 	if err == nil {
 		run.t.Fatal("production server accepted insecure configuration")
@@ -2206,9 +2388,11 @@ func (run *freshCloneRun) executeCommand(ctx context.Context, name string, args 
 }
 
 func (run *freshCloneRun) executeCommandOutput(ctx context.Context, name string, args ...string) ([]byte, error) {
-	command := acceptanceCommandContext(ctx, name, args...)
+	command, resolveErr := acceptanceCommandContext(ctx, run.environment, name, args...)
+	if resolveErr != nil {
+		return nil, fmt.Errorf("%s %s: %w", name, strings.Join(args, " "), resolveErr)
+	}
 	command.Dir = run.root
-	command.Env = run.environment
 	output, err := command.CombinedOutput()
 	if err == nil {
 		return output, nil
@@ -2527,9 +2711,11 @@ func (run *freshCloneRun) cleanupCommand(timeout time.Duration, name string, arg
 }
 
 func executeSubprocess(ctx context.Context, dir string, environment []string, name string, args ...string) ([]byte, error) {
-	command := acceptanceCommandContext(ctx, name, args...)
+	command, err := acceptanceCommandContext(ctx, environment, name, args...)
+	if err != nil {
+		return nil, err
+	}
 	command.Dir = dir
-	command.Env = environment
 	return command.CombinedOutput()
 }
 

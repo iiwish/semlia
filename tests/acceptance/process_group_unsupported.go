@@ -9,7 +9,7 @@ import (
 
 // Semlia's fresh-clone acceptance target supports macOS and Linux. Other
 // platforms retain direct-child cancellation so the package remains buildable.
-func acceptanceCommandContext(ctx context.Context, name string, args ...string) *exec.Cmd {
+func newAcceptanceCommandContext(ctx context.Context, name string, args ...string) *exec.Cmd {
 	command := exec.CommandContext(ctx, name, args...)
 	command.WaitDelay = acceptanceCommandWaitDelay
 	return command

@@ -10,7 +10,7 @@ import (
 	"syscall"
 )
 
-func acceptanceCommandContext(ctx context.Context, name string, args ...string) *exec.Cmd {
+func newAcceptanceCommandContext(ctx context.Context, name string, args ...string) *exec.Cmd {
 	command := exec.CommandContext(ctx, name, args...)
 	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	command.Cancel = func() error {
