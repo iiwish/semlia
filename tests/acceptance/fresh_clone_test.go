@@ -1,6 +1,7 @@
 package acceptance
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -70,6 +71,8 @@ type cleanupResourceKind struct {
 
 type freshCloneRun struct {
 	t               *testing.T
+	scratchBase     string
+	scratch         string
 	root            string
 	environment     []string
 	project         string
@@ -204,12 +207,15 @@ func (config freshCloneConfig) validate() error {
 
 func newFreshCloneRun(t *testing.T, config freshCloneConfig) *freshCloneRun {
 	t.Helper()
-	return newFreshCloneRunWithID(t, config, randomRunID(t))
+	run := newFreshCloneRunWithID(t, config, randomRunID(t))
+	registerTaskScratchCleanup(t, run.scratchBase, run.scratch)
+	return run
 }
 
 func newFreshCloneRunWithID(t *testing.T, config freshCloneConfig, runID string) *freshCloneRun {
 	t.Helper()
 	scratch := t.TempDir()
+	scratchBase := filepath.Dir(scratch)
 	httpPort, postgresPort := reserveLocalPorts(t)
 	project := acceptanceProjectName(config.ref, runID)
 	environment := isolatedEnvironment(scratch, project, httpPort, postgresPort)
@@ -218,11 +224,22 @@ func newFreshCloneRunWithID(t *testing.T, config freshCloneConfig, runID string)
 	}
 	return &freshCloneRun{
 		t:           t,
+		scratchBase: scratchBase,
+		scratch:     scratch,
 		root:        filepath.Join(scratch, "checkout"),
 		environment: environment,
 		project:     project,
 		baseURL:     fmt.Sprintf("http://127.0.0.1:%d", httpPort),
 	}
+}
+
+func registerTaskScratchCleanup(t *testing.T, scratchBase, scratch string) {
+	t.Helper()
+	t.Cleanup(func() {
+		if err := makeTaskScratchRemovable(scratchBase, scratch); err != nil {
+			t.Errorf("make task scratch removable: %v", err)
+		}
+	})
 }
 
 func acceptanceProjectName(ref, runID string) string {
@@ -568,15 +585,238 @@ func prepareIsolatedEnvironmentDirectories(environment []string) error {
 }
 
 func (run *freshCloneRun) validateGoToolchain(ctx context.Context) error {
-	output, err := executeSubprocess(ctx, filepath.Dir(run.root), run.environment, "go", "version")
-	if err != nil {
-		return fmt.Errorf("validate isolated Go toolchain: %w: %s", err, strings.TrimSpace(string(output)))
+	command, resolveErr := acceptanceCommandContext(ctx, run.environment, "go", "version")
+	if resolveErr != nil {
+		return fmt.Errorf("validate isolated Go toolchain: %w", resolveErr)
 	}
-	fields := strings.Fields(string(output))
-	if len(fields) < 3 || fields[0] != "go" || fields[1] != "version" || fields[2] != "go"+pinnedGoVersion {
-		return fmt.Errorf("validate isolated Go toolchain: got %q, want go version go%s <platform>", strings.TrimSpace(string(output)), pinnedGoVersion)
+	command.Dir = filepath.Dir(run.root)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	command.Stdout = &stdout
+	command.Stderr = &stderr
+	err := command.Run()
+	if err != nil {
+		return fmt.Errorf("validate isolated Go toolchain: %w (stdout=%q stderr=%q)", err, strings.TrimSpace(stdout.String()), strings.TrimSpace(stderr.String()))
+	}
+	if err := validateGoToolchainOutput(stdout.String(), stderr.String(), runtime.GOOS, runtime.GOARCH); err != nil {
+		return fmt.Errorf("validate isolated Go toolchain: %w", err)
 	}
 	return nil
+}
+
+func validateGoToolchainOutput(stdout, stderr, goos, goarch string) error {
+	wantStdout := fmt.Sprintf("go version go%s %s/%s", pinnedGoVersion, goos, goarch)
+	gotStdout := trimOneLineEnding(stdout)
+	if gotStdout != wantStdout {
+		return fmt.Errorf("stdout=%q stderr=%q, want stdout=%q", strings.TrimSpace(stdout), strings.TrimSpace(stderr), wantStdout)
+	}
+	gotStderr := trimOneLineEnding(stderr)
+	wantColdDiagnostic := fmt.Sprintf("go: downloading go%s (%s/%s)", pinnedGoVersion, goos, goarch)
+	if gotStderr != "" && gotStderr != wantColdDiagnostic {
+		return fmt.Errorf("stdout=%q unexpected stderr=%q; allowed cold-toolchain stderr=%q", strings.TrimSpace(stdout), strings.TrimSpace(stderr), wantColdDiagnostic)
+	}
+	return nil
+}
+
+func trimOneLineEnding(value string) string {
+	if strings.HasSuffix(value, "\r\n") {
+		return strings.TrimSuffix(value, "\r\n")
+	}
+	return strings.TrimSuffix(value, "\n")
+}
+
+func TestValidateGoToolchainOutput(t *testing.T) {
+	wantStdout := "go version go" + pinnedGoVersion + " darwin/arm64\n"
+	wantColdDiagnostic := "go: downloading go" + pinnedGoVersion + " (darwin/arm64)\n"
+	for _, test := range []struct {
+		name    string
+		stdout  string
+		stderr  string
+		wantErr bool
+	}{
+		{name: "warm", stdout: wantStdout},
+		{name: "cold pinned toolchain", stdout: wantStdout, stderr: wantColdDiagnostic},
+		{name: "wrong version", stdout: "go version go1.26.4 darwin/arm64\n", wantErr: true},
+		{name: "wrong platform", stdout: "go version go" + pinnedGoVersion + " linux/amd64\n", wantErr: true},
+		{name: "unexpected stderr", stdout: wantStdout, stderr: "go: warning: unexpected\n", wantErr: true},
+		{name: "extra download stderr", stdout: wantStdout, stderr: wantColdDiagnostic + "go: downloading example.invalid/module v1.0.0\n", wantErr: true},
+		{name: "extra stdout", stdout: wantStdout + "extra\n", wantErr: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			err := validateGoToolchainOutput(test.stdout, test.stderr, "darwin", "arm64")
+			if (err != nil) != test.wantErr {
+				t.Fatalf("validateGoToolchainOutput() error = %v, wantErr %t", err, test.wantErr)
+			}
+			if test.wantErr {
+				for _, want := range []string{fmt.Sprintf("%q", strings.TrimSpace(test.stdout)), fmt.Sprintf("%q", strings.TrimSpace(test.stderr))} {
+					if want != "" && !strings.Contains(err.Error(), want) {
+						t.Errorf("error %q missing diagnostic %q", err, want)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestMakeTaskScratchRemovableDoesNotFollowSymlinks(t *testing.T) {
+	parent := t.TempDir()
+	scratch := filepath.Join(parent, "scratch")
+	readOnlyDirectory := filepath.Join(scratch, "go-mod", "toolchain")
+	if err := os.MkdirAll(readOnlyDirectory, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	readOnlyFile := filepath.Join(readOnlyDirectory, "LICENSE")
+	if err := os.WriteFile(readOnlyFile, []byte("license"), 0o444); err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(parent, "outside")
+	if err := os.WriteFile(outside, []byte("sentinel"), 0o400); err != nil {
+		t.Fatal(err)
+	}
+	outsideBefore, err := os.Stat(outside)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(readOnlyDirectory, "escape")); err != nil {
+		t.Fatal(err)
+	}
+	outsideDirectory := filepath.Join(parent, "outside-directory")
+	if err := os.Mkdir(outsideDirectory, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outsideDirectory, filepath.Join(readOnlyDirectory, "directory-escape")); err != nil {
+		t.Fatal(err)
+	}
+	outsideDirectoryBefore, err := os.Stat(outsideDirectory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(readOnlyDirectory, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(filepath.Join(scratch, "go-mod"), 0o555); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(scratch, 0o555); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := makeTaskScratchRemovable(parent, scratch); err != nil {
+		t.Fatal(err)
+	}
+	outsideAfter, err := os.Stat(outside)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := outsideAfter.Mode().Perm(), outsideBefore.Mode().Perm(); got != want {
+		t.Fatalf("scratch cleanup changed external symlink target mode: got %04o, want %04o", got, want)
+	}
+	outsideDirectoryAfter, err := os.Stat(outsideDirectory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := outsideDirectoryAfter.Mode().Perm(), outsideDirectoryBefore.Mode().Perm(); got != want {
+		t.Fatalf("scratch cleanup changed external directory symlink target mode: got %04o, want %04o", got, want)
+	}
+	if err := os.RemoveAll(scratch); err != nil {
+		t.Fatalf("remove scratch after making read-only tree removable: %v", err)
+	}
+	if body, err := os.ReadFile(outside); err != nil || string(body) != "sentinel" {
+		t.Fatalf("external symlink target changed: body=%q err=%v", body, err)
+	}
+}
+
+func TestMakeTaskScratchRemovableRejectsUnsafePaths(t *testing.T) {
+	parent := t.TempDir()
+	sibling := t.TempDir()
+	symlinkScratch := filepath.Join(parent, "symlink-scratch")
+	if err := os.Symlink(sibling, symlinkScratch); err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		base    string
+		scratch string
+	}{
+		{base: parent, scratch: ""},
+		{base: parent, scratch: "."},
+		{base: parent, scratch: parent + string(os.PathSeparator) + ".." + string(os.PathSeparator) + "unclean"},
+		{base: parent, scratch: string(os.PathSeparator)},
+		{base: parent, scratch: sibling},
+		{base: parent, scratch: symlinkScratch},
+		{base: string(os.PathSeparator), scratch: parent},
+	} {
+		if err := makeTaskScratchRemovable(test.base, test.scratch); err == nil {
+			t.Fatalf("unsafe scratch base=%q path=%q was accepted", test.base, test.scratch)
+		}
+	}
+}
+
+func TestNewFreshCloneRunRegistersEarlyScratchCleanup(t *testing.T) {
+	subtestPassed := t.Run("readonly scratch", func(t *testing.T) {
+		config := freshCloneConfig{ref: strings.Repeat("a", 40)}
+		run := newFreshCloneRun(t, config)
+		readOnlyDirectory := filepath.Join(run.scratch, "go-mod", "golang.org", "toolchain")
+		if err := os.MkdirAll(readOnlyDirectory, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(readOnlyDirectory, "LICENSE"), []byte("license"), 0o444); err != nil {
+			t.Fatal(err)
+		}
+		for _, path := range []string{readOnlyDirectory, filepath.Dir(readOnlyDirectory), filepath.Dir(filepath.Dir(readOnlyDirectory)), filepath.Join(run.scratch, "go-mod"), run.scratch} {
+			if err := os.Chmod(path, 0o555); err != nil {
+				t.Fatal(err)
+			}
+		}
+	})
+	if !subtestPassed {
+		t.Fatal("early task scratch cleanup failed for a pre-clone read-only toolchain tree")
+	}
+}
+
+func makeTaskScratchRemovable(scratchBase, scratch string) error {
+	if scratchBase == "" || !filepath.IsAbs(scratchBase) || filepath.Clean(scratchBase) != scratchBase || filepath.Dir(scratchBase) == scratchBase {
+		return fmt.Errorf("unsafe task scratch base %q", scratchBase)
+	}
+	if scratch == "" || !filepath.IsAbs(scratch) || filepath.Clean(scratch) != scratch || filepath.Dir(scratch) == scratch {
+		return fmt.Errorf("unsafe task scratch path %q", scratch)
+	}
+	baseInfo, err := os.Lstat(scratchBase)
+	if err != nil {
+		return fmt.Errorf("inspect task scratch base %q: %w", scratchBase, err)
+	}
+	if baseInfo.Mode()&os.ModeSymlink != 0 || !baseInfo.IsDir() {
+		return fmt.Errorf("task scratch base %q is not a physical directory", scratchBase)
+	}
+	relative, err := filepath.Rel(scratchBase, scratch)
+	if err != nil || relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(os.PathSeparator)) || filepath.IsAbs(relative) {
+		return fmt.Errorf("task scratch %q is not a strict descendant of %q", scratch, scratchBase)
+	}
+	info, err := os.Lstat(scratch)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("inspect task scratch %q: %w", scratch, err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+		return fmt.Errorf("task scratch %q is not a physical directory", scratch)
+	}
+	return filepath.WalkDir(scratch, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return nil
+		}
+		if err := os.Chmod(path, info.Mode().Perm()|0o700); err != nil {
+			return fmt.Errorf("make task scratch path removable %q: %w", path, err)
+		}
+		return nil
+	})
 }
 
 type dockerCLIPluginMetadata struct {
@@ -959,19 +1199,21 @@ func TestAcceptanceGoToolchainValidationRejectsWrongVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 	goPath := filepath.Join(bin, "go")
-	if err := os.WriteFile(goPath, []byte("#!/bin/sh\nprintf 'go version go1.26.4 test/arch\\n'\n"), 0o755); err != nil {
+	platform := runtime.GOOS + "/" + runtime.GOARCH
+	if err := os.WriteFile(goPath, []byte("#!/bin/sh\nprintf 'go version go1.26.4 "+platform+"\\n'\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	run := &freshCloneRun{root: filepath.Join(root, "checkout"), environment: []string{"PATH=" + bin}}
 	err := run.validateGoToolchain(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "want go version go"+pinnedGoVersion) {
+	if err == nil || !strings.Contains(err.Error(), "want stdout=\"go version go"+pinnedGoVersion+" "+platform+"\"") {
 		t.Fatalf("wrong Go toolchain version was accepted: %v", err)
 	}
-	if err := os.WriteFile(goPath, []byte("#!/bin/sh\nprintf 'go version go"+pinnedGoVersion+" test/arch\\n'\n"), 0o755); err != nil {
+	coldDiagnostic := "go: downloading go" + pinnedGoVersion + " (" + platform + ")"
+	if err := os.WriteFile(goPath, []byte("#!/bin/sh\nprintf '"+coldDiagnostic+"\\n' >&2\nprintf 'go version go"+pinnedGoVersion+" "+platform+"\\n'\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := run.validateGoToolchain(context.Background()); err != nil {
-		t.Fatalf("pinned Go toolchain was rejected: %v", err)
+		t.Fatalf("cold pinned Go toolchain was rejected: %v", err)
 	}
 }
 
