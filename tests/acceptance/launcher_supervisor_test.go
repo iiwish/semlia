@@ -36,6 +36,7 @@ func TestFreshCloneLauncherForwardsSignalWaitsAndRemovesRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 	launcherRoot := strings.TrimSpace(string(launcherRootBytes))
+	waitForPath(t, filepath.Join(fixture.moduleRoot, "path-validated"), 30*time.Second)
 	waitForPath(t, filepath.Join(fixture.moduleRoot, "probe-ready"), 30*time.Second)
 	if err := process.command.Process.Signal(syscall.SIGTERM); err != nil {
 		t.Fatal(err)
@@ -81,7 +82,7 @@ func TestFreshCloneLauncherDeliversSignalReceivedBeforeChildAssignment(t *testin
 	if !errors.As(waitErr, &exitError) || exitError.ExitCode() != 143 {
 		t.Fatalf("launcher exit = %v, want pending signal status 143\n%s", waitErr, process.output.String())
 	}
-	for _, absent := range []string{fixture.childRecord, filepath.Join(fixture.moduleRoot, "probe-ready"), filepath.Join(fixture.moduleRoot, "child-cleaned")} {
+	for _, absent := range []string{fixture.childRecord, filepath.Join(fixture.moduleRoot, "path-validated"), filepath.Join(fixture.moduleRoot, "probe-ready"), filepath.Join(fixture.moduleRoot, "child-cleaned")} {
 		if _, err := os.Stat(absent); !errors.Is(err, os.ErrNotExist) {
 			t.Fatalf("pre-child signal launched child state %s: %v\n%s", absent, err, process.output.String())
 		}
@@ -174,6 +175,10 @@ func newLauncherSupervisorFixture(t *testing.T, signalProbe bool, mutate func(*t
 	launcher = replaceLauncherFragment(t, launcher,
 		"esac\nOLD_IFS=${IFS}",
 		"esac\nEXPECTED_GO_CANDIDATES="+launcherPhysicalGoTool(t)+"\nOLD_IFS=${IFS}",
+	)
+	launcher = replaceLauncherFragment(t, launcher,
+		"  \"SEMLIA_ACCEPTANCE_REF=${ACCEPTANCE_REF}\" \\\n",
+		"  \"SEMLIA_ACCEPTANCE_REF=${ACCEPTANCE_REF}\" \\\n  \"SEMLIA_TEST_EXPECTED_PATH=${TRUSTED_PATH}\" \\\n",
 	)
 	launcher = replaceLauncherFragment(t, launcher,
 		`"GOTOOLCHAIN=go${PINNED_GO_VERSION}"`,
