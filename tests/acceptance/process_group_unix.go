@@ -8,10 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"syscall"
-	"time"
 )
-
-const acceptanceCommandWaitDelay = 2 * time.Second
 
 func acceptanceCommandContext(ctx context.Context, name string, args ...string) *exec.Cmd {
 	command := exec.CommandContext(ctx, name, args...)
