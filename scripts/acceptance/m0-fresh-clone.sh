@@ -45,8 +45,13 @@ fi
 
 LAUNCHER_ROOT=
 CHILD_PID=
+ACTIVE_PID=
 LAUNCHER_SIGNAL_STATUS=
 LAUNCHER_SIGNAL_NAME=
+LAUNCHER_PREFLIGHT_TIMEOUT_SECONDS=15
+LAUNCHER_PREFLIGHT_TOTAL_TIMEOUT_SECONDS=45
+LAUNCHER_PREFLIGHT_BOUND_RESERVE_SECONDS=3
+LAUNCHER_PREFLIGHT_TERM_GRACE_SECONDS=1
 cleanup_launcher() {
   if [ -z "${LAUNCHER_ROOT}" ]; then
     return 0
@@ -71,10 +76,11 @@ forward_launcher_signal() {
     LAUNCHER_SIGNAL_STATUS=$1
     LAUNCHER_SIGNAL_NAME=$2
   fi
-  if [ -z "${CHILD_PID}" ]; then
+  TARGET_PID=${ACTIVE_PID:-${CHILD_PID}}
+  if [ -z "${TARGET_PID}" ]; then
     return
   fi
-  /bin/kill -"${LAUNCHER_SIGNAL_NAME}" -- "-${CHILD_PID}" 2>/dev/null || /bin/kill -"${LAUNCHER_SIGNAL_NAME}" "${CHILD_PID}" 2>/dev/null || :
+  /bin/kill -"${LAUNCHER_SIGNAL_NAME}" -- "-${TARGET_PID}" 2>/dev/null || /bin/kill -"${LAUNCHER_SIGNAL_NAME}" "${TARGET_PID}" 2>/dev/null || :
 }
 trap cleanup_on_exit 0
 trap 'forward_launcher_signal 129 HUP' HUP
@@ -86,6 +92,119 @@ LAUNCHER_ROOT=$(/usr/bin/mktemp -d /tmp/semlia-t008-launcher.XXXXXX) || {
   exit 1
 }
 /bin/chmod 700 "${LAUNCHER_ROOT}" || exit 1
+print_launcher_command_diagnostics() {
+  LABEL=$1
+  STDOUT_PATH=$2
+  STDERR_PATH=$3
+  if [ -s "${STDOUT_PATH}" ]; then
+    printf '%s\n' "${LABEL} stdout (first 65536 bytes):" >&2
+    /usr/bin/head -c 65536 "${STDOUT_PATH}" >&2
+  fi
+  if [ -s "${STDERR_PATH}" ]; then
+    printf '%s\n' "${LABEL} stderr (first 65536 bytes):" >&2
+    /usr/bin/head -c 65536 "${STDERR_PATH}" >&2
+  fi
+}
+prepare_launcher_command_timeout() {
+  LABEL=$1
+  PHASE_DEADLINE=$2
+  NOW=$(/bin/date +%s) || return 1
+  PHASE_REMAINING=$((PHASE_DEADLINE - NOW))
+  TOTAL_REMAINING=$((LAUNCHER_PREFLIGHT_DEADLINE - NOW))
+  if [ "${PHASE_REMAINING}" -lt "${TOTAL_REMAINING}" ]; then
+    LAUNCHER_COMMAND_TIMEOUT_SECONDS=${PHASE_REMAINING}
+  else
+    LAUNCHER_COMMAND_TIMEOUT_SECONDS=${TOTAL_REMAINING}
+  fi
+  if [ "${LAUNCHER_COMMAND_TIMEOUT_SECONDS}" -le 0 ]; then
+    printf '%s exceeded the %s-second total preflight budget or its %s-second phase budget\n' "${LABEL}" "${LAUNCHER_PREFLIGHT_TOTAL_TIMEOUT_SECONDS}" "${LAUNCHER_PREFLIGHT_TIMEOUT_SECONDS}" >&2
+    return 124
+  fi
+  if [ "${LAUNCHER_COMMAND_TIMEOUT_SECONDS}" -le "${LAUNCHER_PREFLIGHT_BOUND_RESERVE_SECONDS}" ]; then
+    printf '%s has only %s seconds of remaining launcher preflight budget; refusing to start because %s seconds are reserved for termination, reap, diagnostics, and cleanup\n' \
+      "${LABEL}" "${LAUNCHER_COMMAND_TIMEOUT_SECONDS}" "${LAUNCHER_PREFLIGHT_BOUND_RESERVE_SECONDS}" >&2
+    return 124
+  fi
+}
+run_bounded_launcher_command() {
+  LABEL=$1
+  STDOUT_PATH=$2
+  STDERR_PATH=$3
+  shift 3
+  COMMAND_TIMEOUT_SECONDS=${LAUNCHER_COMMAND_TIMEOUT_SECONDS:-${LAUNCHER_PREFLIGHT_TIMEOUT_SECONDS}}
+  TERM_DELAY_SECONDS=$((COMMAND_TIMEOUT_SECONDS - LAUNCHER_PREFLIGHT_BOUND_RESERVE_SECONDS))
+  if [ "${TERM_DELAY_SECONDS}" -lt 0 ]; then
+    TERM_DELAY_SECONDS=0
+  fi
+  TIMEOUT_MARKER=${LAUNCHER_ROOT}/preflight-timeout
+  : >"${STDOUT_PATH}" || return 1
+  : >"${STDERR_PATH}" || return 1
+  /bin/rm -f -- "${TIMEOUT_MARKER}" || return 1
+  if [ -n "${LAUNCHER_SIGNAL_STATUS}" ]; then
+    return "${LAUNCHER_SIGNAL_STATUS}"
+  fi
+
+  set -m
+  "$@" >"${STDOUT_PATH}" 2>"${STDERR_PATH}" &
+  ACTIVE_PID=$!
+  if ! /bin/kill -0 -- "-${ACTIVE_PID}" 2>/dev/null; then
+    /bin/kill -TERM "${ACTIVE_PID}" 2>/dev/null || :
+    wait "${ACTIVE_PID}" 2>/dev/null || :
+    ACTIVE_PID=
+    set +m
+    printf '%s\n' "start ${LABEL} in an isolated process group: failed" >&2
+    return 1
+  fi
+  PENDING_SIGNAL_ESCALATED=
+  if [ -n "${LAUNCHER_SIGNAL_STATUS}" ]; then
+    /bin/kill -"${LAUNCHER_SIGNAL_NAME}" -- "-${ACTIVE_PID}" 2>/dev/null || /bin/kill -"${LAUNCHER_SIGNAL_NAME}" "${ACTIVE_PID}" 2>/dev/null || :
+    /bin/sleep 0.2
+    /bin/kill -KILL -- "-${ACTIVE_PID}" 2>/dev/null || /bin/kill -KILL "${ACTIVE_PID}" 2>/dev/null || :
+    PENDING_SIGNAL_ESCALATED=1
+  fi
+  (
+    /bin/sleep "${TERM_DELAY_SECONDS}"
+    : >"${TIMEOUT_MARKER}"
+    /bin/kill -TERM -- "-${ACTIVE_PID}" 2>/dev/null || /bin/kill -TERM "${ACTIVE_PID}" 2>/dev/null || :
+    /bin/sleep "${LAUNCHER_PREFLIGHT_TERM_GRACE_SECONDS}"
+    /bin/kill -KILL -- "-${ACTIVE_PID}" 2>/dev/null || /bin/kill -KILL "${ACTIVE_PID}" 2>/dev/null || :
+  ) &
+  WATCHDOG_PID=$!
+  set +m
+
+  SIGNAL_ESCALATED=${PENDING_SIGNAL_ESCALATED}
+  while :; do
+    wait "${ACTIVE_PID}"
+    STATUS=$?
+    if [ -n "${LAUNCHER_SIGNAL_STATUS}" ] && [ -z "${SIGNAL_ESCALATED}" ]; then
+      /bin/sleep 0.2
+      /bin/kill -KILL -- "-${ACTIVE_PID}" 2>/dev/null || /bin/kill -KILL "${ACTIVE_PID}" 2>/dev/null || :
+      SIGNAL_ESCALATED=1
+    fi
+    if /bin/kill -0 "${ACTIVE_PID}" 2>/dev/null; then
+      continue
+    fi
+    break
+  done
+  /bin/kill -TERM -- "-${WATCHDOG_PID}" 2>/dev/null || /bin/kill -TERM "${WATCHDOG_PID}" 2>/dev/null || :
+  wait "${WATCHDOG_PID}" 2>/dev/null || :
+
+  # A probe may exit while leaving descendants behind. Always empty its group.
+  /bin/kill -TERM -- "-${ACTIVE_PID}" 2>/dev/null || :
+  /bin/kill -KILL -- "-${ACTIVE_PID}" 2>/dev/null || :
+  wait "${ACTIVE_PID}" 2>/dev/null || :
+  ACTIVE_PID=
+
+  if [ -n "${LAUNCHER_SIGNAL_STATUS}" ]; then
+    return "${LAUNCHER_SIGNAL_STATUS}"
+  fi
+  if [ -e "${TIMEOUT_MARKER}" ]; then
+    printf '%s exceeded the %s-second total preflight budget or its %s-second phase budget; inspect the captured diagnostics below\n' "${LABEL}" "${LAUNCHER_PREFLIGHT_TOTAL_TIMEOUT_SECONDS}" "${LAUNCHER_PREFLIGHT_TIMEOUT_SECONDS}" >&2
+    print_launcher_command_diagnostics "${LABEL}" "${STDOUT_PATH}" "${STDERR_PATH}"
+    return 124
+  fi
+  return "${STATUS}"
+}
 wait_for_child() {
   while :; do
     wait "${CHILD_PID}"
@@ -116,7 +235,11 @@ wait_for_child() {
   "${LAUNCHER_ROOT}/go-mod" || exit 1
 : >"${LAUNCHER_ROOT}/npmrc"
 
+LAUNCHER_PREFLIGHT_DEADLINE=$(( $(/bin/date +%s) + LAUNCHER_PREFLIGHT_TOTAL_TIMEOUT_SECONDS ))
 NODE_BIN=
+NODE_VERSION_STDOUT=${LAUNCHER_ROOT}/node-version.stdout
+NODE_VERSION_STDERR=${LAUNCHER_ROOT}/node-version.stderr
+NODE_PHASE_DEADLINE=$(( $(/bin/date +%s) + LAUNCHER_PREFLIGHT_TIMEOUT_SECONDS ))
 OLD_IFS=${IFS}
 IFS=:
 for DIRECTORY in ${TRUSTED_PATH}; do
@@ -124,7 +247,24 @@ for DIRECTORY in ${TRUSTED_PATH}; do
   if [ ! -x "${CANDIDATE}" ]; then
     continue
   fi
-  NODE_VERSION_OUTPUT=$(/usr/bin/env -i "HOME=${HOME:-/var/empty}" "PATH=${TRUSTED_PATH}" NODE_USE_SYSTEM_CA=1 "${CANDIDATE}" --version 2>/dev/null) || continue
+  prepare_launcher_command_timeout 'Node.js version probe' "${NODE_PHASE_DEADLINE}"
+  PREPARE_STATUS=$?
+  if [ "${PREPARE_STATUS}" -ne 0 ]; then
+    exit "${PREPARE_STATUS}"
+  fi
+  run_bounded_launcher_command 'Node.js version probe' "${NODE_VERSION_STDOUT}" "${NODE_VERSION_STDERR}" \
+    /usr/bin/env -i "HOME=${HOME:-/var/empty}" "PATH=${TRUSTED_PATH}" NODE_USE_SYSTEM_CA=1 "${CANDIDATE}" --version
+  STATUS=$?
+  if [ -n "${LAUNCHER_SIGNAL_STATUS}" ]; then
+    exit "${LAUNCHER_SIGNAL_STATUS}"
+  fi
+  if [ "${STATUS}" -eq 124 ]; then
+    exit 124
+  fi
+  if [ "${STATUS}" -ne 0 ]; then
+    continue
+  fi
+  NODE_VERSION_OUTPUT=$(/bin/cat -- "${NODE_VERSION_STDOUT}") || exit 1
   if [ "${NODE_VERSION_OUTPUT}" = v24.15.0 ]; then
     NODE_BIN=${CANDIDATE}
     break
@@ -137,14 +277,28 @@ if [ -z "${NODE_BIN}" ]; then
 fi
 SYSTEM_CA_BUNDLE=${LAUNCHER_ROOT}/system-ca.pem
 SYSTEM_CA_DIAGNOSTIC=${LAUNCHER_ROOT}/system-ca.stderr
-/usr/bin/env -i \
+CA_PHASE_DEADLINE=$(( $(/bin/date +%s) + LAUNCHER_PREFLIGHT_TIMEOUT_SECONDS ))
+prepare_launcher_command_timeout 'operating-system CA export' "${CA_PHASE_DEADLINE}"
+PREPARE_STATUS=$?
+if [ "${PREPARE_STATUS}" -ne 0 ]; then
+  exit "${PREPARE_STATUS}"
+fi
+run_bounded_launcher_command 'operating-system CA export' "${SYSTEM_CA_BUNDLE}" "${SYSTEM_CA_DIAGNOSTIC}" \
+  /usr/bin/env -i \
   "HOME=${HOME:-/var/empty}" \
   "PATH=${TRUSTED_PATH}" \
   NODE_USE_SYSTEM_CA=1 \
   "${NODE_BIN}" -e 'const {X509Certificate}=require("node:crypto");const tls=require("node:tls");const certificates=tls.getCACertificates("system");if(certificates.length===0)process.exit(42);for(const certificate of certificates){const lines=certificate.trim().split(/\r?\n/);if(lines[0]!=="-----BEGIN CERTIFICATE-----"||lines.at(-1)!=="-----END CERTIFICATE-----"||lines.length<3||lines.slice(1,-1).some(line=>!/^[A-Za-z0-9+/]+={0,2}$/.test(line)||line.length>64)){process.exit(43)}new X509Certificate(certificate)}process.stdout.write(certificates.map(certificate=>certificate.trim()).join("\n")+"\n")' \
-  >"${SYSTEM_CA_BUNDLE}" 2>"${SYSTEM_CA_DIAGNOSTIC}" || {
+  || {
+    STATUS=$?
+    if [ -n "${LAUNCHER_SIGNAL_STATUS}" ]; then
+      exit "${LAUNCHER_SIGNAL_STATUS}"
+    fi
     printf '%s\n' 'export a non-empty operating-system CA bundle for isolated Node.js: failed' >&2
-    exit 1
+    if [ "${STATUS}" -ne 124 ]; then
+      print_launcher_command_diagnostics 'operating-system CA export' "${SYSTEM_CA_BUNDLE}" "${SYSTEM_CA_DIAGNOSTIC}"
+    fi
+    exit "${STATUS}"
   }
 if [ -s "${SYSTEM_CA_DIAGNOSTIC}" ]; then
   printf '%s\n' 'export operating-system CA bundle produced unexpected diagnostics' >&2
@@ -158,6 +312,9 @@ if [ ! -f "${SYSTEM_CA_BUNDLE}" ] || [ ! -s "${SYSTEM_CA_BUNDLE}" ] || [ -L "${S
 fi
 
 GO_BIN=
+GO_VERSION_STDOUT=${LAUNCHER_ROOT}/go-version.stdout
+GO_VERSION_STDERR=${LAUNCHER_ROOT}/go-version.stderr
+GO_PHASE_DEADLINE=$(( $(/bin/date +%s) + LAUNCHER_PREFLIGHT_TIMEOUT_SECONDS ))
 KERNEL_NAME=$(/usr/bin/uname -s 2>/dev/null || printf unknown)
 MACHINE_NAME=$(/usr/bin/uname -m 2>/dev/null || printf unknown)
 EXPECTED_GO_CANDIDATES=
@@ -181,14 +338,31 @@ for CANDIDATE in ${EXPECTED_GO_CANDIDATES}; do
   if [ ! -x "${CANDIDATE}" ]; then
     continue
   fi
-  GO_VERSION_OUTPUT=$(/usr/bin/env -i \
+  prepare_launcher_command_timeout 'Go version probe' "${GO_PHASE_DEADLINE}"
+  PREPARE_STATUS=$?
+  if [ "${PREPARE_STATUS}" -ne 0 ]; then
+    exit "${PREPARE_STATUS}"
+  fi
+  run_bounded_launcher_command 'Go version probe' "${GO_VERSION_STDOUT}" "${GO_VERSION_STDERR}" \
+    /usr/bin/env -i \
     "HOME=${LAUNCHER_ROOT}/home" \
     "PATH=${TRUSTED_PATH}" \
     GOENV=off \
     GOFLAGS= \
     GOWORK=off \
     GOTOOLCHAIN=local \
-    "${CANDIDATE}" version 2>/dev/null) || continue
+    "${CANDIDATE}" version
+  STATUS=$?
+  if [ -n "${LAUNCHER_SIGNAL_STATUS}" ]; then
+    exit "${LAUNCHER_SIGNAL_STATUS}"
+  fi
+  if [ "${STATUS}" -eq 124 ]; then
+    exit 124
+  fi
+  if [ "${STATUS}" -ne 0 ]; then
+    continue
+  fi
+  GO_VERSION_OUTPUT=$(/bin/cat -- "${GO_VERSION_STDOUT}") || exit 1
   case "${GO_VERSION_OUTPUT}" in
     "go version go${PINNED_GO_VERSION} "*|"go version go${PINNED_GO_BOOTSTRAP_VERSION} "*)
       GO_BIN=${CANDIDATE}

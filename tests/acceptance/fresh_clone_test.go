@@ -1106,6 +1106,33 @@ func TestFreshCloneLauncherPinsSystemCAWithoutTLSBypass(t *testing.T) {
 	}
 }
 
+func TestFreshCloneLauncherBoundsPreChildToolProbes(t *testing.T) {
+	launcher := readRepositoryFile(t, "scripts/acceptance/m0-fresh-clone.sh")
+	for _, fragment := range []string{
+		"LAUNCHER_PREFLIGHT_TIMEOUT_SECONDS=15",
+		"LAUNCHER_PREFLIGHT_TOTAL_TIMEOUT_SECONDS=45",
+		"LAUNCHER_PREFLIGHT_BOUND_RESERVE_SECONDS=3",
+		"LAUNCHER_PREFLIGHT_TERM_GRACE_SECONDS=1",
+		`-le "${LAUNCHER_PREFLIGHT_BOUND_RESERVE_SECONDS}"`,
+		"LAUNCHER_PREFLIGHT_DEADLINE=",
+		"NODE_PHASE_DEADLINE=",
+		"CA_PHASE_DEADLINE=",
+		"GO_PHASE_DEADLINE=",
+		"prepare_launcher_command_timeout 'Node.js version probe'",
+		"prepare_launcher_command_timeout 'operating-system CA export'",
+		"prepare_launcher_command_timeout 'Go version probe'",
+		"run_bounded_launcher_command 'Node.js version probe'",
+		"run_bounded_launcher_command 'operating-system CA export'",
+		"run_bounded_launcher_command 'Go version probe'",
+		`/bin/kill -KILL -- "-${ACTIVE_PID}"`,
+		`wait "${ACTIVE_PID}"`,
+	} {
+		if !strings.Contains(launcher, fragment) {
+			t.Errorf("canonical launcher missing bounded pre-child command fragment %q", fragment)
+		}
+	}
+}
+
 func validateGoToolchainOutput(stdout, stderr, goos, goarch string) error {
 	wantStdout := fmt.Sprintf("go version go%s %s/%s", pinnedGoVersion, goos, goarch)
 	gotStdout := trimOneLineEnding(stdout)
