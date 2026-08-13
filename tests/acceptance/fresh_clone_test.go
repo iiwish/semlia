@@ -2015,12 +2015,18 @@ func TestCleanupRemovesDockerResourcesBeforeCachesAndFinallyRelists(t *testing.T
 				if len(args) > 1 && args[1] == "ls" && networkExists {
 					return []byte("task-network\n"), nil
 				}
+				if len(args) > 1 && args[1] == "inspect" {
+					return json.Marshal(map[string]string{"com.docker.compose.project": project})
+				}
 				if len(args) > 2 && args[1] == "rm" && args[2] == "task-network" {
 					networkExists = false
 				}
 			case "volume":
 				if len(args) > 1 && args[1] == "ls" && volumeExists {
 					return []byte("task-volume\n"), nil
+				}
+				if len(args) > 1 && args[1] == "inspect" {
+					return json.Marshal(map[string]string{"com.docker.compose.project": project})
 				}
 				if len(args) > 3 && args[1] == "rm" && args[3] == "task-volume" {
 					volumeExists = false
@@ -2044,6 +2050,19 @@ func TestCleanupRemovesDockerResourcesBeforeCachesAndFinallyRelists(t *testing.T
 		removeIndex := commandIndex(calls, removal)
 		if removeIndex < 0 || removeIndex >= goIndex || removeIndex >= makeIndex {
 			t.Fatalf("task-owned Docker removal %q did not precede cache cleanup:\n%s", removal, strings.Join(calls, "\n"))
+		}
+	}
+	for _, sequence := range []struct {
+		inspect string
+		remove  string
+	}{
+		{"docker network inspect --format {{json .Labels}} task-network", "docker network rm task-network"},
+		{"docker volume inspect --format {{json .Labels}} task-volume", "docker volume rm --force task-volume"},
+	} {
+		inspectIndex := commandIndex(calls, sequence.inspect)
+		removeIndex := commandIndex(calls, sequence.remove)
+		if inspectIndex < 0 || removeIndex <= inspectIndex {
+			t.Errorf("Compose resource identity was not inspected before exact removal: inspect=%q remove=%q\n%s", sequence.inspect, sequence.remove, strings.Join(calls, "\n"))
 		}
 	}
 	for _, relist := range []string{
@@ -2088,6 +2107,8 @@ func TestCleanupPreservesEarlyFailuresAfterFinalDockerVerification(t *testing.T)
 					return []byte("task-network\n"), nil
 				}
 				return nil, nil
+			case strings.HasPrefix(joined, "network inspect"):
+				return json.Marshal(map[string]string{"com.docker.compose.project": project})
 			case strings.HasPrefix(joined, "network rm task-network"):
 				return []byte("network busy"), errors.New("remove failed")
 			default:
@@ -2143,7 +2164,7 @@ func TestCleanupFallbackRemovesOnlyProjectLabeledResources(t *testing.T) {
 			calls = append(calls, call{name: name, args: append([]string{}, args...)})
 			joined := strings.Join(args, " ")
 			switch {
-			case name == "docker" && strings.HasPrefix(joined, "inspect --format"):
+			case name == "docker" && (strings.HasPrefix(joined, "inspect --format") || strings.HasPrefix(joined, "network inspect --format") || strings.HasPrefix(joined, "volume inspect --format")):
 				return []byte(`{"com.docker.compose.project":"semlia-accept-a1b2c3d4-000000000001"}` + "\n"), nil
 			case name == "docker" && strings.HasPrefix(joined, "ps --all"):
 				if !listed["containers"] {
@@ -2214,6 +2235,8 @@ func TestCleanupPreservesInitialDockerTimeoutAfterFallbackRecovers(t *testing.T)
 					return []byte("task-volume\n"), nil
 				}
 				return nil, nil
+			case strings.HasPrefix(joined, "volume inspect --format"):
+				return json.Marshal(map[string]string{"com.docker.compose.project": "semlia-accept-a1b2c3d4-000000000001"})
 			case strings.HasPrefix(joined, "volume rm --force task-volume"):
 				volumeRemoved = true
 				return nil, nil
@@ -2404,6 +2427,72 @@ func TestCleanupOwnsExactTestcontainersSessionResources(t *testing.T) {
 	}
 	if len(wants) != 0 {
 		t.Fatalf("cleanup omitted Testcontainers session resources: %v", wants)
+	}
+}
+
+func TestCleanupOwnsExactComposeResources(t *testing.T) {
+	project := "semlia-accept-a1b2c3d4-000000000001"
+	composeLabel := "com.docker.compose.project=" + project
+	resources := (&freshCloneRun{project: project}).cleanupResourceKinds()
+	wants := map[string]struct {
+		inspectFormat string
+		maximum       int
+	}{
+		"containers": {"{{json .Config.Labels}}", composeServiceContainerLimit},
+		"networks":   {"{{json .Labels}}", composeNetworkLimit},
+		"volumes":    {"{{json .Labels}}", composeVolumeLimit},
+	}
+	for _, resource := range resources {
+		want, ok := wants[resource.label]
+		if !ok {
+			continue
+		}
+		if resource.identityLabel != composeLabel || resource.inspectFormat != want.inspectFormat || resource.maxIdentities != want.maximum {
+			t.Errorf("%s ownership = label %q format %q maximum %d", resource.label, resource.identityLabel, resource.inspectFormat, resource.maxIdentities)
+		}
+		delete(wants, resource.label)
+	}
+	if len(wants) != 0 {
+		t.Fatalf("cleanup omitted Compose resources: %v", wants)
+	}
+}
+
+func TestCleanupRefusesComposeResourceWhoseIdentityChanges(t *testing.T) {
+	project := "semlia-accept-a1b2c3d4-000000000001"
+	composeLabel := "com.docker.compose.project=" + project
+	for _, test := range []struct {
+		name       string
+		kind       string
+		identifier string
+		label      string
+	}{
+		{name: "network", kind: "network", identifier: "task-network", label: "networks"},
+		{name: "volume", kind: "volume", identifier: "task-volume", label: "volumes"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			run := &freshCloneRun{
+				root:    t.TempDir(),
+				project: project,
+				cleanupExecutor: func(_ context.Context, _ string, _ []string, name string, args ...string) ([]byte, error) {
+					if name != "docker" || len(args) < 2 || args[0] != test.kind {
+						return nil, nil
+					}
+					switch {
+					case args[1] == "ls" && argumentAfter(args, "--filter") == "label="+composeLabel:
+						return []byte(test.identifier + "\n"), nil
+					case args[1] == "inspect":
+						return json.Marshal(map[string]string{"com.docker.compose.project": project + "-unrelated"})
+					case args[1] == "rm":
+						t.Fatalf("cleanup removed a Compose %s after its project identity changed", test.name)
+					}
+					return nil, nil
+				},
+			}
+			err := run.removeRemainingTaskDockerResources()
+			if err == nil || !strings.Contains(err.Error(), "refuse to remove "+test.label+" "+test.identifier) {
+				t.Fatalf("changed Compose %s identity was not rejected: %v", test.name, err)
+			}
+		})
 	}
 }
 
@@ -3512,8 +3601,8 @@ func (run *freshCloneRun) cleanupResourceKinds() []cleanupResourceKind {
 	composeLabel := "com.docker.compose.project=" + run.project
 	resources := []cleanupResourceKind{
 		{label: "containers", listArgs: []string{"ps", "--all", "--filter", "label=" + composeLabel, "--format", "{{.ID}}"}, removeArgs: []string{"rm", "--force"}, identityLabel: composeLabel, inspectFormat: "{{json .Config.Labels}}", maxIdentities: composeServiceContainerLimit},
-		{label: "networks", listArgs: []string{"network", "ls", "--filter", "label=" + composeLabel, "--format", "{{.ID}}"}, removeArgs: []string{"network", "rm"}, maxIdentities: composeNetworkLimit},
-		{label: "volumes", listArgs: []string{"volume", "ls", "--filter", "label=" + composeLabel, "--format", "{{.Name}}"}, removeArgs: []string{"volume", "rm", "--force"}, maxIdentities: composeVolumeLimit},
+		{label: "networks", listArgs: []string{"network", "ls", "--filter", "label=" + composeLabel, "--format", "{{.ID}}"}, removeArgs: []string{"network", "rm"}, identityLabel: composeLabel, inspectFormat: "{{json .Labels}}", maxIdentities: composeNetworkLimit},
+		{label: "volumes", listArgs: []string{"volume", "ls", "--filter", "label=" + composeLabel, "--format", "{{.Name}}"}, removeArgs: []string{"volume", "rm", "--force"}, identityLabel: composeLabel, inspectFormat: "{{json .Labels}}", maxIdentities: composeVolumeLimit},
 	}
 	if taskLabel := environmentValue(run.environment, "SEMLIA_DOCKER_RESOURCE_LABEL"); taskLabel != "" {
 		resources = append(resources, cleanupResourceKind{
