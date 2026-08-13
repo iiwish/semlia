@@ -1,0 +1,36 @@
+package launcher_supervisor
+
+import (
+	"context"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"syscall"
+	"testing"
+	"time"
+)
+
+func TestFreshCloneAcceptance(t *testing.T) {
+	launcherRoot := os.Getenv("SEMLIA_ACCEPTANCE_LAUNCHER_ROOT")
+	sourceRoot := os.Getenv("SEMLIA_ACCEPTANCE_SOURCE")
+	if launcherRoot == "" || sourceRoot == "" {
+		t.Fatal("launcher probe requires isolated launcher and source roots")
+	}
+	t.Cleanup(func() {
+		time.Sleep(250 * time.Millisecond)
+		if _, err := os.Stat(launcherRoot); err != nil {
+			t.Errorf("launcher root was removed before child cleanup: %v", err)
+			return
+		}
+		if err := os.WriteFile(filepath.Join(sourceRoot, "child-cleaned"), []byte("cleaned\n"), 0o600); err != nil {
+			t.Error(err)
+		}
+	})
+	if err := os.WriteFile(filepath.Join(sourceRoot, "probe-ready"), []byte("ready\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGHUP, syscall.SIGTERM)
+	defer stop()
+	<-ctx.Done()
+}

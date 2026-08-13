@@ -1,4 +1,4 @@
-#!/usr/bin/env -S SHELLOPTS= BASHOPTS= BASH_ENV= ENV= /bin/sh
+#!/usr/bin/env -S SHELLOPTS= BASHOPTS= BASH_ENV= ENV= /bin/bash --noprofile --norc -p
 
 case "$0" in
   */scripts/acceptance/m0-fresh-clone.sh)
@@ -42,17 +42,64 @@ if [ "${#ACCEPTANCE_REF}" -ne 40 ]; then
   exit 2
 fi
 
+LAUNCHER_ROOT=
+CHILD_PID=
+LAUNCHER_SIGNAL_STATUS=
+LAUNCHER_SIGNAL_NAME=
+cleanup_launcher() {
+  if [ -z "${LAUNCHER_ROOT}" ]; then
+    return 0
+  fi
+  /bin/chmod -R u+w "${LAUNCHER_ROOT}" 2>/dev/null || :
+  /bin/rm -rf -- "${LAUNCHER_ROOT}" || return 1
+  [ ! -e "${LAUNCHER_ROOT}" ]
+}
+cleanup_on_exit() {
+  STATUS=$?
+  trap - 0 HUP INT TERM
+  if ! cleanup_launcher; then
+    printf '%s\n' 'remove isolated acceptance launcher directory: failed' >&2
+    if [ "${STATUS}" -eq 0 ]; then
+      STATUS=1
+    fi
+  fi
+  exit "${STATUS}"
+}
+forward_launcher_signal() {
+  if [ -z "${LAUNCHER_SIGNAL_STATUS}" ]; then
+    LAUNCHER_SIGNAL_STATUS=$1
+    LAUNCHER_SIGNAL_NAME=$2
+  fi
+  if [ -z "${CHILD_PID}" ]; then
+    return
+  fi
+  /bin/kill -"${LAUNCHER_SIGNAL_NAME}" -- "-${CHILD_PID}" 2>/dev/null || /bin/kill -"${LAUNCHER_SIGNAL_NAME}" "${CHILD_PID}" 2>/dev/null || :
+}
+trap cleanup_on_exit 0
+trap 'forward_launcher_signal 129 HUP' HUP
+trap 'forward_launcher_signal 130 INT' INT
+trap 'forward_launcher_signal 143 TERM' TERM
+
 LAUNCHER_ROOT=$(/usr/bin/mktemp -d /tmp/semlia-t008-launcher.XXXXXX) || {
   printf '%s\n' 'create isolated acceptance launcher directory: failed' >&2
   exit 1
 }
-cleanup_launcher() {
-  /bin/chmod -R u+w "${LAUNCHER_ROOT}" 2>/dev/null || :
-  /bin/rm -rf -- "${LAUNCHER_ROOT}"
+wait_for_child() {
+  while :; do
+    wait "${CHILD_PID}"
+    STATUS=$?
+    if /bin/kill -0 "${CHILD_PID}" 2>/dev/null; then
+      continue
+    fi
+    if [ -n "${LAUNCHER_SIGNAL_STATUS}" ]; then
+      while /bin/kill -0 -- "-${CHILD_PID}" 2>/dev/null; do
+        /bin/sleep 0.05
+      done
+      return "${LAUNCHER_SIGNAL_STATUS}"
+    fi
+    return "${STATUS}"
+  done
 }
-trap cleanup_launcher 0
-trap 'exit 130' HUP INT TERM
-
 /bin/mkdir -p \
   "${LAUNCHER_ROOT}/home" \
   "${LAUNCHER_ROOT}/tmp" \
@@ -112,6 +159,10 @@ if [ -z "${GO_BIN}" ]; then
   exit 1
 fi
 
+if [ -n "${LAUNCHER_SIGNAL_STATUS}" ]; then
+  exit "${LAUNCHER_SIGNAL_STATUS}"
+fi
+set -m
 /usr/bin/env -i \
   "HOME=${LAUNCHER_ROOT}/home" \
   "USER=${USER:-}" \
@@ -147,4 +198,21 @@ fi
   "SEMLIA_ACCEPTANCE_LAUNCHER_ROOT=${LAUNCHER_ROOT}" \
   "SEMLIA_ACCEPTANCE_SOURCE=${ACCEPTANCE_SOURCE}" \
   "SEMLIA_ACCEPTANCE_REF=${ACCEPTANCE_REF}" \
-  "${GO_BIN}" -C "${ROOT}" test -v -timeout=100m -run '^TestFreshCloneAcceptance$' ./tests/acceptance/... -count=1
+  "${GO_BIN}" -C "${ROOT}" test -v -timeout=100m -run '^TestFreshCloneAcceptance$' ./tests/acceptance/... -count=1 &
+CHILD_PID=$!
+if ! /bin/kill -0 -- "-${CHILD_PID}" 2>/dev/null; then
+  /bin/kill -TERM "${CHILD_PID}" 2>/dev/null || :
+  wait "${CHILD_PID}" 2>/dev/null || :
+  printf '%s\n' 'start fresh-clone acceptance in an isolated process group: failed' >&2
+  exit 1
+fi
+if [ -n "${LAUNCHER_SIGNAL_STATUS}" ]; then
+  /bin/kill -"${LAUNCHER_SIGNAL_NAME}" -- "-${CHILD_PID}" 2>/dev/null || /bin/kill -"${LAUNCHER_SIGNAL_NAME}" "${CHILD_PID}" 2>/dev/null || :
+fi
+set +m
+wait_for_child
+STATUS=$?
+if [ -n "${LAUNCHER_SIGNAL_STATUS}" ]; then
+  STATUS=${LAUNCHER_SIGNAL_STATUS}
+fi
+exit "${STATUS}"

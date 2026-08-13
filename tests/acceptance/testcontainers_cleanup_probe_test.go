@@ -72,11 +72,24 @@ func TestTestcontainersFailureCleanupProbeHelper(t *testing.T) {
 		t.Fatalf("start Testcontainers failure probe network: %v", err)
 	}
 	fmt.Printf("TESTCONTAINERS_FAILURE_NETWORK=%s\n", networkName)
-	container, err := testcontainers.Run(ctx, image, testcontainers.WithCmd("sh", "-c", "sleep 300"))
+	container, err := testcontainers.Run(
+		ctx,
+		image,
+		testcontainers.WithCmd("sh", "-c", "sleep 300"),
+		testcontainers.WithMounts(testcontainers.ContainerMount{
+			Source: testcontainers.GenericVolumeMountSource{},
+			Target: testcontainers.ContainerMountTarget("/testcontainers-anonymous"),
+		}),
+	)
 	if err != nil {
 		t.Fatalf("start Testcontainers failure probe: %v", err)
 	}
 	fmt.Printf("TESTCONTAINERS_FAILURE_CONTAINER=%s\n", container.GetContainerID())
+	anonymousVolume, err := dockerProbeOutput(ctx, "inspect", "--format", `{{range .Mounts}}{{if and (eq .Type "volume") (eq .Destination "/testcontainers-anonymous")}}{{.Name}}{{end}}{{end}}`, container.GetContainerID())
+	if err != nil || strings.TrimSpace(anonymousVolume) == "" {
+		t.Fatalf("inspect Testcontainers anonymous volume: %v: %s", err, anonymousVolume)
+	}
+	fmt.Printf("TESTCONTAINERS_FAILURE_ANONYMOUS_VOLUME=%s\n", strings.TrimSpace(anonymousVolume))
 	<-ctx.Done()
 }
 
@@ -105,18 +118,40 @@ func TestTestcontainersFailureCleanupProbe(t *testing.T) {
 	volumeName := project + "-volume"
 	unrelatedVolumeName := project + "-unrelated-volume"
 	var unrelatedContainerID string
+	var anonymousVolume string
 	t.Cleanup(func() {
-		remove := func(args ...string) {
+		remove := func(args ...string) error {
 			cleanupCtx, cancelCleanup := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancelCleanup()
-			_, _ = dockerProbeOutput(cleanupCtx, args...)
+			output, err := dockerProbeOutput(cleanupCtx, args...)
+			if err != nil && !strings.Contains(output, "No such") && !strings.Contains(output, "not found") {
+				return fmt.Errorf("docker %s: %w: %s", strings.Join(args, " "), err, output)
+			}
+			return nil
 		}
 		if unrelatedContainerID != "" {
-			remove("rm", "--force", unrelatedContainerID)
+			if err := remove("rm", "--force", unrelatedContainerID); err != nil {
+				t.Errorf("cleanup unrelated probe container: %v", err)
+			}
 		}
-		remove("network", "rm", networkName, unrelatedNetworkName)
-		remove("volume", "rm", "--force", volumeName, unrelatedVolumeName)
-		_ = cleanupDockerProbeContainers(sessionLabel, unrelatedLabel)
+		if anonymousVolume != "" {
+			if err := remove("volume", "rm", "--force", anonymousVolume); err != nil {
+				t.Errorf("cleanup anonymous probe volume: %v", err)
+			}
+		}
+		for _, name := range []string{networkName, unrelatedNetworkName} {
+			if err := remove("network", "rm", name); err != nil {
+				t.Errorf("cleanup probe network %s: %v", name, err)
+			}
+		}
+		for _, name := range []string{volumeName, unrelatedVolumeName} {
+			if err := remove("volume", "rm", "--force", name); err != nil {
+				t.Errorf("cleanup probe volume %s: %v", name, err)
+			}
+		}
+		if err := cleanupDockerProbeContainers(sessionLabel, unrelatedLabel); err != nil {
+			t.Errorf("cleanup probe containers: %v", err)
+		}
 	})
 
 	unrelatedContainerOutput, err := dockerProbeOutput(ctx, "run", "--detach", "--rm", "--label", unrelatedLabel, image, "sh", "-c", "sleep 300")
@@ -191,6 +226,10 @@ func TestTestcontainersFailureCleanupProbe(t *testing.T) {
 	if !strings.Contains(helperOutput.String(), "TESTCONTAINERS_FAILURE_NETWORK="+networkName) {
 		t.Fatalf("timed-out helper did not report the owned network %s:\n%s", networkName, helperOutput.String())
 	}
+	anonymousVolume = outputMarkerValue(helperOutput.String(), "TESTCONTAINERS_FAILURE_ANONYMOUS_VOLUME=")
+	if anonymousVolume == "" {
+		t.Fatalf("timed-out helper did not report its anonymous volume:\n%s", helperOutput.String())
+	}
 
 	run := &freshCloneRun{root: repositoryRoot, project: project, environment: environment}
 	if err := run.removeRemainingTaskDockerResources(); err != nil {
@@ -221,7 +260,26 @@ func TestTestcontainersFailureCleanupProbe(t *testing.T) {
 			t.Errorf("cleanup removed unrelated %s %s: err=%v output=%q", unrelated.kind, unrelated.id, err, output)
 		}
 	}
+	volumeOutput, volumeErr := dockerProbeOutput(ctx, "volume", "ls", "--filter", "name="+anonymousVolume, "--format", "{{.Name}}")
+	if volumeErr != nil {
+		t.Errorf("list task-owned anonymous volume after cleanup: %v: %s", volumeErr, volumeOutput)
+	} else {
+		for _, remaining := range strings.Fields(volumeOutput) {
+			if remaining == anonymousVolume {
+				t.Errorf("task-owned anonymous volume %s remains after container cleanup", anonymousVolume)
+			}
+		}
+	}
 	if !errors.Is(helperCtx.Err(), context.DeadlineExceeded) {
 		t.Fatalf("failure probe did not exercise a deadline: %v", helperCtx.Err())
 	}
+}
+
+func outputMarkerValue(output, marker string) string {
+	for _, line := range strings.Split(output, "\n") {
+		if value, found := strings.CutPrefix(strings.TrimSpace(line), marker); found {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }
