@@ -148,6 +148,31 @@ func TestFreshCloneLauncherCleanupFailureOverridesChildSuccess(t *testing.T) {
 	}
 }
 
+func TestFreshCloneLauncherAcceptsImmediateSuccessfulPreflightCommands(t *testing.T) {
+	fixture := newLauncherSupervisorFixture(t, false, func(t *testing.T, launcher string) string {
+		t.Helper()
+		return replaceLauncherFragment(t, launcher,
+			"  ACTIVE_PID=$!\n  if ! /bin/kill -0",
+			"  ACTIVE_PID=$!\n  /bin/sleep 1\n  if ! /bin/kill -0",
+		)
+	})
+	records := installImmediateSuccessfulPreflight(t, fixture)
+
+	process := startLauncherSupervisorFixture(t, fixture)
+	if err := process.wait(t, 30*time.Second); err != nil {
+		t.Fatalf("launcher rejected immediate successful preflight commands: %v\n%s", err, process.output.String())
+	}
+	for _, record := range records {
+		if _, err := os.Stat(record); err != nil {
+			t.Fatalf("immediate preflight command did not run: %s: %v\n%s", record, err, process.output.String())
+		}
+	}
+	if strings.Contains(process.output.String(), "in an isolated process group: failed") {
+		t.Fatalf("launcher misclassified a completed preflight command as a process-group start failure\n%s", process.output.String())
+	}
+	assertLauncherRootRemoved(t, fixture)
+}
+
 func TestFreshCloneLauncherTimesOutHangingNodeProcessGroup(t *testing.T) {
 	fixture := newLauncherSupervisorFixture(t, false, nil)
 	parentRecord, descendantRecord := installHangingLauncherNode(t, fixture)
@@ -407,6 +432,38 @@ func installHangingLauncherNode(t *testing.T, fixture launcherSupervisorFixture)
 		t.Fatal(err)
 	}
 	return parentRecord, descendantRecord
+}
+
+func installImmediateSuccessfulPreflight(t *testing.T, fixture launcherSupervisorFixture) []string {
+	t.Helper()
+	toolRoot := filepath.Join(filepath.Dir(fixture.moduleRoot), "immediate-preflight-bin")
+	if err := os.MkdirAll(toolRoot, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	certificate := filepath.Join(toolRoot, "certificate.pem")
+	if err := os.WriteFile(certificate, testCertificatePEM(t), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	nodeVersionRecord := filepath.Join(filepath.Dir(fixture.moduleRoot), "immediate-node-version")
+	caRecord := filepath.Join(filepath.Dir(fixture.moduleRoot), "immediate-ca-export")
+	goRecord := filepath.Join(filepath.Dir(fixture.moduleRoot), "immediate-go-version")
+	nodeScript := "#!/bin/bash\n" +
+		"if [ \"${1:-}\" = --version ]; then printf ready >'" + nodeVersionRecord + "'; printf '%s\\n' v24.15.0; exit 0; fi\n" +
+		"printf ready >'" + caRecord + "'\n" +
+		"/bin/cat '" + certificate + "'\n"
+	if err := os.WriteFile(filepath.Join(toolRoot, "node"), []byte(nodeScript), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	goPath := filepath.Join(toolRoot, "go")
+	goScript := "#!/bin/bash\n" +
+		"if [ \"${1:-}\" = version ]; then printf ready >'" + goRecord + "'; printf '%s\\n' 'go version go1.26.5 " + runtime.GOOS + "/" + runtime.GOARCH + "'; exit 0; fi\n" +
+		"exec '" + launcherPhysicalGoTool(t) + "' \"$@\"\n"
+	if err := os.WriteFile(goPath, []byte(goScript), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	prependLauncherTrustedPath(t, fixture.launcher, toolRoot)
+	replaceLauncherGoCandidate(t, fixture.launcher, goPath)
+	return []string{nodeVersionRecord, caRecord, goRecord}
 }
 
 func installHangingLauncherCAExport(t *testing.T, fixture launcherSupervisorFixture) (string, string) {
