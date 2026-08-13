@@ -6,7 +6,8 @@ import (
 )
 
 func TestM0AcceptanceScenarioContract(t *testing.T) {
-	harness := readRepositoryFile(t, "tests/acceptance/fresh_clone_test.go")
+	harness := readRepositoryFile(t, "tests/acceptance/fresh_clone_test.go") +
+		readRepositoryFile(t, "tests/acceptance/testcontainers_cleanup_probe_test.go")
 	required := map[string][]string{
 		"AC-M0-001 fresh checkout": {
 			"git\", \"clone",
@@ -54,6 +55,8 @@ func TestM0AcceptanceScenarioContract(t *testing.T) {
 			"SHA256SUMS",
 			"SEMLIA_DOCKER_RESOURCE_LABEL",
 			"SEMLIA_RUN_DOCKER_CLEANUP_PROBE",
+			"SEMLIA_RUN_TESTCONTAINERS_CLEANUP_PROBE",
+			"TESTCONTAINERS_SESSION_ID",
 		},
 	}
 	for scenario, fragments := range required {

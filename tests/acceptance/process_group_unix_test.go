@@ -26,6 +26,7 @@ func TestAcceptanceProcessTreeHelper(t *testing.T) {
 
 	childPIDPath := os.Getenv("SEMLIA_ACCEPTANCE_CHILD_PID_PATH")
 	parentPIDPath := os.Getenv("SEMLIA_ACCEPTANCE_PARENT_PID_PATH")
+	readyPath := os.Getenv("SEMLIA_ACCEPTANCE_PROCESS_READY")
 	sentinelPath := os.Getenv("SEMLIA_ACCEPTANCE_PROCESS_SENTINEL")
 	switch mode {
 	case "parent":
@@ -42,16 +43,18 @@ func TestAcceptanceProcessTreeHelper(t *testing.T) {
 		if err := child.Start(); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(childPIDPath, []byte(strconv.Itoa(child.Process.Pid)), 0o600); err != nil {
-			_ = child.Process.Kill()
-			t.Fatal(err)
-		}
 		fmt.Println("acceptance process-tree child started")
 		if err := child.Wait(); err != nil {
 			t.Fatal(err)
 		}
 	case "child":
+		if err := os.WriteFile(childPIDPath, []byte(strconv.Itoa(os.Getpid())), 0o600); err != nil {
+			t.Fatal(err)
+		}
 		fmt.Println("acceptance process-tree child ready")
+		if err := os.WriteFile(readyPath, []byte("ready\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
 		time.Sleep(4 * time.Second)
 		if err := os.WriteFile(sentinelPath, []byte("child survived cancellation\n"), 0o600); err != nil {
 			t.Fatal(err)
@@ -65,35 +68,54 @@ func TestAcceptanceSubprocessCancellationKillsProcessTree(t *testing.T) {
 	scratch := t.TempDir()
 	childPIDPath := filepath.Join(scratch, "child.pid")
 	parentPIDPath := filepath.Join(scratch, "parent.pid")
+	readyPath := filepath.Join(scratch, "ready")
 	sentinelPath := filepath.Join(scratch, "survived")
 	environment := append(
-		filteredEnvironment(os.Environ(), processTreeHelperMode, "SEMLIA_ACCEPTANCE_CHILD_PID_PATH", "SEMLIA_ACCEPTANCE_PARENT_PID_PATH", "SEMLIA_ACCEPTANCE_PROCESS_SENTINEL"),
+		filteredEnvironment(os.Environ(), processTreeHelperMode, "SEMLIA_ACCEPTANCE_CHILD_PID_PATH", "SEMLIA_ACCEPTANCE_PARENT_PID_PATH", "SEMLIA_ACCEPTANCE_PROCESS_READY", "SEMLIA_ACCEPTANCE_PROCESS_SENTINEL"),
 		processTreeHelperMode+"=parent",
 		"SEMLIA_ACCEPTANCE_CHILD_PID_PATH="+childPIDPath,
 		"SEMLIA_ACCEPTANCE_PARENT_PID_PATH="+parentPIDPath,
+		"SEMLIA_ACCEPTANCE_PROCESS_READY="+readyPath,
 		"SEMLIA_ACCEPTANCE_PROCESS_SENTINEL="+sentinelPath,
 	)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 700*time.Millisecond)
+	type commandResult struct {
+		output []byte
+		err    error
+	}
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	started := time.Now()
-	output, err := executeSubprocess(
-		ctx,
-		scratch,
-		environment,
-		os.Args[0],
-		"-test.run=^TestAcceptanceProcessTreeHelper$",
-		"-test.count=1",
-	)
-	elapsed := time.Since(started)
-	if err == nil {
-		t.Fatalf("cancelled process tree returned success: %s", output)
+	result := make(chan commandResult, 1)
+	go func() {
+		output, err := executeSubprocess(
+			ctx,
+			scratch,
+			environment,
+			os.Args[0],
+			"-test.run=^TestAcceptanceProcessTreeHelper$",
+			"-test.count=1",
+		)
+		result <- commandResult{output: output, err: err}
+	}()
+	waitForPath(t, readyPath, 5*time.Second)
+
+	cancelledAt := time.Now()
+	cancel()
+	var command commandResult
+	select {
+	case command = <-result:
+	case <-time.After(2 * time.Second):
+		t.Fatal("process-tree cancellation did not return within two seconds")
+	}
+	elapsed := time.Since(cancelledAt)
+	if command.err == nil {
+		t.Fatalf("cancelled process tree returned success: %s", command.output)
 	}
 	if elapsed > 2*time.Second {
-		t.Fatalf("process-tree cancellation was not prompt: elapsed=%s output=%s error=%v", elapsed, output, err)
+		t.Fatalf("process-tree cancellation was not prompt: elapsed=%s output=%s error=%v", elapsed, command.output, command.err)
 	}
-	if !strings.Contains(string(output), "acceptance process-tree child ready") {
-		t.Fatalf("regression did not start the stdout-inheriting child: %s", output)
+	if !strings.Contains(string(command.output), "acceptance process-tree child ready") {
+		t.Fatalf("regression did not start the stdout-inheriting child: %s", command.output)
 	}
 
 	for _, pidPath := range []string{parentPIDPath, childPIDPath} {
@@ -102,6 +124,18 @@ func TestAcceptanceSubprocessCancellationKillsProcessTree(t *testing.T) {
 	if _, statErr := os.Stat(sentinelPath); !errors.Is(statErr, os.ErrNotExist) {
 		t.Fatalf("cancelled child left sentinel %q: %v", sentinelPath, statErr)
 	}
+}
+
+func waitForPath(t *testing.T, path string, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(path); err == nil {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for helper readiness at %s", path)
 }
 
 func readProcessPID(t *testing.T, path string) int {
