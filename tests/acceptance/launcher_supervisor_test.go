@@ -17,6 +17,11 @@ import (
 	"time"
 )
 
+const (
+	launcherFixturePreflightReadyTimeout = 50 * time.Second
+	launcherFixtureChildReadyTimeout     = 75 * time.Second
+)
+
 type launcherSupervisorFixture struct {
 	launcher       string
 	moduleRoot     string
@@ -27,18 +32,32 @@ type launcherSupervisorFixture struct {
 	poisonMarker   string
 }
 
+func TestFreshCloneLauncherReadinessBudgetsCoverCanonicalPreflight(t *testing.T) {
+	const canonicalPreflightTotalTimeout = 45 * time.Second
+	if launcherFixturePreflightReadyTimeout <= canonicalPreflightTotalTimeout {
+		t.Fatalf("preflight readiness timeout = %s, must exceed canonical %s total preflight budget", launcherFixturePreflightReadyTimeout, canonicalPreflightTotalTimeout)
+	}
+	if launcherFixtureChildReadyTimeout < 60*time.Second {
+		t.Fatalf("child readiness timeout = %s, must allow at least 60 seconds for fresh helper startup", launcherFixtureChildReadyTimeout)
+	}
+	if launcherFixtureChildReadyTimeout <= launcherFixturePreflightReadyTimeout {
+		t.Fatalf("child readiness timeout = %s, must also cover preflight readiness %s plus fresh helper compilation", launcherFixtureChildReadyTimeout, launcherFixturePreflightReadyTimeout)
+	}
+}
+
 func TestFreshCloneLauncherForwardsSignalWaitsAndRemovesRoot(t *testing.T) {
 	fixture := newLauncherSupervisorFixture(t, true, nil)
+	installImmediateSuccessfulPreflight(t, fixture)
 	process := startLauncherSupervisorFixture(t, fixture)
 
-	waitForPath(t, fixture.launcherRecord, 10*time.Second)
+	waitForPath(t, fixture.launcherRecord, launcherFixturePreflightReadyTimeout)
 	launcherRootBytes, err := os.ReadFile(fixture.launcherRecord)
 	if err != nil {
 		t.Fatal(err)
 	}
 	launcherRoot := strings.TrimSpace(string(launcherRootBytes))
-	waitForPath(t, filepath.Join(fixture.moduleRoot, "path-validated"), 30*time.Second)
-	waitForPath(t, filepath.Join(fixture.moduleRoot, "probe-ready"), 30*time.Second)
+	waitForPath(t, filepath.Join(fixture.moduleRoot, "path-validated"), launcherFixtureChildReadyTimeout)
+	waitForPath(t, filepath.Join(fixture.moduleRoot, "probe-ready"), launcherFixtureChildReadyTimeout)
 	if err := process.command.Process.Signal(syscall.SIGTERM); err != nil {
 		t.Fatal(err)
 	}
@@ -67,9 +86,10 @@ func TestFreshCloneLauncherDeliversSignalReceivedBeforeChildAssignment(t *testin
 			"fi\n\nprintf ready >\"${SEMLIA_TEST_TRAP_READY}\"\n/bin/sleep 1\nif [ -n \"${LAUNCHER_SIGNAL_STATUS}\" ]; then\n  exit \"${LAUNCHER_SIGNAL_STATUS}\"\nfi\nset -m",
 		)
 	})
+	installImmediateSuccessfulPreflight(t, fixture)
 	process := startLauncherSupervisorFixture(t, fixture)
-	waitForPath(t, fixture.trapReady, 10*time.Second)
-	waitForPath(t, fixture.launcherRecord, 10*time.Second)
+	waitForPath(t, fixture.trapReady, launcherFixturePreflightReadyTimeout)
+	waitForPath(t, fixture.launcherRecord, launcherFixturePreflightReadyTimeout)
 	launcherRootBytes, err := os.ReadFile(fixture.launcherRecord)
 	if err != nil {
 		t.Fatal(err)
