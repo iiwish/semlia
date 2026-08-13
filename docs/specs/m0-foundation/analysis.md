@@ -4,20 +4,20 @@
 
 | 字段 | 值 |
 | --- | --- |
-| 版本 | 0.16.0 |
+| 版本 | 0.19.0 |
 | 状态 | Completed |
 | Scope | m0-foundation |
-| 最后更新 | 2026-08-12 |
+| 最后更新 | 2026-08-13 |
 
 ## 1. Inputs
 
 - Product constitution: `docs/SSOT.md` v0.4.0 Confirmed
 - Feature plan: `docs/specs/m0-foundation/plan.md` v0.4.0 Confirmed
 - Technical decisions: `docs/adr/0001-m0-technical-foundation.md` v0.2.1 Confirmed
-- Requirements checklist: `docs/specs/m0-foundation/checklists/requirements.md` v0.3.0 Completed
-- Work graph: `docs/specs/m0-foundation/tasks.md` v0.7.0 Confirmed
-- Product prototype design: `docs/specs/product-prototype/product-design.md` v0.1.0 Confirmed
-- Execution packets: T001、T002、P001、T003、T004、T005、T006、T007 已 Accepted；T008 packet `M0-T008-A001` 已生成并进入 Running
+- Requirements checklist: `docs/specs/m0-foundation/checklists/requirements.md` v0.4.0 Completed
+- Work graph: `docs/specs/m0-foundation/tasks.md` v0.10.0 Confirmed
+- Product prototype design: `docs/specs/product-prototype/product-design.md` v0.4.1 Confirmed
+- Execution packets: T001、T002、P001、T003、T004、T005、T006、T007 已 Accepted；T008 packet `M0-T008-A001` 已完成 exact-ref validation 与三轮 review，task 状态为 `Needs_Review`
 
 ## 2. Coverage
 
@@ -35,15 +35,15 @@
 - M0-NFR-002：T007、T008。
 - M0-NFR-003：T001、T007、T008。
 - M0-NFR-004：T006、T008。
-- M0-NFR-005：T001、T003、T006、T007。
-- M0-NFR-006：T005、T007。
-- M0-NFR-007：T001、T007。
+- M0-NFR-005：T001、T003、T006、T007 implement；T008 validates the isolated checkout and evidence boundary。
+- M0-NFR-006：T005、T007 implement；T008 validates real PostgreSQL migration and worker journeys。
+- M0-NFR-007：T001、T007 implement；T008 validates pinned-tool and security/release gates。
 
 Requirements without task coverage: None.
 
 Tasks without requirement or plan mapping: None. P001 映射 SSOT 产品旅程，用于产品评审，不声明满足 M0 runtime requirement。
 
-Ready or Running tasks without packet: None. T008 packet 覆盖 fresh-checkout、文档、工具链一致性、受控 module namespace、M0 场景、性能测量、故障恢复和 release report。
+Ready、Running or Needs_Review tasks without packet: None. T008 packet 覆盖 fresh-checkout、文档、工具链一致性、受控 module namespace、M0 场景、性能测量、故障恢复和 release report。
 
 Packets missing required fields: None at analysis time.
 
@@ -128,34 +128,36 @@ Gaps: None blocking M0 execution.
 - Location: `go.mod` and internal Go imports.
 - Impact: The module declares `github.com/semlia/semlia`, while the controlled remote is `github.com/iiwish/semlia`; publishing under an unverified namespace would make imports, provenance and future releases misleading.
 - Resolution: T008 performs a literal migration to `github.com/iiwish/semlia`, adds a repository contract and verifies `go list -m`, `go mod tidy -diff`, all tests and source gates. Historical evidence patches remain immutable.
-- Status: Explicit T008 acceptance-remediation scope; blocks any tag or M1 implementation until its validation passes.
+- Status: Resolved at `49f4784a27c2f10e9840455f2f711acebe2c1878`; repository contract、`go list -m`、tidy and full gates pass.
 
 ### Medium: Doctor Go version drift blocks fresh-clone onboarding
 
 - Location: `scripts/doctor.sh`, `.tool-versions`, `go.mod`, `deploy/local/Dockerfile`.
 - Impact: `make doctor` rejects the canonical Go 1.26.5 toolchain because the script still requires 1.26.3.
 - Resolution: T008 first adds a failing cross-file version contract, then aligns doctor to 1.26.5 and reruns repository checks.
-- Status: Explicit T008 RED/GREEN remediation.
+- Status: Resolved at the validated implementation; doctor reports Go 1.26.5 with zero warnings or errors.
 
 ### Medium: Public-project wording conflicts with Private incubation
 
 - Location: root README/security policy, T007 evidence, documentation index and M1 planning inputs.
 - Impact: Contributors could infer that a public community, vulnerability-reporting channel or tag provenance is already available when the repository is private and those gates are not enabled.
 - Resolution: Historical hosted evidence remains labeled with its validation-time visibility; current product and operations docs describe Private incubation and retain public-release features as gates.
-- Status: Documentation alignment is part of T008 and governance integration.
+- Status: Resolved in README、SECURITY、quickstart and operations documentation; public features remain explicit release gates.
 
 ### Medium: Smoke resource assertions bind to the default Compose project
 
 - Location: `tests/smoke/local_stack_test.go`, preserved-volume and network label assertions.
 - Impact: A fresh or parallel checkout using a unique `COMPOSE_PROJECT_NAME` inspects `semlia-local` resources instead of its own project, causing false failures or cross-project reads.
 - Resolution: T008 derives the expected label from the active task-owned environment and keeps cleanup scoped to that project; Compose topology and runtime behavior remain unchanged.
-- Status: Discovered by the isolated acceptance design and added to the T008 packet before implementation.
+- Status: Resolved with environment-first Compose precedence、strict project-name validation and task-owned cleanup assertions.
 
 ## 7. Execute Gate
 
-- Result: Clear for T008 execution under packet `M0-T008-A001`; no other governed task may execute in parallel.
-- Local completion: CI contract RED/GREEN、完整 `make check`、独立 security/build/SBOM/release/repository validation 和三轮 review 均通过；缓存态完整本地 gate 为 61.33 秒。
-- Security result: Trivy 0.73.0 immutable-digest scan 对 Go modules、production/development pnpm dependencies、repository secrets、container OS 和 Go binary 均报告 0 个 High/Critical finding。
-- Artifact result: 4.2 MB archive 包含 version、完整 commit、migrations、notices 和 21-component CycloneDX 1.7 SBOM；archive 与外部 SBOM 的 SHA-256 校验通过。
-- Hosted gate: 仓库在托管验证执行时为 Public；`https://github.com/iiwish/semlia` 的提交 `44b0f49d8db1227e9c6c0d4dc1342fb20fd75dc3` 完成 CI、Security 与 Linux/Darwin x amd64/arm64 Release Build 绿色运行，最长必需 CI job 约 2m28s。当前 visibility 为 Private。
-- Acceptance gate: Founder 于 2026-08-12 明确接受 T007 并授权继续。T008 已进入 Running；只有完成隔离验收、release report、三轮 review 并由 founder 明确接受后，T008 与 M0 才能进入 Accepted。
+- Result: T008 implementation、exact-ref validation and three-pass review are complete under packet `M0-T008-A001`.
+- T007 predecessor gate: CI contract RED/GREEN、完整 `make check`、独立 security/build/SBOM/release/repository validation 和 T007 三轮 review 均通过；缓存态完整本地 gate 为 61.33 秒。
+- T007 predecessor security and artifact: Trivy 0.73.0 immutable-digest scan 报告 0 个 High/Critical finding；4.2 MB archive 包含完整 commit、migrations、notices、21-component CycloneDX 1.7 SBOM 和通过的 SHA-256 校验。
+- T007 hosted gate: 仓库在托管验证执行时为 Public；`https://github.com/iiwish/semlia` 的提交 `44b0f49d8db1227e9c6c0d4dc1342fb20fd75dc3` 完成 CI、Security 与 Linux/Darwin x amd64/arm64 Release Build 绿色运行，最长必需 CI job 约 2m28s。当前 visibility 为 Private。
+- T008 result: exact commit `49f4784a27c2f10e9840455f2f711acebe2c1878` passed the canonical journey (test 1,061.55s；package 1,061.991s；exit 0). Cold 8m24.895s、warm 567ms、10m58.187s onboarding、real failure recovery、migration、worker、contract、security、release and exact-run cleanup checks all passed.
+- Evidence: `docs/evidence/T008/summary.md`, `docs/evidence/T008/test-results.md`, `docs/evidence/T008/diff.patch`, `docs/specs/m0-foundation/release-report.md`.
+- Review: spec-compliance、bug/code-quality and QA-acceptance passed with no blocking finding；release report status is `Ready_For_User_Review` and T008 is `Needs_Review`。
+- Acceptance gate: Founder 于 2026-08-12 明确接受 T007 并授权继续。只有 founder 明确接受 post-execution M0 evidence 后，T008 与 M0 才能进入 `Accepted`；M1 planning and implementation remain blocked until then。
