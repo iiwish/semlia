@@ -14,12 +14,13 @@ esac
 
 PINNED_GO_VERSION=1.26.5
 PINNED_GO_BOOTSTRAP_VERSION=1.26.3
-TRUSTED_PATH=/usr/local/go/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:/opt/local/bin:/opt/local/sbin:/usr/local/bin:/usr/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin:/run/current-system/sw/bin:/nix/var/nix/profiles/default/bin:/snap/bin:/var/lib/snapd/snap/bin
-TRUSTED_PATH=${TRUSTED_PATH}:/opt/hostedtoolcache/go/1.26.5/x64/bin:/opt/hostedtoolcache/go/1.26.5/arm64/bin
-TRUSTED_PATH=${TRUSTED_PATH}:/Users/runner/hostedtoolcache/go/1.26.5/x64/bin:/Users/runner/hostedtoolcache/go/1.26.5/arm64/bin
+umask 077
+TRUSTED_PATH=/home/runner/setup-pnpm/node_modules/.bin:/Users/runner/setup-pnpm/node_modules/.bin
 TRUSTED_PATH=${TRUSTED_PATH}:/opt/hostedtoolcache/node/24.15.0/x64/bin:/opt/hostedtoolcache/node/24.15.0/arm64/bin
 TRUSTED_PATH=${TRUSTED_PATH}:/Users/runner/hostedtoolcache/node/24.15.0/x64/bin:/Users/runner/hostedtoolcache/node/24.15.0/arm64/bin
-TRUSTED_PATH=${TRUSTED_PATH}:/home/runner/setup-pnpm/node_modules/.bin:/Users/runner/setup-pnpm/node_modules/.bin
+TRUSTED_PATH=${TRUSTED_PATH}:/opt/hostedtoolcache/go/1.26.5/x64/bin:/opt/hostedtoolcache/go/1.26.5/arm64/bin
+TRUSTED_PATH=${TRUSTED_PATH}:/Users/runner/hostedtoolcache/go/1.26.5/x64/bin:/Users/runner/hostedtoolcache/go/1.26.5/arm64/bin
+TRUSTED_PATH=${TRUSTED_PATH}:/usr/local/go/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:/opt/local/bin:/opt/local/sbin:/usr/local/bin:/usr/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin:/run/current-system/sw/bin:/nix/var/nix/profiles/default/bin:/snap/bin:/var/lib/snapd/snap/bin
 
 ACCEPTANCE_SOURCE=${SEMLIA_ACCEPTANCE_SOURCE:-}
 ACCEPTANCE_REF=${SEMLIA_ACCEPTANCE_REF:-}
@@ -84,6 +85,7 @@ LAUNCHER_ROOT=$(/usr/bin/mktemp -d /tmp/semlia-t008-launcher.XXXXXX) || {
   printf '%s\n' 'create isolated acceptance launcher directory: failed' >&2
   exit 1
 }
+/bin/chmod 700 "${LAUNCHER_ROOT}" || exit 1
 wait_for_child() {
   while :; do
     wait "${CHILD_PID}"
@@ -113,6 +115,47 @@ wait_for_child() {
   "${LAUNCHER_ROOT}/go-path" \
   "${LAUNCHER_ROOT}/go-mod" || exit 1
 : >"${LAUNCHER_ROOT}/npmrc"
+
+NODE_BIN=
+OLD_IFS=${IFS}
+IFS=:
+for DIRECTORY in ${TRUSTED_PATH}; do
+  CANDIDATE=${DIRECTORY}/node
+  if [ ! -x "${CANDIDATE}" ]; then
+    continue
+  fi
+  NODE_VERSION_OUTPUT=$(/usr/bin/env -i "HOME=${HOME:-/var/empty}" "PATH=${TRUSTED_PATH}" NODE_USE_SYSTEM_CA=1 "${CANDIDATE}" --version 2>/dev/null) || continue
+  if [ "${NODE_VERSION_OUTPUT}" = v24.15.0 ]; then
+    NODE_BIN=${CANDIDATE}
+    break
+  fi
+done
+IFS=${OLD_IFS}
+if [ -z "${NODE_BIN}" ]; then
+  printf '%s\n' 'fresh-clone acceptance requires Node.js 24.15.0 at an explicit supported toolchain path' >&2
+  exit 1
+fi
+SYSTEM_CA_BUNDLE=${LAUNCHER_ROOT}/system-ca.pem
+SYSTEM_CA_DIAGNOSTIC=${LAUNCHER_ROOT}/system-ca.stderr
+/usr/bin/env -i \
+  "HOME=${HOME:-/var/empty}" \
+  "PATH=${TRUSTED_PATH}" \
+  NODE_USE_SYSTEM_CA=1 \
+  "${NODE_BIN}" -e 'const {X509Certificate}=require("node:crypto");const tls=require("node:tls");const certificates=tls.getCACertificates("system");if(certificates.length===0)process.exit(42);for(const certificate of certificates){const lines=certificate.trim().split(/\r?\n/);if(lines[0]!=="-----BEGIN CERTIFICATE-----"||lines.at(-1)!=="-----END CERTIFICATE-----"||lines.length<3||lines.slice(1,-1).some(line=>!/^[A-Za-z0-9+/]+={0,2}$/.test(line)||line.length>64)){process.exit(43)}new X509Certificate(certificate)}process.stdout.write(certificates.map(certificate=>certificate.trim()).join("\n")+"\n")' \
+  >"${SYSTEM_CA_BUNDLE}" 2>"${SYSTEM_CA_DIAGNOSTIC}" || {
+    printf '%s\n' 'export a non-empty operating-system CA bundle for isolated Node.js: failed' >&2
+    exit 1
+  }
+if [ -s "${SYSTEM_CA_DIAGNOSTIC}" ]; then
+  printf '%s\n' 'export operating-system CA bundle produced unexpected diagnostics' >&2
+  exit 1
+fi
+/bin/rm -f -- "${SYSTEM_CA_DIAGNOSTIC}" || exit 1
+/bin/chmod 600 "${SYSTEM_CA_BUNDLE}" || exit 1
+if [ ! -f "${SYSTEM_CA_BUNDLE}" ] || [ ! -s "${SYSTEM_CA_BUNDLE}" ] || [ -L "${SYSTEM_CA_BUNDLE}" ]; then
+  printf '%s\n' 'isolated Node.js system CA bundle must be a non-empty physical file' >&2
+  exit 1
+fi
 
 GO_BIN=
 KERNEL_NAME=$(/usr/bin/uname -s 2>/dev/null || printf unknown)
@@ -176,8 +219,6 @@ set -m
   "http_proxy=${http_proxy:-}" \
   "https_proxy=${https_proxy:-}" \
   "no_proxy=${no_proxy:-}" \
-  "SSL_CERT_FILE=${SSL_CERT_FILE:-}" \
-  "SSL_CERT_DIR=${SSL_CERT_DIR:-}" \
   "PATH=${TRUSTED_PATH}" \
   "DOCKER_CONFIG=${LAUNCHER_ROOT}/docker-config" \
   "XDG_CONFIG_HOME=${LAUNCHER_ROOT}/config" \
@@ -185,6 +226,8 @@ set -m
   "XDG_DATA_HOME=${LAUNCHER_ROOT}/data" \
   "XDG_STATE_HOME=${LAUNCHER_ROOT}/state" \
   "COREPACK_HOME=${LAUNCHER_ROOT}/corepack" \
+  "NODE_EXTRA_CA_CERTS=${SYSTEM_CA_BUNDLE}" \
+  NODE_USE_SYSTEM_CA=1 \
   "npm_config_userconfig=${LAUNCHER_ROOT}/npmrc" \
   GIT_CONFIG_NOSYSTEM=1 \
   GOENV=off \
