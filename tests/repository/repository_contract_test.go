@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"maps"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -268,6 +269,169 @@ func TestFreshCloneLauncherDisablesUserProcessControls(t *testing.T) {
 		if !strings.Contains(script, required) {
 			t.Errorf("fresh-clone launcher missing %q", required)
 		}
+	}
+}
+
+func TestDockerfileNormalizesMigrationModesBeforeNonrootPackaging(t *testing.T) {
+	migrations := filepath.Join(t.TempDir(), "migrations")
+	nested := filepath.Join(migrations, "nested")
+	if err := os.MkdirAll(nested, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(migrations, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	sql := filepath.Join(nested, "001_restrictive.sql")
+	if err := os.WriteFile(sql, []byte("SELECT 1;\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(sql, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	assertMode(t, migrations, 0o700)
+	assertMode(t, nested, 0o700)
+	assertMode(t, sql, 0o600)
+
+	instructions := parseDockerfile(t, read(t, "deploy/local/Dockerfile"))
+	goBuilderStage := dockerfileStage(t, instructions, "go-builder")
+	finalStage := instructions[len(instructions)-1].stage
+	if finalStage == goBuilderStage {
+		t.Fatal("Dockerfile must package the Go builder output in a separate runtime stage")
+	}
+
+	sourceCopy := dockerfileInstructionIndex(instructions, goBuilderStage, "COPY", []string{".", "."})
+	normalize := dockerfileInstructionIndex(instructions, goBuilderStage, "RUN", []string{"chmod", "-R", "a+rX", "/src/migrations"})
+	if sourceCopy < 0 {
+		t.Fatal("go-builder must copy the checkout before packaging migrations")
+	}
+	if normalize < 0 {
+		t.Fatal("go-builder must normalize restrictive checkout modes with: RUN chmod -R a+rX /src/migrations")
+	}
+	if normalize <= sourceCopy {
+		t.Fatal("migration mode normalization must run after COPY . .")
+	}
+
+	finalCopy := dockerfileInstructionIndex(instructions, finalStage, "COPY", []string{"--from=go-builder", "/src/migrations", "/app/migrations"})
+	finalUser := dockerfileInstructionIndex(instructions, finalStage, "USER", []string{"nonroot:nonroot"})
+	if finalCopy < 0 {
+		t.Fatal("runtime stage must copy /src/migrations from go-builder")
+	}
+	if finalUser <= finalCopy {
+		t.Fatal("runtime stage must switch to nonroot:nonroot after migrations are packaged")
+	}
+
+	command := exec.Command(instructions[normalize].arguments[0], "-R", "a+rX", migrations)
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("exercise Dockerfile migration mode normalization: %v: %s", err, output)
+	}
+	assertMode(t, migrations, 0o755)
+	assertMode(t, nested, 0o755)
+	assertMode(t, sql, 0o644)
+}
+
+type dockerfileInstruction struct {
+	operator  string
+	arguments []string
+	stage     int
+}
+
+func parseDockerfile(t *testing.T, content string) []dockerfileInstruction {
+	t.Helper()
+	var logicalLines []string
+	var current strings.Builder
+	for _, rawLine := range strings.Split(content, "\n") {
+		line := strings.TrimSpace(rawLine)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		continued := strings.HasSuffix(line, "\\")
+		line = strings.TrimSpace(strings.TrimSuffix(line, "\\"))
+		if current.Len() > 0 {
+			current.WriteByte(' ')
+		}
+		current.WriteString(line)
+		if continued {
+			continue
+		}
+		logicalLines = append(logicalLines, current.String())
+		current.Reset()
+	}
+	if current.Len() > 0 {
+		t.Fatal("Dockerfile ends with an unterminated line continuation")
+	}
+
+	stage := -1
+	instructions := make([]dockerfileInstruction, 0, len(logicalLines))
+	for _, line := range logicalLines {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			t.Fatalf("invalid Dockerfile instruction: %q", line)
+		}
+		operator := strings.ToUpper(fields[0])
+		if operator == "FROM" {
+			stage++
+		}
+		if stage < 0 {
+			t.Fatalf("Dockerfile instruction before first FROM: %q", line)
+		}
+		instructions = append(instructions, dockerfileInstruction{
+			operator:  operator,
+			arguments: fields[1:],
+			stage:     stage,
+		})
+	}
+	if len(instructions) == 0 {
+		t.Fatal("Dockerfile contains no instructions")
+	}
+	return instructions
+}
+
+func dockerfileStage(t *testing.T, instructions []dockerfileInstruction, alias string) int {
+	t.Helper()
+	for _, instruction := range instructions {
+		if instruction.operator != "FROM" {
+			continue
+		}
+		for i := 0; i+1 < len(instruction.arguments); i++ {
+			if strings.EqualFold(instruction.arguments[i], "AS") && instruction.arguments[i+1] == alias {
+				return instruction.stage
+			}
+		}
+	}
+	t.Fatalf("Dockerfile stage %q not found", alias)
+	return -1
+}
+
+func dockerfileInstructionIndex(instructions []dockerfileInstruction, stage int, operator string, arguments []string) int {
+	for index, instruction := range instructions {
+		if instruction.stage == stage && instruction.operator == operator && slicesEqual(instruction.arguments, arguments) {
+			return index
+		}
+	}
+	return -1
+}
+
+func slicesEqual(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
+}
+
+func assertMode(t *testing.T, path string, want os.FileMode) {
+	t.Helper()
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != want {
+		t.Fatalf("%s mode = %04o, want %04o", path, got, want)
 	}
 }
 

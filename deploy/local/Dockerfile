@@ -19,6 +19,7 @@ FROM golang:1.26.5-alpine AS go-builder
 WORKDIR /src
 COPY go.mod go.sum ./
 COPY . .
+RUN chmod -R a+rX /src/migrations
 RUN rm -rf internal/platform/web/static
 COPY --from=web-builder /src/web/dist internal/platform/web/static
 RUN --mount=type=cache,target=/go/pkg/mod \
