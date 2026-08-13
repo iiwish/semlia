@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -157,6 +158,36 @@ func TestSmokeTargetPinsTenMinuteProcessTimeout(t *testing.T) {
 	const command = `$(GO) test -timeout=10m -count=1 ./tests/smoke/...`
 	if strings.Count(makefile, command) != 1 {
 		t.Fatalf("Makefile smoke target must contain exactly one %q", command)
+	}
+}
+
+func TestHTTPPollCancellationDoesNotDrainSynchronousTimer(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	timerChannel := make(chan time.Time)
+	stopCalled := make(chan struct{})
+	result := make(chan error, 1)
+	go func() {
+		result <- waitForHTTPPoll(ctx, timerChannel, func() bool {
+			stopCalled <- struct{}{}
+			return false
+		})
+	}()
+
+	select {
+	case <-stopCalled:
+	case <-time.After(time.Second):
+		t.Fatal("waitForHTTPPoll did not stop its timer on cancellation")
+	}
+	select {
+	case err := <-result:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("waitForHTTPPoll() error = %v, want context canceled", err)
+		}
+	case <-time.After(250 * time.Millisecond):
+		close(timerChannel)
+		<-result
+		t.Fatal("waitForHTTPPoll blocked draining a stopped synchronous timer")
 	}
 }
 
@@ -420,14 +451,19 @@ func waitForHTTPStatus(ctx context.Context, path string, status int) error {
 		}
 
 		timer := time.NewTimer(smokeStatusPollInterval)
-		select {
-		case <-ctx.Done():
-			if !timer.Stop() {
-				<-timer.C
-			}
-			return fmt.Errorf("%s did not reach HTTP %d; last result: %s: %w", path, status, lastResult, ctx.Err())
-		case <-timer.C:
+		if err := waitForHTTPPoll(ctx, timer.C, timer.Stop); err != nil {
+			return fmt.Errorf("%s did not reach HTTP %d; last result: %s: %w", path, status, lastResult, err)
 		}
+	}
+}
+
+func waitForHTTPPoll(ctx context.Context, timerChannel <-chan time.Time, stopTimer func() bool) error {
+	select {
+	case <-ctx.Done():
+		stopTimer()
+		return ctx.Err()
+	case <-timerChannel:
+		return nil
 	}
 }
 
