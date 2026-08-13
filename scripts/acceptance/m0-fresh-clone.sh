@@ -198,7 +198,7 @@ set -m
   "SEMLIA_ACCEPTANCE_LAUNCHER_ROOT=${LAUNCHER_ROOT}" \
   "SEMLIA_ACCEPTANCE_SOURCE=${ACCEPTANCE_SOURCE}" \
   "SEMLIA_ACCEPTANCE_REF=${ACCEPTANCE_REF}" \
-  "${GO_BIN}" -C "${ROOT}" test -v -timeout=100m -run '^TestFreshCloneAcceptance$' ./tests/acceptance/... -count=1 &
+  "${GO_BIN}" -C "${ROOT}" test -v -timeout=100m -exec="/usr/bin/env PATH=${TRUSTED_PATH}" -run '^TestFreshCloneAcceptance$' ./tests/acceptance/... -count=1 &
 CHILD_PID=$!
 if ! /bin/kill -0 -- "-${CHILD_PID}" 2>/dev/null; then
   /bin/kill -TERM "${CHILD_PID}" 2>/dev/null || :

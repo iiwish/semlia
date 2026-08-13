@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -379,6 +380,169 @@ func canonicalLauncherTrustedPath() string {
 	return strings.Join(append(filepath.SplitList(trustedAcceptancePath()), trustedHostedToolDirectories()...), string(os.PathListSeparator))
 }
 
+func validateFreshCloneToolPath(got string) error {
+	want := canonicalLauncherTrustedPath()
+	if got != want {
+		return fmt.Errorf("fresh-clone acceptance received PATH=%q, want exact canonical PATH=%q; use scripts/acceptance/m0-fresh-clone.sh", got, want)
+	}
+	return nil
+}
+
+func TestFreshCloneInvocationRejectsAnyAmbientToolPath(t *testing.T) {
+	want := canonicalLauncherTrustedPath()
+	poison := t.TempDir()
+	for _, test := range []struct {
+		name string
+		path string
+	}{
+		{name: "ambient prefix", path: poison + string(os.PathListSeparator) + want},
+		{name: "ambient suffix", path: want + string(os.PathListSeparator) + poison},
+		{name: "duplicate canonical path", path: want + string(os.PathListSeparator) + want},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			err := validateFreshCloneToolPath(test.path)
+			if err == nil {
+				t.Fatalf("accepted noncanonical PATH %q", test.path)
+			}
+			for _, detail := range []string{fmt.Sprintf("%q", test.path), fmt.Sprintf("%q", want)} {
+				if !strings.Contains(err.Error(), detail) {
+					t.Errorf("PATH error missing actionable detail %s: %v", detail, err)
+				}
+			}
+		})
+	}
+}
+
+func TestGoBootstrapReexecResetsGoTestPathAndRejectsAmbientPrefix(t *testing.T) {
+	bootstrap := supportedGoBootstrap1263(t)
+	scratch := t.TempDir()
+	moduleRoot := filepath.Join(scratch, "module")
+	poisonBin := filepath.Join(scratch, "poison-bin")
+	for _, directory := range []string{moduleRoot, poisonBin, filepath.Join(scratch, "home"), filepath.Join(scratch, "go-build"), filepath.Join(scratch, "go-path")} {
+		if err := os.MkdirAll(directory, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(poisonBin, "semlia-ambient-poison"), []byte("#!/bin/sh\nexit 99\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(moduleRoot, "go.mod"), []byte("module semliapathprobe\n\ngo 1.26.0\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	probe := `package semliapathprobe
+
+import (
+	"fmt"
+	"os"
+	"os/exec"
+	"runtime"
+	"testing"
+)
+
+func TestEffectivePath(t *testing.T) {
+	fmt.Printf("PROBE_RUNTIME=%s\n", runtime.Version())
+	fmt.Printf("PROBE_PATH=%s\n", os.Getenv("PATH"))
+	if runtime.Version() != "go1.26.5" {
+		t.Fatalf("runtime = %q, want go1.26.5", runtime.Version())
+	}
+	if got, want := os.Getenv("PATH"), os.Getenv("SEMLIA_EXPECTED_PATH"); got != want {
+		t.Fatalf("PATH = %q, want %q", got, want)
+	}
+	if path, err := exec.LookPath("semlia-ambient-poison"); err == nil {
+		t.Fatalf("ambient poison remains executable at %s", path)
+	}
+}
+`
+	if err := os.WriteFile(filepath.Join(moduleRoot, "path_test.go"), []byte(probe), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	canonicalPath := canonicalLauncherTrustedPath()
+	command := exec.Command(
+		bootstrap,
+		"-C", moduleRoot,
+		"test",
+		"-exec=/usr/bin/env PATH="+canonicalPath,
+		"-run=^TestEffectivePath$",
+		"-count=1",
+		"-v",
+	)
+	command.Env = append(
+		filteredEnvironment(filterAcceptanceEnvironment(os.Environ()), "GOROOT", "GOTOOLCHAIN_INTERNAL_SWITCH_VERSION", "GOTOOLCHAIN_INTERNAL_SWITCH_COUNT"),
+		"HOME="+filepath.Join(scratch, "home"),
+		"PATH="+poisonBin+string(os.PathListSeparator)+canonicalPath,
+		"GOENV=off",
+		"GOFLAGS=",
+		"GOWORK=off",
+		"GOTOOLCHAIN=go1.26.5",
+		"GOCACHE="+filepath.Join(scratch, "go-build"),
+		"GOPATH="+filepath.Join(scratch, "go-path"),
+		"GOMODCACHE="+activeGoModCache(t),
+		"SEMLIA_EXPECTED_PATH="+canonicalPath,
+	)
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("run Go 1.26.3 to 1.26.5 PATH regression: %v\n%s", err, output)
+	}
+	for _, want := range []string{"PROBE_RUNTIME=go1.26.5", "PROBE_PATH=" + canonicalPath} {
+		if !strings.Contains(string(output), want) {
+			t.Errorf("nested Go test probe missing %q:\n%s", want, output)
+		}
+	}
+}
+
+func supportedGoBootstrap1263(t *testing.T) string {
+	t.Helper()
+	var candidates []string
+	switch runtime.GOOS + "/" + runtime.GOARCH {
+	case "darwin/arm64":
+		candidates = []string{"/opt/homebrew/bin/go"}
+	case "darwin/amd64", "linux/amd64", "linux/arm64":
+		candidates = []string{"/usr/local/go/bin/go"}
+	}
+	for _, candidate := range candidates {
+		if info, err := os.Stat(candidate); err != nil || info.Mode()&0o111 == 0 {
+			continue
+		}
+		command := exec.Command(candidate, "version")
+		command.Env = []string{
+			"HOME=" + t.TempDir(),
+			"PATH=" + canonicalLauncherTrustedPath(),
+			"GOENV=off",
+			"GOFLAGS=",
+			"GOWORK=off",
+			"GOTOOLCHAIN=local",
+		}
+		if output, err := command.Output(); err == nil && strings.HasPrefix(string(output), "go version go1.26.3 ") {
+			return candidate
+		}
+	}
+	t.Skip("supported Go 1.26.3 bootstrap is not installed on this host")
+	return ""
+}
+
+func activeGoModCache(t *testing.T) string {
+	t.Helper()
+	goTool := filepath.Join(runtime.GOROOT(), "bin", "go")
+	command := exec.Command(goTool, "env", "GOMODCACHE")
+	command.Env = append(
+		filteredEnvironment(os.Environ(), "GOROOT", "GOENV", "GOFLAGS", "GOTOOLCHAIN", "GOWORK", "GOTOOLCHAIN_INTERNAL_SWITCH_VERSION", "GOTOOLCHAIN_INTERNAL_SWITCH_COUNT"),
+		"GOENV=off",
+		"GOFLAGS=",
+		"GOTOOLCHAIN=local",
+		"GOWORK=off",
+	)
+	output, err := command.Output()
+	if err != nil {
+		t.Fatalf("resolve active Go module cache: %v", err)
+	}
+	cache := strings.TrimSpace(string(output))
+	if !filepath.IsAbs(cache) {
+		t.Fatalf("active Go module cache is not absolute: %q", cache)
+	}
+	return cache
+}
+
 func prepareIsolatedEnvironmentDirectories(environment []string) error {
 	for _, name := range []string{
 		"HOME", "TMPDIR", "DOCKER_CONFIG", "XDG_CONFIG_HOME", "XDG_CACHE_HOME",
@@ -507,8 +671,8 @@ func validateFreshCloneInvocation() error {
 			return fmt.Errorf("fresh-clone acceptance requires %s=%q, got %q; use scripts/acceptance/m0-fresh-clone.sh", name, want, got)
 		}
 	}
-	if got := os.Getenv("PATH"); got != canonicalLauncherTrustedPath() {
-		return fmt.Errorf("fresh-clone acceptance requires the canonical explicit tool PATH; use scripts/acceptance/m0-fresh-clone.sh")
+	if err := validateFreshCloneToolPath(os.Getenv("PATH")); err != nil {
+		return err
 	}
 	if got := os.Getenv("GIT_CONFIG_NOSYSTEM"); got != "1" {
 		return fmt.Errorf("fresh-clone acceptance requires GIT_CONFIG_NOSYSTEM=%q; use scripts/acceptance/m0-fresh-clone.sh", "1")
@@ -1466,6 +1630,10 @@ func TestFreshCloneLauncherReservesCleanupEnvelope(t *testing.T) {
 	launcher := readRepositoryFile(t, "scripts/acceptance/m0-fresh-clone.sh")
 	if strings.Count(launcher, "-timeout=100m") != 1 {
 		t.Fatalf("canonical launcher must set exactly one 100m outer timeout:\n%s", launcher)
+	}
+	const resetGoTestPath = `-exec="/usr/bin/env PATH=${TRUSTED_PATH}"`
+	if strings.Count(launcher, resetGoTestPath) != 1 {
+		t.Fatalf("canonical launcher must reset the Go test PATH exactly once with %q", resetGoTestPath)
 	}
 	if !strings.Contains(launcher, "TRUSTED_PATH="+trustedAcceptancePath()) {
 		t.Fatal("canonical launcher and child acceptance environment use different trusted tool paths")

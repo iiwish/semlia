@@ -16,6 +16,13 @@ func TestFreshCloneAcceptance(t *testing.T) {
 	if launcherRoot == "" || sourceRoot == "" {
 		t.Fatal("launcher probe requires isolated launcher and source roots")
 	}
+	wantPath := os.Getenv("SEMLIA_TEST_EXPECTED_PATH")
+	if wantPath == "" || os.Getenv("PATH") != wantPath {
+		t.Fatalf("launcher probe PATH = %q, want exact canonical PATH %q", os.Getenv("PATH"), wantPath)
+	}
+	if err := os.WriteFile(filepath.Join(sourceRoot, "path-validated"), []byte("validated\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	t.Cleanup(func() {
 		time.Sleep(250 * time.Millisecond)
 		if _, err := os.Stat(launcherRoot); err != nil {
