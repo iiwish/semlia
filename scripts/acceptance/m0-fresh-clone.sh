@@ -148,7 +148,18 @@ run_bounded_launcher_command() {
   "$@" >"${STDOUT_PATH}" 2>"${STDERR_PATH}" &
   ACTIVE_PID=$!
   if ! /bin/kill -0 -- "-${ACTIVE_PID}" 2>/dev/null; then
+    if ! /bin/kill -0 "${ACTIVE_PID}" 2>/dev/null; then
+      wait "${ACTIVE_PID}"
+      STATUS=$?
+      ACTIVE_PID=
+      set +m
+      if [ -n "${LAUNCHER_SIGNAL_STATUS}" ]; then
+        return "${LAUNCHER_SIGNAL_STATUS}"
+      fi
+      return "${STATUS}"
+    fi
     /bin/kill -TERM "${ACTIVE_PID}" 2>/dev/null || :
+    /bin/kill -KILL "${ACTIVE_PID}" 2>/dev/null || :
     wait "${ACTIVE_PID}" 2>/dev/null || :
     ACTIVE_PID=
     set +m
