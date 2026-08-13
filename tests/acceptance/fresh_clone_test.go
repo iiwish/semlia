@@ -131,7 +131,9 @@ func TestFreshCloneAcceptance(t *testing.T) {
 	releaseLock := acquireAcceptanceLock(t)
 	t.Cleanup(releaseLock)
 
-	ctx, cancel := context.WithTimeout(context.Background(), freshCloneTimeout)
+	journeyContext, stopSignals := acceptanceJourneySignalContext(context.Background())
+	defer stopSignals()
+	ctx, cancel := context.WithTimeout(journeyContext, freshCloneTimeout)
 	defer cancel()
 	onboardingStarted := time.Now()
 	run := newFreshCloneRun(t, config)
@@ -1278,6 +1280,7 @@ func TestFreshCloneLauncherRejectsInvalidInputsBeforeShellOptionsCanSkipBody(t *
 
 func TestFreshCloneLauncherRejectsInvalidInputsThroughPoisonedPathAndFunctions(t *testing.T) {
 	bin := t.TempDir()
+	functionPoisonMarker := filepath.Join(t.TempDir(), "imported-shell-function-ran")
 	for _, tool := range []string{"dirname", "env", "go"} {
 		stub := "#!/bin/sh\nexit 0\n"
 		if err := os.WriteFile(filepath.Join(bin, tool), []byte(stub), 0o755); err != nil {
@@ -1303,6 +1306,11 @@ func TestFreshCloneLauncherRejectsInvalidInputsThroughPoisonedPathAndFunctions(t
 				"BASH_FUNC_dirname%%=() { printf '/tmp\\n'; return 0; }",
 				"BASH_FUNC_env%%=() { return 0; }",
 				"BASH_FUNC_go%%=() { return 0; }",
+				"BASH_FUNC_exit%%=() { /usr/bin/touch '" + functionPoisonMarker + "'; return 0; }",
+				"BASH_FUNC_printf%%=() { /usr/bin/touch '" + functionPoisonMarker + "'; return 0; }",
+				"BASH_FUNC_trap%%=() { /usr/bin/touch '" + functionPoisonMarker + "'; return 0; }",
+				"BASH_FUNC_wait%%=() { /usr/bin/touch '" + functionPoisonMarker + "'; return 0; }",
+				"BASH_FUNC_set%%=() { /usr/bin/touch '" + functionPoisonMarker + "'; return 0; }",
 				"SEMLIA_ACCEPTANCE_SOURCE=" + test.source,
 				"SEMLIA_ACCEPTANCE_REF=" + test.ref,
 			}
@@ -1312,6 +1320,9 @@ func TestFreshCloneLauncherRejectsInvalidInputsThroughPoisonedPathAndFunctions(t
 			}
 			if !strings.Contains(string(output), test.want) {
 				t.Fatalf("launcher did not reach the real Go invocation validator: %v\n%s", err, output)
+			}
+			if _, err := os.Stat(functionPoisonMarker); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("launcher imported a poisoned Bash function: %v", err)
 			}
 		})
 	}
@@ -1466,6 +1477,7 @@ func TestFreshCloneLauncherReservesCleanupEnvelope(t *testing.T) {
 		t.Fatal("canonical launcher derives its Go candidates from the ambient PATH")
 	}
 	for _, fragment := range []string{
+		`/bin/bash --noprofile --norc -p`,
 		"PINNED_GO_VERSION=1.26.5",
 		"PINNED_GO_BOOTSTRAP_VERSION=1.26.3",
 		`Linux:x86_64)`,
@@ -1477,6 +1489,11 @@ func TestFreshCloneLauncherReservesCleanupEnvelope(t *testing.T) {
 		`"${CANDIDATE}" version`,
 		`GO_BIN=${CANDIDATE}`,
 		`"${GO_BIN}" -C "${ROOT}" test`,
+		`set -m`,
+		`CHILD_PID=$!`,
+		`/bin/kill -"${LAUNCHER_SIGNAL_NAME}" -- "-${CHILD_PID}"`,
+		`if ! /bin/kill -0 -- "-${CHILD_PID}"`,
+		`wait_for_child`,
 		`"GOTOOLCHAIN=go${PINNED_GO_VERSION}"`,
 		"/opt/hostedtoolcache/go/1.26.5/x64/bin",
 		"/Users/runner/hostedtoolcache/go/1.26.5/arm64/bin",
@@ -1489,6 +1506,17 @@ func TestFreshCloneLauncherReservesCleanupEnvelope(t *testing.T) {
 		if !strings.Contains(launcher, fragment) {
 			t.Errorf("canonical launcher missing isolation/version fragment %q", fragment)
 		}
+	}
+	if strings.Contains(launcher, `trap 'exit 130' HUP INT TERM`) {
+		t.Fatal("canonical launcher exits from its signal trap without supervising the Go test process group")
+	}
+	for _, forbidden := range []string{"SEMLIA_ACCEPTANCE_TEST_PATTERN", "SEMLIA_ACCEPTANCE_TEST_PACKAGES", "SEMLIA_LAUNCHER_ROOT_RECORD"} {
+		if strings.Contains(launcher, forbidden) {
+			t.Fatalf("canonical launcher exposes test-only override %s", forbidden)
+		}
+	}
+	if !strings.Contains(launcher, `if ! cleanup_launcher; then`) || !strings.Contains(launcher, `if [ "${STATUS}" -eq 0 ]; then`) {
+		t.Fatal("canonical launcher can report child success after launcher-root cleanup fails")
 	}
 	if !strings.Contains(readRepositoryFile(t, "tests/acceptance/fresh_clone_test.go"), `"test.timeout": outerAcceptanceTimeout.String()`) {
 		t.Fatal("fresh-clone invocation validator does not enforce the canonical outer timeout")
@@ -2423,6 +2451,9 @@ func TestCleanupOwnsExactTestcontainersSessionResources(t *testing.T) {
 		if resource.identityLabel != sessionLabel || resource.inspectFormat != want.inspectFormat || resource.maxIdentities != want.maximum {
 			t.Errorf("%s ownership = label %q format %q maximum %d", resource.label, resource.identityLabel, resource.inspectFormat, resource.maxIdentities)
 		}
+		if resource.label == "testcontainers containers" && strings.Join(resource.removeArgs, " ") != "rm --force --volumes" {
+			t.Errorf("Testcontainers container removal = %q, want anonymous-volume cleanup", strings.Join(resource.removeArgs, " "))
+		}
 		delete(wants, resource.label)
 	}
 	if len(wants) != 0 {
@@ -3049,7 +3080,7 @@ func cleanupDockerProbeContainersWithTimeout(executor dockerProbeExecutor, timeo
 			if identifierErr != nil {
 				problems = append(problems, fmt.Errorf("initial exact list %s: %w", label, identifierErr))
 			} else if len(identifiers) != 0 {
-				removeArgs := append([]string{"rm", "--force"}, identifiers...)
+				removeArgs := append([]string{"rm", "--force", "--volumes"}, identifiers...)
 				removeOutput, removeErr := executeDockerProbeCleanupPhase(executor, timeout, removeArgs...)
 				if removeErr != nil {
 					problems = append(problems, fmt.Errorf("remove %s containers %s: %w: %s", label, strings.Join(identifiers, ","), removeErr, strings.TrimSpace(removeOutput)))
@@ -3099,9 +3130,69 @@ func argumentAfter(arguments []string, name string) string {
 	return ""
 }
 
+func TestFreshCloneUsesIndependentGitObjects(t *testing.T) {
+	scratch := t.TempDir()
+	source := filepath.Join(scratch, "source")
+	checkout := filepath.Join(scratch, "checkout")
+	environment := isolatedEnvironmentFrom(
+		os.Environ(),
+		filepath.Join(scratch, "environment"),
+		"semlia-accept-a1b2c3d4-000000000001",
+		38080,
+		35432,
+	)
+	if err := prepareIsolatedEnvironmentDirectories(environment); err != nil {
+		t.Fatal(err)
+	}
+	runGit := func(dir string, args ...string) string {
+		t.Helper()
+		output, err := executeSubprocess(context.Background(), dir, environment, "git", args...)
+		if err != nil {
+			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, output)
+		}
+		return strings.TrimSpace(string(output))
+	}
+	if err := os.MkdirAll(source, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	runGit(source, "init", "--quiet")
+	if err := os.WriteFile(filepath.Join(source, "tracked.txt"), []byte("tracked\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runGit(source, "add", "tracked.txt")
+	runGit(source, "-c", "user.name=Semlia Acceptance", "-c", "user.email=acceptance@invalid", "commit", "--quiet", "-m", "initial")
+	ref := runGit(source, "rev-parse", "HEAD")
+	sourceObject := filepath.Join(source, ".git", "objects", ref[:2], ref[2:])
+	sourceInfo, err := os.Stat(sourceObject)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	run := &freshCloneRun{t: t, root: checkout, environment: environment}
+	run.clone(context.Background(), freshCloneConfig{source: source, ref: ref})
+	checkoutObject := filepath.Join(checkout, ".git", "objects", ref[:2], ref[2:])
+	checkoutInfo, err := os.Stat(checkoutObject)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if os.SameFile(sourceInfo, checkoutInfo) {
+		t.Fatal("fresh clone reused a hard-linked Git object from the source repository")
+	}
+	if err := os.Chmod(checkoutObject, 0o400); err != nil {
+		t.Fatal(err)
+	}
+	unchangedSourceInfo, err := os.Stat(sourceObject)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unchangedSourceInfo.Mode().Perm() != sourceInfo.Mode().Perm() {
+		t.Fatalf("checkout object mode changed source object: got %04o, want %04o", unchangedSourceInfo.Mode().Perm(), sourceInfo.Mode().Perm())
+	}
+}
+
 func (run *freshCloneRun) clone(ctx context.Context, config freshCloneConfig) {
 	run.t.Helper()
-	clone, err := acceptanceCommandContext(ctx, run.environment, "git", "clone", "--no-checkout", "--", config.source, run.root)
+	clone, err := acceptanceCommandContext(ctx, run.environment, "git", "clone", "--no-checkout", "--no-hardlinks", "--", config.source, run.root)
 	if err != nil {
 		run.t.Fatalf("resolve isolated git clone: %v", err)
 	}
@@ -3619,7 +3710,7 @@ func (run *freshCloneRun) cleanupResourceKinds() []cleanupResourceKind {
 		resources = append(resources,
 			cleanupResourceKind{
 				label: "testcontainers containers", listArgs: []string{"ps", "--all", "--filter", "label=" + sessionLabel, "--format", "{{.ID}}"},
-				removeArgs: []string{"rm", "--force"}, identityLabel: sessionLabel, inspectFormat: "{{json .Config.Labels}}", maxIdentities: testcontainersContainerLimit,
+				removeArgs: []string{"rm", "--force", "--volumes"}, identityLabel: sessionLabel, inspectFormat: "{{json .Config.Labels}}", maxIdentities: testcontainersContainerLimit,
 			},
 			cleanupResourceKind{
 				label: "testcontainers networks", listArgs: []string{"network", "ls", "--filter", "label=" + sessionLabel, "--format", "{{.ID}}"},
