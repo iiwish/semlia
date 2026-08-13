@@ -3,13 +3,17 @@ package acceptance
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"math/big"
 	"net"
 	"net/http"
 	"os"
@@ -38,6 +42,7 @@ const (
 	checkoutCleanupTimeout        = 3 * time.Minute
 	dockerResourceRemovalTimeout  = 45 * time.Second
 	dockerIdentityTimeout         = 15 * time.Second
+	nodeSystemCAProbeTimeout      = 15 * time.Second
 	acceptanceDockerLabelKey      = "io.semlia.acceptance.run"
 	testcontainersSessionLabelKey = "org.testcontainers.sessionId"
 	acceptanceHostLock            = "/tmp/semlia-t008-acceptance.lock"
@@ -142,6 +147,9 @@ func TestFreshCloneAcceptance(t *testing.T) {
 	onboardingStarted := time.Now()
 	run := newFreshCloneRun(t, config)
 	if err := run.validateGoToolchain(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := run.validateNodeSystemCA(ctx); err != nil {
 		t.Fatal(err)
 	}
 	run.clone(ctx, config)
@@ -260,8 +268,12 @@ func isolatedEnvironment(scratch, project string, httpPort, postgresPort int) []
 }
 
 func isolatedEnvironmentFrom(base []string, scratch, project string, httpPort, postgresPort int) []string {
+	launcherRoot := environmentValue(base, "SEMLIA_ACCEPTANCE_LAUNCHER_ROOT")
+	if launcherRoot == "" || !filepath.IsAbs(launcherRoot) || filepath.Clean(launcherRoot) != launcherRoot {
+		launcherRoot = ""
+	}
 	environment := filterAcceptanceEnvironment(base)
-	return append(environment,
+	environment = append(environment,
 		"PATH="+trustedAcceptancePathFrom(base),
 		"HOME="+filepath.Join(scratch, "home"),
 		"TMPDIR="+filepath.Join(scratch, "tmp"),
@@ -271,6 +283,7 @@ func isolatedEnvironmentFrom(base []string, scratch, project string, httpPort, p
 		"XDG_DATA_HOME="+filepath.Join(scratch, "data"),
 		"XDG_STATE_HOME="+filepath.Join(scratch, "state"),
 		"COREPACK_HOME="+filepath.Join(scratch, "corepack"),
+		"NODE_USE_SYSTEM_CA=1",
 		"npm_config_userconfig="+filepath.Join(scratch, "npmrc"),
 		"GIT_CONFIG_NOSYSTEM=1",
 		"GOENV=off",
@@ -294,13 +307,20 @@ func isolatedEnvironmentFrom(base []string, scratch, project string, httpPort, p
 		fmt.Sprintf("SEMLIA_HTTP_PORT=%d", httpPort),
 		fmt.Sprintf("SEMLIA_POSTGRES_PORT=%d", postgresPort),
 	)
+	if launcherRoot != "" {
+		environment = append(environment,
+			"SEMLIA_ACCEPTANCE_LAUNCHER_ROOT="+launcherRoot,
+			"NODE_EXTRA_CA_CERTS="+filepath.Join(launcherRoot, "system-ca.pem"),
+		)
+	}
+	return environment
 }
 
 func filterAcceptanceEnvironment(environment []string) []string {
 	blockedExact := map[string]struct{}{
 		"GO": {}, "GOARCH": {}, "GOCACHE": {}, "GOENV": {}, "GOFLAGS": {}, "GOMODCACHE": {}, "GOOS": {}, "GOPATH": {}, "GOTOOLCHAIN": {}, "GOWORK": {},
 		"BASHOPTS": {}, "BASH_ENV": {}, "ENV": {}, "SHELLOPTS": {}, "GNUMAKEFLAGS": {}, "MAKE": {}, "MAKEFILES": {}, "MAKEFLAGS": {}, "MAKELEVEL": {}, "MAKEOVERRIDES": {}, "MFLAGS": {}, "PNPM": {},
-		"HOME": {}, "TMPDIR": {}, "NODE_OPTIONS": {}, "NODE_PATH": {}, "PNPM_CONFIG_STORE_DIR": {}, "PNPM_HOME": {}, "PNPM_STORE_DIR": {}, "XDG_CACHE_HOME": {},
+		"HOME": {}, "TMPDIR": {}, "NODE_EXTRA_CA_CERTS": {}, "NODE_OPTIONS": {}, "NODE_PATH": {}, "NODE_TLS_REJECT_UNAUTHORIZED": {}, "NODE_USE_BUNDLED_CA": {}, "NODE_USE_OPENSSL_CA": {}, "NODE_USE_SYSTEM_CA": {}, "OPENSSL_CONF": {}, "OPENSSL_MODULES": {}, "PNPM_CONFIG_STORE_DIR": {}, "PNPM_HOME": {}, "PNPM_STORE_DIR": {}, "SSL_CERT_FILE": {}, "SSL_CERT_DIR": {}, "SSLKEYLOGFILE": {}, "XDG_CACHE_HOME": {},
 		"npm_config_store_dir": {}, "pnpm_config_store_dir": {},
 		"PATH": {},
 	}
@@ -310,7 +330,7 @@ func filterAcceptanceEnvironment(environment []string) []string {
 		_, exactBlocked := blockedExact[key]
 		upperKey := strings.ToUpper(key)
 		prefixBlocked := false
-		for _, prefix := range []string{"BASH_FUNC_", "SEMLIA_", "COMPOSE_", "GIT_", "DOCKER_", "TESTCONTAINERS_", "RYUK_", "NPM_", "PNPM_", "COREPACK_", "PLAYWRIGHT_", "XDG_"} {
+		for _, prefix := range []string{"BASH_FUNC_", "SEMLIA_", "COMPOSE_", "GIT_", "DOCKER_", "TESTCONTAINERS_", "RYUK_", "NODE_", "OPENSSL_", "SSL_", "NPM_", "PNPM_", "COREPACK_", "PLAYWRIGHT_", "XDG_"} {
 			if strings.HasPrefix(upperKey, prefix) {
 				prefixBlocked = true
 				break
@@ -347,16 +367,20 @@ func trustedAcceptancePath() string {
 }
 
 func trustedAcceptancePathFrom(environment []string) string {
-	directories := filepath.SplitList(trustedAcceptancePath())
-	seen := make(map[string]struct{}, len(directories))
-	for _, directory := range directories {
-		seen[directory] = struct{}{}
-	}
+	directories := make([]string, 0, len(trustedHostedToolDirectories())+len(filepath.SplitList(trustedAcceptancePath())))
+	seen := make(map[string]struct{}, cap(directories))
 	for _, rawDirectory := range filepath.SplitList(environmentValue(environment, "PATH")) {
 		if rawDirectory != filepath.Clean(rawDirectory) || !trustedDynamicToolDirectory(rawDirectory) {
 			continue
 		}
 		directory := rawDirectory
+		if _, exists := seen[directory]; exists {
+			continue
+		}
+		directories = append(directories, directory)
+		seen[directory] = struct{}{}
+	}
+	for _, directory := range filepath.SplitList(trustedAcceptancePath()) {
 		if _, exists := seen[directory]; exists {
 			continue
 		}
@@ -380,21 +404,21 @@ func trustedDynamicToolDirectory(directory string) bool {
 
 func trustedHostedToolDirectories() []string {
 	return []string{
-		"/opt/hostedtoolcache/go/1.26.5/x64/bin",
-		"/opt/hostedtoolcache/go/1.26.5/arm64/bin",
-		"/Users/runner/hostedtoolcache/go/1.26.5/x64/bin",
-		"/Users/runner/hostedtoolcache/go/1.26.5/arm64/bin",
+		"/home/runner/setup-pnpm/node_modules/.bin",
+		"/Users/runner/setup-pnpm/node_modules/.bin",
 		"/opt/hostedtoolcache/node/24.15.0/x64/bin",
 		"/opt/hostedtoolcache/node/24.15.0/arm64/bin",
 		"/Users/runner/hostedtoolcache/node/24.15.0/x64/bin",
 		"/Users/runner/hostedtoolcache/node/24.15.0/arm64/bin",
-		"/home/runner/setup-pnpm/node_modules/.bin",
-		"/Users/runner/setup-pnpm/node_modules/.bin",
+		"/opt/hostedtoolcache/go/1.26.5/x64/bin",
+		"/opt/hostedtoolcache/go/1.26.5/arm64/bin",
+		"/Users/runner/hostedtoolcache/go/1.26.5/x64/bin",
+		"/Users/runner/hostedtoolcache/go/1.26.5/arm64/bin",
 	}
 }
 
 func canonicalLauncherTrustedPath() string {
-	return strings.Join(append(filepath.SplitList(trustedAcceptancePath()), trustedHostedToolDirectories()...), string(os.PathListSeparator))
+	return strings.Join(append(trustedHostedToolDirectories(), filepath.SplitList(trustedAcceptancePath())...), string(os.PathListSeparator))
 }
 
 func validateFreshCloneToolPath(got string) error {
@@ -602,6 +626,484 @@ func (run *freshCloneRun) validateGoToolchain(ctx context.Context) error {
 		return fmt.Errorf("validate isolated Go toolchain: %w", err)
 	}
 	return nil
+}
+
+func (run *freshCloneRun) validateNodeSystemCA(ctx context.Context) error {
+	if err := validateTaskCABundle(run.environment); err != nil {
+		return fmt.Errorf("validate isolated Node.js CA bundle: %w", err)
+	}
+	const probe = `const tls=require("node:tls");const bundled=tls.getCACertificates("bundled");const extra=tls.getCACertificates("extra");const defaults=tls.getCACertificates("default");const defaultSet=new Set(defaults);process.stdout.write(JSON.stringify({nodeVersion:process.versions.node,platform:process.platform,architecture:process.arch,nodeUseSystemCA:process.env.NODE_USE_SYSTEM_CA,bundledCertificateCount:bundled.length,extraCertificateCount:extra.length,defaultCertificateCount:defaults.length,extraCertificatesMerged:extra.every(certificate=>defaultSet.has(certificate))})+"\n")`
+	probeCtx, cancel := context.WithTimeout(ctx, nodeSystemCAProbeTimeout)
+	defer cancel()
+	command, resolveErr := acceptanceCommandContext(probeCtx, run.environment, "node", "-e", probe)
+	if resolveErr != nil {
+		return fmt.Errorf("validate isolated Node.js system CA capability: %w", resolveErr)
+	}
+	command.Dir = filepath.Dir(run.root)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	command.Stdout = &stdout
+	command.Stderr = &stderr
+	if err := command.Run(); err != nil {
+		if probeCtx.Err() != nil {
+			return fmt.Errorf("validate isolated Node.js system CA capability: command failed: %v: %w (stdout=%q stderr=%q)", err, probeCtx.Err(), strings.TrimSpace(stdout.String()), strings.TrimSpace(stderr.String()))
+		}
+		return fmt.Errorf("validate isolated Node.js system CA capability: %w (stdout=%q stderr=%q)", err, strings.TrimSpace(stdout.String()), strings.TrimSpace(stderr.String()))
+	}
+	if err := validateNodeSystemCAOutput(stdout.String(), stderr.String()); err != nil {
+		return fmt.Errorf("validate isolated Node.js system CA capability: %w", err)
+	}
+	return nil
+}
+
+type nodeSystemCAProbeResult struct {
+	NodeVersion             string `json:"nodeVersion"`
+	Platform                string `json:"platform"`
+	Architecture            string `json:"architecture"`
+	NodeUseSystemCA         string `json:"nodeUseSystemCA"`
+	BundledCertificateCount int    `json:"bundledCertificateCount"`
+	ExtraCertificateCount   int    `json:"extraCertificateCount"`
+	DefaultCertificateCount int    `json:"defaultCertificateCount"`
+	ExtraCertificatesMerged bool   `json:"extraCertificatesMerged"`
+}
+
+func validateNodeSystemCAOutput(stdout, stderr string) error {
+	return validateNodeSystemCAOutputForTarget(stdout, stderr, runtime.GOOS, runtime.GOARCH)
+}
+
+func validateNodeSystemCAOutputForTarget(stdout, stderr, goos, goarch string) error {
+	trimmedStdout := strings.TrimSpace(stdout)
+	trimmedStderr := strings.TrimSpace(stderr)
+	if trimmedStderr != "" {
+		return fmt.Errorf("unexpected stderr=%q (stdout=%q)", trimmedStderr, trimmedStdout)
+	}
+	decoder := json.NewDecoder(strings.NewReader(trimmedStdout))
+	decoder.DisallowUnknownFields()
+	var result nodeSystemCAProbeResult
+	if err := decoder.Decode(&result); err != nil {
+		return fmt.Errorf("parse exact probe output %q: %w", trimmedStdout, err)
+	}
+	if decoder.Decode(&struct{}{}) != io.EOF {
+		return fmt.Errorf("probe output contains trailing data: %q", trimmedStdout)
+	}
+	wantPlatform, wantArchitecture, err := expectedNodeTarget(goos, goarch)
+	if err != nil {
+		return err
+	}
+	if result.NodeUseSystemCA != "1" || result.ExtraCertificateCount <= 0 || !result.ExtraCertificatesMerged || result.NodeVersion != "24.15.0" || result.Platform != wantPlatform || result.Architecture != wantArchitecture {
+		return fmt.Errorf("NODE_USE_SYSTEM_CA=%q bundledCertificateCount=%d extraCertificateCount=%d defaultCertificateCount=%d extraCertificatesMerged=%t; Node %s on %s/%s requires the non-empty task CA bundle in the default trust set", result.NodeUseSystemCA, result.BundledCertificateCount, result.ExtraCertificateCount, result.DefaultCertificateCount, result.ExtraCertificatesMerged, result.NodeVersion, result.Platform, result.Architecture)
+	}
+	return nil
+}
+
+func expectedNodeTarget(goos, goarch string) (string, string, error) {
+	if goos != "darwin" && goos != "linux" {
+		return "", "", fmt.Errorf("unsupported Node.js CA probe platform %q", goos)
+	}
+	architecture := ""
+	switch goarch {
+	case "amd64":
+		architecture = "x64"
+	case "arm64":
+		architecture = "arm64"
+	default:
+		return "", "", fmt.Errorf("unsupported Node.js CA probe architecture %q", goarch)
+	}
+	return goos, architecture, nil
+}
+
+func validateTaskCABundle(environment []string) error {
+	launcherRoot := environmentValue(environment, "SEMLIA_ACCEPTANCE_LAUNCHER_ROOT")
+	bundle := environmentValue(environment, "NODE_EXTRA_CA_CERTS")
+	if launcherRoot == "" || !filepath.IsAbs(launcherRoot) || filepath.Clean(launcherRoot) != launcherRoot {
+		return fmt.Errorf("SEMLIA_ACCEPTANCE_LAUNCHER_ROOT=%q is not an absolute clean path", launcherRoot)
+	}
+	rootInfo, err := os.Lstat(launcherRoot)
+	if err != nil {
+		return fmt.Errorf("inspect acceptance launcher root: %w", err)
+	}
+	if !rootInfo.IsDir() || rootInfo.Mode()&os.ModeSymlink != 0 || rootInfo.Mode().Perm() != 0o700 {
+		return fmt.Errorf("acceptance launcher root must be a private physical directory: mode=%s", rootInfo.Mode())
+	}
+	want := filepath.Join(launcherRoot, "system-ca.pem")
+	if bundle != want {
+		return fmt.Errorf("NODE_EXTRA_CA_CERTS=%q, want task-owned %q", bundle, want)
+	}
+	pathInfo, err := os.Lstat(bundle)
+	if err != nil {
+		return fmt.Errorf("inspect task CA bundle: %w", err)
+	}
+	if !pathInfo.Mode().IsRegular() || pathInfo.Size() <= 0 || pathInfo.Mode().Perm() != 0o600 {
+		return fmt.Errorf("task CA bundle must be a non-empty private physical regular file: mode=%s size=%d", pathInfo.Mode(), pathInfo.Size())
+	}
+	file, err := os.Open(bundle)
+	if err != nil {
+		return fmt.Errorf("open task CA bundle: %w", err)
+	}
+	defer file.Close()
+	openedInfo, err := file.Stat()
+	if err != nil {
+		return fmt.Errorf("inspect opened task CA bundle: %w", err)
+	}
+	if !os.SameFile(pathInfo, openedInfo) || !openedInfo.Mode().IsRegular() || openedInfo.Size() <= 0 || openedInfo.Mode().Perm() != 0o600 {
+		return fmt.Errorf("opened task CA bundle identity or permissions changed during validation")
+	}
+	body, err := io.ReadAll(file)
+	if err != nil {
+		return fmt.Errorf("read task CA bundle: %w", err)
+	}
+	rest := body
+	certificates := 0
+	for {
+		rest = bytes.TrimSpace(rest)
+		if len(rest) == 0 {
+			break
+		}
+		if !bytes.HasPrefix(rest, []byte("-----BEGIN CERTIFICATE-----")) {
+			return fmt.Errorf("task CA bundle contains data outside certificate PEM blocks")
+		}
+		block, remaining := pem.Decode(rest)
+		if block == nil || block.Type != "CERTIFICATE" || len(block.Headers) != 0 {
+			return fmt.Errorf("task CA bundle contains non-certificate PEM or trailing data")
+		}
+		if _, err := x509.ParseCertificate(block.Bytes); err != nil {
+			return fmt.Errorf("task CA bundle contains an invalid certificate: %w", err)
+		}
+		certificates++
+		rest = remaining
+	}
+	if certificates == 0 {
+		return fmt.Errorf("task CA bundle contains no certificates")
+	}
+	return nil
+}
+
+func testCertificatePEM(t *testing.T) []byte {
+	t.Helper()
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	template := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		NotBefore:             time.Unix(1, 0),
+		NotAfter:              time.Unix(2, 0),
+		IsCA:                  true,
+		BasicConstraintsValid: true,
+		KeyUsage:              x509.KeyUsageCertSign,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, publicKey, privateKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+}
+
+func writeTestCABundle(t *testing.T, launcherRoot string, body []byte, mode os.FileMode) string {
+	t.Helper()
+	if err := os.Chmod(launcherRoot, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	bundle := filepath.Join(launcherRoot, "system-ca.pem")
+	if err := os.WriteFile(bundle, body, mode); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(bundle, mode); err != nil {
+		t.Fatal(err)
+	}
+	return bundle
+}
+
+func TestValidateTaskCABundle(t *testing.T) {
+	certificate := testCertificatePEM(t)
+	privateKey := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: []byte("not public")})
+	for _, test := range []struct {
+		name    string
+		setup   func(*testing.T, string, string) []string
+		wantErr bool
+	}{
+		{name: "valid", setup: func(t *testing.T, root, bundle string) []string {
+			writeTestCABundle(t, root, certificate, 0o600)
+			return []string{"SEMLIA_ACCEPTANCE_LAUNCHER_ROOT=" + root, "NODE_EXTRA_CA_CERTS=" + bundle}
+		}},
+		{name: "wrong bundle path", wantErr: true, setup: func(t *testing.T, root, bundle string) []string {
+			writeTestCABundle(t, root, certificate, 0o600)
+			return []string{"SEMLIA_ACCEPTANCE_LAUNCHER_ROOT=" + root, "NODE_EXTRA_CA_CERTS=" + filepath.Join(filepath.Dir(root), "outside.pem")}
+		}},
+		{name: "symlink bundle", wantErr: true, setup: func(t *testing.T, root, bundle string) []string {
+			outside := filepath.Join(filepath.Dir(root), "outside.pem")
+			if err := os.WriteFile(outside, certificate, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(outside, bundle); err != nil {
+				t.Fatal(err)
+			}
+			return []string{"SEMLIA_ACCEPTANCE_LAUNCHER_ROOT=" + root, "NODE_EXTRA_CA_CERTS=" + bundle}
+		}},
+		{name: "directory bundle", wantErr: true, setup: func(t *testing.T, root, bundle string) []string {
+			if err := os.Mkdir(bundle, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			return []string{"SEMLIA_ACCEPTANCE_LAUNCHER_ROOT=" + root, "NODE_EXTRA_CA_CERTS=" + bundle}
+		}},
+		{name: "empty bundle", wantErr: true, setup: func(t *testing.T, root, bundle string) []string {
+			writeTestCABundle(t, root, nil, 0o600)
+			return []string{"SEMLIA_ACCEPTANCE_LAUNCHER_ROOT=" + root, "NODE_EXTRA_CA_CERTS=" + bundle}
+		}},
+		{name: "read only owner mode", wantErr: true, setup: func(t *testing.T, root, bundle string) []string {
+			writeTestCABundle(t, root, certificate, 0o400)
+			return []string{"SEMLIA_ACCEPTANCE_LAUNCHER_ROOT=" + root, "NODE_EXTRA_CA_CERTS=" + bundle}
+		}},
+		{name: "group readable mode", wantErr: true, setup: func(t *testing.T, root, bundle string) []string {
+			writeTestCABundle(t, root, certificate, 0o640)
+			return []string{"SEMLIA_ACCEPTANCE_LAUNCHER_ROOT=" + root, "NODE_EXTRA_CA_CERTS=" + bundle}
+		}},
+		{name: "leading garbage", wantErr: true, setup: func(t *testing.T, root, bundle string) []string {
+			writeTestCABundle(t, root, append([]byte("garbage\n"), certificate...), 0o600)
+			return []string{"SEMLIA_ACCEPTANCE_LAUNCHER_ROOT=" + root, "NODE_EXTRA_CA_CERTS=" + bundle}
+		}},
+		{name: "interstitial garbage", wantErr: true, setup: func(t *testing.T, root, bundle string) []string {
+			body := append(append(append([]byte{}, certificate...), []byte("garbage\n")...), certificate...)
+			writeTestCABundle(t, root, body, 0o600)
+			return []string{"SEMLIA_ACCEPTANCE_LAUNCHER_ROOT=" + root, "NODE_EXTRA_CA_CERTS=" + bundle}
+		}},
+		{name: "trailing garbage", wantErr: true, setup: func(t *testing.T, root, bundle string) []string {
+			writeTestCABundle(t, root, append(append([]byte{}, certificate...), []byte("garbage\n")...), 0o600)
+			return []string{"SEMLIA_ACCEPTANCE_LAUNCHER_ROOT=" + root, "NODE_EXTRA_CA_CERTS=" + bundle}
+		}},
+		{name: "private key", wantErr: true, setup: func(t *testing.T, root, bundle string) []string {
+			writeTestCABundle(t, root, privateKey, 0o600)
+			return []string{"SEMLIA_ACCEPTANCE_LAUNCHER_ROOT=" + root, "NODE_EXTRA_CA_CERTS=" + bundle}
+		}},
+		{name: "invalid certificate", wantErr: true, setup: func(t *testing.T, root, bundle string) []string {
+			writeTestCABundle(t, root, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: []byte("invalid")}), 0o600)
+			return []string{"SEMLIA_ACCEPTANCE_LAUNCHER_ROOT=" + root, "NODE_EXTRA_CA_CERTS=" + bundle}
+		}},
+		{name: "nonprivate launcher root", wantErr: true, setup: func(t *testing.T, root, bundle string) []string {
+			writeTestCABundle(t, root, certificate, 0o600)
+			if err := os.Chmod(root, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			return []string{"SEMLIA_ACCEPTANCE_LAUNCHER_ROOT=" + root, "NODE_EXTRA_CA_CERTS=" + bundle}
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			root := filepath.Join(t.TempDir(), "launcher")
+			if err := os.Mkdir(root, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			bundle := filepath.Join(root, "system-ca.pem")
+			err := validateTaskCABundle(test.setup(t, root, bundle))
+			if (err != nil) != test.wantErr {
+				t.Fatalf("validateTaskCABundle() error = %v, wantErr %t", err, test.wantErr)
+			}
+		})
+	}
+
+	t.Run("symlink launcher root", func(t *testing.T) {
+		parent := t.TempDir()
+		target := filepath.Join(parent, "target")
+		if err := os.Mkdir(target, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		writeTestCABundle(t, target, certificate, 0o600)
+		root := filepath.Join(parent, "launcher")
+		if err := os.Symlink(target, root); err != nil {
+			t.Fatal(err)
+		}
+		err := validateTaskCABundle([]string{"SEMLIA_ACCEPTANCE_LAUNCHER_ROOT=" + root, "NODE_EXTRA_CA_CERTS=" + filepath.Join(root, "system-ca.pem")})
+		if err == nil {
+			t.Fatal("validateTaskCABundle() accepted a symlink launcher root")
+		}
+	})
+}
+
+func TestValidateNodeSystemCAOutput(t *testing.T) {
+	valid := `{"nodeVersion":"24.15.0","platform":"darwin","architecture":"arm64","nodeUseSystemCA":"1","bundledCertificateCount":145,"extraCertificateCount":4,"defaultCertificateCount":149,"extraCertificatesMerged":true}`
+	duplicateOnlyValid := `{"nodeVersion":"24.15.0","platform":"linux","architecture":"x64","nodeUseSystemCA":"1","bundledCertificateCount":145,"extraCertificateCount":2,"defaultCertificateCount":145,"extraCertificatesMerged":true}`
+	for _, test := range []struct {
+		name    string
+		stdout  string
+		stderr  string
+		goos    string
+		goarch  string
+		wantErr bool
+	}{
+		{name: "arm64 certificates merged", stdout: valid + "\n", goos: "darwin", goarch: "arm64"},
+		{name: "amd64 maps to x64 with duplicate certificates", stdout: duplicateOnlyValid + "\n", goos: "linux", goarch: "amd64"},
+		{name: "wrong Node architecture", stdout: strings.Replace(duplicateOnlyValid, `"architecture":"x64"`, `"architecture":"amd64"`, 1), goos: "linux", goarch: "amd64", wantErr: true},
+		{name: "unsupported Go architecture", stdout: duplicateOnlyValid, goos: "linux", goarch: "riscv64", wantErr: true},
+		{name: "unsupported platform", stdout: duplicateOnlyValid, goos: "windows", goarch: "amd64", wantErr: true},
+		{name: "empty extra store", stdout: strings.Replace(valid, `"extraCertificateCount":4`, `"extraCertificateCount":0`, 1), goos: "darwin", goarch: "arm64", wantErr: true},
+		{name: "extra certificates not merged", stdout: strings.Replace(valid, `"extraCertificatesMerged":true`, `"extraCertificatesMerged":false`, 1), goos: "darwin", goarch: "arm64", wantErr: true},
+		{name: "unpinned environment", stdout: strings.Replace(valid, `"nodeUseSystemCA":"1"`, `"nodeUseSystemCA":"0"`, 1), goos: "darwin", goarch: "arm64", wantErr: true},
+		{name: "wrong Node version", stdout: strings.Replace(valid, `"nodeVersion":"24.15.0"`, `"nodeVersion":"24.14.0"`, 1), goos: "darwin", goarch: "arm64", wantErr: true},
+		{name: "malformed", stdout: `{`, goos: "darwin", goarch: "arm64", wantErr: true},
+		{name: "unknown field", stdout: strings.TrimSuffix(valid, "}") + `,"unexpected":true}`, goos: "darwin", goarch: "arm64", wantErr: true},
+		{name: "trailing data", stdout: valid + "\n{}", goos: "darwin", goarch: "arm64", wantErr: true},
+		{name: "noisy stderr", stdout: valid, stderr: "warning", goos: "darwin", goarch: "arm64", wantErr: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			err := validateNodeSystemCAOutputForTarget(test.stdout, test.stderr, test.goos, test.goarch)
+			if (err != nil) != test.wantErr {
+				t.Fatalf("validateNodeSystemCAOutput() error = %v, wantErr %t", err, test.wantErr)
+			}
+		})
+	}
+}
+
+func TestAcceptanceEnvironmentPinsNodeSystemCAAndScrubsTLSOverrides(t *testing.T) {
+	poisonedNames := []string{
+		"NODE_USE_SYSTEM_CA", "NODE_EXTRA_CA_CERTS", "NODE_OPTIONS", "NODE_PATH", "NODE_TLS_REJECT_UNAUTHORIZED", "NODE_USE_BUNDLED_CA", "NODE_USE_OPENSSL_CA",
+		"OPENSSL_CONF", "OPENSSL_ENGINES", "OPENSSL_MODULES", "SSL_CERT_FILE", "SSL_CERT_DIR", "SSLKEYLOGFILE",
+	}
+	launcherRoot := t.TempDir()
+	writeTestCABundle(t, launcherRoot, testCertificatePEM(t), 0o600)
+	poisoned := []string{"PATH=" + os.Getenv("PATH"), "SEMLIA_ACCEPTANCE_LAUNCHER_ROOT=" + launcherRoot, "NODE_EXTRA_CA_CERTS=/outside/poison"}
+	for _, name := range poisonedNames {
+		if name == "NODE_EXTRA_CA_CERTS" {
+			continue
+		}
+		poisoned = append(poisoned, name+"=/outside/poison")
+	}
+	environment := isolatedEnvironmentFrom(poisoned, t.TempDir(), "semlia-accept-a1b2c3d4-000000000001", 38080, 35432)
+	if values := environmentValues(environment, "NODE_USE_SYSTEM_CA"); len(values) != 1 || values[0] != "1" {
+		t.Fatalf("NODE_USE_SYSTEM_CA values = %v, want exactly 1", values)
+	}
+	if values := environmentValues(environment, "NODE_EXTRA_CA_CERTS"); len(values) != 1 || values[0] != filepath.Join(launcherRoot, "system-ca.pem") {
+		t.Fatalf("NODE_EXTRA_CA_CERTS values = %v, want the outer validated bundle for subsequent strict validation", values)
+	}
+	for _, name := range poisonedNames[2:] {
+		if values := environmentValues(environment, name); len(values) != 0 {
+			t.Errorf("isolated environment retained %s=%v", name, values)
+		}
+	}
+}
+
+func TestValidateNodeSystemCACapability(t *testing.T) {
+	launcherRoot := t.TempDir()
+	if err := os.Chmod(launcherRoot, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	scratch := filepath.Join(launcherRoot, "scratch")
+	if err := os.MkdirAll(scratch, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	bundle := filepath.Join(launcherRoot, "system-ca.pem")
+	if err := exportSystemCABundleForTest(bundle); err != nil {
+		t.Skipf("host does not expose a non-empty Node system CA set: %v", err)
+	}
+	base := append(filteredEnvironment(os.Environ(), "SEMLIA_ACCEPTANCE_LAUNCHER_ROOT", "NODE_EXTRA_CA_CERTS"), "SEMLIA_ACCEPTANCE_LAUNCHER_ROOT="+launcherRoot, "NODE_EXTRA_CA_CERTS="+bundle)
+	environment := isolatedEnvironmentFrom(base, scratch, "semlia-accept-a1b2c3d4-000000000001", 38080, 35432)
+	if err := prepareIsolatedEnvironmentDirectories(environment); err != nil {
+		t.Fatal(err)
+	}
+	run := &freshCloneRun{root: filepath.Join(scratch, "checkout"), environment: environment}
+	ctx, cancel := context.WithTimeout(context.Background(), nodeSystemCAProbeTimeout)
+	defer cancel()
+	if err := run.validateNodeSystemCA(ctx); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func exportSystemCABundleForTest(bundle string) error {
+	environment := []string{
+		"HOME=" + os.Getenv("HOME"),
+		"PATH=" + trustedAcceptancePathFrom(os.Environ()),
+		"NODE_USE_SYSTEM_CA=1",
+	}
+	node, err := acceptanceExecutablePath(environment, "node")
+	if err != nil {
+		return err
+	}
+	command := exec.Command(node, "-e", `const tls=require("node:tls");const certificates=tls.getCACertificates("system");if(certificates.length===0)process.exit(42);process.stdout.write(certificates.join("\n")+"\n")`)
+	command.Env = environment
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	command.Stdout = &stdout
+	command.Stderr = &stderr
+	err = command.Run()
+	if err != nil {
+		return fmt.Errorf("export host system CA bundle: %w (stderr=%q)", err, strings.TrimSpace(stderr.String()))
+	}
+	if stderr.Len() != 0 {
+		return fmt.Errorf("export host system CA bundle produced stderr=%q", strings.TrimSpace(stderr.String()))
+	}
+	return os.WriteFile(bundle, stdout.Bytes(), 0o600)
+}
+
+func TestValidateNodeSystemCACapabilityIsBounded(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("supported macOS/Linux probe uses a shell stub")
+	}
+	root := t.TempDir()
+	if err := os.Chmod(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	nodePath := filepath.Join(root, "node")
+	if err := os.WriteFile(nodePath, []byte("#!/bin/sh\n/bin/sleep 30\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	bundle := filepath.Join(root, "system-ca.pem")
+	if err := os.WriteFile(bundle, []byte(`-----BEGIN CERTIFICATE-----
+MIIEUTCCAzmgAwIBAgIQfK9pCiW3Of57m0R6wXjF7jANBgkqhkiG9w0BAQsFADBi
+MQswCQYDVQQGEwJVUzETMBEGA1UEChMKQXBwbGUgSW5jLjEmMCQGA1UECxMdQXBw
+bGUgQ2VydGlmaWNhdGlvbiBBdXRob3JpdHkxFjAUBgNVBAMTDUFwcGxlIFJvb3Qg
+Q0EwHhcNMjAwMjE5MTgxMzQ3WhcNMzAwMjIwMDAwMDAwWjB1MUQwQgYDVQQDDDtB
+cHBsZSBXb3JsZHdpZGUgRGV2ZWxvcGVyIFJlbGF0aW9ucyBDZXJ0aWZpY2F0aW9u
+IEF1dGhvcml0eTELMAkGA1UECwwCRzMxEzARBgNVBAoMCkFwcGxlIEluYy4xCzAJ
+BgNVBAYTAlVTMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2PWJ/KhZ
+C4fHTJEuLVaQ03gdpDDppUjvC0O/LYT7JF1FG+XrWTYSXFRknmxiLbTGl8rMPPbW
+BpH85QKmHGq0edVny6zpPwcR4YS8Rx1mjjmi6LRJ7TrS4RBgeo6TjMrA2gzAg9Dj
++ZHWp4zIwXPirkbRYp2SqJBgN31ols2N4Pyb+ni743uvLRfdW/6AWSN1F7gSwe0b
+5TTO/iK1nkmw5VW/j4SiPKi6xYaVFuQAyZ8D0MyzOhZ71gVcnetHrg21LYwOaU1A
+0EtMOwSejSGxrC5DVDDOwYqGlJhL32oNP/77HK6XF8J4CjDgXx9UO0m3JQAaN4LS
+VpelUkl8YDib7wIDAQABo4HvMIHsMBIGA1UdEwEB/wQIMAYBAf8CAQAwHwYDVR0j
+BBgwFoAUK9BpR5R2Cf70a40uQKb3R01/CF4wRAYIKwYBBQUHAQEEODA2MDQGCCsG
+AQUFBzABhihodHRwOi8vb2NzcC5hcHBsZS5jb20vb2NzcDAzLWFwcGxlcm9vdGNh
+MC4GA1UdHwQnMCUwI6AhoB+GHWh0dHA6Ly9jcmwuYXBwbGUuY29tL3Jvb3QuY3Js
+MB0GA1UdDgQWBBQJ/sAVkPmvZAqSErkmKGMMl+ynsjAOBgNVHQ8BAf8EBAMCAQYw
+EAYKKoZIhvdjZAYCAQQCBQAwDQYJKoZIhvcNAQELBQADggEBAK1lE+j24IF3RAJH
+Qr5fpTkg6mKp/cWQyXMT1Z6b0KoPjY3L7QHPbChAW8dVJEH4/M/BtSPp3Ozxb8qA
+HXfCxGFJJWevD8o5Ja3T43rMMygNDi6hV0Bz+uZcrgZRKe3jhQxPYdwyFot30ETK
+XXIDMUacrptAGvr04NM++i+MZp+XxFRZ79JI9AeZSWBZGcfdlNHAwWx/eCHvDOs7
+bJmCS1JgOLU5gm3sUjFTvg+RTElJdI+mUcuER04ddSduvfnSXPN/wmwLCTbiZOTC
+NwMUGdXqapSqqdv+9poIZ4vvK7iqF0mDr8/LvOnP6pVxsLRFoszlh6oKw0E6eVza
+UDSdlTs=
+-----END CERTIFICATE-----
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	run := &freshCloneRun{root: filepath.Join(root, "checkout"), environment: []string{"PATH=" + root, "NODE_USE_SYSTEM_CA=1", "NODE_EXTRA_CA_CERTS=" + bundle, "SEMLIA_ACCEPTANCE_LAUNCHER_ROOT=" + root}}
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	started := time.Now()
+	err := run.validateNodeSystemCA(ctx)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("validateNodeSystemCA() error = %v, want deadline exceeded", err)
+	}
+	if elapsed := time.Since(started); elapsed > acceptanceCommandWaitDelay+time.Second {
+		t.Fatalf("cancelled Node system CA probe returned after %s", elapsed)
+	}
+}
+
+func TestFreshCloneLauncherPinsSystemCAWithoutTLSBypass(t *testing.T) {
+	launcherBytes, err := os.ReadFile(filepath.Join(repositoryRoot, "scripts", "acceptance", "m0-fresh-clone.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	launcher := string(launcherBytes)
+	if count := strings.Count(launcher, "NODE_USE_SYSTEM_CA=1"); count != 3 {
+		t.Fatalf("launcher NODE_USE_SYSTEM_CA pin count = %d, want version probe, CA export, and child pins", count)
+	}
+	if count := strings.Count(launcher, `"NODE_EXTRA_CA_CERTS=${SYSTEM_CA_BUNDLE}"`); count != 1 {
+		t.Fatalf("launcher task CA bundle pin count = %d, want exactly 1", count)
+	}
+	for _, forbidden := range []string{"NODE_TLS_REJECT_UNAUTHORIZED", "SSL_CERT_FILE=", "SSL_CERT_DIR=", "strict-ssl=false", "strict_ssl=false"} {
+		if strings.Contains(launcher, forbidden) {
+			t.Errorf("launcher contains forbidden TLS override %q", forbidden)
+		}
+	}
 }
 
 func validateGoToolchainOutput(stdout, stderr, goos, goarch string) error {
@@ -881,6 +1383,7 @@ func validateFreshCloneInvocation() error {
 		{"GOFLAGS", os.Getenv("GOFLAGS"), ""},
 		{"GOTOOLCHAIN", os.Getenv("GOTOOLCHAIN"), "go" + pinnedGoVersion},
 		{"GOWORK", os.Getenv("GOWORK"), "off"},
+		{"NODE_USE_SYSTEM_CA", os.Getenv("NODE_USE_SYSTEM_CA"), "1"},
 	}
 	for _, check := range checks {
 		if check.got != check.want {
@@ -911,6 +1414,12 @@ func validateFreshCloneInvocation() error {
 			return fmt.Errorf("fresh-clone acceptance requires %s=%q, got %q; use scripts/acceptance/m0-fresh-clone.sh", name, want, got)
 		}
 	}
+	if got, want := os.Getenv("NODE_EXTRA_CA_CERTS"), filepath.Join(launcherRoot, "system-ca.pem"); got != want {
+		return fmt.Errorf("fresh-clone acceptance requires NODE_EXTRA_CA_CERTS=%q, got %q; use scripts/acceptance/m0-fresh-clone.sh", want, got)
+	}
+	if err := validateTaskCABundle(os.Environ()); err != nil {
+		return fmt.Errorf("fresh-clone acceptance requires a valid task CA bundle: %w", err)
+	}
 	if err := validateFreshCloneToolPath(os.Getenv("PATH")); err != nil {
 		return err
 	}
@@ -928,6 +1437,99 @@ func validateFreshCloneInvocation() error {
 		}
 	}
 	return nil
+}
+
+func TestFreshCloneInvocationRejectsMissingOrWrongNodeSystemCA(t *testing.T) {
+	const helper = "SEMLIA_NODE_SYSTEM_CA_INVOCATION_HELPER"
+	if os.Getenv(helper) == "1" {
+		if err := validateFreshCloneInvocation(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+		return
+	}
+	launcherRoot := t.TempDir()
+	base := freshCloneInvocationTestEnvironment(t, launcherRoot)
+	base = filteredEnvironment(base, "NODE_USE_SYSTEM_CA")
+	base = append(base, helper+"=1")
+	for _, value := range []string{"", "0", "true"} {
+		command := exec.Command(os.Args[0], "-test.run=^TestFreshCloneInvocationRejectsMissingOrWrongNodeSystemCA$", "-test.count=1", "-test.timeout=100m")
+		command.Env = append([]string{}, base...)
+		if value != "" {
+			command.Env = append(command.Env, "NODE_USE_SYSTEM_CA="+value)
+		}
+		output, err := command.CombinedOutput()
+		if err == nil || !strings.Contains(string(output), `fresh-clone acceptance requires NODE_USE_SYSTEM_CA="1"`) {
+			t.Errorf("NODE_USE_SYSTEM_CA=%q rejection: err=%v output=%s", value, err, output)
+		}
+	}
+}
+
+func freshCloneInvocationTestEnvironment(t *testing.T, launcherRoot string) []string {
+	t.Helper()
+	writeTestCABundle(t, launcherRoot, testCertificatePEM(t), 0o600)
+	return []string{
+		"PATH=" + canonicalLauncherTrustedPath(),
+		"HOME=" + filepath.Join(launcherRoot, "home"),
+		"TMPDIR=" + filepath.Join(launcherRoot, "tmp"),
+		"DOCKER_CONFIG=" + filepath.Join(launcherRoot, "docker-config"),
+		"XDG_CONFIG_HOME=" + filepath.Join(launcherRoot, "config"),
+		"XDG_CACHE_HOME=" + filepath.Join(launcherRoot, "cache"),
+		"XDG_DATA_HOME=" + filepath.Join(launcherRoot, "data"),
+		"XDG_STATE_HOME=" + filepath.Join(launcherRoot, "state"),
+		"COREPACK_HOME=" + filepath.Join(launcherRoot, "corepack"),
+		"npm_config_userconfig=" + filepath.Join(launcherRoot, "npmrc"),
+		"GIT_CONFIG_NOSYSTEM=1", "GOENV=off", "GOFLAGS=", "GOTOOLCHAIN=go" + pinnedGoVersion, "GOWORK=off",
+		"GOCACHE=" + filepath.Join(launcherRoot, "go-build"), "GOPATH=" + filepath.Join(launcherRoot, "go-path"), "GOMODCACHE=" + filepath.Join(launcherRoot, "go-mod"),
+		"NODE_USE_SYSTEM_CA=1", "NODE_EXTRA_CA_CERTS=" + filepath.Join(launcherRoot, "system-ca.pem"),
+		"SEMLIA_ACCEPTANCE_LAUNCHER_ROOT=" + launcherRoot,
+	}
+}
+
+func TestFreshCloneInvocationRejectsInvalidCABundle(t *testing.T) {
+	const helper = "SEMLIA_CA_BUNDLE_INVOCATION_HELPER"
+	if os.Getenv(helper) == "1" {
+		if err := validateFreshCloneInvocation(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+		return
+	}
+	for _, test := range []struct {
+		name string
+		edit func(*testing.T, string, []string) []string
+		want string
+	}{
+		{name: "missing path", want: "requires NODE_EXTRA_CA_CERTS", edit: func(t *testing.T, root string, environment []string) []string {
+			return filteredEnvironment(environment, "NODE_EXTRA_CA_CERTS")
+		}},
+		{name: "wrong path", want: "requires NODE_EXTRA_CA_CERTS", edit: func(t *testing.T, root string, environment []string) []string {
+			return append(filteredEnvironment(environment, "NODE_EXTRA_CA_CERTS"), "NODE_EXTRA_CA_CERTS="+filepath.Join(filepath.Dir(root), "outside.pem"))
+		}},
+		{name: "wrong mode", want: "requires a valid task CA bundle", edit: func(t *testing.T, root string, environment []string) []string {
+			if err := os.Chmod(filepath.Join(root, "system-ca.pem"), 0o400); err != nil {
+				t.Fatal(err)
+			}
+			return environment
+		}},
+		{name: "invalid content", want: "requires a valid task CA bundle", edit: func(t *testing.T, root string, environment []string) []string {
+			if err := os.WriteFile(filepath.Join(root, "system-ca.pem"), []byte("not a certificate\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			return environment
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			launcherRoot := t.TempDir()
+			environment := test.edit(t, launcherRoot, freshCloneInvocationTestEnvironment(t, launcherRoot))
+			command := exec.Command(os.Args[0], "-test.run=^TestFreshCloneInvocationRejectsInvalidCABundle$", "-test.count=1", "-test.timeout=100m")
+			command.Env = append(environment, helper+"=1")
+			output, err := command.CombinedOutput()
+			if err == nil || !strings.Contains(string(output), test.want) {
+				t.Fatalf("invalid CA bundle rejection: err=%v want=%q output=%s", err, test.want, output)
+			}
+		})
+	}
 }
 
 func acquireAcceptanceLock(t *testing.T) func() {
@@ -1147,7 +1749,7 @@ func TestAcceptanceEnvironmentAllowsExactHostedToolPaths(t *testing.T) {
 		38080,
 		35432,
 	)
-	want := strings.Join([]string{trustedAcceptancePath(), hostedGo, hostedNode, hostedPnpm}, string(os.PathListSeparator))
+	want := strings.Join([]string{hostedGo, hostedNode, hostedPnpm, trustedAcceptancePath()}, string(os.PathListSeparator))
 	if got := environmentValue(environment, "PATH"); got != want {
 		t.Fatalf("isolated hosted-tool PATH = %q, want %q", got, want)
 	}
@@ -1166,9 +1768,31 @@ func TestAcceptanceEnvironmentAllowsLinuxGitHubHostedToolPaths(t *testing.T) {
 		38080,
 		35432,
 	)
-	want := strings.Join([]string{trustedAcceptancePath(), basePath}, string(os.PathListSeparator))
+	want := strings.Join([]string{basePath, trustedAcceptancePath()}, string(os.PathListSeparator))
 	if got := environmentValue(environment, "PATH"); got != want {
 		t.Fatalf("Linux GitHub-hosted PATH = %q, want %q", got, want)
+	}
+}
+
+func TestAcceptanceEnvironmentPrioritizesExactHostedToolsOverGenericFallbacks(t *testing.T) {
+	hostedNode := "/opt/hostedtoolcache/node/24.15.0/x64/bin"
+	hostedPnpm := "/home/runner/setup-pnpm/node_modules/.bin"
+	environment := isolatedEnvironmentFrom(
+		[]string{"PATH=" + strings.Join([]string{"/usr/local/bin", hostedNode, hostedPnpm}, string(os.PathListSeparator))},
+		t.TempDir(),
+		"semlia-accept-a1b2c3d4-000000000001",
+		38080,
+		35432,
+	)
+	directories := filepath.SplitList(environmentValue(environment, "PATH"))
+	positions := make(map[string]int, len(directories))
+	for index, directory := range directories {
+		positions[directory] = index
+	}
+	for _, hosted := range []string{hostedNode, hostedPnpm} {
+		if positions[hosted] >= positions["/usr/local/bin"] {
+			t.Fatalf("hosted tool directory %q appears after generic fallback in %v", hosted, directories)
+		}
 	}
 }
 
@@ -1877,7 +2501,7 @@ func TestFreshCloneLauncherReservesCleanupEnvelope(t *testing.T) {
 	if strings.Count(launcher, resetGoTestPath) != 1 {
 		t.Fatalf("canonical launcher must reset the Go test PATH exactly once with %q", resetGoTestPath)
 	}
-	if !strings.Contains(launcher, "TRUSTED_PATH="+trustedAcceptancePath()) {
+	if !strings.Contains(launcher, "TRUSTED_PATH=${TRUSTED_PATH}:"+trustedAcceptancePath()) {
 		t.Fatal("canonical launcher and child acceptance environment use different trusted tool paths")
 	}
 	if strings.Contains(launcher, "hostedtoolcache/*/bin") {
@@ -2153,6 +2777,7 @@ func TestDockerCLIIsolationProbe(t *testing.T) {
 
 func TestFreshCloneInvocationRejectsNoncanonicalOuterTimeout(t *testing.T) {
 	launcherRoot := t.TempDir()
+	writeTestCABundle(t, launcherRoot, testCertificatePEM(t), 0o600)
 	command := exec.Command(
 		os.Args[0],
 		"-test.run=^TestFreshCloneAcceptance$",
@@ -2170,6 +2795,8 @@ func TestFreshCloneInvocationRejectsNoncanonicalOuterTimeout(t *testing.T) {
 		"XDG_DATA_HOME="+filepath.Join(launcherRoot, "data"),
 		"XDG_STATE_HOME="+filepath.Join(launcherRoot, "state"),
 		"COREPACK_HOME="+filepath.Join(launcherRoot, "corepack"),
+		"NODE_EXTRA_CA_CERTS="+filepath.Join(launcherRoot, "system-ca.pem"),
+		"NODE_USE_SYSTEM_CA=1",
 		"npm_config_userconfig="+filepath.Join(launcherRoot, "npmrc"),
 		"GIT_CONFIG_NOSYSTEM=1",
 		"GOENV=off",
