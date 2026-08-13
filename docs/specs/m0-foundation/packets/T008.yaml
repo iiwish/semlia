@@ -5,6 +5,23 @@ feature_id: m0-foundation
 mode: execute_one_task
 adapter: agent-neutral
 
+execution_result:
+  status: Needs_Review
+  validated_implementation: source-revision-redacted
+  canonical_log: /tmp/semlia-t008-acceptance-49f4784-1786623621.log
+  canonical_log_sha256: 13db9ae12000c2fe4e4e1420e5ea30c71ee1a311d7b77cad4b8e91298c773f87
+  canonical_result: TestFreshCloneAcceptance passed in 1061.55s; package passed in 1061.991s; exit 0.
+  timings: >-
+    clean 297ms; doctor 12.312s; cold bootstrap 8m24.895s; warm bootstrap 567ms;
+    readiness 21.761s; first request 1ms; clone-to-first 10m58.187s; smoke 27.632s;
+    worker 6.371s; migration 2.634s; drift recovery 1.405s; check 5m33.241s; release 10.112s.
+  http: 100 requests, 0 errors, p50 125us, p95 260us, max 493us.
+  cleanup: >-
+    Exact final-run project resources, matching processes and recorded root are absent. The persistent
+    acceptance lock path is unheld and independently reacquirable; historical launcher roots are outside this assertion.
+  review: Spec-compliance, bug/code-quality and QA-acceptance passed with no blocking finding.
+  acceptance_gate: Explicit founder acceptance is still required; do not mark T008 or M0 Accepted or begin M1 planning or implementation.
+
 governance_inputs:
   product_contract: docs/SSOT.md
   project_instructions: AGENTS.md
@@ -57,6 +74,7 @@ work_unit:
     - T007
   blocks:
     - M1 planning
+    - M1 implementation
   parallel: false
 
 codebase_context:
@@ -84,6 +102,7 @@ codebase_context:
 execution_constraints:
   branch_or_worktree: current codex/core-product-loop branch
   allowed_files:
+    - Makefile
     - README.md
     - SECURITY.md
     - docs/quickstart.md
@@ -93,7 +112,11 @@ execution_constraints:
     - docs/specs/m0-foundation/release-report.md
     - tests/acceptance/**
     - scripts/acceptance/m0-fresh-clone.sh
+    - scripts/ci/security-check.sh
+    - scripts/release/sbom.sh
     - scripts/doctor.sh
+    - deploy/local/Dockerfile
+    - tests/repository/ci_contract_test.go
     - tests/repository/repository_contract_test.go
     - go.mod
     - cmd/semlia/main.go
@@ -106,12 +129,15 @@ execution_constraints:
     - internal/platform/http/handler_test.go
     - tests/integration/db/database_test.go
     - tests/integration/worker/worker_test.go
+    - tests/smoke/dependency_failure_test.go
     - tests/smoke/local_stack_test.go
     - web/e2e/system-status.spec.ts
   forbidden_changes:
     - Do not edit runtime behavior, migrations, generated API artifacts, Web UI, prototype, Compose topology or release workflow behavior.
+    - The local Dockerfile edit is limited to normalizing packaged migration directory and SQL-file read/traverse modes for the existing nonroot runtime user; image stages, dependencies, commands and topology remain unchanged.
+    - Security and SBOM script edits are limited to an optional, validated acceptance ownership label on task-started Docker containers; ordinary local and hosted behavior remains unchanged.
     - The Web end-to-end edit is limited to replacing a timing race with an explicit request barrier; product behavior and assertions remain unchanged.
-    - Smoke-test edits are limited to deriving the expected Compose project label from the task-owned environment instead of the literal semlia-local value.
+    - Makefile and smoke-test edits are limited to an explicit 10-minute smoke-test process timeout, an ordered runtime journey, task-owned Compose project resolution, and bounded PostgreSQL/worker failure recovery; product runtime behavior is unchanged.
     - Do not add a new framework, service, SaaS dependency, telemetry exporter or package dependency.
     - Do not rewrite historical evidence patches when migrating the module namespace.
     - Do not claim public vulnerability reporting, branch protection, code scanning, secret scanning or private tag attestation is enabled.
@@ -151,9 +177,17 @@ tdd_plan:
       -run 'TestSmokeJourneyUsesActiveComposeProject' -count=1
     corrective_expected_failure: >-
       The contract rejects the literal semlia-local resource label before smoke lookup is changed to the active Compose project.
+    packaging_command: >-
+      go test ./tests/repository -run '^TestDockerfileNormalizesMigrationModesBeforeNonrootPackaging$' -count=1
+    packaging_expected_failure: >-
+      A checkout created under the launcher umask leaves migration directories at 0700 and SQL files at 0600, while the
+      final image runs as nonroot and the Dockerfile does not normalize those modes before packaging.
   green:
     command: go test ./tests/repository ./tests/acceptance/... -count=1
     expected_signal: Toolchain, module identity, documentation and non-expensive acceptance contracts pass.
+    packaging_signal: >-
+      The Dockerfile normalizes the copied migration tree after the source COPY, a restrictive-mode image audit finds
+      traversable directories and readable SQL files, and the final image remains configured as nonroot:nonroot.
   refactor:
     command: make doctor && go list -m && go mod tidy -diff && make check-source
     expected_signal: Pinned tools and controlled module identity remain consistent with all source, contract and build gates green.
@@ -172,8 +206,9 @@ validation_loop:
     - make release
     - make dev-down
     - git diff --check
+    - Build a uniquely tagged image from a restrictive-umask checkout, assert final migration directory/file modes and nonroot runtime identity, then remove only that exact image and temporary root.
   isolated_checkout_command: >-
-    SEMLIA_ACCEPTANCE_SOURCE=<repository-path> SEMLIA_ACCEPTANCE_REF=<exact-commit>
+    SEMLIA_ACCEPTANCE_SOURCE="$(git rev-parse --show-toplevel)" SEMLIA_ACCEPTANCE_REF=source-revision-redacted
     ./scripts/acceptance/m0-fresh-clone.sh
   runtime_checks:
     - make doctor succeeds with exactly the versions in .tool-versions.
@@ -188,6 +223,18 @@ validation_loop:
     first_failure: Fix only documentation, acceptance automation, module imports or the doctor version when the failure maps directly to T008.
     second_failure: Classify the failure as a pre-existing M0 defect, acceptance-isolation defect, host constraint or external registry/GitHub limitation and record exact evidence.
     beyond_budget: Stop with Blocked evidence; never weaken a security, reliability, performance or clean-tree assertion.
+  authorized_exception:
+    authority: Founder explicit continuation on 2026-08-13
+    reason: >-
+      Independent review found additional false-green, process-isolation and task-owned cleanup defects after the original retry budget was exhausted.
+      The founder explicitly instructed the orchestrator to continue rather than accept or suppress those defects.
+    scope: >-
+      Additional attempts are limited to independently reviewed T008 acceptance-harness, diagnostic, cleanup, build-packaging permission
+      and evidence corrections inside allowed_files. The build-packaging permission exception covers only the restrictive-umask
+      fresh-clone failure proven by the fe174ac image audit; it does not authorize migration or runtime behavior changes.
+      Every failed attempt remains evidence; security, reliability, performance and clean-tree thresholds cannot be weakened.
+    exit: >-
+      No further launcher attempt may start until spec-compliance, bug/code-quality and QA pre-run reviews pass for its exact commit.
 
 evidence_contract:
   summary: docs/evidence/T008/summary.md
@@ -225,6 +272,7 @@ handoff:
   finish_options:
     - request founder acceptance for T008 and M0
     - begin M1 plan only after explicit founder acceptance
+    - begin M1 implementation only after founder acceptance, an approved M1 work graph and a Ready execution packet
 
 stop_conditions:
   - A fix requires changing application behavior, migrations, Web UI, Compose topology, security thresholds or release workflow semantics.

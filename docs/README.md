@@ -11,8 +11,13 @@
 | [M0 Plan](./specs/m0-foundation/plan.md) | M0 范围、需求、交付顺序和退出标准 | Confirmed |
 | [M0 Work Graph](./specs/m0-foundation/tasks.md) | Epic、Story、Task、依赖、文件边界和验证命令 | Confirmed |
 | [M0 Requirements Checklist](./specs/m0-foundation/checklists/requirements.md) | M0 需求完整性、可测性和覆盖检查 | Completed |
-| [M0 Consistency Analysis](./specs/m0-foundation/analysis.md) | SSOT、TDR、计划和工作图一致性分析 | Clear for T008 execution |
-| [M0 T008 Packet](./specs/m0-foundation/packets/T008.yaml) | Fresh-clone、module identity、文档与 release report 的自包含执行包 | Running |
+| [M0 Consistency Analysis](./specs/m0-foundation/analysis.md) | SSOT、TDR、计划和工作图一致性分析 | Completed |
+| [M0 T008 Packet](./specs/m0-foundation/packets/T008.yaml) | Fresh-clone、module identity、文档与 release report 的自包含执行包 | T008 `Needs_Review` |
+| [M0 Release Report](./specs/m0-foundation/release-report.md) | M0 requirement、场景、性能、安全、工件和残余门槛 | `Ready_For_User_Review` |
+| [T008 Evidence](./evidence/T008/summary.md) | Exact-ref fresh-clone、失败恢复、review 与 rollback 证据 | `Needs_Review` |
+| [Quickstart](./quickstart.md) | Private clone 到 M0 首次请求的当前入门路径 | Current |
+| [Local Development](./operations/local-development.md) | 本地堆栈、迁移、验证、清理和 release runbook | Current |
+| [Troubleshooting](./operations/troubleshooting.md) | 工具链、端口、Compose、API、数据库和 gate 诊断 | Current |
 | [M1 TDR](./adr/0002-m1-product-and-semantic-execution.md) | M1 前端依赖、Cube Core 边界、后端库和质量门禁 | Confirmed；实现等待 M0 验收 |
 | [M1 Frontend Baseline Audit](./specs/m1-semantic-registry/frontend-baseline-audit.md) | 当前生产 Web 与产品原型的文档符合性、视觉和交互基线 | Completed |
 

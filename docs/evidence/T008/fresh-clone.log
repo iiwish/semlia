@@ -1,0 +1,67 @@
+go: downloading go1.26.5 (darwin/arm64)
+go: downloading github.com/testcontainers/testcontainers-go v0.44.0
+go: downloading go.yaml.in/yaml/v3 v3.0.5
+go: downloading github.com/moby/moby/api v1.55.0
+go: downloading github.com/cenkalti/backoff/v4 v4.3.0
+go: downloading dario.cat/mergo v1.0.2
+go: downloading github.com/cpuguy83/dockercfg v0.3.2
+go: downloading github.com/containerd/errdefs v1.0.0
+go: downloading github.com/containerd/platforms v0.2.1
+go: downloading github.com/google/uuid v1.6.0
+go: downloading github.com/moby/go-archive v0.2.0
+go: downloading github.com/moby/moby/client v0.5.0
+go: downloading github.com/moby/patternmatcher v0.6.1
+go: downloading github.com/opencontainers/image-spec v1.1.1
+go: downloading github.com/stretchr/testify v1.11.1
+go: downloading golang.org/x/crypto v0.54.0
+go: downloading github.com/containerd/log v0.1.0
+go: downloading github.com/moby/sys/sequential v0.7.0
+go: downloading github.com/moby/sys/user v0.4.0
+go: downloading golang.org/x/sys v0.47.0
+go: downloading github.com/docker/go-units v0.5.0
+go: downloading github.com/moby/docker-image-spec v1.3.1
+go: downloading github.com/magiconair/properties v1.8.10
+go: downloading github.com/shirou/gopsutil/v4 v4.26.6
+go: downloading github.com/klauspost/compress v1.18.6
+go: downloading github.com/opencontainers/go-digest v1.0.0
+go: downloading github.com/moby/term v0.5.2
+go: downloading github.com/containerd/errdefs/pkg v0.3.0
+go: downloading github.com/distribution/reference v0.6.0
+go: downloading github.com/docker/go-connections v0.7.0
+go: downloading go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.69.0
+go: downloading github.com/sirupsen/logrus v1.9.4
+go: downloading go.opentelemetry.io/otel/trace v1.44.0
+go: downloading github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
+go: downloading github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
+go: downloading github.com/tklauser/go-sysconf v0.4.0
+go: downloading github.com/ebitengine/purego v0.10.1
+go: downloading gopkg.in/yaml.v3 v3.0.1
+go: downloading go.opentelemetry.io/otel v1.44.0
+go: downloading github.com/felixge/httpsnoop v1.1.0
+go: downloading go.opentelemetry.io/otel/metric v1.44.0
+go: downloading github.com/go-logr/stdr v1.2.2
+go: downloading github.com/cespare/xxhash/v2 v2.3.0
+go: downloading github.com/go-logr/logr v1.4.3
+go: downloading go.opentelemetry.io/auto/sdk v1.2.1
+=== RUN   TestFreshCloneAcceptance
+    fresh_clone_test.go:170: clean: 297ms
+    fresh_clone_test.go:171: doctor: 12.312s
+    fresh_clone_test.go:172: cold bootstrap: 8m24.895s
+    fresh_clone_test.go:173: warm bootstrap: 567ms
+    fresh_clone_test.go:178: development readiness: 21.761s
+    fresh_clone_test.go:179: first successful request: 1ms
+    fresh_clone_test.go:179: clone to first successful request: 10m58.187s
+    fresh_clone_test.go:179: 100 sequential system-info requests: errors=0 p50=125µs p95=260µs max=493µs
+    fresh_clone_test.go:181: smoke: 27.632s
+    fresh_clone_test.go:182: worker lease retry dead-letter (isolated PostgreSQL): 6.371s
+    fresh_clone_test.go:183: migration upgrade, migration downgrade, migration re-upgrade (isolated PostgreSQL): 2.634s
+    fresh_clone_test.go:184: contract drift recovery: 1.405s
+    fresh_clone_test.go:184: contract drift gate rejected and then accepted the restored generated artifact
+    fresh_clone_test.go:185: production fail-closed: rejected insecure origin, database TLS and secret settings
+    fresh_clone_test.go:186: complete pull-request gate: 5m33.241s
+    fresh_clone_test.go:187: release bundle: 10.112s
+    fresh_clone_test.go:188: release output contains archive, standalone CycloneDX SBOM and checksum subjects
+--- PASS: TestFreshCloneAcceptance (1061.55s)
+PASS
+ok  	github.com/iiwish/semlia/tests/acceptance	1061.991s
+CANONICAL_FULL_EXIT=0

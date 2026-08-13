@@ -5,9 +5,9 @@
 | 字段 | 值 |
 | --- | --- |
 | Feature | m0-foundation |
-| 版本 | 0.8.0 |
+| 版本 | 0.10.0 |
 | 状态 | Confirmed |
-| 最后更新 | 2026-08-12 |
+| 最后更新 | 2026-08-13 |
 | Source | `docs/SSOT.md`, `docs/specs/m0-foundation/plan.md` |
 | TDR | `docs/adr/0001-m0-technical-foundation.md` |
 
@@ -749,13 +749,13 @@ Execution notes:
 
 ### T008 完成 fresh-clone 验收与 M0 交付证据
 
-Status: Running
+Status: Needs_Review
 Priority: P0
 Depends on: T001, T002, T003, T004, T005, T006, T007
-Blocks: M1 planning
-Story / Requirement: M0-US-001, M0-US-005, AC-M0-001 至 AC-M0-006
+Blocks: M1 planning and implementation
+Story / Requirement: M0-US-001, M0-US-005, M0-FR-001, M0-FR-008, M0-NFR-001 至 M0-NFR-007, AC-M0-001 至 AC-M0-006
 Parallel: No
-Conflicts with: 所有实现任务必须先进入 Needs_Review 或 Accepted
+Conflicts with: 创始人明确接受 T008 与 M0 前，所有 M1 planning 和 implementation 均保持阻断；其他当前实现任务不得与 T008 并行
 
 Goal:
 
@@ -763,6 +763,7 @@ Goal:
 
 Allowed files:
 
+- `Makefile`
 - `README.md`
 - `SECURITY.md`
 - `docs/quickstart.md`
@@ -772,7 +773,11 @@ Allowed files:
 - `docs/specs/m0-foundation/release-report.md`
 - `tests/acceptance/**`
 - `scripts/acceptance/m0-fresh-clone.sh`
+- `scripts/ci/security-check.sh`
+- `scripts/release/sbom.sh`
 - `scripts/doctor.sh`
+- `deploy/local/Dockerfile`
+- `tests/repository/ci_contract_test.go`
 - `tests/repository/repository_contract_test.go`
 - `go.mod`
 - `cmd/semlia/main.go`
@@ -785,14 +790,19 @@ Allowed files:
 - `internal/platform/http/handler_test.go`
 - `tests/integration/db/database_test.go`
 - `tests/integration/worker/worker_test.go`
+- `tests/smoke/dependency_failure_test.go`
 - `tests/smoke/local_stack_test.go`
 - `web/e2e/system-status.spec.ts`
 
 Test targets:
 
+- `Makefile` smoke target contract
 - `tests/acceptance/fresh_clone_test.go`
 - `tests/acceptance/m0_scenarios_test.go`
+- `tests/repository/ci_contract_test.go`
 - `tests/repository/repository_contract_test.go`
+- `deploy/local/Dockerfile` migration file-mode contract
+- `tests/smoke/dependency_failure_test.go`
 - `tests/smoke/local_stack_test.go`
 - `web/e2e/system-status.spec.ts`
 
@@ -827,7 +837,7 @@ Validation commands:
 - `make check`
 - `make smoke`
 - `go test ./tests/acceptance/...`
-- `SEMLIA_ACCEPTANCE_SOURCE=<repository-path> SEMLIA_ACCEPTANCE_REF=<exact-commit> ./scripts/acceptance/m0-fresh-clone.sh`
+- `SEMLIA_ACCEPTANCE_SOURCE="$(git rev-parse --show-toplevel)" SEMLIA_ACCEPTANCE_REF=source-revision-redacted ./scripts/acceptance/m0-fresh-clone.sh`
 - `go test ./tests/repository`
 - `go list -m`
 - `go mod tidy -diff`
@@ -835,8 +845,8 @@ Validation commands:
 
 TDD plan:
 
-- RED: 添加文档、工具链和 module identity contract，在隔离 clone 中执行 acceptance harness，记录缺失文档、Go patch 漂移、未受控 module namespace 和写死 Compose project identity 的失败。
-- GREEN: 修复 M0 验收直接发现的问题、迁移内部 import，让 smoke test 从当前 project 环境解析资源标签，并补回归测试。
+- RED: 添加文档、工具链、module identity 与 restrictive-umask 镜像权限 contract，在隔离 clone 中执行 acceptance harness，记录缺失文档、Go patch 漂移、未受控 module namespace、写死 Compose project identity，以及 nonroot 无法读取打包 migration SQL 的失败。
+- GREEN: 修复 M0 验收直接发现的问题、迁移内部 import，让 smoke test 从当前 project 环境解析资源标签，并在 Go builder 中把打包 migration 目录和 SQL 文件规范化为现有 nonroot 运行用户可遍历、可读取的模式。
 - REFACTOR: 整理文档和诊断输出，不扩大 M0 功能范围。
 
 Packet path:
@@ -853,17 +863,22 @@ Evidence required:
 
 Execution notes:
 
+- The original retry budget was exhausted. Founder continuation on 2026-08-13 authorizes only independently reviewed corrective attempts; every failure remains evidence and no acceptance threshold may be weakened.
 - Exact baseline `source-revision-redacted`; validated implementation `source-revision-redacted`。
-- Final isolated clone acceptance passed in 1,209.434s. Cold bootstrap was 7m58.859s, warm bootstrap 293ms, clone-to-first-request 8m40.844s and the complete pull-request gate 7m31.246s。
+- Final isolated clone acceptance passed: test 1,061.55s, package 1,061.991s, exit 0. Cold bootstrap was 8m24.895s, warm bootstrap 567ms, clone-to-first-request 10m58.187s and the complete pull-request gate 5m33.241s。
+- 100 sequential requests had zero errors, p50 125µs, p95 260µs and max 493µs；smoke 27.632s、worker 6.371s、migration 2.634s、drift recovery 1.405s and release 10.112s all passed。
 - Real PostgreSQL failure/recovery、migration up/down/up、concurrent worker lease/retry/dead-letter、contract drift reject/recover、production fail-closed、security scan and release verification all passed。
-- Two corrective failures are retained in `docs/evidence/T008/test-results.md`; neither security thresholds nor ignore rules were weakened。
+- The complete failure/supersession trail, including cold Corepack、Buildx、migration permission and signal-lifecycle remedies, is retained in `docs/evidence/T008/test-results.md`; neither security thresholds nor ignore rules were weakened。
 - Evidence: `docs/evidence/T008/summary.md`, `docs/evidence/T008/test-results.md`, `docs/evidence/T008/diff.patch`, `docs/specs/m0-foundation/release-report.md`。
-- Current gate: implementation and evidence are Review Candidate; T008 remains Running until spec-compliance、bug/code-quality and QA-acceptance reviews all pass。
+- Review: spec-compliance、bug/code-quality and QA-acceptance all passed with no blocking finding。
+- Cleanup: exact final-run resources/processes/recorded root are absent；the persistent acceptance lock path is unheld and reacquirable。
+- Restrictive-image proof: source migration modes 0700/0600 became packaged 0755/0644 under `nonroot:nonroot`; the unique probe container, image tag and temporary context were removed. Shared canonical release/security image tags are outside this task-owned zero-resource assertion。
+- Current gate: T008 is `Needs_Review`; only explicit founder acceptance can move T008 and M0 to `Accepted`。
 
 ## 5. 用户审核闸门
 
 - Approval: Confirmed by founder on 2026-08-08
 - Accepted graph: E001、E002 和 T001 至 T008 的范围、依赖、并行边界、验证命令与 Definition of Done。
-- Current execution: T008 exact-ref isolation、full gate and release evidence 已通过，执行状态保持 Running 直到三轮 review 完成；其余里程碑不得与 T008 并行实现。
-- Next gate: T008 完成三轮 review 和 M0 release report 后由 founder 明确接受，随后才生成 M1 work graph 与 Ready packet。
+- Current execution: T008 exact-ref isolation、full gate、release evidence 和三轮 review 已通过，状态为 `Needs_Review`；其余里程碑不得与 T008 并行实现。
+- Next gate: founder 明确接受 T008 与 M0 后，才生成 M1 work graph 与 Ready packet。
 - Execution rule: 没有已审核 packet、干净 worktree 和明确执行授权时，不开始任何 task。
