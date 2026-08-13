@@ -75,14 +75,15 @@ type cleanupResourceKind struct {
 }
 
 type freshCloneRun struct {
-	t               *testing.T
-	scratchBase     string
-	scratch         string
-	root            string
-	environment     []string
-	project         string
-	baseURL         string
-	cleanupExecutor cleanupCommandExecutor
+	t                                *testing.T
+	scratchBase                      string
+	scratch                          string
+	root                             string
+	environment                      []string
+	project                          string
+	baseURL                          string
+	cleanupExecutor                  cleanupCommandExecutor
+	dockerCLIPluginSystemDirectories []string
 }
 
 type cleanupReport struct {
@@ -1353,51 +1354,286 @@ type dockerCLIPluginMetadata struct {
 	Vendor           string `json:"Vendor"`
 	Version          string `json:"Version"`
 	ShortDescription string `json:"ShortDescription"`
+	URL              string `json:"URL,omitempty"`
+	Hidden           bool   `json:"Hidden,omitempty"`
 }
 
-func (run *freshCloneRun) prepareDockerCLI(ctx context.Context) error {
+type dockerCLIPluginCapability struct {
+	command      string
+	description  string
+	logicalPath  string
+	physicalPath string
+	physicalInfo os.FileInfo
+	physicalDir  string
+}
+
+func (run *freshCloneRun) prepareDockerCLI(ctx context.Context) (returnErr error) {
 	dockerOutput, err := executeSubprocess(ctx, run.root, run.environment, "docker", "version")
 	if err != nil {
 		return fmt.Errorf("validate isolated Docker CLI and daemon: %w: %s", err, strings.TrimSpace(run.redactTaskSecrets(string(dockerOutput))))
 	}
-	if _, composeErr := executeSubprocess(ctx, run.root, run.environment, "docker", "compose", "version"); composeErr == nil {
-		return nil
-	}
 
-	plugin, err := acceptanceExecutablePath(run.environment, "docker-compose")
+	compose, err := run.resolveDockerCLIPlugin(ctx, "docker-compose", "Docker Compose", "compose", "")
 	if err != nil {
-		return fmt.Errorf("locate a supported Docker Compose capability for the isolated Docker configuration: %w", err)
+		return err
 	}
-	metadataOutput, metadataErr := executeSubprocess(ctx, run.root, run.environment, plugin, "docker-cli-plugin-metadata")
-	if metadataErr != nil {
-		return fmt.Errorf("validate Docker Compose plugin metadata: %w: %s", metadataErr, strings.TrimSpace(string(metadataOutput)))
+	buildx, err := run.resolveDockerCLIPlugin(ctx, "docker-buildx", "Docker Buildx", "buildx", compose.physicalDir)
+	if err != nil {
+		return err
 	}
-	metadata := dockerCLIPluginMetadata{}
-	if err := json.Unmarshal(metadataOutput, &metadata); err != nil {
-		return fmt.Errorf("validate Docker Compose plugin metadata: parse JSON: %w", err)
-	}
-	if metadata.SchemaVersion == "" || metadata.Vendor == "" || metadata.Version == "" || !strings.Contains(strings.ToLower(metadata.ShortDescription), "compose") {
-		return fmt.Errorf("validate Docker Compose plugin metadata: incomplete capability metadata: %+v", metadata)
-	}
+	capabilities := []dockerCLIPluginCapability{compose, buildx}
 
 	pluginDirectory := filepath.Join(environmentValue(run.environment, "DOCKER_CONFIG"), "cli-plugins")
 	if err := os.MkdirAll(pluginDirectory, 0o700); err != nil {
 		return fmt.Errorf("create task-local Docker CLI plugin directory: %w", err)
 	}
-	installedPlugin := filepath.Join(pluginDirectory, "docker-compose")
-	if _, err := os.Lstat(installedPlugin); err == nil {
-		return fmt.Errorf("task-local Docker Compose plugin path already exists")
-	} else if !os.IsNotExist(err) {
-		return fmt.Errorf("inspect task-local Docker Compose plugin path: %w", err)
+	installed := make([]string, 0, len(capabilities))
+	defer func() {
+		if returnErr == nil {
+			return
+		}
+		for _, path := range installed {
+			if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+				returnErr = errors.Join(returnErr, fmt.Errorf("roll back task-local Docker CLI plugin %q: %w", path, err))
+			}
+		}
+	}()
+
+	for _, capability := range capabilities {
+		if err := validateDockerCLIPluginIdentity(capability); err != nil {
+			return err
+		}
+		installedPlugin := filepath.Join(pluginDirectory, capability.command)
+		if _, err := os.Lstat(installedPlugin); err == nil {
+			return fmt.Errorf("task-local %s plugin path already exists", capability.description)
+		} else if !os.IsNotExist(err) {
+			return fmt.Errorf("inspect task-local %s plugin path: %w", capability.description, err)
+		}
 	}
-	if err := os.Symlink(plugin, installedPlugin); err != nil {
-		return fmt.Errorf("link validated Docker Compose capability into task-local configuration: %w", err)
+	for _, capability := range capabilities {
+		installedPlugin := filepath.Join(pluginDirectory, capability.command)
+		if err := os.Symlink(capability.physicalPath, installedPlugin); err != nil {
+			return fmt.Errorf("link validated %s capability into task-local configuration: %w", capability.description, err)
+		}
+		installed = append(installed, installedPlugin)
+		if err := validateDockerCLIPluginIdentity(capability); err != nil {
+			return err
+		}
+		if err := validateInstalledDockerCLIPlugin(ctx, run.root, run.environment, capability, installedPlugin); err != nil {
+			return err
+		}
 	}
-	composeOutput, composeErr := executeSubprocess(ctx, run.root, run.environment, "docker", "compose", "version")
-	if composeErr != nil {
-		return fmt.Errorf("validate task-local Docker Compose capability: %w: %s", composeErr, strings.TrimSpace(string(composeOutput)))
+	for _, capability := range capabilities {
+		output, err := executeSubprocess(ctx, run.root, run.environment, "docker", capability.command[len("docker-"):], "version")
+		if err != nil {
+			return fmt.Errorf("validate task-local %s capability: %w: %s", capability.description, err, strings.TrimSpace(string(output)))
+		}
 	}
 	return nil
+}
+
+func validateInstalledDockerCLIPlugin(ctx context.Context, root string, environment []string, capability dockerCLIPluginCapability, installedPath string) error {
+	if err := validateInstalledDockerCLIPluginIdentity(capability, installedPath); err != nil {
+		return err
+	}
+	metadataOutput, metadataErr := executeSubprocess(ctx, root, environment, installedPath, "docker-cli-plugin-metadata")
+	if metadataErr != nil {
+		return fmt.Errorf("validate installed %s plugin metadata: %w: %s", capability.description, metadataErr, strings.TrimSpace(string(metadataOutput)))
+	}
+	metadata := dockerCLIPluginMetadata{}
+	if err := json.Unmarshal(metadataOutput, &metadata); err != nil {
+		return fmt.Errorf("validate installed %s plugin metadata: parse JSON: %w", capability.description, err)
+	}
+	if metadata.SchemaVersion != "0.1.0" || metadata.Vendor == "" || metadata.Version == "" || metadata.ShortDescription != capability.description {
+		return fmt.Errorf("validate installed %s plugin metadata: capability identity mismatch: %+v", capability.description, metadata)
+	}
+	if err := validateInstalledDockerCLIPluginIdentity(capability, installedPath); err != nil {
+		return fmt.Errorf("revalidate installed %s plugin after metadata: %w", capability.description, err)
+	}
+	return nil
+}
+
+func validateInstalledDockerCLIPluginIdentity(capability dockerCLIPluginCapability, installedPath string) error {
+	info, err := os.Lstat(installedPath)
+	if err != nil {
+		return fmt.Errorf("validate installed %s plugin path: %w", capability.description, err)
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		return fmt.Errorf("validate installed %s plugin path: task-local capability is not a symlink", capability.description)
+	}
+	target, err := os.Readlink(installedPath)
+	if err != nil {
+		return fmt.Errorf("validate installed %s plugin link: %w", capability.description, err)
+	}
+	if target != capability.physicalPath {
+		return fmt.Errorf("validate installed %s plugin link: target = %q, want %q", capability.description, target, capability.physicalPath)
+	}
+	physicalPath, err := filepath.EvalSymlinks(installedPath)
+	if err != nil {
+		return fmt.Errorf("validate installed %s physical plugin path: %w", capability.description, err)
+	}
+	if physicalPath != capability.physicalPath {
+		return fmt.Errorf("validate installed %s physical plugin path: got %q, want %q", capability.description, physicalPath, capability.physicalPath)
+	}
+	physicalInfo, err := os.Stat(physicalPath)
+	if err != nil {
+		return fmt.Errorf("validate installed %s physical plugin identity: %w", capability.description, err)
+	}
+	if !os.SameFile(capability.physicalInfo, physicalInfo) {
+		return fmt.Errorf("validate installed %s physical plugin identity: file changed at %q", capability.description, physicalPath)
+	}
+	return nil
+}
+
+func (run *freshCloneRun) resolveDockerCLIPlugin(ctx context.Context, command, description, kind, fallbackDirectory string) (dockerCLIPluginCapability, error) {
+	candidates := make([]string, 0, 6)
+	failures := make([]error, 0, 7)
+	if pathCandidate, err := acceptanceExecutablePath(run.environment, command); err == nil {
+		candidates = append(candidates, pathCandidate)
+	} else {
+		failures = append(failures, err)
+	}
+	candidates = append(candidates, dockerCLIPluginFallbackPaths(command, fallbackDirectory, run.dockerCLIPluginDirectories())...)
+	seen := make(map[string]struct{}, len(candidates))
+	for _, candidate := range candidates {
+		if _, duplicate := seen[candidate]; duplicate {
+			continue
+		}
+		seen[candidate] = struct{}{}
+		capability, err := run.validateDockerCLIPluginCandidate(ctx, candidate, command, description, kind)
+		if err == nil {
+			return capability, nil
+		}
+		failures = append(failures, fmt.Errorf("candidate %q: %w", candidate, err))
+		if ctx.Err() != nil {
+			break
+		}
+	}
+	return dockerCLIPluginCapability{}, fmt.Errorf("locate a supported %s capability for the isolated Docker configuration: %w", description, errors.Join(failures...))
+}
+
+func (run *freshCloneRun) validateDockerCLIPluginCandidate(ctx context.Context, logicalPath, command, description, kind string) (dockerCLIPluginCapability, error) {
+	physicalPath, err := validateDockerCLIPluginPath(logicalPath)
+	if err != nil {
+		return dockerCLIPluginCapability{}, fmt.Errorf("validate %s plugin path: %w", description, err)
+	}
+	physicalInfo, err := os.Stat(physicalPath)
+	if err != nil {
+		return dockerCLIPluginCapability{}, fmt.Errorf("validate %s physical plugin identity: %w", description, err)
+	}
+	metadataOutput, metadataErr := executeSubprocess(ctx, run.root, run.environment, logicalPath, "docker-cli-plugin-metadata")
+	if metadataErr != nil {
+		return dockerCLIPluginCapability{}, fmt.Errorf("validate %s plugin metadata: %w: %s", description, metadataErr, strings.TrimSpace(string(metadataOutput)))
+	}
+	metadata := dockerCLIPluginMetadata{}
+	decoder := json.NewDecoder(bytes.NewReader(metadataOutput))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&metadata); err != nil {
+		return dockerCLIPluginCapability{}, fmt.Errorf("validate %s plugin metadata: parse JSON: %w", description, err)
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return dockerCLIPluginCapability{}, fmt.Errorf("validate %s plugin metadata: trailing JSON data", description)
+	}
+	if metadata.SchemaVersion != "0.1.0" || metadata.Vendor == "" || metadata.Version == "" || metadata.ShortDescription != description {
+		return dockerCLIPluginCapability{}, fmt.Errorf("validate %s plugin metadata: capability identity does not match %q: %+v", description, kind, metadata)
+	}
+	currentPhysicalPath, err := validateDockerCLIPluginPath(logicalPath)
+	if err != nil {
+		return dockerCLIPluginCapability{}, fmt.Errorf("revalidate %s plugin identity after metadata: %w", description, err)
+	}
+	if currentPhysicalPath != physicalPath {
+		return dockerCLIPluginCapability{}, fmt.Errorf("revalidate %s plugin identity after metadata: physical path changed from %q to %q", description, physicalPath, currentPhysicalPath)
+	}
+	currentPhysicalInfo, err := os.Stat(currentPhysicalPath)
+	if err != nil {
+		return dockerCLIPluginCapability{}, fmt.Errorf("revalidate %s physical plugin identity after metadata: %w", description, err)
+	}
+	if !os.SameFile(physicalInfo, currentPhysicalInfo) {
+		return dockerCLIPluginCapability{}, fmt.Errorf("revalidate %s physical plugin identity after metadata: file changed at %q", description, physicalPath)
+	}
+	return dockerCLIPluginCapability{
+		command:      command,
+		description:  description,
+		logicalPath:  logicalPath,
+		physicalPath: physicalPath,
+		physicalInfo: physicalInfo,
+		physicalDir:  filepath.Dir(physicalPath),
+	}, nil
+}
+
+func (run *freshCloneRun) dockerCLIPluginDirectories() []string {
+	if run.dockerCLIPluginSystemDirectories != nil {
+		return run.dockerCLIPluginSystemDirectories
+	}
+	return []string{
+		"/usr/local/lib/docker/cli-plugins",
+		"/usr/local/libexec/docker/cli-plugins",
+		"/usr/lib/docker/cli-plugins",
+		"/usr/libexec/docker/cli-plugins",
+	}
+}
+
+func dockerCLIPluginFallbackPaths(command, physicalSiblingDirectory string, systemDirectories []string) []string {
+	paths := make([]string, 0, 1+len(systemDirectories))
+	if physicalSiblingDirectory != "" {
+		paths = append(paths, filepath.Join(physicalSiblingDirectory, command))
+	}
+	for _, directory := range systemDirectories {
+		candidate := filepath.Join(directory, command)
+		if len(paths) == 0 || candidate != paths[0] {
+			paths = append(paths, candidate)
+		}
+	}
+	return paths
+}
+
+func validateDockerCLIPluginIdentity(capability dockerCLIPluginCapability) error {
+	physicalPath, err := validateDockerCLIPluginPath(capability.logicalPath)
+	if err != nil {
+		return fmt.Errorf("revalidate %s plugin identity: %w", capability.description, err)
+	}
+	if physicalPath != capability.physicalPath {
+		return fmt.Errorf("revalidate %s plugin identity: physical path changed from %q to %q", capability.description, capability.physicalPath, physicalPath)
+	}
+	got, err := os.Stat(physicalPath)
+	if err != nil {
+		return fmt.Errorf("revalidate %s plugin identity: inspect current physical path: %w", capability.description, err)
+	}
+	if !os.SameFile(capability.physicalInfo, got) {
+		return fmt.Errorf("revalidate %s plugin identity: physical file changed at %q", capability.description, physicalPath)
+	}
+	return nil
+}
+
+func validateDockerCLIPluginPath(logicalPath string) (string, error) {
+	if logicalPath == "" || !filepath.IsAbs(logicalPath) || filepath.Clean(logicalPath) != logicalPath {
+		return "", fmt.Errorf("logical plugin path %q must be clean and absolute", logicalPath)
+	}
+	logicalInfo, err := os.Lstat(logicalPath)
+	if err != nil {
+		return "", fmt.Errorf("inspect logical plugin path %q: %w", logicalPath, err)
+	}
+	if logicalInfo.IsDir() {
+		return "", fmt.Errorf("logical plugin path %q is a directory", logicalPath)
+	}
+	physicalPath, err := filepath.EvalSymlinks(logicalPath)
+	if err != nil {
+		return "", fmt.Errorf("resolve physical plugin path %q: %w", logicalPath, err)
+	}
+	if !filepath.IsAbs(physicalPath) || filepath.Clean(physicalPath) != physicalPath {
+		return "", fmt.Errorf("resolved physical plugin path %q is not clean and absolute", physicalPath)
+	}
+	physicalInfo, err := os.Lstat(physicalPath)
+	if err != nil {
+		return "", fmt.Errorf("inspect physical plugin path %q: %w", physicalPath, err)
+	}
+	if physicalInfo.Mode()&os.ModeSymlink != 0 || !physicalInfo.Mode().IsRegular() {
+		return "", fmt.Errorf("physical plugin path %q must be a regular file", physicalPath)
+	}
+	if runtime.GOOS != "windows" && physicalInfo.Mode().Perm()&0o111 == 0 {
+		return "", fmt.Errorf("physical plugin path %q is not executable", physicalPath)
+	}
+	return physicalPath, nil
 }
 
 func validateFreshCloneInvocation() error {
@@ -2609,7 +2845,7 @@ func TestFreshCloneLauncherReservesCleanupEnvelope(t *testing.T) {
 	}
 }
 
-func TestPrepareDockerCLIUsesValidatedTaskLocalComposePlugin(t *testing.T) {
+func TestPrepareDockerCLIUsesValidatedTaskLocalComposeAndBuildxPlugins(t *testing.T) {
 	root := t.TempDir()
 	bin := filepath.Join(root, "bin")
 	dockerConfig := filepath.Join(root, "docker-config")
@@ -2626,25 +2862,45 @@ if [ "$1" = compose ] && [ "$2" = version ]; then
   [ -x "$plugin" ] || exit 42
   exec "$plugin" version
 fi
+if [ "$1" = buildx ] && [ "$2" = version ]; then
+  plugin="$DOCKER_CONFIG/cli-plugins/docker-buildx"
+  [ -x "$plugin" ] || exit 43
+  exec "$plugin" version
+fi
 exit 64
 `
 	if err := os.WriteFile(docker, []byte(dockerScript), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	plugin := filepath.Join(bin, "docker-compose")
+	physicalPlugin := filepath.Join(bin, "docker-tools")
 	pluginScript := `#!/bin/sh
+plugin=${0##*/}
 if [ "$1" = docker-cli-plugin-metadata ]; then
-  printf '%s\n' '{"SchemaVersion":"0.1.0","Vendor":"Docker Inc.","Version":"v2.0.0","ShortDescription":"Docker Compose"}'
+  case "$plugin" in
+    docker-compose) description='Docker Compose'; version='v2.0.0' ;;
+    docker-buildx) description='Docker Buildx'; version='v0.20.0' ;;
+    *) printf 'unsupported argv0 %s\n' "$plugin" >&2; exit 65 ;;
+  esac
+  printf '{"SchemaVersion":"0.1.0","Vendor":"Docker Inc.","Version":"%s","ShortDescription":"%s"}\n' "$version" "$description"
   exit 0
 fi
 if [ "$1" = version ]; then
-  printf '%s\n' 'Docker Compose version v2.0.0'
+  printf '%s version\n' "$plugin"
   exit 0
 fi
 exit 64
 `
-	if err := os.WriteFile(plugin, []byte(pluginScript), 0o755); err != nil {
+	if err := os.WriteFile(physicalPlugin, []byte(pluginScript), 0o755); err != nil {
 		t.Fatal(err)
+	}
+	plugins := map[string]string{
+		"docker-compose": filepath.Join(bin, "docker-compose"),
+		"docker-buildx":  filepath.Join(bin, "docker-buildx"),
+	}
+	for _, plugin := range plugins {
+		if err := os.Symlink(physicalPlugin, plugin); err != nil {
+			t.Fatal(err)
+		}
 	}
 	run := &freshCloneRun{
 		t:    t,
@@ -2654,24 +2910,471 @@ exit 64
 			"HOME=" + filepath.Join(root, "home"),
 			"DOCKER_CONFIG=" + dockerConfig,
 		},
+		dockerCLIPluginSystemDirectories: []string{},
 	}
 	if err := run.prepareDockerCLI(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	installed := filepath.Join(dockerConfig, "cli-plugins", "docker-compose")
-	info, err := os.Lstat(installed)
+	for name := range plugins {
+		installed := filepath.Join(dockerConfig, "cli-plugins", name)
+		info, err := os.Lstat(installed)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode()&os.ModeSymlink == 0 {
+			t.Fatalf("task-local %s capability was copied instead of symlinked: mode=%s", name, info.Mode())
+		}
+		target, err := os.Readlink(installed)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want, err := filepath.EvalSymlinks(physicalPlugin)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if target != want {
+			t.Fatalf("task-local %s plugin target = %q, want validated physical path %q", name, target, want)
+		}
+	}
+}
+
+func TestPrepareDockerCLIDoesNotReturnBeforeBuildxIsAvailable(t *testing.T) {
+	root := t.TempDir()
+	bin := filepath.Join(root, "bin")
+	if err := os.MkdirAll(bin, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	dockerScript := `#!/bin/sh
+if [ "$1" = version ]; then exit 0; fi
+if [ "$1" = compose ] && [ "$2" = version ]; then exit 0; fi
+exit 42
+`
+	if err := os.WriteFile(filepath.Join(bin, "docker"), []byte(dockerScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeDockerCLIPluginStub(t, filepath.Join(bin, "docker-compose"), "Docker Compose")
+	run := &freshCloneRun{
+		t:                                t,
+		root:                             root,
+		environment:                      []string{"PATH=" + bin, "HOME=" + filepath.Join(root, "home"), "DOCKER_CONFIG=" + filepath.Join(root, "docker-config")},
+		dockerCLIPluginSystemDirectories: []string{},
+	}
+	err := run.prepareDockerCLI(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "locate a supported Docker Buildx capability") {
+		t.Fatalf("prepareDockerCLI returned before installing exact task-local Compose and Buildx capabilities: %v", err)
+	}
+}
+
+func TestPrepareDockerCLIPrioritizesBuildxOnCanonicalPath(t *testing.T) {
+	root := t.TempDir()
+	composeBin := filepath.Join(root, "compose-bin")
+	buildxBin := filepath.Join(root, "buildx-bin")
+	for _, directory := range []string{composeBin, buildxBin} {
+		if err := os.MkdirAll(directory, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	dockerScript := `#!/bin/sh
+if [ "$1" = version ]; then exit 0; fi
+plugin="$DOCKER_CONFIG/cli-plugins/docker-$1"
+[ "$2" = version ] && [ -x "$plugin" ] && exec "$plugin" version
+exit 42
+`
+	if err := os.WriteFile(filepath.Join(composeBin, "docker"), []byte(dockerScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeDockerCLIPluginStub(t, filepath.Join(composeBin, "docker-compose"), "Docker Compose")
+	writeDockerCLIPluginStub(t, filepath.Join(buildxBin, "docker-buildx"), "Docker Buildx")
+	dockerConfig := filepath.Join(root, "docker-config")
+	run := &freshCloneRun{
+		t:                                t,
+		root:                             root,
+		environment:                      []string{"PATH=" + strings.Join([]string{composeBin, buildxBin}, string(os.PathListSeparator)), "HOME=" + filepath.Join(root, "home"), "DOCKER_CONFIG=" + dockerConfig},
+		dockerCLIPluginSystemDirectories: []string{},
+	}
+	if err := run.prepareDockerCLI(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	target, err := os.Readlink(filepath.Join(dockerConfig, "cli-plugins", "docker-buildx"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Mode()&os.ModeSymlink == 0 {
-		t.Fatalf("task-local Compose capability was copied instead of symlinked: mode=%s", info.Mode())
-	}
-	target, err := os.Readlink(installed)
+	want, err := filepath.EvalSymlinks(filepath.Join(buildxBin, "docker-buildx"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if target != plugin {
-		t.Fatalf("task-local Compose plugin target = %q, want validated %q", target, plugin)
+	if target != want {
+		t.Fatalf("task-local Buildx plugin target = %q, want canonical PATH capability physical target %q", target, want)
+	}
+}
+
+func TestPrepareDockerCLIFallsBackFromInvalidPathBuildxToValidatedSibling(t *testing.T) {
+	root := t.TempDir()
+	bin := filepath.Join(root, "bin")
+	distribution := filepath.Join(root, "docker-distribution")
+	for _, directory := range []string{bin, distribution} {
+		if err := os.MkdirAll(directory, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeDockerTestCLI(t, filepath.Join(bin, "docker"))
+	physicalPlugin := filepath.Join(distribution, "docker-tools")
+	multicallPlugin := `#!/bin/sh
+case "${0##*/}" in
+  docker-compose) description='Docker Compose' ;;
+  docker-buildx) description='Docker Buildx' ;;
+  *) exit 65 ;;
+esac
+if [ "$1" = docker-cli-plugin-metadata ]; then
+  printf '{"SchemaVersion":"0.1.0","Vendor":"Docker Inc.","Version":"v1.0.0","ShortDescription":"%s"}\n' "$description"
+  exit 0
+fi
+if [ "$1" = version ]; then exit 0; fi
+exit 64
+`
+	if err := os.WriteFile(physicalPlugin, []byte(multicallPlugin), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"docker-compose", "docker-buildx"} {
+		if err := os.Symlink(physicalPlugin, filepath.Join(distribution, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink(filepath.Join(distribution, "docker-compose"), filepath.Join(bin, "docker-compose")); err != nil {
+		t.Fatal(err)
+	}
+	invalidExecuted := filepath.Join(root, "invalid-buildx-executed")
+	invalidBuildx := `#!/bin/sh
+if [ "$1" = docker-cli-plugin-metadata ]; then
+  printf '%s\n' '{"SchemaVersion":"0.1.0","Vendor":"Docker Inc.","Version":"v1.0.0","ShortDescription":"Docker Compose"}'
+  exit 0
+fi
+: > "$INVALID_BUILDX_EXECUTED"
+exit 74
+`
+	if err := os.WriteFile(filepath.Join(bin, "docker-buildx"), []byte(invalidBuildx), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dockerConfig := filepath.Join(root, "docker-config")
+	run := &freshCloneRun{
+		t:                                t,
+		root:                             root,
+		environment:                      []string{"PATH=" + bin, "HOME=" + filepath.Join(root, "home"), "DOCKER_CONFIG=" + dockerConfig, "INVALID_BUILDX_EXECUTED=" + invalidExecuted},
+		dockerCLIPluginSystemDirectories: []string{},
+	}
+	if err := run.prepareDockerCLI(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	target, err := os.Readlink(filepath.Join(dockerConfig, "cli-plugins", "docker-buildx"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := filepath.EvalSymlinks(physicalPlugin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if target != want {
+		t.Fatalf("task-local Buildx plugin target = %q, want validated sibling physical target %q", target, want)
+	}
+	if _, err := os.Stat(invalidExecuted); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("invalid PATH Buildx candidate was executed beyond metadata validation: %v", err)
+	}
+}
+
+func TestPrepareDockerCLIRejectsMissingBuildxWithoutPartialInstall(t *testing.T) {
+	root := t.TempDir()
+	bin := filepath.Join(root, "bin")
+	if err := os.MkdirAll(bin, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	writeDockerTestCLI(t, filepath.Join(bin, "docker"))
+	writeDockerCLIPluginStub(t, filepath.Join(bin, "docker-compose"), "Docker Compose")
+	dockerConfig := filepath.Join(root, "docker-config")
+	run := &freshCloneRun{
+		t:                                t,
+		root:                             root,
+		environment:                      []string{"PATH=" + bin, "HOME=" + filepath.Join(root, "home"), "DOCKER_CONFIG=" + dockerConfig},
+		dockerCLIPluginSystemDirectories: []string{},
+	}
+	err := run.prepareDockerCLI(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "locate a supported Docker Buildx capability") {
+		t.Fatalf("missing Buildx capability did not produce an actionable failure: %v", err)
+	}
+	assertDockerCLIPluginPathsAbsent(t, dockerConfig)
+}
+
+func TestPrepareDockerCLIRejectsUnvalidatedBuildxWithoutPartialInstall(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		script string
+	}{
+		{name: "malformed metadata", script: "#!/bin/sh\nprintf 'not-json\\n'\n"},
+		{name: "wrong plugin kind", script: "#!/bin/sh\nprintf '%s\\n' '{\"SchemaVersion\":\"0.1.0\",\"Vendor\":\"Docker Inc.\",\"Version\":\"v2.0.0\",\"ShortDescription\":\"Docker Compose\"}'\n"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			bin := filepath.Join(root, "bin")
+			if err := os.MkdirAll(bin, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			writeDockerTestCLI(t, filepath.Join(bin, "docker"))
+			writeDockerCLIPluginStub(t, filepath.Join(bin, "docker-compose"), "Docker Compose")
+			if err := os.WriteFile(filepath.Join(bin, "docker-buildx"), []byte(test.script), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			dockerConfig := filepath.Join(root, "docker-config")
+			run := &freshCloneRun{
+				t:                                t,
+				root:                             root,
+				environment:                      []string{"PATH=" + bin, "HOME=" + filepath.Join(root, "home"), "DOCKER_CONFIG=" + dockerConfig},
+				dockerCLIPluginSystemDirectories: []string{},
+			}
+			err := run.prepareDockerCLI(context.Background())
+			if err == nil || !strings.Contains(err.Error(), "validate Docker Buildx plugin metadata") {
+				t.Fatalf("unvalidated Buildx plugin was accepted: %v", err)
+			}
+			assertDockerCLIPluginPathsAbsent(t, dockerConfig)
+		})
+	}
+}
+
+func TestPrepareDockerCLIRejectsPreexistingTaskLocalBuildxPlugin(t *testing.T) {
+	root := t.TempDir()
+	bin := filepath.Join(root, "bin")
+	dockerConfig := filepath.Join(root, "docker-config")
+	pluginDirectory := filepath.Join(dockerConfig, "cli-plugins")
+	for _, directory := range []string{bin, pluginDirectory} {
+		if err := os.MkdirAll(directory, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeDockerTestCLI(t, filepath.Join(bin, "docker"))
+	writeDockerCLIPluginStub(t, filepath.Join(bin, "docker-compose"), "Docker Compose")
+	writeDockerCLIPluginStub(t, filepath.Join(bin, "docker-buildx"), "Docker Buildx")
+	preexisting := filepath.Join(pluginDirectory, "docker-buildx")
+	if err := os.WriteFile(preexisting, []byte("poison"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	run := &freshCloneRun{
+		t:                                t,
+		root:                             root,
+		environment:                      []string{"PATH=" + bin, "HOME=" + filepath.Join(root, "home"), "DOCKER_CONFIG=" + dockerConfig},
+		dockerCLIPluginSystemDirectories: []string{},
+	}
+	err := run.prepareDockerCLI(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "task-local Docker Buildx plugin path already exists") {
+		t.Fatalf("preexisting task-local Buildx plugin was accepted: %v", err)
+	}
+	if contents, readErr := os.ReadFile(preexisting); readErr != nil || string(contents) != "poison" {
+		t.Fatalf("preexisting Buildx plugin was changed: contents=%q err=%v", contents, readErr)
+	}
+	if _, statErr := os.Lstat(filepath.Join(pluginDirectory, "docker-compose")); !os.IsNotExist(statErr) {
+		t.Fatalf("Compose plugin was partially installed before Buildx conflict was rejected: %v", statErr)
+	}
+}
+
+func TestPrepareDockerCLIRollsBackLinksWhenBuildxVersionFails(t *testing.T) {
+	root := t.TempDir()
+	bin := filepath.Join(root, "bin")
+	if err := os.MkdirAll(bin, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	writeDockerTestCLI(t, filepath.Join(bin, "docker"))
+	writeDockerCLIPluginStub(t, filepath.Join(bin, "docker-compose"), "Docker Compose")
+	buildx := filepath.Join(bin, "docker-buildx")
+	buildxScript := `#!/bin/sh
+if [ "$1" = docker-cli-plugin-metadata ]; then
+  printf '%s\n' '{"SchemaVersion":"0.1.0","Vendor":"Docker Inc.","Version":"v1.0.0","ShortDescription":"Docker Buildx","URL":"https://github.com/docker/buildx","Hidden":false}'
+  exit 0
+fi
+if [ "$1" = version ]; then
+  printf '%s\n' 'buildx version unavailable' >&2
+  exit 73
+fi
+exit 64
+`
+	if err := os.WriteFile(buildx, []byte(buildxScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dockerConfig := filepath.Join(root, "docker-config")
+	run := &freshCloneRun{
+		t:                                t,
+		root:                             root,
+		environment:                      []string{"PATH=" + bin, "HOME=" + filepath.Join(root, "home"), "DOCKER_CONFIG=" + dockerConfig},
+		dockerCLIPluginSystemDirectories: []string{},
+	}
+	err := run.prepareDockerCLI(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "validate task-local Docker Buildx capability") || !strings.Contains(err.Error(), "buildx version unavailable") {
+		t.Fatalf("failing task-local Buildx version did not produce an actionable failure: %v", err)
+	}
+	assertDockerCLIPluginPathsAbsent(t, dockerConfig)
+}
+
+func TestPrepareDockerCLIRejectsInstalledPluginMutationDuringMetadata(t *testing.T) {
+	root := t.TempDir()
+	bin := filepath.Join(root, "bin")
+	if err := os.MkdirAll(bin, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	writeDockerTestCLI(t, filepath.Join(bin, "docker"))
+	writeDockerCLIPluginStub(t, filepath.Join(bin, "docker-compose"), "Docker Compose")
+	buildx := filepath.Join(bin, "docker-buildx")
+	replacementRan := filepath.Join(root, "replacement-ran")
+	replacement := filepath.Join(root, "replacement-buildx")
+	replacementScript := `#!/bin/sh
+: > "$REPLACEMENT_RAN"
+exit 76
+`
+	if err := os.WriteFile(replacement, []byte(replacementScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	buildxScript := `#!/bin/sh
+if [ "$1" = docker-cli-plugin-metadata ]; then
+  case "$0" in
+    "$DOCKER_CONFIG"/cli-plugins/docker-buildx)
+      /bin/ln -sfn "$REPLACEMENT_PLUGIN" "$0"
+      ;;
+  esac
+  printf '%s\n' '{"SchemaVersion":"0.1.0","Vendor":"Docker Inc.","Version":"v1.0.0","ShortDescription":"Docker Buildx"}'
+  exit 0
+fi
+if [ "$1" = version ]; then exit 0; fi
+exit 64
+`
+	if err := os.WriteFile(buildx, []byte(buildxScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dockerConfig := filepath.Join(root, "docker-config")
+	run := &freshCloneRun{
+		t:                                t,
+		root:                             root,
+		environment:                      []string{"PATH=" + bin, "HOME=" + filepath.Join(root, "home"), "DOCKER_CONFIG=" + dockerConfig, "REPLACEMENT_PLUGIN=" + replacement, "REPLACEMENT_RAN=" + replacementRan},
+		dockerCLIPluginSystemDirectories: []string{},
+	}
+	err := run.prepareDockerCLI(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "revalidate installed Docker Buildx plugin after metadata") {
+		t.Fatalf("installed Docker Buildx mutation during metadata was accepted: %v", err)
+	}
+	assertDockerCLIPluginPathsAbsent(t, dockerConfig)
+	if _, err := os.Stat(replacementRan); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("replacement Docker Buildx plugin was executed after installed metadata mutation: %v", err)
+	}
+}
+
+func TestDockerCLIPluginFallbackPathsAreAllowlisted(t *testing.T) {
+	sibling := filepath.Join(t.TempDir(), "distribution")
+	got := dockerCLIPluginFallbackPaths("docker-buildx", sibling, (&freshCloneRun{}).dockerCLIPluginDirectories())
+	want := []string{
+		filepath.Join(sibling, "docker-buildx"),
+		"/usr/local/lib/docker/cli-plugins/docker-buildx",
+		"/usr/local/libexec/docker/cli-plugins/docker-buildx",
+		"/usr/lib/docker/cli-plugins/docker-buildx",
+		"/usr/libexec/docker/cli-plugins/docker-buildx",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("Docker CLI plugin fallback paths = %q, want exact trusted order %q", got, want)
+	}
+	for _, candidate := range got {
+		if strings.Contains(candidate, ".docker") {
+			t.Fatalf("Docker CLI plugin fallback scans ambient HOME configuration: %q", candidate)
+		}
+	}
+}
+
+func TestValidateDockerCLIPluginPathRejectsUnsafePhysicalTargets(t *testing.T) {
+	root := t.TempDir()
+	nonExecutable := filepath.Join(root, "non-executable")
+	if err := os.WriteFile(nonExecutable, []byte("plugin"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if runtime.GOOS != "windows" {
+		if _, err := validateDockerCLIPluginPath(nonExecutable); err == nil || !strings.Contains(err.Error(), "not executable") {
+			t.Fatalf("non-executable Docker CLI plugin was accepted: %v", err)
+		}
+	}
+	loopA := filepath.Join(root, "loop-a")
+	loopB := filepath.Join(root, "loop-b")
+	if err := os.Symlink(loopB, loopA); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(loopA, loopB); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := validateDockerCLIPluginPath(loopA); err == nil || !strings.Contains(err.Error(), "resolve physical plugin path") {
+		t.Fatalf("Docker CLI plugin symlink loop was accepted: %v", err)
+	}
+	directory := filepath.Join(root, "directory")
+	if err := os.Mkdir(directory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := validateDockerCLIPluginPath(directory); err == nil || !strings.Contains(err.Error(), "is a directory") {
+		t.Fatalf("Docker CLI plugin directory was accepted: %v", err)
+	}
+}
+
+func TestValidateDockerCLIPluginCandidateRejectsPhysicalReplacementDuringMetadata(t *testing.T) {
+	root := t.TempDir()
+	plugin := filepath.Join(root, "docker-buildx")
+	replacement := filepath.Join(root, "replacement")
+	replacementScript := "#!/bin/sh\nexit 75\n"
+	if err := os.WriteFile(replacement, []byte(replacementScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	pluginScript := `#!/bin/sh
+if [ "$1" = docker-cli-plugin-metadata ]; then
+  /bin/mv "$REPLACEMENT_PLUGIN" "$0"
+  printf '%s\n' '{"SchemaVersion":"0.1.0","Vendor":"Docker Inc.","Version":"v1.0.0","ShortDescription":"Docker Buildx"}'
+  exit 0
+fi
+exit 64
+`
+	if err := os.WriteFile(plugin, []byte(pluginScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	run := &freshCloneRun{
+		root:        root,
+		environment: []string{"PATH=" + root, "REPLACEMENT_PLUGIN=" + replacement},
+	}
+	_, err := run.validateDockerCLIPluginCandidate(context.Background(), plugin, "docker-buildx", "Docker Buildx", "buildx")
+	if err == nil || !strings.Contains(err.Error(), "physical plugin identity after metadata") || !strings.Contains(err.Error(), "file changed") {
+		t.Fatalf("Docker CLI plugin replacement during metadata was accepted: %v", err)
+	}
+}
+
+func writeDockerTestCLI(t *testing.T, path string) {
+	t.Helper()
+	script := `#!/bin/sh
+if [ "$1" = version ]; then exit 0; fi
+plugin="$DOCKER_CONFIG/cli-plugins/docker-$1"
+[ "$2" = version ] && [ -x "$plugin" ] && exec "$plugin" version
+exit 42
+`
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func writeDockerCLIPluginStub(t *testing.T, path, description string) {
+	t.Helper()
+	script := fmt.Sprintf(`#!/bin/sh
+if [ "$1" = docker-cli-plugin-metadata ]; then
+  printf '%%s\n' '{"SchemaVersion":"0.1.0","Vendor":"Docker Inc.","Version":"v1.0.0","ShortDescription":"%s"}'
+  exit 0
+fi
+if [ "$1" = version ]; then exit 0; fi
+exit 64
+`, description)
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func assertDockerCLIPluginPathsAbsent(t *testing.T, dockerConfig string) {
+	t.Helper()
+	for _, name := range []string{"docker-compose", "docker-buildx"} {
+		if _, err := os.Lstat(filepath.Join(dockerConfig, "cli-plugins", name)); !os.IsNotExist(err) {
+			t.Errorf("task-local %s plugin was partially installed: %v", name, err)
+		}
 	}
 }
 
@@ -2698,6 +3401,7 @@ func TestPrepareDockerCLIRejectsUnvalidatedComposePlugin(t *testing.T) {
 			"HOME=" + filepath.Join(root, "home"),
 			"DOCKER_CONFIG=" + dockerConfig,
 		},
+		dockerCLIPluginSystemDirectories: []string{},
 	}
 	err := run.prepareDockerCLI(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "validate Docker Compose plugin metadata") {
@@ -2714,36 +3418,53 @@ func TestAcceptanceDockerCLIIgnoresHostHomePlugin(t *testing.T) {
 	if err := os.MkdirAll(pluginDirectory, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	marker := filepath.Join(hostHome, "host-plugin-ran")
-	plugin := `#!/bin/sh
+	markers := map[string]string{
+		"compose": filepath.Join(hostHome, "host-compose-plugin-ran"),
+		"buildx":  filepath.Join(hostHome, "host-buildx-plugin-ran"),
+	}
+	composePlugin := `#!/bin/sh
 if [ "$1" = docker-cli-plugin-metadata ]; then
   printf '%s\n' '{"SchemaVersion":"0.1.0","Vendor":"Host Poison","Version":"v0.0.0","ShortDescription":"Docker Compose"}'
   exit 0
 fi
-: > "$ACCEPTANCE_HOST_DOCKER_PLUGIN_MARKER"
+: > "$ACCEPTANCE_HOST_COMPOSE_PLUGIN_MARKER"
 printf '%s\n' 'host Compose plugin'
 `
-	if err := os.WriteFile(filepath.Join(pluginDirectory, "docker-compose"), []byte(plugin), 0o755); err != nil {
+	buildxPlugin := `#!/bin/sh
+if [ "$1" = docker-cli-plugin-metadata ]; then
+  printf '%s\n' '{"SchemaVersion":"0.1.0","Vendor":"Host Poison","Version":"v0.0.0","ShortDescription":"Docker Buildx"}'
+  exit 0
+fi
+: > "$ACCEPTANCE_HOST_BUILDX_PLUGIN_MARKER"
+printf '%s\n' 'host Buildx plugin'
+`
+	if err := os.WriteFile(filepath.Join(pluginDirectory, "docker-compose"), []byte(composePlugin), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDirectory, "docker-buildx"), []byte(buildxPlugin), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	ambientEnvironment := append(
 		filterAcceptanceEnvironment(os.Environ()),
 		"PATH="+trustedAcceptancePathFrom(os.Environ()),
 		"HOME="+hostHome,
-		"ACCEPTANCE_HOST_DOCKER_PLUGIN_MARKER="+marker,
+		"ACCEPTANCE_HOST_COMPOSE_PLUGIN_MARKER="+markers["compose"],
+		"ACCEPTANCE_HOST_BUILDX_PLUGIN_MARKER="+markers["buildx"],
 	)
-	ambient, err := acceptanceCommandContext(context.Background(), ambientEnvironment, "docker", "compose", "version")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if output, err := ambient.CombinedOutput(); err != nil {
-		t.Fatalf("test precondition did not execute the poisoned host Docker plugin: %v\n%s", err, output)
-	}
-	if _, err := os.Stat(marker); err != nil {
-		t.Fatalf("test precondition did not execute the poisoned host Docker plugin: %v", err)
-	}
-	if err := os.Remove(marker); err != nil {
-		t.Fatal(err)
+	for _, capability := range []string{"compose", "buildx"} {
+		ambient, err := acceptanceCommandContext(context.Background(), ambientEnvironment, "docker", capability, "version")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if output, err := ambient.CombinedOutput(); err != nil {
+			t.Fatalf("test precondition did not execute the poisoned host Docker %s plugin: %v\n%s", capability, err, output)
+		}
+		if _, err := os.Stat(markers[capability]); err != nil {
+			t.Fatalf("test precondition did not execute the poisoned host Docker %s plugin: %v", capability, err)
+		}
+		if err := os.Remove(markers[capability]); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	isolationRoot := t.TempDir()
@@ -2757,13 +3478,15 @@ printf '%s\n' 'host Compose plugin'
 	if err := prepareIsolatedEnvironmentDirectories(isolatedEnvironment); err != nil {
 		t.Fatal(err)
 	}
-	isolated, err := acceptanceCommandContext(context.Background(), isolatedEnvironment, "docker", "compose", "version")
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, _ = isolated.CombinedOutput()
-	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("isolated Docker CLI executed the host HOME plugin: %v", err)
+	for _, capability := range []string{"compose", "buildx"} {
+		isolated, err := acceptanceCommandContext(context.Background(), isolatedEnvironment, "docker", capability, "version")
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, _ = isolated.CombinedOutput()
+		if _, err := os.Stat(markers[capability]); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("isolated Docker CLI executed the host HOME %s plugin: %v", capability, err)
+		}
 	}
 	if got := environmentValue(isolatedEnvironment, "DOCKER_CONFIG"); got != filepath.Join(isolationRoot, "docker-config") {
 		t.Fatalf("isolated Docker configuration = %q", got)
@@ -2791,7 +3514,7 @@ func TestDockerCLIIsolationProbe(t *testing.T) {
 	if err := run.prepareDockerCLI(ctx); err != nil {
 		t.Fatal(err)
 	}
-	for _, command := range [][]string{{"version"}, {"compose", "version"}, {"info", "--format", "{{.Name}}"}} {
+	for _, command := range [][]string{{"version"}, {"compose", "version"}, {"buildx", "version"}, {"info", "--format", "{{.Name}}"}} {
 		output, err := executeSubprocess(ctx, repositoryRoot, environment, "docker", command...)
 		if err != nil || strings.TrimSpace(string(output)) == "" {
 			t.Errorf("isolated docker %s: err=%v output=%q", strings.Join(command, " "), err, output)
