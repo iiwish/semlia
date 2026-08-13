@@ -6,6 +6,22 @@ readonly TRIVY_IMAGE="aquasec/trivy:0.73.0@sha256:7cced7cae583819fc7806d4cbc0dbb
 readonly SOURCE_PATH="${1:-build/semlia}"
 readonly OUTPUT_PATH="${2:-build/release/semlia.sbom.cdx.json}"
 readonly CACHE_DIR="${ROOT}/build/trivy-cache"
+readonly DOCKER_RESOURCE_LABEL="${SEMLIA_DOCKER_RESOURCE_LABEL:-}"
+
+if [[ -n "${DOCKER_RESOURCE_LABEL}" ]]; then
+  if [[ ! "${DOCKER_RESOURCE_LABEL}" =~ ^[a-z0-9][a-z0-9_.-]{0,127}=[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$ ]]; then
+    printf 'invalid SEMLIA_DOCKER_RESOURCE_LABEL; expected key=value with Docker-safe characters.\n' >&2
+    exit 2
+  fi
+fi
+
+docker_run() {
+  if [[ -n "${DOCKER_RESOURCE_LABEL}" ]]; then
+    docker run --rm --label "${DOCKER_RESOURCE_LABEL}" "$@"
+  else
+    docker run --rm "$@"
+  fi
+}
 
 case "${SOURCE_PATH}" in
   /*) printf 'SBOM source must be relative to the repository root.\n' >&2; exit 2 ;;
@@ -23,7 +39,7 @@ if ! docker image inspect "${TRIVY_IMAGE}" >/dev/null 2>&1; then
   docker pull "${TRIVY_IMAGE}"
 fi
 
-docker run --rm \
+docker_run \
   --user "$(id -u):$(id -g)" \
   --volume "${ROOT}:/workspace:ro" \
   --volume "${output_dir}:/reports" \
