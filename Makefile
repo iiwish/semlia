@@ -69,7 +69,7 @@ dev-down:
 smoke:
 	@./scripts/dev/ensure-env.sh
 	@port="$$(sed -n 's/^SEMLIA_HTTP_PORT=//p' .semlia/dev.env)"; \
-	SEMLIA_RUN_SMOKE=1 SEMLIA_SMOKE_URL="http://127.0.0.1:$$port" $(GO) test -count=1 ./tests/smoke/...
+	SEMLIA_RUN_SMOKE=1 SEMLIA_SMOKE_URL="http://127.0.0.1:$$port" $(GO) test -timeout=10m -count=1 ./tests/smoke/...
 
 contracts:
 	@./scripts/generate-contracts.sh --write

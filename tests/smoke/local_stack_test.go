@@ -19,11 +19,37 @@ import (
 )
 
 const (
-	smokeTimeout  = 4 * time.Minute
-	traceIDLength = 32
+	smokeTimeout              = 4 * time.Minute
+	smokeProcessTimeout       = 10 * time.Minute
+	smokeHTTPClientTimeout    = 5 * time.Second
+	smokeStatusRequestTimeout = 2 * time.Second
+	smokeStatusPollInterval   = 500 * time.Millisecond
+	traceIDLength             = 32
 )
 
 var assetPattern = regexp.MustCompile(`(?:src|href)="(/assets/[^"]+)"`)
+
+type runtimeJourneyStep struct {
+	name string
+	run  func(*testing.T)
+}
+
+var runtimeJourneySteps = []runtimeJourneyStep{
+	{name: "01 embedded Web and API baseline", run: testEmbeddedWebAndAPI},
+	{name: "02 required processes", run: testRequiredProcessesAreRunning},
+	{name: "03 worker restart and persistence", run: testWorkerRestartPreservesDatabaseJob},
+	{name: "04 PostgreSQL failure and recovery", run: testPostgresFailureAndRecovery},
+	{name: "05 shutdown persistence", run: testShutdownPreservesDataVolume},
+}
+
+func TestLocalStackRuntimeJourney(t *testing.T) {
+	requireRuntimeSmoke(t)
+	for _, step := range runtimeJourneySteps {
+		if !t.Run(step.name, step.run) {
+			t.FailNow()
+		}
+	}
+}
 
 func Test00LocalStackContract(t *testing.T) {
 	root := repositoryRoot(t)
@@ -90,9 +116,51 @@ func TestComposeProjectResolution(t *testing.T) {
 	}
 }
 
-func Test01EmbeddedWebAndAPI(t *testing.T) {
-	requireRuntimeSmoke(t)
+func TestRuntimeJourneyContract(t *testing.T) {
+	got := make([]string, 0, len(runtimeJourneySteps))
+	for _, step := range runtimeJourneySteps {
+		got = append(got, step.name)
+	}
+	want := []string{
+		"01 embedded Web and API baseline",
+		"02 required processes",
+		"03 worker restart and persistence",
+		"04 PostgreSQL failure and recovery",
+		"05 shutdown persistence",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("runtime journey order = %q, want %q", got, want)
+	}
 
+	sources := readFile(t, filepath.Join(repositoryRoot(t), "tests", "smoke", "local_stack_test.go")) +
+		readFile(t, filepath.Join(repositoryRoot(t), "tests", "smoke", "dependency_failure_test.go"))
+	optInCall := "requireRuntime" + "Smoke(t)"
+	if count := strings.Count(sources, optInCall); count != 1 {
+		t.Fatalf("top-level runtime journey opt-in count = %d, want 1", count)
+	}
+	for _, testName := range []string{
+		"Test01EmbeddedWebAndAPI",
+		"Test02RequiredProcessesAreRunning",
+		"Test03WorkerRestartPreservesDatabaseJob",
+		"Test04PostgresFailureAndRecovery",
+		"Test05ShutdownPreservesDataVolume",
+	} {
+		forbidden := "func " + testName + "("
+		if strings.Contains(sources, forbidden) {
+			t.Errorf("runtime step remains independently runnable: %s", forbidden)
+		}
+	}
+}
+
+func TestSmokeTargetPinsTenMinuteProcessTimeout(t *testing.T) {
+	makefile := readFile(t, filepath.Join(repositoryRoot(t), "Makefile"))
+	const command = `$(GO) test -timeout=10m -count=1 ./tests/smoke/...`
+	if strings.Count(makefile, command) != 1 {
+		t.Fatalf("Makefile smoke target must contain exactly one %q", command)
+	}
+}
+
+func testEmbeddedWebAndAPI(t *testing.T) {
 	index := get(t, "/", http.StatusOK)
 	if !bytes.Contains(index, []byte("Semlia System Status")) {
 		t.Fatal("embedded Web root does not contain the Semlia status application")
@@ -118,9 +186,7 @@ func Test01EmbeddedWebAndAPI(t *testing.T) {
 	}
 }
 
-func Test02RequiredProcessesAreRunning(t *testing.T) {
-	requireRuntimeSmoke(t)
-
+func testRequiredProcessesAreRunning(t *testing.T) {
 	running := strings.Fields(compose(t, "ps", "--status", "running", "--services"))
 	sort.Strings(running)
 	if got, want := strings.Join(running, ","), "postgres,server,worker"; got != want {
@@ -132,9 +198,7 @@ func Test02RequiredProcessesAreRunning(t *testing.T) {
 	}
 }
 
-func Test03WorkerRestartPreservesDatabaseJob(t *testing.T) {
-	requireRuntimeSmoke(t)
-
+func testWorkerRestartPreservesDatabaseJob(t *testing.T) {
 	stamp := time.Now().UTC().UnixNano()
 	workspaceID := fmt.Sprintf("smoke_workspace_%d", stamp)
 	jobID := fmt.Sprintf("smoke_job_%d", stamp)
@@ -162,9 +226,7 @@ func Test03WorkerRestartPreservesDatabaseJob(t *testing.T) {
 	}
 }
 
-func Test05ShutdownPreservesDataVolume(t *testing.T) {
-	requireRuntimeSmoke(t)
-
+func testShutdownPreservesDataVolume(t *testing.T) {
 	stamp := time.Now().UTC().UnixNano()
 	workspaceID := fmt.Sprintf("shutdown_workspace_%d", stamp)
 	jobID := fmt.Sprintf("shutdown_job_%d", stamp)
@@ -312,7 +374,7 @@ func get(t *testing.T, path string, status int) []byte {
 	if err != nil {
 		t.Fatal(err)
 	}
-	client := &http.Client{Timeout: 5 * time.Second}
+	client := &http.Client{Timeout: smokeHTTPClientTimeout}
 	response, err := client.Do(request)
 	if err != nil {
 		t.Fatalf("GET %s: %v", path, err)
@@ -330,20 +392,43 @@ func get(t *testing.T, path string, status int) []byte {
 
 func waitForStatus(t *testing.T, path string, status int, timeout time.Duration) {
 	t.Helper()
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		request, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, smokeBaseURL()+path, nil)
-		response, err := (&http.Client{Timeout: 2 * time.Second}).Do(request)
-		if err == nil {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	if err := waitForHTTPStatus(ctx, path, status); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func waitForHTTPStatus(ctx context.Context, path string, status int) error {
+	client := &http.Client{Timeout: smokeStatusRequestTimeout}
+	lastResult := "no response"
+	for {
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, smokeBaseURL()+path, nil)
+		if err != nil {
+			return fmt.Errorf("create GET %s: %w", path, err)
+		}
+		response, requestErr := client.Do(request)
+		if requestErr == nil {
 			_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 64<<10))
 			_ = response.Body.Close()
+			lastResult = fmt.Sprintf("HTTP %d", response.StatusCode)
 			if response.StatusCode == status {
-				return
+				return nil
 			}
+		} else {
+			lastResult = requestErr.Error()
 		}
-		time.Sleep(500 * time.Millisecond)
+
+		timer := time.NewTimer(smokeStatusPollInterval)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+			return fmt.Errorf("%s did not reach HTTP %d; last result: %s: %w", path, status, lastResult, ctx.Err())
+		case <-timer.C:
+		}
 	}
-	t.Fatalf("%s did not reach HTTP %d within %s", path, status, timeout)
 }
 
 func smokeBaseURL() string {
