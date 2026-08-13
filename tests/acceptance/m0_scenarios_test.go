@@ -10,7 +10,7 @@ func TestM0AcceptanceScenarioContract(t *testing.T) {
 	required := map[string][]string{
 		"AC-M0-001 fresh checkout": {
 			"git\", \"clone",
-			"outerAcceptanceTimeout        = 70 * time.Minute",
+			"outerAcceptanceTimeout        = 90 * time.Minute",
 			`"test.timeout": outerAcceptanceTimeout.String()`,
 			"cold bootstrap",
 			"coldBootstrapLimit            = 10 * time.Minute",
@@ -52,6 +52,7 @@ func TestM0AcceptanceScenarioContract(t *testing.T) {
 			"make\", \"release",
 			"verifyReleaseBundle",
 			"SHA256SUMS",
+			"SEMLIA_DOCKER_RESOURCE_LABEL",
 		},
 	}
 	for scenario, fragments := range required {

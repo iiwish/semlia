@@ -14,4 +14,4 @@ exec env \
   GOFLAGS= \
   GOWORK=off \
   SEMLIA_RUN_FRESH_CLONE=1 \
-  go test -v -timeout=70m -run '^TestFreshCloneAcceptance$' ./tests/acceptance/... -count=1
+  go test -v -timeout=90m -run '^TestFreshCloneAcceptance$' ./tests/acceptance/... -count=1

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -22,7 +23,7 @@ import (
 
 const (
 	freshCloneTimeout             = 45 * time.Minute
-	outerAcceptanceTimeout        = 70 * time.Minute // Journey plus worst-case diagnostics, cleanup phases, and shutdown margin.
+	outerAcceptanceTimeout        = 90 * time.Minute // Journey plus worst-case diagnostics, cleanup phases, and shutdown margin.
 	coldBootstrapLimit            = 10 * time.Minute
 	warmBootstrapLimit            = 2 * time.Minute
 	pullRequestGateLimit          = 10 * time.Minute
@@ -31,6 +32,7 @@ const (
 	dockerInspectionTimeout       = 30 * time.Second
 	goModCacheCleanupTimeout      = 10 * time.Minute
 	checkoutCleanupTimeout        = 3 * time.Minute
+	acceptanceDockerLabelKey      = "io.semlia.acceptance.run"
 )
 
 var acceptanceHostLock = filepath.Join(os.TempDir(), "semlia-t008-acceptance.lock")
@@ -44,9 +46,11 @@ type freshCloneConfig struct {
 type cleanupCommandExecutor func(context.Context, string, []string, string, ...string) ([]byte, error)
 
 type cleanupResourceKind struct {
-	label      string
-	listArgs   []string
-	removeArgs []string
+	label         string
+	listArgs      []string
+	removeArgs    []string
+	identityLabel string
+	maxIdentities int
 }
 
 type freshCloneRun struct {
@@ -82,7 +86,7 @@ func (report *cleanupReport) setDockerProblem(label string, err error) {
 
 func (report *cleanupReport) err() error {
 	problems := append([]error{}, report.otherProblems...)
-	for _, label := range []string{"containers", "networks", "volumes"} {
+	for _, label := range []string{"containers", "networks", "volumes", "tool containers"} {
 		if problem := report.dockerProblems[label]; problem != nil {
 			problems = append(problems, problem)
 		}
@@ -221,6 +225,7 @@ func isolatedEnvironmentFrom(base []string, scratch, project string, httpPort, p
 		"XDG_CACHE_HOME="+filepath.Join(scratch, "cache"),
 		"COMPOSE_PROJECT_NAME="+project,
 		"SEMLIA_SECURITY_IMAGE=semlia:security",
+		"SEMLIA_DOCKER_RESOURCE_LABEL="+acceptanceDockerLabelKey+"="+project,
 		fmt.Sprintf("SEMLIA_HTTP_PORT=%d", httpPort),
 		fmt.Sprintf("SEMLIA_POSTGRES_PORT=%d", postgresPort),
 	)
@@ -351,6 +356,22 @@ func TestAcceptanceEnvironmentPinsGoControls(t *testing.T) {
 		if values := environmentValues(environment, name); len(values) != 0 {
 			t.Errorf("%s must not be inherited: %v", name, values)
 		}
+	}
+}
+
+func TestAcceptanceEnvironmentPinsTaskDockerResourceLabel(t *testing.T) {
+	project := "semlia-accept-a1b2c3d4-000000000001"
+	environment := isolatedEnvironmentFrom(
+		[]string{"PATH=/usr/bin", "SEMLIA_DOCKER_RESOURCE_LABEL=attacker.label=unrelated"},
+		t.TempDir(),
+		project,
+		38080,
+		35432,
+	)
+	values := environmentValues(environment, "SEMLIA_DOCKER_RESOURCE_LABEL")
+	want := "io.semlia.acceptance.run=" + project
+	if len(values) != 1 || values[0] != want {
+		t.Fatalf("SEMLIA_DOCKER_RESOURCE_LABEL values = %v, want exactly %q", values, want)
 	}
 }
 
@@ -577,11 +598,30 @@ func TestTimedCommandWithLimitReportsLastMakeCheckPhase(t *testing.T) {
 
 func TestFreshCloneLauncherReservesCleanupEnvelope(t *testing.T) {
 	launcher := readRepositoryFile(t, "scripts/acceptance/m0-fresh-clone.sh")
-	if strings.Count(launcher, "-timeout=70m") != 1 {
-		t.Fatalf("canonical launcher must set exactly one 70m outer timeout:\n%s", launcher)
+	if strings.Count(launcher, "-timeout=90m") != 1 {
+		t.Fatalf("canonical launcher must set exactly one 90m outer timeout:\n%s", launcher)
 	}
 	if !strings.Contains(readRepositoryFile(t, "tests/acceptance/fresh_clone_test.go"), `"test.timeout": outerAcceptanceTimeout.String()`) {
 		t.Fatal("fresh-clone invocation validator does not enforce the canonical outer timeout")
+	}
+	resourceKinds := (&freshCloneRun{
+		project:     "semlia-accept-a1b2c3d4-000000000001",
+		environment: []string{"SEMLIA_DOCKER_RESOURCE_LABEL=" + acceptanceDockerLabelKey + "=semlia-accept-a1b2c3d4-000000000001"},
+	}).cleanupResourceKinds()
+	cleanupEnvelope := dockerTeardownTimeout +
+		time.Duration(len(resourceKinds))*dockerInspectionTimeout +
+		goModCacheCleanupTimeout + checkoutCleanupTimeout +
+		time.Duration(len(resourceKinds))*(dockerInspectionTimeout+dockerTeardownTimeout+dockerInspectionTimeout)
+	for _, resource := range resourceKinds {
+		cleanupEnvelope += time.Duration(resource.maxIdentities) * (dockerInspectionTimeout + dockerInspectionTimeout)
+	}
+	const developmentDiagnosticsEnvelope = 2 * developmentDiagnosticsTimeout
+	const maximumTimedSubprocessCount = 32
+	const processWaitEnvelope = maximumTimedSubprocessCount * acceptanceCommandWaitDelay
+	const shutdownMargin = 5 * time.Minute
+	minimumOuterTimeout := freshCloneTimeout + developmentDiagnosticsEnvelope + cleanupEnvelope + processWaitEnvelope + shutdownMargin
+	if outerAcceptanceTimeout <= minimumOuterTimeout {
+		t.Fatalf("outer timeout %s cannot contain journey %s + diagnostics %s + cleanup %s + process wait %s + shutdown margin %s", outerAcceptanceTimeout, freshCloneTimeout, developmentDiagnosticsEnvelope, cleanupEnvelope, processWaitEnvelope, shutdownMargin)
 	}
 }
 
@@ -590,7 +630,7 @@ func TestFreshCloneInvocationRejectsNoncanonicalOuterTimeout(t *testing.T) {
 		os.Args[0],
 		"-test.run=^TestFreshCloneAcceptance$",
 		"-test.count=1",
-		"-test.timeout=69m",
+		"-test.timeout=89m",
 	)
 	command.Env = append(
 		filterAcceptanceEnvironment(os.Environ()),
@@ -603,7 +643,7 @@ func TestFreshCloneInvocationRejectsNoncanonicalOuterTimeout(t *testing.T) {
 	if err == nil {
 		t.Fatalf("fresh-clone invocation accepted noncanonical outer timeout:\n%s", output)
 	}
-	want := `fresh-clone acceptance requires -timeout="1h10m0s"`
+	want := `fresh-clone acceptance requires -timeout="1h30m0s"`
 	if !strings.Contains(string(output), want) {
 		t.Fatalf("outer-timeout failure is not actionable; want %q:\n%s", want, output)
 	}
@@ -837,6 +877,8 @@ func TestCleanupFallbackRemovesOnlyProjectLabeledResources(t *testing.T) {
 			calls = append(calls, call{name: name, args: append([]string{}, args...)})
 			joined := strings.Join(args, " ")
 			switch {
+			case name == "docker" && strings.HasPrefix(joined, "inspect --format"):
+				return []byte(`{"com.docker.compose.project":"semlia-accept-a1b2c3d4-000000000001"}` + "\n"), nil
 			case name == "docker" && strings.HasPrefix(joined, "ps --all"):
 				if !listed["containers"] {
 					listed["containers"] = true
@@ -947,6 +989,170 @@ func TestCleanupFallbackRejectsInvalidDockerIdentifiers(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), `invalid identifier "not-a-container-id"`) {
 		t.Fatalf("invalid Docker identifier was not rejected: %v", err)
 	}
+}
+
+func TestCleanupFallbackRejectsMoreContainersThanTaskCanOwn(t *testing.T) {
+	run := &freshCloneRun{
+		root:    t.TempDir(),
+		project: "semlia-accept-a1b2c3d4-000000000001",
+		cleanupExecutor: func(_ context.Context, _ string, _ []string, name string, args ...string) ([]byte, error) {
+			if name == "docker" && len(args) > 0 && args[0] == "ps" {
+				return []byte("000000000001\n000000000002\n000000000003\n000000000004\n"), nil
+			}
+			if name == "docker" && len(args) > 0 && args[0] == "rm" {
+				t.Fatalf("cleanup attempted removal after the task maximum was exceeded: %v", args)
+			}
+			return nil, nil
+		},
+	}
+	err := run.removeRemainingTaskDockerResources(&cleanupReport{})
+	if err == nil || !strings.Contains(err.Error(), "refuse to exceed task maximum 3") {
+		t.Fatalf("excess task-owned container count was not rejected: %v", err)
+	}
+}
+
+func TestCleanupOwnsLabeledDaemonContainers(t *testing.T) {
+	project := "semlia-accept-a1b2c3d4-000000000001"
+	resourceLabel := "io.semlia.acceptance.run=" + project
+	containers := map[string]map[string]string{
+		"abcdef123456": {"io.semlia.acceptance.run": project},
+		"123456abcdef": {"io.semlia.acceptance.run": "unrelated-run"},
+	}
+	var inspected, removed []string
+	run := &freshCloneRun{
+		root:        t.TempDir(),
+		project:     project,
+		environment: []string{"SEMLIA_DOCKER_RESOURCE_LABEL=" + resourceLabel},
+		cleanupExecutor: func(_ context.Context, _ string, _ []string, name string, args ...string) ([]byte, error) {
+			if name != "docker" || len(args) == 0 {
+				return nil, nil
+			}
+			switch args[0] {
+			case "ps":
+				filter := argumentAfter(args, "--filter")
+				label, found := strings.CutPrefix(filter, "label=")
+				if !found {
+					return nil, nil
+				}
+				key, value, found := strings.Cut(label, "=")
+				if !found {
+					return nil, nil
+				}
+				var matches []string
+				for identifier, labels := range containers {
+					if labels[key] == value {
+						matches = append(matches, identifier)
+					}
+				}
+				sort.Strings(matches)
+				return []byte(strings.Join(matches, "\n")), nil
+			case "inspect":
+				identifier := args[len(args)-1]
+				inspected = append(inspected, identifier)
+				return json.Marshal(containers[identifier])
+			case "rm":
+				for _, identifier := range args[2:] {
+					removed = append(removed, identifier)
+					delete(containers, identifier)
+				}
+				return nil, nil
+			default:
+				return nil, nil
+			}
+		},
+	}
+
+	if err := run.cleanup(); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := containers["abcdef123456"]; ok {
+		t.Fatal("task-owned scanner container survived cleanup")
+	}
+	if _, ok := containers["123456abcdef"]; !ok {
+		t.Fatal("cleanup removed an unrelated scanner container")
+	}
+	if strings.Join(inspected, ",") != "abcdef123456" {
+		t.Fatalf("inspected containers = %v, want only task-owned container", inspected)
+	}
+	if strings.Join(removed, ",") != "abcdef123456" {
+		t.Fatalf("removed containers = %v, want only task-owned container", removed)
+	}
+}
+
+func TestCleanupTreatsAutoRemovedLabeledContainerAsResolved(t *testing.T) {
+	project := "semlia-accept-a1b2c3d4-000000000001"
+	resourceLabel := acceptanceDockerLabelKey + "=" + project
+	containerExists := true
+	run := &freshCloneRun{
+		root:        t.TempDir(),
+		project:     project,
+		environment: []string{"SEMLIA_DOCKER_RESOURCE_LABEL=" + resourceLabel},
+		cleanupExecutor: func(_ context.Context, _ string, _ []string, name string, args ...string) ([]byte, error) {
+			if name != "docker" || len(args) == 0 {
+				return nil, nil
+			}
+			switch args[0] {
+			case "ps":
+				if argumentAfter(args, "--filter") == "label="+resourceLabel && containerExists {
+					return []byte("abcdef123456\n"), nil
+				}
+			case "inspect":
+				containerExists = false
+				return nil, errors.New("No such object: abcdef123456")
+			case "rm":
+				t.Fatal("cleanup attempted to remove a container that Docker had already auto-removed")
+			}
+			return nil, nil
+		},
+	}
+
+	if err := run.cleanup(); err != nil {
+		t.Fatalf("auto-removed task-owned container was not treated as resolved: %v", err)
+	}
+}
+
+func TestCleanupPreservesInspectFailureWhenContainerStillListed(t *testing.T) {
+	project := "semlia-accept-a1b2c3d4-000000000001"
+	resourceLabel := acceptanceDockerLabelKey + "=" + project
+	removeCalled := false
+	run := &freshCloneRun{
+		root:        t.TempDir(),
+		project:     project,
+		environment: []string{"SEMLIA_DOCKER_RESOURCE_LABEL=" + resourceLabel},
+		cleanupExecutor: func(_ context.Context, _ string, _ []string, name string, args ...string) ([]byte, error) {
+			if name != "docker" || len(args) == 0 {
+				return nil, nil
+			}
+			switch args[0] {
+			case "ps":
+				if argumentAfter(args, "--filter") == "label="+resourceLabel {
+					return []byte("abcdef123456\n"), nil
+				}
+			case "inspect":
+				return []byte("daemon unavailable"), errors.New("inspect failed")
+			case "rm":
+				removeCalled = true
+			}
+			return nil, nil
+		},
+	}
+
+	err := run.cleanup()
+	if err == nil || !strings.Contains(err.Error(), "inspect identity for task-owned tool containers abcdef123456") {
+		t.Fatalf("live-container inspect failure was erased: %v", err)
+	}
+	if removeCalled {
+		t.Fatal("cleanup removed a container whose task identity could not be verified")
+	}
+}
+
+func argumentAfter(arguments []string, name string) string {
+	for index := 0; index+1 < len(arguments); index++ {
+		if arguments[index] == name {
+			return arguments[index+1]
+		}
+	}
+	return ""
 }
 
 func (run *freshCloneRun) clone(ctx context.Context, config freshCloneConfig) {
@@ -1412,19 +1618,32 @@ func (run *freshCloneRun) cleanup() error {
 }
 
 func (run *freshCloneRun) cleanupResourceKinds() []cleanupResourceKind {
-	projectLabel := "label=com.docker.compose.project=" + run.project
-	return []cleanupResourceKind{
-		{label: "containers", listArgs: []string{"ps", "--all", "--filter", projectLabel, "--format", "{{.ID}}"}, removeArgs: []string{"rm", "--force"}},
-		{label: "networks", listArgs: []string{"network", "ls", "--filter", projectLabel, "--format", "{{.ID}}"}, removeArgs: []string{"network", "rm"}},
-		{label: "volumes", listArgs: []string{"volume", "ls", "--filter", projectLabel, "--format", "{{.Name}}"}, removeArgs: []string{"volume", "rm", "--force"}},
+	composeLabel := "com.docker.compose.project=" + run.project
+	resources := []cleanupResourceKind{
+		{label: "containers", listArgs: []string{"ps", "--all", "--filter", "label=" + composeLabel, "--format", "{{.ID}}"}, removeArgs: []string{"rm", "--force"}, identityLabel: composeLabel, maxIdentities: 3},
+		{label: "networks", listArgs: []string{"network", "ls", "--filter", "label=" + composeLabel, "--format", "{{.ID}}"}, removeArgs: []string{"network", "rm"}},
+		{label: "volumes", listArgs: []string{"volume", "ls", "--filter", "label=" + composeLabel, "--format", "{{.Name}}"}, removeArgs: []string{"volume", "rm", "--force"}},
 	}
+	if taskLabel := environmentValue(run.environment, "SEMLIA_DOCKER_RESOURCE_LABEL"); taskLabel != "" {
+		resources = append(resources, cleanupResourceKind{
+			label:         "tool containers",
+			listArgs:      []string{"ps", "--all", "--filter", "label=" + taskLabel, "--format", "{{.ID}}"},
+			removeArgs:    []string{"rm", "--force"},
+			identityLabel: taskLabel,
+			maxIdentities: 3,
+		})
+	}
+	return resources
 }
 
 func validateDockerResourceIdentifiers(resource cleanupResourceKind, output []byte) ([]string, error) {
 	identifiers := strings.Fields(string(output))
+	if resource.maxIdentities > 0 && len(identifiers) > resource.maxIdentities {
+		return nil, fmt.Errorf("inspect task-owned %s returned %d resources; refuse to exceed task maximum %d", resource.label, len(identifiers), resource.maxIdentities)
+	}
 	for _, identifier := range identifiers {
 		valid := regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]*$`).MatchString(identifier)
-		if resource.label == "containers" {
+		if resource.identityLabel != "" {
 			valid = regexp.MustCompile(`^[a-f0-9]{12,64}$`).MatchString(identifier)
 		}
 		if !valid {
@@ -1432,6 +1651,52 @@ func validateDockerResourceIdentifiers(resource cleanupResourceKind, output []by
 		}
 	}
 	return identifiers, nil
+}
+
+func (run *freshCloneRun) verifyDockerResourceIdentity(resource cleanupResourceKind, identifiers []string) ([]string, error) {
+	if resource.identityLabel == "" || len(identifiers) == 0 {
+		return identifiers, nil
+	}
+	key, value, found := strings.Cut(resource.identityLabel, "=")
+	if !found || key == "" || value == "" {
+		return nil, fmt.Errorf("task-owned %s has invalid identity label %q", resource.label, resource.identityLabel)
+	}
+	verified := make([]string, 0, len(identifiers))
+	for _, identifier := range identifiers {
+		output, err := run.cleanupCommand(dockerInspectionTimeout, "docker", "inspect", "--format", "{{json .Config.Labels}}", identifier)
+		if err != nil {
+			if run.dockerResourceNoLongerExists(resource, identifier) {
+				continue
+			}
+			return nil, fmt.Errorf("inspect identity for task-owned %s %s: %w: %s", resource.label, identifier, err, strings.TrimSpace(run.redactTaskSecrets(string(output))))
+		}
+		labels := map[string]string{}
+		if err := json.Unmarshal([]byte(strings.TrimSpace(string(output))), &labels); err != nil {
+			return nil, fmt.Errorf("inspect identity for task-owned %s %s: parse labels: %w", resource.label, identifier, err)
+		}
+		if labels[key] != value {
+			return nil, fmt.Errorf("refuse to remove %s %s: label %s=%q, want %q", resource.label, identifier, key, labels[key], value)
+		}
+		verified = append(verified, identifier)
+	}
+	return verified, nil
+}
+
+func (run *freshCloneRun) dockerResourceNoLongerExists(resource cleanupResourceKind, identifier string) bool {
+	output, err := run.cleanupCommand(dockerInspectionTimeout, "docker", resource.listArgs...)
+	if err != nil {
+		return false
+	}
+	identifiers, err := validateDockerResourceIdentifiers(resource, output)
+	if err != nil {
+		return false
+	}
+	for _, remaining := range identifiers {
+		if remaining == identifier {
+			return false
+		}
+	}
+	return true
 }
 
 func (run *freshCloneRun) removeRemainingTaskDockerResources(report *cleanupReport) error {
@@ -1451,9 +1716,18 @@ func (run *freshCloneRun) removeRemainingTaskDockerResources(report *cleanupRepo
 			report.setDockerProblem(resource.label, nil)
 			continue
 		}
-		removeArgs := append(append([]string{}, resource.removeArgs...), identifiers...)
+		verifiedIdentifiers, identityErr := run.verifyDockerResourceIdentity(resource, identifiers)
+		if identityErr != nil {
+			problems = append(problems, identityErr)
+			continue
+		}
+		if len(verifiedIdentifiers) == 0 {
+			report.setDockerProblem(resource.label, nil)
+			continue
+		}
+		removeArgs := append(append([]string{}, resource.removeArgs...), verifiedIdentifiers...)
 		if removeOutput, removeErr := run.cleanupCommand(dockerTeardownTimeout, "docker", removeArgs...); removeErr != nil {
-			problems = append(problems, fmt.Errorf("remove task-owned %s %s: %w: %s", resource.label, strings.Join(identifiers, ","), removeErr, strings.TrimSpace(run.redactTaskSecrets(string(removeOutput)))))
+			problems = append(problems, fmt.Errorf("remove task-owned %s %s: %w: %s", resource.label, strings.Join(verifiedIdentifiers, ","), removeErr, strings.TrimSpace(run.redactTaskSecrets(string(removeOutput)))))
 			continue
 		}
 		verifyOutput, verifyErr := run.cleanupCommand(dockerInspectionTimeout, "docker", resource.listArgs...)

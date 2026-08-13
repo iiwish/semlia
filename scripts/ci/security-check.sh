@@ -6,6 +6,22 @@ readonly REPORT_DIR="${ROOT}/build/security"
 readonly CACHE_DIR="${ROOT}/build/trivy-cache"
 readonly TRIVY_IMAGE="aquasec/trivy:0.73.0@sha256:7cced7cae583819fc7806d4cbc0dbbc7cad18b99f7d3e235192e6da8c091045c"
 readonly RELEASE_IMAGE="${SEMLIA_SECURITY_IMAGE:-semlia:security}"
+readonly DOCKER_RESOURCE_LABEL="${SEMLIA_DOCKER_RESOURCE_LABEL:-}"
+
+if [[ -n "${DOCKER_RESOURCE_LABEL}" ]]; then
+  if [[ ! "${DOCKER_RESOURCE_LABEL}" =~ ^[a-z0-9][a-z0-9_.-]{0,127}=[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$ ]]; then
+    printf 'invalid SEMLIA_DOCKER_RESOURCE_LABEL; expected key=value with Docker-safe characters.\n' >&2
+    exit 2
+  fi
+fi
+
+docker_run() {
+  if [[ -n "${DOCKER_RESOURCE_LABEL}" ]]; then
+    docker run --rm --label "${DOCKER_RESOURCE_LABEL}" "$@"
+  else
+    docker run --rm "$@"
+  fi
+}
 
 mkdir -p "${REPORT_DIR}" "${CACHE_DIR}"
 
@@ -16,7 +32,7 @@ fi
 status=0
 
 printf '\n==> dependency and secret scan\n'
-if ! docker run --rm \
+if ! docker_run \
   --user "$(id -u):$(id -g)" \
   --volume "${ROOT}:/workspace:ro" \
   --volume "${CACHE_DIR}:/cache" \
@@ -36,7 +52,7 @@ if ! docker run --rm \
 fi
 
 printf '\n==> release container scan\n'
-if ! docker run --rm \
+if ! docker_run \
   --volume /var/run/docker.sock:/var/run/docker.sock:ro \
   --volume "${CACHE_DIR}:/cache" \
   "${TRIVY_IMAGE}" image \

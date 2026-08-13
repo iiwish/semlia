@@ -3,6 +3,7 @@ package repository_test
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -263,6 +264,115 @@ func TestCISecurityScannerAndReleaseArtifactContracts(t *testing.T) {
 	for _, phrase := range []string{"requirement", "test evidence", "residual risk"} {
 		if !strings.Contains(template, phrase) {
 			t.Errorf("pull request template missing %q", phrase)
+		}
+	}
+}
+
+func TestDockerRunScriptsApplyValidatedTaskResourceLabel(t *testing.T) {
+	tests := []struct {
+		path    string
+		runArgs []string
+		runs    int
+	}{
+		{path: "scripts/ci/security-check.sh", runs: 2},
+		{path: "scripts/release/sbom.sh", runArgs: []string{"build/semlia", "build/release/semlia.sbom.cdx.json"}, runs: 1},
+	}
+	for _, test := range tests {
+		t.Run(filepath.Base(test.path), func(t *testing.T) {
+			unlabeled, output, err := runDockerScriptWithLabel(t, test.path, test.runArgs, "")
+			if err != nil {
+				t.Fatalf("unlabeled script failed: %v\n%s", err, output)
+			}
+			assertDockerRunLabel(t, unlabeled, test.runs, "")
+
+			label := "io.semlia.acceptance.run=semlia-accept-a1b2c3d4-000000000001"
+			labeled, output, err := runDockerScriptWithLabel(t, test.path, test.runArgs, label)
+			if err != nil {
+				t.Fatalf("labeled script failed: %v\n%s", err, output)
+			}
+			assertDockerRunLabel(t, labeled, test.runs, label)
+
+			invalid, output, err := runDockerScriptWithLabel(t, test.path, test.runArgs, "io.semlia.acceptance.run=task --privileged")
+			if err == nil {
+				t.Fatalf("invalid Docker label was accepted:\n%s", output)
+			}
+			if !strings.Contains(output, "invalid SEMLIA_DOCKER_RESOURCE_LABEL") {
+				t.Fatalf("invalid-label failure is not actionable:\n%s", output)
+			}
+			if strings.TrimSpace(invalid) != "" {
+				t.Fatalf("invalid label reached Docker:\n%s", invalid)
+			}
+		})
+	}
+}
+
+func runDockerScriptWithLabel(t *testing.T, relativePath string, args []string, label string) (string, string, error) {
+	t.Helper()
+	scratch := t.TempDir()
+	target := filepath.Join(scratch, relativePath)
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(target, []byte(read(t, relativePath)), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(scratch, "build"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(scratch, "build", "semlia"), []byte("test binary\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	bin := filepath.Join(scratch, "bin")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	logPath := filepath.Join(scratch, "docker.log")
+	dockerStub := "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$DOCKER_LOG\"\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(bin, "docker"), []byte(dockerStub), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	command := exec.Command(target, args...)
+	environment := make([]string, 0, len(os.Environ())+3)
+	for _, entry := range os.Environ() {
+		if !strings.HasPrefix(entry, "SEMLIA_DOCKER_RESOURCE_LABEL=") && !strings.HasPrefix(entry, "PATH=") {
+			environment = append(environment, entry)
+		}
+	}
+	environment = append(environment, "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"), "DOCKER_LOG="+logPath)
+	if label != "" {
+		environment = append(environment, "SEMLIA_DOCKER_RESOURCE_LABEL="+label)
+	}
+	command.Env = environment
+	output, err := command.CombinedOutput()
+	log, readErr := os.ReadFile(logPath)
+	if readErr != nil && !os.IsNotExist(readErr) {
+		t.Fatal(readErr)
+	}
+	return string(log), string(output), err
+}
+
+func assertDockerRunLabel(t *testing.T, log string, wantRuns int, wantLabel string) {
+	t.Helper()
+	var runs []string
+	for _, line := range strings.Split(strings.TrimSpace(log), "\n") {
+		if strings.HasPrefix(line, "run ") {
+			runs = append(runs, line)
+		}
+	}
+	if len(runs) != wantRuns {
+		t.Fatalf("docker run calls = %d, want %d:\n%s", len(runs), wantRuns, log)
+	}
+	for _, run := range runs {
+		if wantLabel == "" {
+			if strings.Contains(run, "--label") {
+				t.Errorf("ordinary Docker run gained a label: %s", run)
+			}
+			continue
+		}
+		if got := strings.Count(run, "--label "+wantLabel); got != 1 {
+			t.Errorf("Docker run label count = %d, want 1: %s", got, run)
 		}
 	}
 }
