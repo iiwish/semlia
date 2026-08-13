@@ -34,12 +34,19 @@ const (
 	dockerInspectionTimeout       = 30 * time.Second
 	goModCacheCleanupTimeout      = 10 * time.Minute
 	checkoutCleanupTimeout        = 3 * time.Minute
+	dockerResourceRemovalTimeout  = 45 * time.Second
+	dockerIdentityTimeout         = 15 * time.Second
 	acceptanceDockerLabelKey      = "io.semlia.acceptance.run"
+	testcontainersSessionLabelKey = "org.testcontainers.sessionId"
 	acceptanceHostLock            = "/tmp/semlia-t008-acceptance.lock"
 	composeServiceContainerLimit  = 4 // compose.yaml defines postgres, migrate, server, and worker.
 	composeNetworkLimit           = 1 // compose.yaml defines the backend network.
 	composeVolumeLimit            = 1 // compose.yaml defines the postgres-data volume.
 	toolContainerLimit            = 3 // Two security scans plus one release SBOM invocation.
+	testcontainersContainerLimit  = 3 // Two integration PostgreSQL containers plus one shared Ryuk container.
+	testcontainersNetworkLimit    = 1 // No current journey network; one failure-probe network is bounded and owned.
+	testcontainersVolumeLimit     = 1 // No current journey volume; one failure-probe volume is bounded and owned.
+	pinnedGoVersion               = "1.26.5"
 )
 
 var errCommandDurationLimit = errors.New("command duration limit exceeded")
@@ -56,6 +63,7 @@ type cleanupResourceKind struct {
 	listArgs      []string
 	removeArgs    []string
 	identityLabel string
+	inspectFormat string
 	maxIdentities int
 }
 
@@ -92,7 +100,12 @@ func (report *cleanupReport) setDockerProblem(label string, err error) {
 
 func (report *cleanupReport) err() error {
 	problems := append([]error{}, report.otherProblems...)
-	for _, label := range []string{"containers", "networks", "volumes", "tool containers"} {
+	labels := make([]string, 0, len(report.dockerProblems))
+	for label := range report.dockerProblems {
+		labels = append(labels, label)
+	}
+	sort.Strings(labels)
+	for _, label := range labels {
 		if problem := report.dockerProblems[label]; problem != nil {
 			problems = append(problems, problem)
 		}
@@ -122,7 +135,13 @@ func TestFreshCloneAcceptance(t *testing.T) {
 	defer cancel()
 	onboardingStarted := time.Now()
 	run := newFreshCloneRun(t, config)
+	if err := run.validateGoToolchain(ctx); err != nil {
+		t.Fatal(err)
+	}
 	run.clone(ctx, config)
+	if err := run.prepareDockerCLI(ctx); err != nil {
+		t.Fatal(err)
+	}
 	run.configure(ctx)
 	cleaned := false
 	t.Cleanup(func() {
@@ -164,8 +183,8 @@ func TestFreshCloneAcceptance(t *testing.T) {
 }
 
 func (config freshCloneConfig) validate() error {
-	if config.source == "" {
-		return fmt.Errorf("SEMLIA_ACCEPTANCE_SOURCE is required")
+	if config.source == "" || !filepath.IsAbs(config.source) {
+		return fmt.Errorf("SEMLIA_ACCEPTANCE_SOURCE must be an absolute local repository directory")
 	}
 	info, err := os.Stat(config.source)
 	if err != nil {
@@ -191,6 +210,9 @@ func newFreshCloneRunWithID(t *testing.T, config freshCloneConfig, runID string)
 	httpPort, postgresPort := reserveLocalPorts(t)
 	project := acceptanceProjectName(config.ref, runID)
 	environment := isolatedEnvironment(scratch, project, httpPort, postgresPort)
+	if err := prepareIsolatedEnvironmentDirectories(environment); err != nil {
+		t.Fatalf("prepare isolated acceptance environment: %v", err)
+	}
 	return &freshCloneRun{
 		t:           t,
 		root:        filepath.Join(scratch, "checkout"),
@@ -221,18 +243,34 @@ func isolatedEnvironmentFrom(base []string, scratch, project string, httpPort, p
 	environment := filterAcceptanceEnvironment(base)
 	return append(environment,
 		"PATH="+trustedAcceptancePathFrom(base),
+		"HOME="+filepath.Join(scratch, "home"),
+		"TMPDIR="+filepath.Join(scratch, "tmp"),
+		"DOCKER_CONFIG="+filepath.Join(scratch, "docker-config"),
+		"XDG_CONFIG_HOME="+filepath.Join(scratch, "config"),
+		"XDG_CACHE_HOME="+filepath.Join(scratch, "cache"),
+		"XDG_DATA_HOME="+filepath.Join(scratch, "data"),
+		"XDG_STATE_HOME="+filepath.Join(scratch, "state"),
+		"COREPACK_HOME="+filepath.Join(scratch, "corepack"),
+		"npm_config_userconfig="+filepath.Join(scratch, "npmrc"),
+		"GIT_CONFIG_NOSYSTEM=1",
 		"GOENV=off",
 		"GOFLAGS=",
+		"GOTOOLCHAIN=go"+pinnedGoVersion,
 		"GOWORK=off",
 		"GOCACHE="+filepath.Join(scratch, "go-build"),
 		"GOPATH="+filepath.Join(scratch, "go-path"),
 		"GOMODCACHE="+filepath.Join(scratch, "go-mod"),
 		"PNPM_HOME="+filepath.Join(scratch, "pnpm-home"),
 		"pnpm_config_store_dir="+filepath.Join(scratch, "pnpm-store"),
-		"XDG_CACHE_HOME="+filepath.Join(scratch, "cache"),
 		"COMPOSE_PROJECT_NAME="+project,
 		"SEMLIA_SECURITY_IMAGE=semlia:security",
 		"SEMLIA_DOCKER_RESOURCE_LABEL="+acceptanceDockerLabelKey+"="+project,
+		"TESTCONTAINERS_SESSION_ID="+project,
+		"TESTCONTAINERS_RYUK_DISABLED=false",
+		"TESTCONTAINERS_RYUK_CONTAINER_PRIVILEGED=false",
+		"RYUK_CONNECTION_TIMEOUT=1m",
+		"RYUK_RECONNECTION_TIMEOUT=10s",
+		"RYUK_VERBOSE=false",
 		fmt.Sprintf("SEMLIA_HTTP_PORT=%d", httpPort),
 		fmt.Sprintf("SEMLIA_POSTGRES_PORT=%d", postgresPort),
 	)
@@ -240,9 +278,9 @@ func isolatedEnvironmentFrom(base []string, scratch, project string, httpPort, p
 
 func filterAcceptanceEnvironment(environment []string) []string {
 	blockedExact := map[string]struct{}{
-		"GO": {}, "GOARCH": {}, "GOCACHE": {}, "GOENV": {}, "GOFLAGS": {}, "GOMODCACHE": {}, "GOOS": {}, "GOPATH": {}, "GOWORK": {},
+		"GO": {}, "GOARCH": {}, "GOCACHE": {}, "GOENV": {}, "GOFLAGS": {}, "GOMODCACHE": {}, "GOOS": {}, "GOPATH": {}, "GOTOOLCHAIN": {}, "GOWORK": {},
 		"BASHOPTS": {}, "BASH_ENV": {}, "ENV": {}, "SHELLOPTS": {}, "GNUMAKEFLAGS": {}, "MAKE": {}, "MAKEFILES": {}, "MAKEFLAGS": {}, "MAKELEVEL": {}, "MAKEOVERRIDES": {}, "MFLAGS": {}, "PNPM": {},
-		"PNPM_CONFIG_STORE_DIR": {}, "PNPM_HOME": {}, "PNPM_STORE_DIR": {}, "XDG_CACHE_HOME": {},
+		"HOME": {}, "TMPDIR": {}, "NODE_OPTIONS": {}, "NODE_PATH": {}, "PNPM_CONFIG_STORE_DIR": {}, "PNPM_HOME": {}, "PNPM_STORE_DIR": {}, "XDG_CACHE_HOME": {},
 		"npm_config_store_dir": {}, "pnpm_config_store_dir": {},
 		"PATH": {},
 	}
@@ -250,7 +288,15 @@ func filterAcceptanceEnvironment(environment []string) []string {
 	for _, entry := range environment {
 		key, _, _ := strings.Cut(entry, "=")
 		_, exactBlocked := blockedExact[key]
-		if strings.HasPrefix(key, "BASH_FUNC_") || strings.HasPrefix(key, "SEMLIA_") || strings.HasPrefix(key, "COMPOSE_") || strings.HasPrefix(key, "GIT_") || strings.HasPrefix(key, "TESTCONTAINERS_") || exactBlocked {
+		upperKey := strings.ToUpper(key)
+		prefixBlocked := false
+		for _, prefix := range []string{"BASH_FUNC_", "SEMLIA_", "COMPOSE_", "GIT_", "DOCKER_", "TESTCONTAINERS_", "RYUK_", "NPM_", "PNPM_", "COREPACK_", "PLAYWRIGHT_", "XDG_"} {
+			if strings.HasPrefix(upperKey, prefix) {
+				prefixBlocked = true
+				break
+			}
+		}
+		if prefixBlocked || exactBlocked {
 			continue
 		}
 		filtered = append(filtered, entry)
@@ -286,11 +332,11 @@ func trustedAcceptancePathFrom(environment []string) string {
 	for _, directory := range directories {
 		seen[directory] = struct{}{}
 	}
-	for _, directory := range filepath.SplitList(environmentValue(environment, "PATH")) {
-		directory = filepath.Clean(directory)
-		if !trustedDynamicToolDirectory(directory) {
+	for _, rawDirectory := range filepath.SplitList(environmentValue(environment, "PATH")) {
+		if rawDirectory != filepath.Clean(rawDirectory) || !trustedDynamicToolDirectory(rawDirectory) {
 			continue
 		}
+		directory := rawDirectory
 		if _, exists := seen[directory]; exists {
 			continue
 		}
@@ -304,16 +350,119 @@ func trustedDynamicToolDirectory(directory string) bool {
 	if !filepath.IsAbs(directory) {
 		return false
 	}
-	for _, prefix := range []string{
-		"/opt/hostedtoolcache/",
-		"/Users/runner/hostedtoolcache/",
-	} {
-		if strings.HasPrefix(directory, prefix) && strings.HasSuffix(directory, "/bin") {
+	for _, trusted := range trustedHostedToolDirectories() {
+		if directory == trusted {
 			return true
 		}
 	}
-	return directory == "/home/runner/setup-pnpm/node_modules/.bin" ||
-		directory == "/Users/runner/setup-pnpm/node_modules/.bin"
+	return false
+}
+
+func trustedHostedToolDirectories() []string {
+	return []string{
+		"/opt/hostedtoolcache/go/1.26.5/x64/bin",
+		"/opt/hostedtoolcache/go/1.26.5/arm64/bin",
+		"/Users/runner/hostedtoolcache/go/1.26.5/x64/bin",
+		"/Users/runner/hostedtoolcache/go/1.26.5/arm64/bin",
+		"/opt/hostedtoolcache/node/24.15.0/x64/bin",
+		"/opt/hostedtoolcache/node/24.15.0/arm64/bin",
+		"/Users/runner/hostedtoolcache/node/24.15.0/x64/bin",
+		"/Users/runner/hostedtoolcache/node/24.15.0/arm64/bin",
+		"/home/runner/setup-pnpm/node_modules/.bin",
+		"/Users/runner/setup-pnpm/node_modules/.bin",
+	}
+}
+
+func canonicalLauncherTrustedPath() string {
+	return strings.Join(append(filepath.SplitList(trustedAcceptancePath()), trustedHostedToolDirectories()...), string(os.PathListSeparator))
+}
+
+func prepareIsolatedEnvironmentDirectories(environment []string) error {
+	for _, name := range []string{
+		"HOME", "TMPDIR", "DOCKER_CONFIG", "XDG_CONFIG_HOME", "XDG_CACHE_HOME",
+		"XDG_DATA_HOME", "XDG_STATE_HOME", "COREPACK_HOME", "GOCACHE", "GOPATH",
+		"GOMODCACHE", "PNPM_HOME", "pnpm_config_store_dir",
+	} {
+		path := environmentValue(environment, name)
+		if path == "" || !filepath.IsAbs(path) {
+			return fmt.Errorf("%s must be an absolute task-local path", name)
+		}
+		if err := os.MkdirAll(path, 0o700); err != nil {
+			return fmt.Errorf("create %s: %w", name, err)
+		}
+	}
+	npmrc := environmentValue(environment, "npm_config_userconfig")
+	if npmrc == "" || !filepath.IsAbs(npmrc) {
+		return fmt.Errorf("npm_config_userconfig must be an absolute task-local path")
+	}
+	if err := os.WriteFile(npmrc, nil, 0o600); err != nil {
+		return fmt.Errorf("create isolated npm configuration: %w", err)
+	}
+	return nil
+}
+
+func (run *freshCloneRun) validateGoToolchain(ctx context.Context) error {
+	output, err := executeSubprocess(ctx, filepath.Dir(run.root), run.environment, "go", "version")
+	if err != nil {
+		return fmt.Errorf("validate isolated Go toolchain: %w: %s", err, strings.TrimSpace(string(output)))
+	}
+	fields := strings.Fields(string(output))
+	if len(fields) < 3 || fields[0] != "go" || fields[1] != "version" || fields[2] != "go"+pinnedGoVersion {
+		return fmt.Errorf("validate isolated Go toolchain: got %q, want go version go%s <platform>", strings.TrimSpace(string(output)), pinnedGoVersion)
+	}
+	return nil
+}
+
+type dockerCLIPluginMetadata struct {
+	SchemaVersion    string `json:"SchemaVersion"`
+	Vendor           string `json:"Vendor"`
+	Version          string `json:"Version"`
+	ShortDescription string `json:"ShortDescription"`
+}
+
+func (run *freshCloneRun) prepareDockerCLI(ctx context.Context) error {
+	dockerOutput, err := executeSubprocess(ctx, run.root, run.environment, "docker", "version")
+	if err != nil {
+		return fmt.Errorf("validate isolated Docker CLI and daemon: %w: %s", err, strings.TrimSpace(run.redactTaskSecrets(string(dockerOutput))))
+	}
+	if _, composeErr := executeSubprocess(ctx, run.root, run.environment, "docker", "compose", "version"); composeErr == nil {
+		return nil
+	}
+
+	plugin, err := acceptanceExecutablePath(run.environment, "docker-compose")
+	if err != nil {
+		return fmt.Errorf("locate a supported Docker Compose capability for the isolated Docker configuration: %w", err)
+	}
+	metadataOutput, metadataErr := executeSubprocess(ctx, run.root, run.environment, plugin, "docker-cli-plugin-metadata")
+	if metadataErr != nil {
+		return fmt.Errorf("validate Docker Compose plugin metadata: %w: %s", metadataErr, strings.TrimSpace(string(metadataOutput)))
+	}
+	metadata := dockerCLIPluginMetadata{}
+	if err := json.Unmarshal(metadataOutput, &metadata); err != nil {
+		return fmt.Errorf("validate Docker Compose plugin metadata: parse JSON: %w", err)
+	}
+	if metadata.SchemaVersion == "" || metadata.Vendor == "" || metadata.Version == "" || !strings.Contains(strings.ToLower(metadata.ShortDescription), "compose") {
+		return fmt.Errorf("validate Docker Compose plugin metadata: incomplete capability metadata: %+v", metadata)
+	}
+
+	pluginDirectory := filepath.Join(environmentValue(run.environment, "DOCKER_CONFIG"), "cli-plugins")
+	if err := os.MkdirAll(pluginDirectory, 0o700); err != nil {
+		return fmt.Errorf("create task-local Docker CLI plugin directory: %w", err)
+	}
+	installedPlugin := filepath.Join(pluginDirectory, "docker-compose")
+	if _, err := os.Lstat(installedPlugin); err == nil {
+		return fmt.Errorf("task-local Docker Compose plugin path already exists")
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("inspect task-local Docker Compose plugin path: %w", err)
+	}
+	if err := os.Symlink(plugin, installedPlugin); err != nil {
+		return fmt.Errorf("link validated Docker Compose capability into task-local configuration: %w", err)
+	}
+	composeOutput, composeErr := executeSubprocess(ctx, run.root, run.environment, "docker", "compose", "version")
+	if composeErr != nil {
+		return fmt.Errorf("validate task-local Docker Compose capability: %w: %s", composeErr, strings.TrimSpace(string(composeOutput)))
+	}
+	return nil
 }
 
 func validateFreshCloneInvocation() error {
@@ -324,12 +473,43 @@ func validateFreshCloneInvocation() error {
 	}{
 		{"GOENV", os.Getenv("GOENV"), "off"},
 		{"GOFLAGS", os.Getenv("GOFLAGS"), ""},
+		{"GOTOOLCHAIN", os.Getenv("GOTOOLCHAIN"), "go" + pinnedGoVersion},
 		{"GOWORK", os.Getenv("GOWORK"), "off"},
 	}
 	for _, check := range checks {
 		if check.got != check.want {
 			return fmt.Errorf("fresh-clone acceptance requires %s=%q; use scripts/acceptance/m0-fresh-clone.sh", check.name, check.want)
 		}
+	}
+	launcherRoot := os.Getenv("SEMLIA_ACCEPTANCE_LAUNCHER_ROOT")
+	if launcherRoot == "" || !filepath.IsAbs(launcherRoot) {
+		return fmt.Errorf("fresh-clone acceptance requires an absolute SEMLIA_ACCEPTANCE_LAUNCHER_ROOT; use scripts/acceptance/m0-fresh-clone.sh")
+	}
+	paths := map[string]string{
+		"HOME":                  "home",
+		"TMPDIR":                "tmp",
+		"DOCKER_CONFIG":         "docker-config",
+		"XDG_CONFIG_HOME":       "config",
+		"XDG_CACHE_HOME":        "cache",
+		"XDG_DATA_HOME":         "data",
+		"XDG_STATE_HOME":        "state",
+		"COREPACK_HOME":         "corepack",
+		"npm_config_userconfig": "npmrc",
+		"GOCACHE":               "go-build",
+		"GOPATH":                "go-path",
+		"GOMODCACHE":            "go-mod",
+	}
+	for name, relative := range paths {
+		want := filepath.Join(launcherRoot, relative)
+		if got := os.Getenv(name); got != want {
+			return fmt.Errorf("fresh-clone acceptance requires %s=%q, got %q; use scripts/acceptance/m0-fresh-clone.sh", name, want, got)
+		}
+	}
+	if got := os.Getenv("PATH"); got != canonicalLauncherTrustedPath() {
+		return fmt.Errorf("fresh-clone acceptance requires the canonical explicit tool PATH; use scripts/acceptance/m0-fresh-clone.sh")
+	}
+	if got := os.Getenv("GIT_CONFIG_NOSYSTEM"); got != "1" {
+		return fmt.Errorf("fresh-clone acceptance requires GIT_CONFIG_NOSYSTEM=%q; use scripts/acceptance/m0-fresh-clone.sh", "1")
 	}
 	for name, want := range map[string]string{
 		"test.run":     "^TestFreshCloneAcceptance$",
@@ -374,21 +554,32 @@ func TestAcceptanceProjectNameUsesPerRunIdentity(t *testing.T) {
 	}
 }
 
+func TestFreshCloneConfigRequiresAbsoluteSource(t *testing.T) {
+	config := freshCloneConfig{source: ".", ref: strings.Repeat("a", 40)}
+	err := config.validate()
+	if err == nil || !strings.Contains(err.Error(), "absolute local repository directory") {
+		t.Fatalf("relative acceptance source was accepted: %v", err)
+	}
+}
+
 func TestAcceptanceEnvironmentRejectsPoisonedControls(t *testing.T) {
 	poisoned := []string{
 		"PATH=/usr/bin", "HOME=/tmp/home", "SEMLIA_RUN_SMOKE=1", "SEMLIA_RELEASE_DIR=/outside",
 		"SEMLIA_SECURITY_IMAGE=wrong", "SEMLIA_POSTGRES_PASSWORD=wrong", "COMPOSE_FILE=/outside/compose.yaml",
 		"COMPOSE_PROFILES=wrong", "COMPOSE_PATH_SEPARATOR=;", "GIT_DIR=/outside/git", "GIT_CONFIG_COUNT=1",
-		"GOENV=/outside/go.env", "GOFLAGS=-run=^$", "GOWORK=/outside/go.work", "GOCACHE=/outside/go-cache",
+		"DOCKER_CONFIG=/outside/docker", "DOCKER_CONTEXT=attacker", "DOCKER_HOST=tcp://attacker.invalid:2375",
+		"GOENV=/outside/go.env", "GOFLAGS=-run=^$", "GOWORK=/outside/go.work", "GOTOOLCHAIN=attacker", "GOCACHE=/outside/go-cache",
 		"GOPATH=/outside/go-path", "GOMODCACHE=/outside/go-mod", "GO=false", "GOOS=plan9", "GOARCH=386",
 		"BASHOPTS=extdebug", "BASH_ENV=/outside/bash-env", "ENV=/outside/env", "SHELLOPTS=noexec", "GNUMAKEFLAGS=-i", "MAKE=true", "MAKEFILES=/outside/makefile",
 		"MAKEFLAGS=-i", "MAKELEVEL=99", "MAKEOVERRIDES=ACCEPTANCE_SENTINEL=poisoned", "MFLAGS=-k", "PNPM=false", "PNPM_CONFIG_STORE_DIR=/outside/pnpm",
-		"PNPM_STORE_DIR=/outside/legacy-pnpm", "npm_config_store_dir=/outside/npm", "pnpm_config_store_dir=/outside/lower-pnpm",
+		"PNPM_STORE_DIR=/outside/legacy-pnpm", "PNPM_CONFIG_SCRIPT_SHELL=/outside/fake-shell", "npm_config_store_dir=/outside/npm", "npm_config_script_shell=/outside/fake-shell", "pnpm_config_store_dir=/outside/lower-pnpm",
+		"PNPM_SCRIPT_SRC_DIR=/outside/source", "npm_lifecycle_event=test", "NODE_OPTIONS=--require=/outside/fake.js", "NODE_PATH=/outside/node_modules", "PLAYWRIGHT_BROWSERS_PATH=/outside/browsers",
+		"COREPACK_HOME=/outside/corepack", "XDG_CONFIG_HOME=/outside/config", "XDG_DATA_HOME=/outside/data", "XDG_STATE_HOME=/outside/state",
 		"BASH_FUNC_make%%=() { return 0; }", "BASH_FUNC_go%%=() { return 0; }", "BASH_FUNC_docker%%=() { return 0; }", "BASH_FUNC_pnpm%%=() { return 0; }",
-		"TESTCONTAINERS_RYUK_DISABLED=true",
+		"TESTCONTAINERS_RYUK_DISABLED=true", "TESTCONTAINERS_SESSION_ID=attacker", "RYUK_CONNECTION_TIMEOUT=1ns",
 	}
 	got := filterAcceptanceEnvironment(poisoned)
-	if strings.Join(got, "\n") != "HOME=/tmp/home" {
+	if len(got) != 0 {
 		t.Fatalf("filtered environment retained control variables: %v", got)
 	}
 }
@@ -476,15 +667,16 @@ func TestAcceptanceHostLockPathIgnoresTMPDIR(t *testing.T) {
 
 func TestAcceptanceEnvironmentPinsGoControls(t *testing.T) {
 	poisoned := []string{
-		"PATH=/usr/bin", "GOENV=/outside/go.env", "GOFLAGS=-run=^$", "GOWORK=/outside/go.work",
+		"PATH=/usr/bin", "GOENV=/outside/go.env", "GOFLAGS=-run=^$", "GOWORK=/outside/go.work", "GOTOOLCHAIN=local",
 		"GO=false", "GOOS=plan9", "GOARCH=386", "BASHOPTS=extdebug", "BASH_ENV=/outside/bash-env", "ENV=/outside/env", "SHELLOPTS=noexec",
 		"GNUMAKEFLAGS=-i", "MAKE=true", "MAKEFILES=/outside/makefile", "MAKELEVEL=99", "MAKEOVERRIDES=poisoned", "PNPM=false",
 	}
 	environment := isolatedEnvironmentFrom(poisoned, t.TempDir(), "semlia-accept-a1b2c3d4-000000000001", 38080, 35432)
 	for name, want := range map[string]string{
-		"GOENV":   "off",
-		"GOFLAGS": "",
-		"GOWORK":  "off",
+		"GOENV":       "off",
+		"GOFLAGS":     "",
+		"GOWORK":      "off",
+		"GOTOOLCHAIN": "go" + pinnedGoVersion,
 	} {
 		values := environmentValues(environment, name)
 		if len(values) != 1 || values[0] != want {
@@ -514,25 +706,17 @@ func TestAcceptanceEnvironmentPinsTrustedToolPath(t *testing.T) {
 	if strings.Contains(values[0], poisonedPath) {
 		t.Fatalf("isolated PATH retained ambient directory %q", poisonedPath)
 	}
-	for _, tool := range []string{"make", "go", "docker", "pnpm", "git"} {
-		path, err := acceptanceExecutablePath(environment, tool)
-		if err != nil {
-			t.Errorf("trusted platform path does not provide required %s: %v", tool, err)
-			continue
-		}
-		if !filepath.IsAbs(path) || strings.HasPrefix(path, poisonedPath+string(os.PathSeparator)) {
-			t.Errorf("%s resolved to untrusted path %q", tool, path)
-		}
-	}
 }
 
-func TestAcceptanceEnvironmentAllowsOnlyKnownHostedToolPaths(t *testing.T) {
+func TestAcceptanceEnvironmentRejectsHostedToolLookalikes(t *testing.T) {
 	poisoned := t.TempDir()
-	traversal := "/opt/hostedtoolcache/../../" + strings.TrimPrefix(poisoned, string(os.PathSeparator))
-	nonBin := "/opt/hostedtoolcache/go/1.26.5/x64"
-	hostedGo := "/opt/hostedtoolcache/go/1.26.5/x64/bin"
-	hostedPnpm := "/home/runner/setup-pnpm/node_modules/.bin"
-	basePath := strings.Join([]string{poisoned, traversal, nonBin, hostedGo, hostedPnpm, hostedGo}, string(os.PathListSeparator))
+	basePath := strings.Join([]string{
+		poisoned,
+		filepath.Join(poisoned, "opt", "hostedtoolcache", "go", "1.26.5", "x64", "bin"),
+		"/opt/hostedtoolcache/go/latest/x64/bin",
+		"/opt/hostedtoolcache/go/1.26.5/x64/bin/..",
+		"/opt/hostedtoolcache/arbitrary/1.26.5/x64/bin",
+	}, string(os.PathListSeparator))
 	environment := isolatedEnvironmentFrom(
 		[]string{"PATH=" + basePath},
 		t.TempDir(),
@@ -540,9 +724,401 @@ func TestAcceptanceEnvironmentAllowsOnlyKnownHostedToolPaths(t *testing.T) {
 		38080,
 		35432,
 	)
-	want := strings.Join([]string{trustedAcceptancePath(), hostedGo, hostedPnpm}, string(os.PathListSeparator))
+	if got := environmentValue(environment, "PATH"); got != trustedAcceptancePath() {
+		t.Fatalf("isolated PATH trusted hosted-tool lookalike: %q", got)
+	}
+}
+
+func TestAcceptanceEnvironmentAllowsExactHostedToolPaths(t *testing.T) {
+	hostedGo := "/opt/hostedtoolcache/go/1.26.5/x64/bin"
+	hostedNode := "/opt/hostedtoolcache/node/24.15.0/x64/bin"
+	hostedPnpm := "/home/runner/setup-pnpm/node_modules/.bin"
+	basePath := strings.Join([]string{hostedGo, hostedNode, hostedPnpm, hostedGo}, string(os.PathListSeparator))
+	environment := isolatedEnvironmentFrom(
+		[]string{"PATH=" + basePath},
+		t.TempDir(),
+		"semlia-accept-a1b2c3d4-000000000001",
+		38080,
+		35432,
+	)
+	want := strings.Join([]string{trustedAcceptancePath(), hostedGo, hostedNode, hostedPnpm}, string(os.PathListSeparator))
 	if got := environmentValue(environment, "PATH"); got != want {
 		t.Fatalf("isolated hosted-tool PATH = %q, want %q", got, want)
+	}
+}
+
+func TestAcceptanceEnvironmentAllowsLinuxGitHubHostedToolPaths(t *testing.T) {
+	basePath := strings.Join([]string{
+		"/opt/hostedtoolcache/go/1.26.5/x64/bin",
+		"/opt/hostedtoolcache/node/24.15.0/x64/bin",
+		"/home/runner/setup-pnpm/node_modules/.bin",
+	}, string(os.PathListSeparator))
+	environment := isolatedEnvironmentFrom(
+		[]string{"PATH=" + basePath},
+		t.TempDir(),
+		"semlia-accept-a1b2c3d4-000000000001",
+		38080,
+		35432,
+	)
+	want := strings.Join([]string{trustedAcceptancePath(), basePath}, string(os.PathListSeparator))
+	if got := environmentValue(environment, "PATH"); got != want {
+		t.Fatalf("Linux GitHub-hosted PATH = %q, want %q", got, want)
+	}
+}
+
+func TestAcceptanceEnvironmentSupportsActiveToolchainPath(t *testing.T) {
+	environment := isolatedEnvironmentFrom(
+		os.Environ(),
+		t.TempDir(),
+		"semlia-accept-a1b2c3d4-000000000001",
+		38080,
+		35432,
+	)
+	for _, tool := range []string{"make", "go", "docker", "pnpm", "node", "git"} {
+		path, err := acceptanceExecutablePath(environment, tool)
+		if err != nil {
+			t.Errorf("isolated active toolchain does not provide %s: %v", tool, err)
+			continue
+		}
+		if !filepath.IsAbs(path) {
+			t.Errorf("%s resolved to non-absolute path %q", tool, path)
+		}
+	}
+}
+
+func TestAcceptanceGoToolchainValidationRejectsWrongVersion(t *testing.T) {
+	root := t.TempDir()
+	bin := filepath.Join(root, "bin")
+	if err := os.MkdirAll(bin, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	goPath := filepath.Join(bin, "go")
+	if err := os.WriteFile(goPath, []byte("#!/bin/sh\nprintf 'go version go1.26.4 test/arch\\n'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	run := &freshCloneRun{root: filepath.Join(root, "checkout"), environment: []string{"PATH=" + bin}}
+	err := run.validateGoToolchain(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "want go version go"+pinnedGoVersion) {
+		t.Fatalf("wrong Go toolchain version was accepted: %v", err)
+	}
+	if err := os.WriteFile(goPath, []byte("#!/bin/sh\nprintf 'go version go"+pinnedGoVersion+" test/arch\\n'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := run.validateGoToolchain(context.Background()); err != nil {
+		t.Fatalf("pinned Go toolchain was rejected: %v", err)
+	}
+}
+
+func TestAcceptanceEnvironmentPinsTaskHomeAndConfiguration(t *testing.T) {
+	scratch := t.TempDir()
+	hostHome := t.TempDir()
+	environment := isolatedEnvironmentFrom(
+		[]string{
+			"PATH=" + os.Getenv("PATH"),
+			"HOME=" + hostHome,
+			"DOCKER_CONFIG=" + filepath.Join(hostHome, ".docker"),
+			"XDG_CONFIG_HOME=" + filepath.Join(hostHome, ".config"),
+			"COREPACK_HOME=" + filepath.Join(hostHome, ".cache", "corepack"),
+			"npm_config_userconfig=" + filepath.Join(hostHome, ".npmrc"),
+		},
+		scratch,
+		"semlia-accept-a1b2c3d4-000000000001",
+		38080,
+		35432,
+	)
+	wants := map[string]string{
+		"HOME":                  filepath.Join(scratch, "home"),
+		"TMPDIR":                filepath.Join(scratch, "tmp"),
+		"DOCKER_CONFIG":         filepath.Join(scratch, "docker-config"),
+		"XDG_CONFIG_HOME":       filepath.Join(scratch, "config"),
+		"XDG_CACHE_HOME":        filepath.Join(scratch, "cache"),
+		"XDG_DATA_HOME":         filepath.Join(scratch, "data"),
+		"XDG_STATE_HOME":        filepath.Join(scratch, "state"),
+		"COREPACK_HOME":         filepath.Join(scratch, "corepack"),
+		"npm_config_userconfig": filepath.Join(scratch, "npmrc"),
+		"GIT_CONFIG_NOSYSTEM":   "1",
+	}
+	for name, want := range wants {
+		values := environmentValues(environment, name)
+		if len(values) != 1 || values[0] != want {
+			t.Errorf("%s values = %v, want exactly %q", name, values, want)
+		}
+	}
+	for _, value := range environment {
+		if strings.Contains(value, hostHome) {
+			t.Errorf("isolated environment retained host home path: %q", value)
+		}
+	}
+}
+
+func TestAcceptancePnpmIgnoresHostScriptShell(t *testing.T) {
+	hostConfig := t.TempDir()
+	fakeShell := filepath.Join(hostConfig, "fake-shell")
+	marker := filepath.Join(hostConfig, "fake-shell-ran")
+	if err := os.WriteFile(fakeShell, []byte("#!/bin/sh\n: > \"$ACCEPTANCE_FAKE_SCRIPT_SHELL_MARKER\"\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	pnpmConfig := filepath.Join(hostConfig, "pnpm")
+	if err := os.MkdirAll(pnpmConfig, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pnpmConfig, "config.yaml"), []byte("scriptShell: "+fakeShell+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	ambient := exec.Command("pnpm", "--filter", "@semlia/web", "test")
+	ambient.Dir = repositoryRoot
+	ambient.Env = append(
+		filteredEnvironment(os.Environ(), "XDG_CONFIG_HOME", "ACCEPTANCE_FAKE_SCRIPT_SHELL_MARKER"),
+		"XDG_CONFIG_HOME="+hostConfig,
+		"ACCEPTANCE_FAKE_SCRIPT_SHELL_MARKER="+marker,
+	)
+	if output, err := ambient.CombinedOutput(); err != nil {
+		t.Fatalf("test precondition did not reproduce host scriptShell fake green: %v\n%s", err, output)
+	}
+	if _, err := os.Stat(marker); err != nil {
+		t.Fatalf("test precondition did not execute the poisoned host scriptShell: %v", err)
+	}
+	if err := os.Remove(marker); err != nil {
+		t.Fatal(err)
+	}
+
+	environment := isolatedEnvironmentFrom(
+		ambient.Env,
+		t.TempDir(),
+		"semlia-accept-a1b2c3d4-000000000001",
+		38080,
+		35432,
+	)
+	command, err := acceptanceCommandContext(context.Background(), environment, "pnpm", "--filter", "@semlia/web", "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	command.Dir = repositoryRoot
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("isolated pnpm did not execute the real Semlia frontend tests: err=%v output=%s", err, output)
+	}
+	for _, evidence := range []string{"Test Files", "Tests", "passed"} {
+		if !strings.Contains(string(output), evidence) {
+			t.Errorf("real Semlia frontend test output missing %q:\n%s", evidence, output)
+		}
+	}
+	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("isolated pnpm reused poisoned host scriptShell: %v", err)
+	}
+}
+
+func TestAcceptanceGitIgnoresHostGlobalConfiguration(t *testing.T) {
+	hostHome := t.TempDir()
+	hooks := filepath.Join(hostHome, "hooks")
+	if err := os.MkdirAll(hooks, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	config := "[core]\n\thooksPath = " + hooks + "\n\tignoreStat = true\n"
+	if err := os.WriteFile(filepath.Join(hostHome, ".gitconfig"), []byte(config), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	environment := isolatedEnvironmentFrom(
+		append(filteredEnvironment(os.Environ(), "HOME"), "HOME="+hostHome),
+		t.TempDir(),
+		"semlia-accept-a1b2c3d4-000000000001",
+		38080,
+		35432,
+	)
+	for _, key := range []string{"core.hooksPath", "core.ignoreStat"} {
+		command, err := acceptanceCommandContext(context.Background(), environment, "git", "config", "--global", "--get", key)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if output, err := command.CombinedOutput(); err == nil || strings.TrimSpace(string(output)) != "" {
+			t.Fatalf("isolated git inherited host global %s: err=%v output=%q", key, err, output)
+		}
+	}
+}
+
+func TestAcceptanceGitCloneDoesNotPropagateAssumeUnchanged(t *testing.T) {
+	scratch := t.TempDir()
+	source := filepath.Join(scratch, "source")
+	destination := filepath.Join(scratch, "destination")
+	environment := isolatedEnvironmentFrom(
+		os.Environ(),
+		filepath.Join(scratch, "environment"),
+		"semlia-accept-a1b2c3d4-000000000001",
+		38080,
+		35432,
+	)
+	if err := prepareIsolatedEnvironmentDirectories(environment); err != nil {
+		t.Fatal(err)
+	}
+	runGit := func(dir string, args ...string) string {
+		t.Helper()
+		command, err := acceptanceCommandContext(context.Background(), environment, "git", args...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		command.Dir = dir
+		output, err := command.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, output)
+		}
+		return strings.TrimSpace(string(output))
+	}
+	if err := os.MkdirAll(source, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	runGit(source, "init", "--quiet")
+	if err := os.WriteFile(filepath.Join(source, "tracked.txt"), []byte("tracked\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runGit(source, "add", "tracked.txt")
+	runGit(source, "-c", "user.name=Semlia Acceptance", "-c", "user.email=acceptance@invalid", "commit", "--quiet", "-m", "initial")
+	runGit(source, "update-index", "--assume-unchanged", "tracked.txt")
+	if marker := runGit(source, "ls-files", "-v", "tracked.txt"); marker == "" || marker[0] < 'a' || marker[0] > 'z' {
+		t.Fatalf("test precondition did not mark source index assume-unchanged: %q", marker)
+	}
+	runGit(scratch, "clone", "--quiet", "--no-checkout", "--", source, destination)
+	runGit(destination, "checkout", "--quiet", "--detach", "HEAD")
+	if marker := runGit(destination, "ls-files", "-v", "tracked.txt"); marker == "" || marker[0] < 'A' || marker[0] > 'Z' {
+		t.Fatalf("fresh acceptance clone propagated assume-unchanged state: %q", marker)
+	}
+}
+
+func TestAcceptanceGitIgnoresHostCheckoutHookThatHidesChanges(t *testing.T) {
+	scratch := t.TempDir()
+	source := filepath.Join(scratch, "source")
+	hostHome := filepath.Join(scratch, "host-home")
+	hooks := filepath.Join(hostHome, "hooks")
+	for _, directory := range []string{source, hooks} {
+		if err := os.MkdirAll(directory, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(source, "Makefile"), []byte("verify:\n\t@echo real\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	hook := `#!/bin/sh
+printf 'verify:
+	@echo fake
+' > Makefile
+git update-index --assume-unchanged Makefile
+`
+	if err := os.WriteFile(filepath.Join(hooks, "post-checkout"), []byte(hook), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(hostHome, ".gitconfig"), []byte("[core]\n\thooksPath = "+hooks+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	setupEnvironment := isolatedEnvironmentFrom(
+		os.Environ(),
+		filepath.Join(scratch, "setup-environment"),
+		"semlia-accept-a1b2c3d4-000000000001",
+		38080,
+		35432,
+	)
+	if err := prepareIsolatedEnvironmentDirectories(setupEnvironment); err != nil {
+		t.Fatal(err)
+	}
+	run := func(environment []string, directory, name string, args ...string) string {
+		t.Helper()
+		command, err := acceptanceCommandContext(context.Background(), environment, name, args...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		command.Dir = directory
+		output, err := command.CombinedOutput()
+		if err != nil {
+			t.Fatalf("%s %s: %v\n%s", name, strings.Join(args, " "), err, output)
+		}
+		return strings.TrimSpace(string(output))
+	}
+	run(setupEnvironment, source, "git", "init", "--quiet")
+	run(setupEnvironment, source, "git", "add", "Makefile")
+	run(setupEnvironment, source, "git", "-c", "user.name=Semlia Acceptance", "-c", "user.email=acceptance@invalid", "commit", "--quiet", "-m", "initial")
+	ref := run(setupEnvironment, source, "git", "rev-parse", "HEAD")
+
+	ambientEnvironment := append(
+		filteredEnvironment(os.Environ(), "HOME", "XDG_CONFIG_HOME", "GIT_CONFIG_NOSYSTEM"),
+		"HOME="+hostHome,
+		"XDG_CONFIG_HOME="+filepath.Join(hostHome, ".config"),
+		"GIT_CONFIG_NOSYSTEM=1",
+	)
+	cloneAndCheckout := func(environment []string, destination string) {
+		t.Helper()
+		run(environment, scratch, "git", "clone", "--quiet", "--no-checkout", "--", source, destination)
+		run(environment, destination, "git", "checkout", "--quiet", "--detach", ref)
+	}
+	ambientCheckout := filepath.Join(scratch, "ambient-checkout")
+	cloneAndCheckout(ambientEnvironment, ambientCheckout)
+	if got := run(ambientEnvironment, ambientCheckout, "make", "--no-print-directory", "verify"); got != "fake" {
+		t.Fatalf("test precondition did not reproduce hidden host-hook mutation: %q", got)
+	}
+	if status := run(ambientEnvironment, ambientCheckout, "git", "status", "--short"); status != "" {
+		t.Fatalf("test precondition hook did not hide its mutation: %s", status)
+	}
+	if marker := run(ambientEnvironment, ambientCheckout, "git", "ls-files", "-v", "Makefile"); marker == "" || marker[0] < 'a' || marker[0] > 'z' {
+		t.Fatalf("test precondition hook did not set assume-unchanged: %q", marker)
+	}
+
+	isolatedEnvironment := isolatedEnvironmentFrom(
+		ambientEnvironment,
+		filepath.Join(scratch, "isolated-environment"),
+		"semlia-accept-a1b2c3d4-000000000001",
+		38080,
+		35432,
+	)
+	if err := prepareIsolatedEnvironmentDirectories(isolatedEnvironment); err != nil {
+		t.Fatal(err)
+	}
+	isolatedCheckout := filepath.Join(scratch, "isolated-checkout")
+	cloneAndCheckout(isolatedEnvironment, isolatedCheckout)
+	if got := run(isolatedEnvironment, isolatedCheckout, "make", "--no-print-directory", "verify"); got != "real" {
+		t.Fatalf("isolated checkout executed host hook or replaced Makefile: %q", got)
+	}
+	if status := run(isolatedEnvironment, isolatedCheckout, "git", "status", "--short"); status != "" {
+		t.Fatalf("isolated checkout is unexpectedly dirty: %s", status)
+	}
+	if marker := run(isolatedEnvironment, isolatedCheckout, "git", "ls-files", "-v", "Makefile"); marker == "" || marker[0] < 'A' || marker[0] > 'Z' {
+		t.Fatalf("isolated checkout inherited assume-unchanged state: %q", marker)
+	}
+}
+
+func TestAcceptanceEnvironmentPinsTestcontainersSessionAndRyuk(t *testing.T) {
+	scratch := t.TempDir()
+	project := "semlia-accept-a1b2c3d4-000000000001"
+	hostHome := t.TempDir()
+	if err := os.WriteFile(filepath.Join(hostHome, ".testcontainers.properties"), []byte("session.id=attacker\nryuk.disabled=true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	environment := isolatedEnvironmentFrom(
+		[]string{
+			"PATH=" + os.Getenv("PATH"), "HOME=" + hostHome,
+			"TESTCONTAINERS_SESSION_ID=attacker", "TESTCONTAINERS_RYUK_DISABLED=true",
+			"TESTCONTAINERS_RYUK_CONTAINER_PRIVILEGED=true", "RYUK_CONNECTION_TIMEOUT=1ns",
+			"RYUK_RECONNECTION_TIMEOUT=1ns", "RYUK_VERBOSE=true",
+		},
+		scratch,
+		project,
+		38080,
+		35432,
+	)
+	wants := map[string]string{
+		"TESTCONTAINERS_SESSION_ID":                project,
+		"TESTCONTAINERS_RYUK_DISABLED":             "false",
+		"TESTCONTAINERS_RYUK_CONTAINER_PRIVILEGED": "false",
+		"RYUK_CONNECTION_TIMEOUT":                  "1m",
+		"RYUK_RECONNECTION_TIMEOUT":                "10s",
+		"RYUK_VERBOSE":                             "false",
+	}
+	for name, want := range wants {
+		values := environmentValues(environment, name)
+		if len(values) != 1 || values[0] != want {
+			t.Errorf("%s values = %v, want exactly %q", name, values, want)
+		}
+	}
+	if got := environmentValue(environment, "HOME"); strings.HasPrefix(got, hostHome) {
+		t.Fatalf("testcontainers can still read host properties through HOME=%q", got)
 	}
 }
 
@@ -714,7 +1290,7 @@ func TestFreshCloneLauncherRejectsInvalidInputsThroughPoisonedPathAndFunctions(t
 		ref    string
 		want   string
 	}{
-		{name: "invalid source", source: "", ref: "not-a-commit", want: "SEMLIA_ACCEPTANCE_SOURCE is required"},
+		{name: "invalid source", source: "", ref: "not-a-commit", want: "SEMLIA_ACCEPTANCE_SOURCE"},
 		{name: "invalid ref", source: repositoryRoot, ref: "not-a-commit", want: "SEMLIA_ACCEPTANCE_REF must be an exact 40-character lowercase commit"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -862,7 +1438,7 @@ func TestTimedCommandWithLimitReportsLastMakeCheckPhase(t *testing.T) {
 	_, err := run.executeTimedCommandWithLimit(
 		context.Background(),
 		"complete pull-request gate",
-		75*time.Millisecond,
+		2*time.Second,
 		os.Args[0],
 		"-test.run=^TestAcceptanceSleepingCommandHelper$",
 		"-test.count=1",
@@ -883,20 +1459,54 @@ func TestFreshCloneLauncherReservesCleanupEnvelope(t *testing.T) {
 	if !strings.Contains(launcher, "TRUSTED_PATH="+trustedAcceptancePath()) {
 		t.Fatal("canonical launcher and child acceptance environment use different trusted tool paths")
 	}
+	if strings.Contains(launcher, "hostedtoolcache/*/bin") {
+		t.Fatal("canonical launcher trusts a broad hosted-toolcache wildcard")
+	}
+	if strings.Contains(launcher, `for DIRECTORY in ${PATH:-}`) {
+		t.Fatal("canonical launcher derives its Go candidates from the ambient PATH")
+	}
+	for _, fragment := range []string{
+		"PINNED_GO_VERSION=1.26.5",
+		"PINNED_GO_BOOTSTRAP_VERSION=1.26.3",
+		`Linux:x86_64)`,
+		`EXPECTED_GO_CANDIDATES=/opt/hostedtoolcache/go/1.26.5/x64/bin/go:/usr/local/go/bin/go`,
+		`Darwin:arm64)`,
+		`EXPECTED_GO_CANDIDATES=/Users/runner/hostedtoolcache/go/1.26.5/arm64/bin/go:/opt/homebrew/bin/go`,
+		`for CANDIDATE in ${EXPECTED_GO_CANDIDATES}; do`,
+		`GOTOOLCHAIN=local`,
+		`"${CANDIDATE}" version`,
+		`GO_BIN=${CANDIDATE}`,
+		`"${GO_BIN}" -C "${ROOT}" test`,
+		`"GOTOOLCHAIN=go${PINNED_GO_VERSION}"`,
+		"/opt/hostedtoolcache/go/1.26.5/x64/bin",
+		"/Users/runner/hostedtoolcache/go/1.26.5/arm64/bin",
+		`"HOME=${LAUNCHER_ROOT}/home"`,
+		`"TMPDIR=${LAUNCHER_ROOT}/tmp"`,
+		`"DOCKER_CONFIG=${LAUNCHER_ROOT}/docker-config"`,
+		`"XDG_CONFIG_HOME=${LAUNCHER_ROOT}/config"`,
+		`"GOMODCACHE=${LAUNCHER_ROOT}/go-mod"`,
+	} {
+		if !strings.Contains(launcher, fragment) {
+			t.Errorf("canonical launcher missing isolation/version fragment %q", fragment)
+		}
+	}
 	if !strings.Contains(readRepositoryFile(t, "tests/acceptance/fresh_clone_test.go"), `"test.timeout": outerAcceptanceTimeout.String()`) {
 		t.Fatal("fresh-clone invocation validator does not enforce the canonical outer timeout")
 	}
 	resourceKinds := (&freshCloneRun{
-		project:     "semlia-accept-a1b2c3d4-000000000001",
-		environment: []string{"SEMLIA_DOCKER_RESOURCE_LABEL=" + acceptanceDockerLabelKey + "=semlia-accept-a1b2c3d4-000000000001"},
+		project: "semlia-accept-a1b2c3d4-000000000001",
+		environment: []string{
+			"SEMLIA_DOCKER_RESOURCE_LABEL=" + acceptanceDockerLabelKey + "=semlia-accept-a1b2c3d4-000000000001",
+			"TESTCONTAINERS_SESSION_ID=semlia-accept-a1b2c3d4-000000000001",
+		},
 	}).cleanupResourceKinds()
 	cleanupEnvelope := dockerTeardownTimeout +
 		2*time.Duration(len(resourceKinds))*dockerInspectionTimeout + // Initial inspection and final exact relist.
 		goModCacheCleanupTimeout + checkoutCleanupTimeout +
-		time.Duration(len(resourceKinds))*(dockerInspectionTimeout+dockerTeardownTimeout+dockerInspectionTimeout) // Pre-cache list, removal, and failed-removal relist.
+		time.Duration(len(resourceKinds))*(dockerInspectionTimeout+dockerResourceRemovalTimeout+dockerInspectionTimeout) // Pre-cache list, removal, and failed-removal relist.
 	maximumCleanupSubprocessCount := 3 + 5*len(resourceKinds) // Compose down, two cache cleanups, and five per-kind list/remove phases.
 	for _, resource := range resourceKinds {
-		cleanupEnvelope += time.Duration(resource.maxIdentities) * (dockerInspectionTimeout + dockerInspectionTimeout)
+		cleanupEnvelope += time.Duration(resource.maxIdentities) * (dockerIdentityTimeout + dockerInspectionTimeout)
 		maximumCleanupSubprocessCount += 2 * resource.maxIdentities // Identity inspection plus a conservative disappearance relist.
 	}
 	const developmentDiagnosticsEnvelope = 2 * developmentDiagnosticsTimeout
@@ -910,7 +1520,201 @@ func TestFreshCloneLauncherReservesCleanupEnvelope(t *testing.T) {
 	}
 }
 
+func TestPrepareDockerCLIUsesValidatedTaskLocalComposePlugin(t *testing.T) {
+	root := t.TempDir()
+	bin := filepath.Join(root, "bin")
+	dockerConfig := filepath.Join(root, "docker-config")
+	if err := os.MkdirAll(bin, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	docker := filepath.Join(bin, "docker")
+	dockerScript := `#!/bin/sh
+if [ "$1" = version ]; then
+  exit 0
+fi
+if [ "$1" = compose ] && [ "$2" = version ]; then
+  plugin="$DOCKER_CONFIG/cli-plugins/docker-compose"
+  [ -x "$plugin" ] || exit 42
+  exec "$plugin" version
+fi
+exit 64
+`
+	if err := os.WriteFile(docker, []byte(dockerScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	plugin := filepath.Join(bin, "docker-compose")
+	pluginScript := `#!/bin/sh
+if [ "$1" = docker-cli-plugin-metadata ]; then
+  printf '%s\n' '{"SchemaVersion":"0.1.0","Vendor":"Docker Inc.","Version":"v2.0.0","ShortDescription":"Docker Compose"}'
+  exit 0
+fi
+if [ "$1" = version ]; then
+  printf '%s\n' 'Docker Compose version v2.0.0'
+  exit 0
+fi
+exit 64
+`
+	if err := os.WriteFile(plugin, []byte(pluginScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	run := &freshCloneRun{
+		t:    t,
+		root: root,
+		environment: []string{
+			"PATH=" + bin,
+			"HOME=" + filepath.Join(root, "home"),
+			"DOCKER_CONFIG=" + dockerConfig,
+		},
+	}
+	if err := run.prepareDockerCLI(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	installed := filepath.Join(dockerConfig, "cli-plugins", "docker-compose")
+	info, err := os.Lstat(installed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("task-local Compose capability was copied instead of symlinked: mode=%s", info.Mode())
+	}
+	target, err := os.Readlink(installed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if target != plugin {
+		t.Fatalf("task-local Compose plugin target = %q, want validated %q", target, plugin)
+	}
+}
+
+func TestPrepareDockerCLIRejectsUnvalidatedComposePlugin(t *testing.T) {
+	root := t.TempDir()
+	bin := filepath.Join(root, "bin")
+	if err := os.MkdirAll(bin, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	dockerScript := "#!/bin/sh\n[ \"$1\" = version ] && exit 0\nexit 42\n"
+	if err := os.WriteFile(filepath.Join(bin, "docker"), []byte(dockerScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	plugin := filepath.Join(bin, "docker-compose")
+	if err := os.WriteFile(plugin, []byte("#!/bin/sh\nprintf 'not-json\\n'\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dockerConfig := filepath.Join(root, "docker-config")
+	run := &freshCloneRun{
+		t:    t,
+		root: root,
+		environment: []string{
+			"PATH=" + bin,
+			"HOME=" + filepath.Join(root, "home"),
+			"DOCKER_CONFIG=" + dockerConfig,
+		},
+	}
+	err := run.prepareDockerCLI(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "validate Docker Compose plugin metadata") {
+		t.Fatalf("unvalidated Compose plugin was accepted: %v", err)
+	}
+	if _, statErr := os.Lstat(filepath.Join(dockerConfig, "cli-plugins", "docker-compose")); !os.IsNotExist(statErr) {
+		t.Fatalf("unvalidated Compose plugin was installed: %v", statErr)
+	}
+}
+
+func TestAcceptanceDockerCLIIgnoresHostHomePlugin(t *testing.T) {
+	hostHome := t.TempDir()
+	pluginDirectory := filepath.Join(hostHome, ".docker", "cli-plugins")
+	if err := os.MkdirAll(pluginDirectory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(hostHome, "host-plugin-ran")
+	plugin := `#!/bin/sh
+if [ "$1" = docker-cli-plugin-metadata ]; then
+  printf '%s\n' '{"SchemaVersion":"0.1.0","Vendor":"Host Poison","Version":"v0.0.0","ShortDescription":"Docker Compose"}'
+  exit 0
+fi
+: > "$ACCEPTANCE_HOST_DOCKER_PLUGIN_MARKER"
+printf '%s\n' 'host Compose plugin'
+`
+	if err := os.WriteFile(filepath.Join(pluginDirectory, "docker-compose"), []byte(plugin), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ambientEnvironment := append(
+		filterAcceptanceEnvironment(os.Environ()),
+		"PATH="+trustedAcceptancePathFrom(os.Environ()),
+		"HOME="+hostHome,
+		"ACCEPTANCE_HOST_DOCKER_PLUGIN_MARKER="+marker,
+	)
+	ambient, err := acceptanceCommandContext(context.Background(), ambientEnvironment, "docker", "compose", "version")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output, err := ambient.CombinedOutput(); err != nil {
+		t.Fatalf("test precondition did not execute the poisoned host Docker plugin: %v\n%s", err, output)
+	}
+	if _, err := os.Stat(marker); err != nil {
+		t.Fatalf("test precondition did not execute the poisoned host Docker plugin: %v", err)
+	}
+	if err := os.Remove(marker); err != nil {
+		t.Fatal(err)
+	}
+
+	isolationRoot := t.TempDir()
+	isolatedEnvironment := isolatedEnvironmentFrom(
+		ambientEnvironment,
+		isolationRoot,
+		"semlia-accept-a1b2c3d4-000000000001",
+		38080,
+		35432,
+	)
+	if err := prepareIsolatedEnvironmentDirectories(isolatedEnvironment); err != nil {
+		t.Fatal(err)
+	}
+	isolated, err := acceptanceCommandContext(context.Background(), isolatedEnvironment, "docker", "compose", "version")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = isolated.CombinedOutput()
+	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("isolated Docker CLI executed the host HOME plugin: %v", err)
+	}
+	if got := environmentValue(isolatedEnvironment, "DOCKER_CONFIG"); got != filepath.Join(isolationRoot, "docker-config") {
+		t.Fatalf("isolated Docker configuration = %q", got)
+	}
+}
+
+func TestDockerCLIIsolationProbe(t *testing.T) {
+	if os.Getenv("SEMLIA_RUN_DOCKER_CLI_ISOLATION_PROBE") != "1" {
+		t.Skip("set SEMLIA_RUN_DOCKER_CLI_ISOLATION_PROBE=1 to validate the active Docker daemon with task-local CLI configuration")
+	}
+	scratch := t.TempDir()
+	environment := isolatedEnvironmentFrom(
+		os.Environ(),
+		scratch,
+		"semlia-docker-cli-probe-"+randomRunID(t),
+		38080,
+		35432,
+	)
+	if err := prepareIsolatedEnvironmentDirectories(environment); err != nil {
+		t.Fatal(err)
+	}
+	run := &freshCloneRun{t: t, root: repositoryRoot, environment: environment}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	if err := run.prepareDockerCLI(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for _, command := range [][]string{{"version"}, {"compose", "version"}, {"info", "--format", "{{.Name}}"}} {
+		output, err := executeSubprocess(ctx, repositoryRoot, environment, "docker", command...)
+		if err != nil || strings.TrimSpace(string(output)) == "" {
+			t.Errorf("isolated docker %s: err=%v output=%q", strings.Join(command, " "), err, output)
+		}
+	}
+	if got := environmentValue(environment, "DOCKER_CONFIG"); got == "" || !strings.HasPrefix(got, scratch+string(os.PathSeparator)) {
+		t.Fatalf("Docker CLI configuration is not task-local: %q", got)
+	}
+}
+
 func TestFreshCloneInvocationRejectsNoncanonicalOuterTimeout(t *testing.T) {
+	launcherRoot := t.TempDir()
 	command := exec.Command(
 		os.Args[0],
 		"-test.run=^TestFreshCloneAcceptance$",
@@ -919,10 +1723,26 @@ func TestFreshCloneInvocationRejectsNoncanonicalOuterTimeout(t *testing.T) {
 	)
 	command.Env = append(
 		filterAcceptanceEnvironment(os.Environ()),
+		"PATH="+canonicalLauncherTrustedPath(),
+		"HOME="+filepath.Join(launcherRoot, "home"),
+		"TMPDIR="+filepath.Join(launcherRoot, "tmp"),
+		"DOCKER_CONFIG="+filepath.Join(launcherRoot, "docker-config"),
+		"XDG_CONFIG_HOME="+filepath.Join(launcherRoot, "config"),
+		"XDG_CACHE_HOME="+filepath.Join(launcherRoot, "cache"),
+		"XDG_DATA_HOME="+filepath.Join(launcherRoot, "data"),
+		"XDG_STATE_HOME="+filepath.Join(launcherRoot, "state"),
+		"COREPACK_HOME="+filepath.Join(launcherRoot, "corepack"),
+		"npm_config_userconfig="+filepath.Join(launcherRoot, "npmrc"),
+		"GIT_CONFIG_NOSYSTEM=1",
 		"GOENV=off",
 		"GOFLAGS=",
+		"GOTOOLCHAIN=go"+pinnedGoVersion,
 		"GOWORK=off",
+		"GOCACHE="+filepath.Join(launcherRoot, "go-build"),
+		"GOPATH="+filepath.Join(launcherRoot, "go-path"),
+		"GOMODCACHE="+filepath.Join(launcherRoot, "go-mod"),
 		"SEMLIA_RUN_FRESH_CLONE=1",
+		"SEMLIA_ACCEPTANCE_LAUNCHER_ROOT="+launcherRoot,
 	)
 	output, err := command.CombinedOutput()
 	if err == nil {
@@ -1546,6 +2366,125 @@ func TestCleanupToolContainerLimitIsIndependentFromComposeTopology(t *testing.T)
 	err := run.removeRemainingTaskDockerResources()
 	if err == nil || !strings.Contains(err.Error(), "task-owned tool containers returned 4 resources; refuse to exceed task maximum 3") {
 		t.Fatalf("tool container maximum followed Compose topology instead of its own contract: %v", err)
+	}
+}
+
+func TestCleanupOwnsExactTestcontainersSessionResources(t *testing.T) {
+	project := "semlia-accept-a1b2c3d4-000000000001"
+	sessionLabel := testcontainersSessionLabelKey + "=" + project
+	run := &freshCloneRun{
+		project: project,
+		environment: []string{
+			"SEMLIA_DOCKER_RESOURCE_LABEL=" + acceptanceDockerLabelKey + "=" + project,
+			"TESTCONTAINERS_SESSION_ID=" + project,
+		},
+	}
+	resources := run.cleanupResourceKinds()
+	wants := map[string]struct {
+		command       string
+		inspectFormat string
+		maximum       int
+	}{
+		"testcontainers containers": {"ps --all --filter label=" + sessionLabel, "{{json .Config.Labels}}", testcontainersContainerLimit},
+		"testcontainers networks":   {"network ls --filter label=" + sessionLabel, "{{json .Labels}}", testcontainersNetworkLimit},
+		"testcontainers volumes":    {"volume ls --filter label=" + sessionLabel, "{{json .Labels}}", testcontainersVolumeLimit},
+	}
+	for _, resource := range resources {
+		want, ok := wants[resource.label]
+		if !ok {
+			continue
+		}
+		if got := strings.Join(resource.listArgs, " "); !strings.HasPrefix(got, want.command) {
+			t.Errorf("%s list command = %q, want prefix %q", resource.label, got, want.command)
+		}
+		if resource.identityLabel != sessionLabel || resource.inspectFormat != want.inspectFormat || resource.maxIdentities != want.maximum {
+			t.Errorf("%s ownership = label %q format %q maximum %d", resource.label, resource.identityLabel, resource.inspectFormat, resource.maxIdentities)
+		}
+		delete(wants, resource.label)
+	}
+	if len(wants) != 0 {
+		t.Fatalf("cleanup omitted Testcontainers session resources: %v", wants)
+	}
+}
+
+func TestCleanupInspectsNetworkAndVolumeIdentityBeforeRemoval(t *testing.T) {
+	project := "semlia-accept-a1b2c3d4-000000000001"
+	sessionLabel := testcontainersSessionLabelKey + "=" + project
+	networkExists := true
+	volumeExists := true
+	var calls []string
+	run := &freshCloneRun{
+		root:    t.TempDir(),
+		project: project,
+		environment: []string{
+			"TESTCONTAINERS_SESSION_ID=" + project,
+		},
+		cleanupExecutor: func(_ context.Context, _ string, _ []string, name string, args ...string) ([]byte, error) {
+			joined := name + " " + strings.Join(args, " ")
+			calls = append(calls, joined)
+			if name != "docker" || len(args) == 0 {
+				return nil, nil
+			}
+			switch {
+			case args[0] == "network" && len(args) > 1 && args[1] == "ls" && argumentAfter(args, "--filter") == "label="+sessionLabel && networkExists:
+				return []byte("session-network\n"), nil
+			case args[0] == "volume" && len(args) > 1 && args[1] == "ls" && argumentAfter(args, "--filter") == "label="+sessionLabel && volumeExists:
+				return []byte("session-volume\n"), nil
+			case args[0] == "network" && len(args) > 1 && args[1] == "inspect":
+				return json.Marshal(map[string]string{testcontainersSessionLabelKey: project})
+			case args[0] == "volume" && len(args) > 1 && args[1] == "inspect":
+				return json.Marshal(map[string]string{testcontainersSessionLabelKey: project})
+			case args[0] == "network" && len(args) > 2 && args[1] == "rm":
+				networkExists = false
+			case args[0] == "volume" && len(args) > 2 && args[1] == "rm":
+				volumeExists = false
+			}
+			return nil, nil
+		},
+	}
+	if err := run.removeRemainingTaskDockerResources(); err != nil {
+		t.Fatal(err)
+	}
+	for _, sequence := range []struct {
+		inspect string
+		remove  string
+	}{
+		{"docker network inspect --format {{json .Labels}} session-network", "docker network rm session-network"},
+		{"docker volume inspect --format {{json .Labels}} session-volume", "docker volume rm --force session-volume"},
+	} {
+		inspectIndex := commandIndex(calls, sequence.inspect)
+		removeIndex := commandIndex(calls, sequence.remove)
+		if inspectIndex < 0 || removeIndex <= inspectIndex {
+			t.Errorf("resource identity was not inspected before removal: inspect=%q remove=%q\n%s", sequence.inspect, sequence.remove, strings.Join(calls, "\n"))
+		}
+	}
+}
+
+func TestCleanupRefusesTestcontainersResourceWhoseIdentityChanges(t *testing.T) {
+	project := "semlia-accept-a1b2c3d4-000000000001"
+	sessionLabel := testcontainersSessionLabelKey + "=" + project
+	run := &freshCloneRun{
+		root:        t.TempDir(),
+		project:     project,
+		environment: []string{"TESTCONTAINERS_SESSION_ID=" + project},
+		cleanupExecutor: func(_ context.Context, _ string, _ []string, name string, args ...string) ([]byte, error) {
+			if name != "docker" || len(args) < 2 {
+				return nil, nil
+			}
+			switch {
+			case args[0] == "network" && args[1] == "ls" && argumentAfter(args, "--filter") == "label="+sessionLabel:
+				return []byte("session-network\n"), nil
+			case args[0] == "network" && args[1] == "inspect":
+				return json.Marshal(map[string]string{testcontainersSessionLabelKey: project + "-unrelated"})
+			case args[0] == "network" && args[1] == "rm":
+				t.Fatal("cleanup removed a Testcontainers network after its task identity changed")
+			}
+			return nil, nil
+		},
+	}
+	err := run.removeRemainingTaskDockerResources()
+	if err == nil || !strings.Contains(err.Error(), "refuse to remove testcontainers networks session-network") {
+		t.Fatalf("changed Testcontainers network identity was not rejected: %v", err)
 	}
 }
 
@@ -2572,7 +3511,7 @@ func (run *freshCloneRun) verifyTaskDockerResourcesRemoved(report *cleanupReport
 func (run *freshCloneRun) cleanupResourceKinds() []cleanupResourceKind {
 	composeLabel := "com.docker.compose.project=" + run.project
 	resources := []cleanupResourceKind{
-		{label: "containers", listArgs: []string{"ps", "--all", "--filter", "label=" + composeLabel, "--format", "{{.ID}}"}, removeArgs: []string{"rm", "--force"}, identityLabel: composeLabel, maxIdentities: composeServiceContainerLimit},
+		{label: "containers", listArgs: []string{"ps", "--all", "--filter", "label=" + composeLabel, "--format", "{{.ID}}"}, removeArgs: []string{"rm", "--force"}, identityLabel: composeLabel, inspectFormat: "{{json .Config.Labels}}", maxIdentities: composeServiceContainerLimit},
 		{label: "networks", listArgs: []string{"network", "ls", "--filter", "label=" + composeLabel, "--format", "{{.ID}}"}, removeArgs: []string{"network", "rm"}, maxIdentities: composeNetworkLimit},
 		{label: "volumes", listArgs: []string{"volume", "ls", "--filter", "label=" + composeLabel, "--format", "{{.Name}}"}, removeArgs: []string{"volume", "rm", "--force"}, maxIdentities: composeVolumeLimit},
 	}
@@ -2582,8 +3521,26 @@ func (run *freshCloneRun) cleanupResourceKinds() []cleanupResourceKind {
 			listArgs:      []string{"ps", "--all", "--filter", "label=" + taskLabel, "--format", "{{.ID}}"},
 			removeArgs:    []string{"rm", "--force"},
 			identityLabel: taskLabel,
+			inspectFormat: "{{json .Config.Labels}}",
 			maxIdentities: toolContainerLimit,
 		})
+	}
+	if sessionID := environmentValue(run.environment, "TESTCONTAINERS_SESSION_ID"); sessionID != "" {
+		sessionLabel := testcontainersSessionLabelKey + "=" + sessionID
+		resources = append(resources,
+			cleanupResourceKind{
+				label: "testcontainers containers", listArgs: []string{"ps", "--all", "--filter", "label=" + sessionLabel, "--format", "{{.ID}}"},
+				removeArgs: []string{"rm", "--force"}, identityLabel: sessionLabel, inspectFormat: "{{json .Config.Labels}}", maxIdentities: testcontainersContainerLimit,
+			},
+			cleanupResourceKind{
+				label: "testcontainers networks", listArgs: []string{"network", "ls", "--filter", "label=" + sessionLabel, "--format", "{{.ID}}"},
+				removeArgs: []string{"network", "rm"}, identityLabel: sessionLabel, inspectFormat: "{{json .Labels}}", maxIdentities: testcontainersNetworkLimit,
+			},
+			cleanupResourceKind{
+				label: "testcontainers volumes", listArgs: []string{"volume", "ls", "--filter", "label=" + sessionLabel, "--format", "{{.Name}}"},
+				removeArgs: []string{"volume", "rm", "--force"}, identityLabel: sessionLabel, inspectFormat: "{{json .Labels}}", maxIdentities: testcontainersVolumeLimit,
+			},
+		)
 	}
 	return resources
 }
@@ -2595,7 +3552,7 @@ func validateDockerResourceIdentifiers(resource cleanupResourceKind, output []by
 	}
 	for _, identifier := range identifiers {
 		valid := regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]*$`).MatchString(identifier)
-		if resource.identityLabel != "" {
+		if len(resource.listArgs) > 0 && resource.listArgs[0] == "ps" {
 			valid = regexp.MustCompile(`^[a-f0-9]{12,64}$`).MatchString(identifier)
 		}
 		if !valid {
@@ -2615,7 +3572,11 @@ func (run *freshCloneRun) verifyDockerResourceIdentity(resource cleanupResourceK
 	}
 	verified := make([]string, 0, len(identifiers))
 	for _, identifier := range identifiers {
-		output, err := run.cleanupCommand(dockerInspectionTimeout, "docker", "inspect", "--format", "{{json .Config.Labels}}", identifier)
+		inspectArgs := []string{"inspect", "--format", resource.inspectFormat, identifier}
+		if len(resource.listArgs) > 0 && (resource.listArgs[0] == "network" || resource.listArgs[0] == "volume") {
+			inspectArgs = append([]string{resource.listArgs[0]}, inspectArgs...)
+		}
+		output, err := run.cleanupCommand(dockerIdentityTimeout, "docker", inspectArgs...)
 		if err != nil {
 			if run.dockerResourceNoLongerExists(resource, identifier) {
 				continue
@@ -2676,7 +3637,7 @@ func (run *freshCloneRun) removeRemainingTaskDockerResources() error {
 			continue
 		}
 		removeArgs := append(append([]string{}, resource.removeArgs...), verifiedIdentifiers...)
-		if removeOutput, removeErr := run.cleanupCommand(dockerTeardownTimeout, "docker", removeArgs...); removeErr != nil {
+		if removeOutput, removeErr := run.cleanupCommand(dockerResourceRemovalTimeout, "docker", removeArgs...); removeErr != nil {
 			removeProblem := fmt.Errorf("remove task-owned %s %s: %w: %s", resource.label, strings.Join(verifiedIdentifiers, ","), removeErr, strings.TrimSpace(run.redactTaskSecrets(string(removeOutput))))
 			confirmOutput, confirmErr := run.cleanupCommand(dockerInspectionTimeout, "docker", resource.listArgs...)
 			if confirmErr != nil {
