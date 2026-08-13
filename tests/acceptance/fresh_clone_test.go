@@ -35,13 +35,13 @@ const (
 	goModCacheCleanupTimeout      = 10 * time.Minute
 	checkoutCleanupTimeout        = 3 * time.Minute
 	acceptanceDockerLabelKey      = "io.semlia.acceptance.run"
+	acceptanceHostLock            = "/tmp/semlia-t008-acceptance.lock"
 	composeServiceContainerLimit  = 4 // compose.yaml defines postgres, migrate, server, and worker.
 	composeNetworkLimit           = 1 // compose.yaml defines the backend network.
 	composeVolumeLimit            = 1 // compose.yaml defines the postgres-data volume.
 	toolContainerLimit            = 3 // Two security scans plus one release SBOM invocation.
 )
 
-var acceptanceHostLock = filepath.Join(os.TempDir(), "semlia-t008-acceptance.lock")
 var errCommandDurationLimit = errors.New("command duration limit exceeded")
 
 type freshCloneConfig struct {
@@ -248,7 +248,7 @@ func filterAcceptanceEnvironment(environment []string) []string {
 	for _, entry := range environment {
 		key, _, _ := strings.Cut(entry, "=")
 		_, exactBlocked := blockedExact[key]
-		if strings.HasPrefix(key, "SEMLIA_") || strings.HasPrefix(key, "COMPOSE_") || strings.HasPrefix(key, "GIT_") || strings.HasPrefix(key, "TESTCONTAINERS_") || exactBlocked {
+		if strings.HasPrefix(key, "BASH_FUNC_") || strings.HasPrefix(key, "SEMLIA_") || strings.HasPrefix(key, "COMPOSE_") || strings.HasPrefix(key, "GIT_") || strings.HasPrefix(key, "TESTCONTAINERS_") || exactBlocked {
 			continue
 		}
 		filtered = append(filtered, entry)
@@ -286,24 +286,37 @@ func validateFreshCloneInvocation() error {
 
 func acquireAcceptanceLock(t *testing.T) func() {
 	t.Helper()
-	file, err := os.OpenFile(acceptanceHostLock, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	release, err := createAcceptanceLock(acceptanceHostLock)
 	if err != nil {
 		t.Fatalf("another T008 acceptance run is active on this Docker host (%s): %v", acceptanceHostLock, err)
 	}
-	if _, err := fmt.Fprintf(file, "pid=%d\n", os.Getpid()); err != nil {
-		_ = file.Close()
-		_ = os.Remove(acceptanceHostLock)
-		t.Fatal(err)
-	}
-	if err := file.Close(); err != nil {
-		_ = os.Remove(acceptanceHostLock)
-		t.Fatal(err)
-	}
 	return func() {
-		if err := os.Remove(acceptanceHostLock); err != nil && !os.IsNotExist(err) {
+		if err := release(); err != nil {
 			t.Errorf("remove T008 host lock: %v", err)
 		}
 	}
+}
+
+func createAcceptanceLock(path string) (func() error, error) {
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := fmt.Fprintf(file, "pid=%d\n", os.Getpid()); err != nil {
+		_ = file.Close()
+		_ = os.Remove(path)
+		return nil, err
+	}
+	if err := file.Close(); err != nil {
+		_ = os.Remove(path)
+		return nil, err
+	}
+	return func() error {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		return nil
+	}, nil
 }
 
 func TestAcceptanceProjectNameUsesPerRunIdentity(t *testing.T) {
@@ -333,11 +346,110 @@ func TestAcceptanceEnvironmentRejectsPoisonedControls(t *testing.T) {
 		"BASHOPTS=extdebug", "BASH_ENV=/outside/bash-env", "ENV=/outside/env", "SHELLOPTS=noexec", "GNUMAKEFLAGS=-i", "MAKE=true", "MAKEFILES=/outside/makefile",
 		"MAKEFLAGS=-i", "MAKELEVEL=99", "MAKEOVERRIDES=ACCEPTANCE_SENTINEL=poisoned", "MFLAGS=-k", "PNPM=false", "PNPM_CONFIG_STORE_DIR=/outside/pnpm",
 		"PNPM_STORE_DIR=/outside/legacy-pnpm", "npm_config_store_dir=/outside/npm", "pnpm_config_store_dir=/outside/lower-pnpm",
+		"BASH_FUNC_make%%=() { return 0; }", "BASH_FUNC_go%%=() { return 0; }", "BASH_FUNC_docker%%=() { return 0; }", "BASH_FUNC_pnpm%%=() { return 0; }",
 		"TESTCONTAINERS_RYUK_DISABLED=true",
 	}
 	got := filterAcceptanceEnvironment(poisoned)
 	if strings.Join(got, "\n") != "PATH=/usr/bin\nHOME=/tmp/home" {
 		t.Fatalf("filtered environment retained control variables: %v", got)
+	}
+}
+
+func TestAcceptanceEnvironmentRejectsExportedBashFunctionPoisoningInNestedTools(t *testing.T) {
+	bash, err := exec.LookPath("bash")
+	if err != nil {
+		t.Fatalf("locate bash required by the acceptance toolchain: %v", err)
+	}
+	bin := t.TempDir()
+	path := bin + string(os.PathListSeparator) + os.Getenv("PATH")
+	for _, tool := range []string{"make", "go", "docker", "pnpm"} {
+		tool := tool
+		t.Run(tool, func(t *testing.T) {
+			stub := "#!/bin/sh\nprintf 'real-" + tool + "\\n'\nexit 41\n"
+			if err := os.WriteFile(filepath.Join(bin, tool), []byte(stub), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			functionEntry := "BASH_FUNC_" + tool + "%%=() { printf 'poisoned-" + tool + "\\n'; return 0; }"
+			poisonedEnvironment := []string{
+				"PATH=" + path,
+				"HOME=" + t.TempDir(),
+				functionEntry,
+			}
+
+			poisoned := exec.Command(bash, "-c", tool)
+			poisoned.Env = poisonedEnvironment
+			poisonedOutput, poisonedErr := poisoned.CombinedOutput()
+			if poisonedErr != nil || strings.TrimSpace(string(poisonedOutput)) != "poisoned-"+tool {
+				t.Fatalf("test precondition did not reproduce exported-function fake green: err=%v output=%q", poisonedErr, poisonedOutput)
+			}
+
+			isolated := exec.Command(bash, "-c", tool)
+			isolated.Env = filterAcceptanceEnvironment(poisonedEnvironment)
+			isolatedOutput, isolatedErr := isolated.CombinedOutput()
+			var exitError *exec.ExitError
+			if !errors.As(isolatedErr, &exitError) || exitError.ExitCode() != 41 {
+				t.Fatalf("nested %s did not execute the real failing binary: err=%v output=%q", tool, isolatedErr, isolatedOutput)
+			}
+			if strings.TrimSpace(string(isolatedOutput)) != "real-"+tool {
+				t.Fatalf("nested %s output = %q, want real binary marker", tool, isolatedOutput)
+			}
+		})
+	}
+}
+
+func TestAcceptanceHostLockPathIgnoresTMPDIR(t *testing.T) {
+	const helperEnvironment = "T008_ACCEPTANCE_LOCK_PATH_HELPER"
+	if os.Getenv(helperEnvironment) == "1" {
+		fmt.Printf("LOCK_PATH=%s\n", acceptanceHostLock)
+		return
+	}
+
+	var paths []string
+	for _, temporaryDirectory := range []string{t.TempDir(), t.TempDir()} {
+		command := exec.Command(os.Args[0], "-test.run=^TestAcceptanceHostLockPathIgnoresTMPDIR$", "-test.count=1")
+		command.Env = append(
+			filteredEnvironment(os.Environ(), "TMPDIR", helperEnvironment),
+			"TMPDIR="+temporaryDirectory,
+			helperEnvironment+"=1",
+		)
+		output, err := command.CombinedOutput()
+		if err != nil {
+			t.Fatalf("resolve acceptance lock with TMPDIR=%q: %v\n%s", temporaryDirectory, err, output)
+		}
+		var lockPath string
+		for _, line := range strings.Split(string(output), "\n") {
+			if value, found := strings.CutPrefix(strings.TrimSpace(line), "LOCK_PATH="); found {
+				lockPath = value
+				break
+			}
+		}
+		if lockPath == "" {
+			t.Fatalf("lock-path helper returned no path:\n%s", output)
+		}
+		paths = append(paths, lockPath)
+	}
+	if paths[0] != paths[1] {
+		t.Fatalf("different TMPDIR values bypass the Docker-host lock: %q != %q", paths[0], paths[1])
+	}
+	if paths[0] != "/tmp/semlia-t008-acceptance.lock" {
+		t.Fatalf("Docker-host lock path = %q, want fixed ordinary-user-writable /tmp path", paths[0])
+	}
+}
+
+func TestAcceptanceHostLockUsesExclusiveCreate(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "acceptance.lock")
+	release, err := createAcceptanceLock(path)
+	if err != nil {
+		t.Fatalf("acquire first acceptance lock: %v", err)
+	}
+	if _, err := createAcceptanceLock(path); !errors.Is(err, os.ErrExist) {
+		t.Fatalf("second acceptance lock error = %v, want O_EXCL conflict", err)
+	}
+	if err := release(); err != nil {
+		t.Fatalf("release acceptance lock: %v", err)
+	}
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("acceptance lock remains after release: %v", err)
 	}
 }
 
@@ -1537,7 +1649,9 @@ func TestDockerCleanupLifecycleProbe(t *testing.T) {
 	taskLabel := acceptanceDockerLabelKey + "=" + project
 	unrelatedLabel := acceptanceDockerLabelKey + "=" + project + "-unrelated"
 	t.Cleanup(func() {
-		bestEffortRemoveDockerProbeContainers(t, taskLabel, unrelatedLabel)
+		if err := cleanupDockerProbeContainers(taskLabel, unrelatedLabel); err != nil {
+			t.Errorf("clean Docker lifecycle probe containers: %v", err)
+		}
 	})
 
 	unrelatedID, err := dockerProbeOutput(ctx,
@@ -1609,6 +1723,83 @@ func TestDockerCleanupLifecycleProbe(t *testing.T) {
 	}
 }
 
+func TestDockerProbeCleanupUsesIndependentTimeoutsAndExactRelists(t *testing.T) {
+	timedOutLabel := acceptanceDockerLabelKey + "=timeout-run"
+	failedRemoveLabel := acceptanceDockerLabelKey + "=failed-remove-run"
+	removedLabel := acceptanceDockerLabelKey + "=removed-run"
+	containers := map[string][]string{
+		failedRemoveLabel: {"abcdef123456"},
+		removedLabel:      {"123456abcdef"},
+	}
+	var calls []string
+	listCalls := map[string]int{}
+	executor := func(ctx context.Context, args ...string) (string, error) {
+		if _, ok := ctx.Deadline(); !ok {
+			t.Fatal("Docker probe cleanup command has no phase deadline")
+		}
+		if err := ctx.Err(); err != nil {
+			t.Fatalf("Docker probe cleanup reused an expired phase context: %v", err)
+		}
+		joined := strings.Join(args, " ")
+		calls = append(calls, joined)
+		switch args[0] {
+		case "ps":
+			label := strings.TrimPrefix(argumentAfter(args, "--filter"), "label=")
+			listCalls[label]++
+			if label == timedOutLabel && listCalls[label] == 1 {
+				<-ctx.Done()
+				return "timed out list", ctx.Err()
+			}
+			return strings.Join(containers[label], "\n"), nil
+		case "rm":
+			identifier := args[len(args)-1]
+			if identifier == "abcdef123456" {
+				return "container busy", errors.New("remove failed")
+			}
+			containers[removedLabel] = nil
+			return "", nil
+		default:
+			return "", fmt.Errorf("unexpected Docker probe cleanup command: %s", joined)
+		}
+	}
+
+	err := cleanupDockerProbeContainersWithTimeout(
+		executor,
+		10*time.Millisecond,
+		timedOutLabel,
+		failedRemoveLabel,
+		removedLabel,
+	)
+	if err == nil {
+		t.Fatal("Docker probe cleanup failures and residual containers were not reported")
+	}
+	for _, fragment := range []string{
+		"initial exact list " + timedOutLabel,
+		"context deadline exceeded",
+		"remove " + failedRemoveLabel,
+		"remove failed",
+		"container busy",
+		"exact relist " + failedRemoveLabel,
+		"abcdef123456",
+	} {
+		if !strings.Contains(err.Error(), fragment) {
+			t.Errorf("Docker probe cleanup error missing %q: %v", fragment, err)
+		}
+	}
+	for _, label := range []string{timedOutLabel, failedRemoveLabel, removedLabel} {
+		wantList := "ps --all --filter label=" + label + " --format {{.ID}}"
+		if listCalls[label] != 2 {
+			t.Errorf("exact list calls for %q = %d, want initial list plus final relist; calls:\n%s", label, listCalls[label], strings.Join(calls, "\n"))
+		}
+		if got := strings.Count(strings.Join(calls, "\n"), wantList); got != 2 {
+			t.Errorf("exact list command %q calls = %d, want 2; calls:\n%s", wantList, got, strings.Join(calls, "\n"))
+		}
+	}
+	if containers[removedLabel] != nil {
+		t.Fatalf("successful Docker probe cleanup left task container: %v", containers[removedLabel])
+	}
+}
+
 func waitForDockerProbeContainer(ctx context.Context, label string) (string, error) {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
@@ -1638,26 +1829,63 @@ func dockerProbeOutput(ctx context.Context, args ...string) (string, error) {
 	return string(output), err
 }
 
-func bestEffortRemoveDockerProbeContainers(t *testing.T, labels ...string) {
-	t.Helper()
+type dockerProbeExecutor func(context.Context, ...string) (string, error)
+
+func cleanupDockerProbeContainers(labels ...string) error {
+	return cleanupDockerProbeContainersWithTimeout(dockerProbeOutput, 30*time.Second, labels...)
+}
+
+func cleanupDockerProbeContainersWithTimeout(executor dockerProbeExecutor, timeout time.Duration, labels ...string) error {
+	var problems []error
 	for _, label := range labels {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		output, err := dockerProbeOutput(ctx, "ps", "--all", "--filter", "label="+label, "--format", "{{.ID}}")
+		listArgs := []string{"ps", "--all", "--filter", "label=" + label, "--format", "{{.ID}}"}
+		output, err := executeDockerProbeCleanupPhase(executor, timeout, listArgs...)
 		if err != nil {
-			cancel()
-			t.Logf("list Docker cleanup probe containers for %q: %v", label, err)
+			problems = append(problems, fmt.Errorf("initial exact list %s: %w: %s", label, err, strings.TrimSpace(output)))
+		} else {
+			identifiers, identifierErr := validateDockerProbeContainerIdentifiers(output)
+			if identifierErr != nil {
+				problems = append(problems, fmt.Errorf("initial exact list %s: %w", label, identifierErr))
+			} else if len(identifiers) != 0 {
+				removeArgs := append([]string{"rm", "--force"}, identifiers...)
+				removeOutput, removeErr := executeDockerProbeCleanupPhase(executor, timeout, removeArgs...)
+				if removeErr != nil {
+					problems = append(problems, fmt.Errorf("remove %s containers %s: %w: %s", label, strings.Join(identifiers, ","), removeErr, strings.TrimSpace(removeOutput)))
+				}
+			}
+		}
+
+		verifyOutput, verifyErr := executeDockerProbeCleanupPhase(executor, timeout, listArgs...)
+		if verifyErr != nil {
+			problems = append(problems, fmt.Errorf("exact relist %s: %w: %s", label, verifyErr, strings.TrimSpace(verifyOutput)))
 			continue
 		}
-		identifiers := strings.Fields(output)
-		if len(identifiers) == 0 {
-			cancel()
+		remaining, identifierErr := validateDockerProbeContainerIdentifiers(verifyOutput)
+		if identifierErr != nil {
+			problems = append(problems, fmt.Errorf("exact relist %s: %w", label, identifierErr))
 			continue
 		}
-		if removeOutput, removeErr := dockerProbeOutput(ctx, append([]string{"rm", "--force"}, identifiers...)...); removeErr != nil {
-			t.Logf("remove Docker cleanup probe containers for %q: %v: %s", label, removeErr, strings.TrimSpace(removeOutput))
+		if len(remaining) != 0 {
+			problems = append(problems, fmt.Errorf("exact relist %s found residual containers: %s", label, strings.Join(remaining, ",")))
 		}
-		cancel()
 	}
+	return errors.Join(problems...)
+}
+
+func executeDockerProbeCleanupPhase(executor dockerProbeExecutor, timeout time.Duration, args ...string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return executor(ctx, args...)
+}
+
+func validateDockerProbeContainerIdentifiers(output string) ([]string, error) {
+	identifiers := strings.Fields(output)
+	for _, identifier := range identifiers {
+		if !regexp.MustCompile(`^[a-f0-9]{12,64}$`).MatchString(identifier) {
+			return nil, fmt.Errorf("invalid Docker probe container identifier %q", identifier)
+		}
+	}
+	return identifiers, nil
 }
 
 func argumentAfter(arguments []string, name string) string {
