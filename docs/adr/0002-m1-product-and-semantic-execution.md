@@ -4,22 +4,22 @@
 
 | 字段 | 值 |
 | --- | --- |
-| 版本 | 1.1.0 |
+| 版本 | 1.2.0 |
 | 状态 | Confirmed |
-| 最后更新 | 2026-08-12 |
-| 来源 | `docs/SSOT.md` v0.4.0 Confirmed |
-| 产品合同 | `docs/specs/product-prototype/product-design.md` v0.4.1 Confirmed |
+| 最后更新 | 2026-08-14 |
+| 来源 | `docs/SSOT.md` v0.7.0 Confirmed |
+| 产品合同 | `docs/specs/product-prototype/product-design.md` v0.4.2 Confirmed |
 | 前端基线 | `docs/specs/m1-semantic-registry/frontend-baseline-audit.md` |
-| 审核 | 2026-08-10 经创始人确认前端依赖、Cube Core 边界与后端依赖原则 |
+| 审核 | 2026-08-24 经创始人确认仓库优先接入、物理图谱与可选执行适配器边界 |
 | 实现闸门 | M0 通过 fresh-clone 验收并由创始人接受后，才创建 M1 Ready task |
 
 ## 1. 决策摘要
 
-M1 交付 Semantic Registry 的第一条生产纵向闭环：从真实 Cube 项目发现和导入语义模型，形成可搜索、可追溯、可版本化的资产目录、详情和有限关系图。M1 不提前实现 M2 的 AI 提案、验证和发布工作流，也不提前实现 M3 的 MCP 消费面。
+M1 交付企业语义资产平台的第一条生产纵向闭环：从真实仓库 Catalog、DDL/View SQL 和版本化 SQL/dbt 工件发现物理资产、血缘和语义证据，形成可搜索、可追溯、可版本化的物理图谱、语义候选、权威 Wiki 页面和有限本体关系图。M1 不提前实现 M2 的 AI 提案、JoinContract 发布和治理工作流，也不提前实现 M3 的 MCP 可信解析消费面。
 
 生产 Web 保持 React 19、TypeScript 和 Vite，采用 Tailwind CSS 4、shadcn/ui 源码组件、Radix primitives、Lucide、TanStack Router、TanStack Query、TanStack Table、TanStack Virtual、React Hook Form、Zod 和 react-i18next。组件库负责可访问交互原语，Semlia 自有设计 token、信息架构和高密度工作台布局保持规范来源。
 
-Cube Core 是独立部署的首选可执行语义内核，不是 Semlia 控制面框架，也不链接进 Go 二进制。Semlia 通过窄而类型化的 HTTP adapter 使用 Cube 公开模型与 Data API；Cube 负责模型编译、查询规划与执行、执行期访问控制和预聚合，Semlia 负责资产身份、来源证据、revision、审计以及后续里程碑中的提案、审核、release 和 binding。
+Cube Core 是可选的独立执行与验证适配器，不是 Semlia 控制面框架，也不链接进 Go 二进制。M1 的仓库接入、物理图谱、搜索和语义候选路径在未部署 Cube 时完整成立。客户启用 Cube 后，Semlia 通过窄而类型化的 HTTP adapter 使用公开模型与 API，并将诊断结果作为证据；查询执行能力在后续里程碑通过相同 adapter contract 接入。
 
 ## 2. Constitution Check
 
@@ -29,9 +29,9 @@ Cube Core 是独立部署的首选可执行语义内核，不是 Semlia 控制�
 | P-003 发布版本不可变 | M1 建立 revision 与基础 diff，不以 UI 临时状态代替版本事实 |
 | P-005 Git-native | 语义内容使用 Git，PostgreSQL 只保存控制面索引和事务状态 |
 | P-006 Headless first | OpenAPI 和生成类型仍是 Web 与控制面的公共边界 |
-| P-007 开放执行生态 | Cube 位于独立 adapter 边界，核心领域对象不引用 Cube 私有类型 |
-| P-008 默认安全 | 浏览器不直连 Cube；凭据、security context 和业务事实行不进入前端 |
-| P-009 可靠性优先 | 真实 Cube 合约测试、桌面视觉回归、WCAG 2.2 AA 和性能预算进入验收 |
+| P-007 开放执行生态 | 仓库与执行适配器位于独立边界，核心领域对象不引用 Cube 或仓库厂商私有类型 |
+| P-008 默认安全 | 浏览器不直连仓库或执行运行时；凭据、security context 和业务事实行不进入前端 |
+| P-009 可靠性优先 | 真实仓库接入、可选 adapter 合约测试、桌面视觉回归、WCAG 2.2 AA 和性能预算进入验收 |
 | P-010 可归因、可解释、保护隐私 | M1 只从真实服务端读取和搜索操作生成最小信号，状态事实可重建，不保存原始搜索文本或客户事实行 |
 
 Constitution violations: None.
@@ -40,10 +40,12 @@ Constitution violations: None.
 
 M1 includes:
 
-- Cube workspace 配置、连接检查、模型发现、增量扫描和可诊断的导入结果。
-- 语义资产目录、搜索、筛选、详情、owner、source、evidence、revision 和 audit trace。
+- 仓库只读元数据配置、连接检查、Catalog/DDL/View SQL 发现、增量扫描和可诊断的导入结果。
+- 版本化 SQL/dbt 工件导入，以及 PhysicalDataset、PhysicalField、CodeArtifact、LineageEdge、键、粒度和 JoinObservation。
+- 物理与语义资产目录、万表搜索、筛选、详情、owner、source、evidence、revision 和 audit trace。
 - 有界的一至三跳上游/下游关系视图，以及图形关系的等价文本摘要。
-- Git 内容存储、PostgreSQL 索引和真实 Cube 项目的集成验收。
+- Git 内容存储、PostgreSQL 索引和真实仓库与版本化转换工件的集成验收。
+- 可选 Cube 模型来源的独立 adapter 和 contract test，不作为 M1 核心验收前置条件。
 - 服务端生成的 `catalog.asset.read` 与 `catalog.search.completed` 信号，以及 definition、owner、evidence、source health 和 provenance 状态事实。
 
 M1 excludes:
@@ -51,7 +53,7 @@ M1 excludes:
 - AI 自动生成 proposal、结构化 patch、验证编排和 release policy；这些属于 M2。
 - 发布、rollback、consumer binding、MCP 和 Agent 查询消费；这些属于 M2/M3。
 - BI dashboard、Workbook、NL2SQL、聊天主界面和 Cube 运维界面。
-- dbt 正式适配器、通用数据目录、移动端和触控专用体验。
+- 大量浅层连接器、通用数据目录、移动端和触控专用体验。
 - 语义 resolution、consumer/release/binding 归因、综合质量评分、Attention Item、通用事件 ingest 和跨租户学习。
 
 ## 4. 前端技术决策
@@ -101,7 +103,7 @@ Decision:
 
 - M1 关系图默认采用 `@xyflow/react`，仅渲染服务端限制的一至三跳子图，并始终提供列表或关系摘要作为等价操作面。
 - 图谱模块按路由 lazy load，不进入首次工作台 shell bundle。
-- 任务开始前使用真实 Cube 样本执行节点数、边数、布局和交互基准。只有证据证明可见图规模超过 React Flow 的目标范围时，才单独评估 Cytoscape.js 或 WebGL 方案。
+- 任务开始前使用真实仓库与转换工件样本执行节点数、边数、布局和交互基准。只有证据证明可见图规模超过 React Flow 的目标范围时，才单独评估 Cytoscape.js 或 WebGL 方案。
 - 不同时安装 React Flow 与 Cytoscape.js，不在浏览器中加载完整企业关系图。
 
 ### TDR-013 前端质量与测试基线
@@ -122,50 +124,50 @@ Deferred:
 - `motion` 只在存在可中断、连续性要求高的复杂交互时引入；普通 hover、tab 和 dialog 使用 CSS 与 Radix 状态。
 - Next.js、MUI、Ant Design 和第二套通用组件系统不进入 M1。
 
-## 5. Cube Core 技术决策
+## 5. 来源与执行适配器技术决策
 
-### TDR-014 Cube Core 作为外部执行 adapter
+### TDR-014 仓库优先接入与可选执行 adapter
 
 Decision:
 
-- Cube Core 作为独立服务运行，可由固定版本与 digest 的容器、本地受控进程或兼容托管服务提供。
-- Semlia Go 控制面通过 `CubeAdapter` 应用边界调用 Cube 公开 REST/Meta API，不导入 Cube 私有包，也不复制 Cube compiler。
-- M1 adapter 覆盖 capability/health、metadata discovery、模型诊断和导入所需的最小 API；查询执行能力留在同一 adapter 边界，但不是 M1 产品 UI 的必需表面。
-- M2 的编译验证和 release gate、M3 的受约束查询消费复用该 adapter，不改变核心资产模型。
-- Adapter capability 按里程碑扩展：M1 实现 health/meta/diagnostic，M2 实现 compile/validate，M3 实现携带受约束 security context 的 query；不预建未进入范围的方法。
-- Semlia 输出到 Cube 的内容使用版本化、确定性序列化的 Cube YAML 或兼容模型工件。M1 importer 保留 source identity 与 canonical mapping，使后续 validation 和 release 可以复现同一模型。
-- 本地与 CI 使用可选 Cube Compose profile 运行真实集成套件；不依赖 Cube 的单元和领域测试保持可独立运行。
-- 浏览器首先只调用 Semlia API。Cube 凭据、安全上下文和内部 endpoint 不暴露给 Web。
+- M1 的规范来源路径由 `CatalogAdapter`、`TransformationAdapter` 和可选 `LineageAdapter` 组成，读取仓库 Catalog、DDL/View SQL、数据库约束、版本化 SQL/dbt 工件和已有血缘。
+- Adapter DTO 在 integration 边界终止，application service 将其映射为 `SourceRevision`、`PhysicalDataset`、`PhysicalField`、`CodeArtifact`、`LineageEdge` 和 `JoinObservation`。
+- 来源 adapter 必须返回稳定 source identity、revision、capability、diagnostic 和增量 fingerprint；不把仓库厂商私有类型写入领域模型。
+- Cube Core 通过独立 `CubeAdapter` 作为可选语义模型来源和执行运行时接入，不链接进 Go 二进制，不成为 M1 核心路径或本地启动前置条件。
+- M1 的 Cube capability 仅包含显式进入任务范围的 health、metadata 和 diagnostic；M2/M3 的 compile、validate 和 query 能力通过同一 adapter contract 按需扩展。
+- 浏览器只调用 Semlia API。仓库、Cube 和其他运行时的凭据、安全上下文与内部 endpoint 不暴露给 Web。
+- 本地与 CI 以真实仓库 fixture 验证核心路径；Cube 使用独立可选 profile、固定版本与 digest 验证，不依赖 Cube 的测试必须可独立通过。
 
 Integration contract:
 
-1. Semlia 读取经配置的 Cube 项目或版本化模型工件，生成稳定的 discovery input fingerprint。
-2. Adapter 调用 Cube health/metadata/diagnostic 能力，返回 Semlia 自有的类型化结果和稳定错误码。
-3. Import application service 把 Cube 名称和结构映射为引擎无关资产、关系、source evidence 和 revision。
-4. Git 保存规范内容，PostgreSQL 保存索引、run 状态、diagnostic 和 audit event。
-5. 集成测试使用固定 Cube image tag 与 digest、repository-local fixture 和可重复断言，不使用 `latest`。
+1. Semlia 对来源配置和 revision 生成稳定 discovery fingerprint。
+2. Adapter 返回能力声明、规范化 metadata、版本归因、可诊断错误和不包含事实明细的证据。
+3. Import service 幂等写入物理对象、血缘、知识块、证据和语义候选，并保留原始 source identity 映射。
+4. Git 保存规范语义内容；PostgreSQL 保存物理图谱、索引、run 状态、diagnostic 和 audit event；大型证据进入对象存储。
+5. 集成测试使用 repository-local fixture、固定 schema revision 和可重复断言；可选外部服务禁止使用 `latest`。
 
 Rationale:
 
-- Cube 已提供成熟的编译、查询、访问控制和预聚合能力，重新实现会扩大风险并偏离 Semlia 的控制平台定位。
-- 独立 adapter 保护 Go 模块化单体、Apache-2 开源边界和未来其他语义执行引擎的接入空间。
+- 企业的普遍冷启动输入是仓库元数据、SQL/dbt 工件和杂乱文档，而不是既有 Cube 项目。
+- 物理图谱是万表检索、物理绑定和 JoinContract 的必要基础，必须在执行引擎选择之前成立。
+- 独立 adapter 保护 Go 模块化单体、Apache-2 开源边界和不同仓库与执行运行时的接入空间。
 
 Alternatives considered:
 
+- 只从 Cube 导入：无法服务尚未采用 Cube、但拥有大量表和 SQL 的企业。
 - 把 Cube Core 链接进 Go 二进制：运行时和语言边界不匹配，升级与供应链耦合过强。
-- 在 Go 中重写 Cube compiler：成本高且会产生长期兼容性分叉。
-- 浏览器直连 Cube：短期少一跳，但泄露凭据和授权边界，并让 Web 绕过 Semlia 审计。
-- 不采用执行内核：无法验证发布语义是否可执行，也会迫使 Semlia 自建查询能力。
+- 在 Go 中重写查询编译器：成本高且会让 Semlia 偏离语义控制面定位。
+- 浏览器直连仓库或执行运行时：泄露凭据和授权边界，并绕过 Semlia 审计与策略。
 
 Risks and mitigations:
 
 | 风险 | 控制 |
 | --- | --- |
-| Cube API 或模型语法升级 | 固定版本与 digest，adapter contract tests，升级作为独立依赖 PR |
-| Cube 对象直接污染领域模型 | adapter DTO 在 integration 边界终止，application 层显式映射 |
+| 仓库方言和 metadata 差异 | capability contract、规范化 DTO、方言 fixture 和 conformance tests |
+| SQL 无法完整静态解析 | 保留原始证据与 unresolved 状态，确定性解析优先，禁止 LLM 推断静默升级为事实 |
+| 厂商或 Cube 对象污染领域模型 | adapter DTO 在 integration 边界终止，application 层显式映射 |
 | 大型项目扫描超时 | fingerprint 增量发现、后台 job、有界重试、可恢复 run 和分阶段 metadata |
-| 错误信息不可行动 | 稳定 Semlia error code 保留安全脱敏的 Cube diagnostic 与 trace ID |
-| 测试只验证 mock | CI integration profile 启动真实固定版本 Cube Core 并导入 fixture |
+| 测试只验证 mock | 核心路径使用真实数据库 fixture；可选运行时使用固定版本独立 profile |
 
 ## 6. 后端依赖原则
 
@@ -175,14 +177,16 @@ Risks and mitigations:
 
 | 能力 | 选择 | 最早里程碑 | 采用条件 |
 | --- | --- | --- | --- |
-| Cube integration | 标准库 HTTP client + 项目内窄 typed adapter | M1 | health、metadata、diagnostic 与真实 Cube contract test |
+| Catalog integration | 标准库 `database/sql` 或驱动提供的只读 metadata API + 项目内 typed adapter | M1 | Catalog、DDL、约束、增量 fingerprint 与真实数据库 fixture |
+| Transformation integration | 结构化 manifest/catalog parser 与按方言隔离的 SQL parser adapter | M1 | 版本化 dbt/SQL fixture、字段血缘和 unresolved 退化路径 |
+| Cube integration | 标准库 HTTP client + 项目内窄 typed adapter | M1 optional | health、metadata、diagnostic 与独立 Cube contract test |
 | Git content adapter | system Git 与 `go-git/v5` 二选一 | M1 spike | 比较 shallow clone、credentials、worktree、diff、跨平台和二进制体积后确认 |
 | S3/MinIO evidence | `github.com/aws/aws-sdk-go-v2` | 首个对象存储 task | evidence 大小与生命周期证明本地文件系统不足 |
 | MCP server/client | `github.com/modelcontextprotocol/go-sdk` | M3 | MCP consumption requirement Confirmed |
 | OIDC | `github.com/coreos/go-oidc/v3` + `golang.org/x/oauth2` | Auth milestone | 多用户认证和 provider contract Confirmed |
 | JSON Schema validation | `github.com/santhosh-tekuri/jsonschema/v6` | M2 | 校验 AI structured output 或版本化 schema |
 | Release policy | `github.com/google/cel-go` | M2 | policy language 与审计语义 Confirmed |
-| JWK/JWT | `github.com/lestrrat-go/jwx/v3` | Security context task | 内部 token、JWK rotation 或 Cube security context 进入范围 |
+| JWK/JWT | `github.com/lestrrat-go/jwx/v3` | Security context task | 内部 token、JWK rotation 或执行适配器 security context 进入范围 |
 | OTLP metrics/export | `go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp` 等官方 exporter | Observability task | collector endpoint 与生产 telemetry contract Confirmed |
 
 Deferred systems:
@@ -214,13 +218,14 @@ Rationale:
 M1 计划必须至少包含以下工作流，但在 M0 验收完成前保持规划态：
 
 1. M1 领域 schema、OpenAPI、错误模型和资产 revision 契约。
-2. Cube adapter spike、固定容器 contract test 和增量 discovery 设计。
-3. Git content adapter spike 与 PostgreSQL asset index。
+2. Catalog、DDL/View SQL 和 Transformation adapter spike，真实数据库 fixture、增量 discovery 与 unresolved 设计。
+3. 物理图谱 schema、Git content adapter spike 与 PostgreSQL 物理/语义 asset index。
 4. UsageEvent taxonomy、隐私/retention contract、M1 两个服务端 producer 和删除测试。
 5. 生产 Web shell、design tokens、Radix/shadcn primitives、router/query 和 i18n 基础。
 6. Source setup、discovery run、资产 catalog/detail、empty/error/running state。
 7. 有界关系图、文本 fallback、性能和无障碍验证。
-8. 真实 Cube fixture 的端到端导入、fresh-workspace 验收、信号归因和交付证据。
+8. 真实仓库与版本化 SQL/dbt fixture 的端到端导入、10,000 表检索基准、fresh-workspace 验收、信号归因和交付证据。
+9. 可选 Cube adapter 的独立 contract test，证明启用与未启用两种路径均不污染核心领域模型。
 
 M1 task 不得直接复制 `prototypes/product/**` 到 `web/**`。原型只提供产品合同和交互意图；生产实现必须按 feature 边界重建、使用生成 API 类型，并解决前端基线审计中的阻断问题。
 

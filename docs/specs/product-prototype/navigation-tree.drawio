@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="drawio" version="31.1.5">
+  <diagram name="Semlia Navigation">
+    <mxGraphModel dx="1920" dy="1080" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1920" pageHeight="1080" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="2" value="Semlia 产品菜单树" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#172033;strokeColor=#172033;fontColor=#FFFFFF;fontSize=22;fontStyle=1;arcSize=8;" vertex="1" parent="1"><mxGeometry x="760" y="20" width="400" height="58" as="geometry" /></mxCell>
+        <mxCell id="3" value="主功能区 · Rail 从上到下排列，可信知识从下向上形成" style="swimlane;startSize=42;container=1;pointerEvents=0;rounded=1;whiteSpace=wrap;html=1;fillColor=#F7F8FA;swimlaneFillColor=#FFFFFF;strokeColor=#DDE2EA;fontColor=#172033;fontSize=16;fontStyle=1;arcSize=4;" vertex="1" parent="1"><mxGeometry x="100" y="105" width="1720" height="750" as="geometry" /></mxCell>
+
+        <mxCell id="10" value="语义问答" style="swimlane;startSize=46;container=1;pointerEvents=0;rounded=1;whiteSpace=wrap;html=1;fillColor=#EEF3FF;swimlaneFillColor=#FFFFFF;strokeColor=#315FD5;fontColor=#172033;fontSize=15;fontStyle=1;arcSize=4;horizontal=0;" vertex="1" parent="3"><mxGeometry x="30" y="62" width="1660" height="92" as="geometry" /></mxCell>
+        <mxCell id="11" value="会话历史" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#DDE2EA;fontColor=#172033;fontSize=13;" vertex="1" parent="10"><mxGeometry x="80" y="18" width="470" height="56" as="geometry" /></mxCell>
+        <mxCell id="12" value="问题解析与回答" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#DDE2EA;fontColor=#172033;fontSize=13;" vertex="1" parent="10"><mxGeometry x="565" y="18" width="500" height="56" as="geometry" /></mxCell>
+        <mxCell id="13" value="引用、计划与证据" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#DDE2EA;fontColor=#172033;fontSize=13;" vertex="1" parent="10"><mxGeometry x="1080" y="18" width="550" height="56" as="geometry" /></mxCell>
+
+        <mxCell id="20" value="工作台" style="swimlane;startSize=46;container=1;pointerEvents=0;rounded=1;whiteSpace=wrap;html=1;fillColor=#F2F4F7;swimlaneFillColor=#FFFFFF;strokeColor=#7A8496;fontColor=#172033;fontSize=15;fontStyle=1;arcSize=4;horizontal=0;" vertex="1" parent="3"><mxGeometry x="30" y="166" width="1660" height="92" as="geometry" /></mxCell>
+        <mxCell id="21" value="我的工作" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#DDE2EA;fontColor=#172033;fontSize=13;" vertex="1" parent="20"><mxGeometry x="80" y="18" width="760" height="56" as="geometry" /></mxCell>
+        <mxCell id="22" value="活动与异常" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#DDE2EA;fontColor=#172033;fontSize=13;" vertex="1" parent="20"><mxGeometry x="855" y="18" width="775" height="56" as="geometry" /></mxCell>
+
+        <mxCell id="30" value="语义交付" style="swimlane;startSize=46;container=1;pointerEvents=0;rounded=1;whiteSpace=wrap;html=1;fillColor=#EAF7F2;swimlaneFillColor=#FFFFFF;strokeColor=#168A63;fontColor=#172033;fontSize=15;fontStyle=1;arcSize=4;horizontal=0;" vertex="1" parent="3"><mxGeometry x="30" y="270" width="1660" height="92" as="geometry" /></mxCell>
+        <mxCell id="31" value="交付通道" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#DDE2EA;fontColor=#172033;fontSize=13;" vertex="1" parent="30"><mxGeometry x="80" y="18" width="370" height="56" as="geometry" /></mxCell>
+        <mxCell id="32" value="消费者" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#DDE2EA;fontColor=#172033;fontSize=13;" vertex="1" parent="30"><mxGeometry x="465" y="18" width="370" height="56" as="geometry" /></mxCell>
+        <mxCell id="33" value="版本绑定" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#DDE2EA;fontColor=#172033;fontSize=13;" vertex="1" parent="30"><mxGeometry x="850" y="18" width="370" height="56" as="geometry" /></mxCell>
+        <mxCell id="34" value="解析与运行反馈" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#DDE2EA;fontColor=#172033;fontSize=13;" vertex="1" parent="30"><mxGeometry x="1235" y="18" width="395" height="56" as="geometry" /></mxCell>
+
+        <mxCell id="40" value="治理发布" style="swimlane;startSize=46;container=1;pointerEvents=0;rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF9E8;swimlaneFillColor=#FFFFFF;strokeColor=#B7791F;fontColor=#172033;fontSize=15;fontStyle=1;arcSize=4;horizontal=0;" vertex="1" parent="3"><mxGeometry x="30" y="374" width="1660" height="92" as="geometry" /></mxCell>
+        <mxCell id="41" value="变更事项" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#DDE2EA;fontColor=#172033;fontSize=13;" vertex="1" parent="40"><mxGeometry x="80" y="18" width="760" height="56" as="geometry" /></mxCell>
+        <mxCell id="42" value="发布记录" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#DDE2EA;fontColor=#172033;fontSize=13;" vertex="1" parent="40"><mxGeometry x="855" y="18" width="775" height="56" as="geometry" /></mxCell>
+
+        <mxCell id="50" value="知识资产" style="swimlane;startSize=46;container=1;pointerEvents=0;rounded=1;whiteSpace=wrap;html=1;fillColor=#F3F0FB;swimlaneFillColor=#FFFFFF;strokeColor=#7655B5;fontColor=#172033;fontSize=15;fontStyle=1;arcSize=4;horizontal=0;" vertex="1" parent="3"><mxGeometry x="30" y="478" width="1660" height="92" as="geometry" /></mxCell>
+        <mxCell id="51" value="最近打开 · 资产快捷入口" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#DDE2EA;fontColor=#172033;fontSize=13;" vertex="1" parent="50"><mxGeometry x="80" y="18" width="500" height="56" as="geometry" /></mxCell>
+        <mxCell id="52" value="默认工作面 · 知识目录（语义资产主行 / 关系与实现子对象）" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#DDE2EA;fontColor=#172033;fontSize=13;" vertex="1" parent="50"><mxGeometry x="595" y="18" width="1035" height="56" as="geometry" /></mxCell>
+
+        <mxCell id="60" value="数据接入" style="swimlane;startSize=46;container=1;pointerEvents=0;rounded=1;whiteSpace=wrap;html=1;fillColor=#EAF7F2;swimlaneFillColor=#FFFFFF;strokeColor=#168A63;fontColor=#172033;fontSize=15;fontStyle=1;arcSize=4;horizontal=0;" vertex="1" parent="3"><mxGeometry x="30" y="582" width="1660" height="92" as="geometry" /></mxCell>
+        <mxCell id="61" value="数据来源" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#DDE2EA;fontColor=#172033;fontSize=13;" vertex="1" parent="60"><mxGeometry x="80" y="18" width="760" height="56" as="geometry" /></mxCell>
+        <mxCell id="62" value="接入自动化" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#DDE2EA;fontColor=#172033;fontSize=13;" vertex="1" parent="60"><mxGeometry x="855" y="18" width="775" height="56" as="geometry" /></mxCell>
+
+        <mxCell id="70" value="平台管理" style="swimlane;startSize=40;container=1;pointerEvents=0;rounded=1;whiteSpace=wrap;html=1;fillColor=#F7F8FA;swimlaneFillColor=#FFFFFF;strokeColor=#DDE2EA;fontColor=#172033;fontSize=16;fontStyle=1;arcSize=4;" vertex="1" parent="1"><mxGeometry x="100" y="885" width="1720" height="150" as="geometry" /></mxCell>
+        <mxCell id="71" value="系统设置" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F2F4F7;strokeColor=#7A8496;fontColor=#172033;fontSize=15;fontStyle=1;arcSize=4;" vertex="1" parent="70"><mxGeometry x="30" y="58" width="280" height="60" as="geometry" /></mxCell>
+        <mxCell id="72" value="工作区与成员" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#DDE2EA;fontColor=#172033;fontSize=13;" vertex="1" parent="70"><mxGeometry x="330" y="58" width="300" height="60" as="geometry" /></mxCell>
+        <mxCell id="73" value="策略与权限" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#DDE2EA;fontColor=#172033;fontSize=13;" vertex="1" parent="70"><mxGeometry x="650" y="58" width="300" height="60" as="geometry" /></mxCell>
+        <mxCell id="74" value="密钥与凭据" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#DDE2EA;fontColor=#172033;fontSize=13;" vertex="1" parent="70"><mxGeometry x="970" y="58" width="300" height="60" as="geometry" /></mxCell>
+        <mxCell id="75" value="审计与运行设置" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#DDE2EA;fontColor=#172033;fontSize=13;" vertex="1" parent="70"><mxGeometry x="1290" y="58" width="380" height="60" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

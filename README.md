@@ -1,59 +1,64 @@
 # Semlia
 
-> **Semlia is an AI-first data semantics platform built on Cube's executable semantic layer and a living wiki for organizational meaning.**
+> **Semlia is an enterprise semantic asset platform that organizes business meaning as a living LLM Wiki and governed ontology.**
 >
-> **Semlia 是一个以 Cube Core 为可执行语义内核、以 LLM Wiki 为知识组织与协作范式的 AI-first 数据语义中台。**
+> **Semlia 是一个以 LLM Wiki 组织企业含义、以本体表达业务概念与关系的企业语义资产平台。**
 
-Semlia turns metrics, dimensions, business concepts, relationships, evidence, and consumption contracts into governed semantic assets that people, applications, and AI agents can understand and use together.
+Semlia governs business semantics as executable, testable, releasable software assets with explicit consumer compatibility constraints. It turns metrics, dimensions, business concepts, relationships, evidence, contracts, and quality signals into trusted assets that people, applications, and AI agents can use through stable headless interfaces.
 
-It combines three product ideas:
+It combines four product ideas:
 
-- **Executable semantics:** Cube Core compiles and executes governed semantic queries, access rules, and pre-aggregations.
 - **A living semantic wiki:** every semantic asset has an authoritative page for its meaning, calculation, owner, lineage, evidence, tests, history, consumers, and AI context.
-- **An AI-first governance lifecycle:** AI discovers gaps and proposes structured changes; policy, validation, evidence, and review determine what becomes published truth.
+- **A governed business ontology:** concepts, entities, metrics, relationships, constraints, and physical bindings form a shared machine-readable model of organizational meaning.
+- **A software-grade asset lifecycle:** AI can discover gaps and propose changes, while tests, policy, evidence, review, immutable releases, and compatibility contracts determine what becomes published truth.
+- **Trusted semantic resolution:** CLI, MCP, REST, SDKs, and events resolve released semantics to governed physical bindings and join contracts before optional execution adapters are invoked.
 
 > Project status: pre-alpha, under Private incubation. The M0 engineering foundation is implemented and is undergoing fresh-clone acceptance; M1 product capabilities are not implemented. The product prototype uses repository-local mock data and is isolated from the production runtime. This repository is not production-ready and does not yet operate as an active public community project.
 
 ## Product Positioning
 
-Semlia is the semantic knowledge and governance layer around an executable semantic core. It helps teams:
+Semlia is an enterprise semantic asset platform and governance control plane around executable semantic runtimes. It helps teams:
 
-1. discover existing semantics and supporting evidence;
+1. discover physical datasets, fields, SQL lineage, existing semantics, and supporting evidence;
 2. define metrics and business meaning as stable assets rather than prompt fragments;
-3. validate changes against schemas, references, Cube compilation, policies, and evaluation cases;
+3. validate changes against schemas, references, SQL, joins, grain, configured execution adapters, policies, and evaluation cases;
 4. review AI-generated proposals without allowing models to silently rewrite production truth;
 5. publish immutable semantic releases and bind consumers to explicit versions;
-6. serve the same released definitions, relationships, and evidence to people, applications, and AI agents;
+6. resolve the same released definitions, physical bindings, join contracts, and evidence for people, applications, and AI agents;
 7. improve semantic quality from usage, failures, drift, and incidents.
 
-Semlia is not a BI dashboard, a general data catalog, a text-to-SQL product, a data warehouse, or a new query execution engine.
+Semlia includes Governed Ask, a first-party reference interface for questions grounded in released knowledge and semantic assets. It is not a BI dashboard, workbook, unrestricted ChatBI, general-purpose text-to-SQL product, data warehouse, or new query execution engine.
 
-## Relationship With Cube
+## Execution Runtime Boundary
 
-Cube Core is Semlia's first executable semantic kernel, not a component Semlia intends to replace.
+Semlia does not require Cube to ingest warehouse metadata, build a physical graph, govern semantic assets, publish releases, or resolve a semantic query. Query execution is delegated through optional, capability-scoped adapters. Cube Core is one supported adapter for teams that already use it or need its compilation, access-control, and pre-aggregation capabilities.
 
 | Concern | Primary responsibility |
 | --- | --- |
-| Semantic model compilation and query planning | Cube Core |
-| Query execution, access enforcement, and pre-aggregations | Cube Core |
+| Warehouse catalog, DDL, SQL, lineage, keys, and grain discovery | Semlia source adapters |
+| Semantic query resolution, physical binding, and join planning | Semlia |
+| Plan policy, grain, fanout, compatibility, and capability validation | Semlia |
+| Semantic model compilation and query execution | Optional Cube or governed warehouse adapter |
+| Execution-time access enforcement and pre-aggregations | Configured execution runtime |
 | Stable semantic asset identity and living wiki pages | Semlia |
-| Discovery, evidence, ownership, and relationship graph | Semlia |
+| Physical graph, discovery, evidence, ownership, and relationship graph | Semlia |
 | AI proposals, validation orchestration, review, and policy | Semlia |
 | Immutable semantic releases, consumer bindings, and audit | Semlia |
-| Governed context and released facts for agents | Semlia, delegating metric execution to Cube Core |
+| Governed context and released semantics for agents and applications | Semlia, delegating only validated plans when execution is required |
 
-Semlia integrates through public Cube contracts and model artifacts. It does not fork Cube, duplicate its query runtime, or reproduce Cube's BI, dashboard, and conversational analytics surfaces. When an agent needs a metric result, Semlia resolves the governed asset, release, evidence, and policy context, then delegates execution to Cube Core through an adapter.
+Semlia integrates with execution runtimes through public contracts and versioned model or query-plan artifacts. It does not fork Cube, duplicate warehouse query runtimes, or reproduce BI, dashboard, workbook, or unrestricted conversational analytics surfaces. Governed Ask and external consumers use the same released definitions, ontology context, physical bindings, join contracts, evidence, and permitted execution capabilities.
 
-Cube Core is the first-priority integration, while Semlia's domain model remains engine-independent. Additional semantic runtimes can integrate through explicit adapter and validation contracts as real demand emerges.
+An agent cannot choose arbitrary physical tables, invent joins, or execute unrestricted SQL. Semlia first produces a release-bound resolved semantic plan and validates ambiguity, grain, cardinality, fanout, filters, authorization, compatibility, and adapter capabilities. Unresolved or unsafe plans are rejected or returned for clarification.
 
 ## Product Principles
 
 - Semantics are versioned assets, not prompt fragments.
+- Business semantics are governed like software: executable, testable, releasable, and compatibility-aware.
 - AI proposes changes; policy, evidence, and review determine what is published.
 - Every production semantic response resolves to an immutable release and revision.
 - Git stores reviewable semantic content; the product does not require users to understand Git.
 - REST is the canonical service contract; MCP is the primary agent interface.
-- Cube Core executes semantics; Semlia governs how semantic truth is formed, proven, released, and consumed.
+- Execution runtimes execute validated plans; Semlia governs how physical evidence and semantic assets are discovered, bound, joined, tested, released, resolved, and delivered.
 
 The canonical product and architecture contract lives in [docs/SSOT.md](docs/SSOT.md). The confirmed M0 plan and task graph are indexed in [docs/README.md](docs/README.md).
 

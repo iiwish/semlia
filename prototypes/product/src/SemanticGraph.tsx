@@ -1,4 +1,5 @@
 import { ArrowRight, Database, FileCheck2, Gauge, Users } from "lucide-react";
+import type { AssetRelation, AssetType } from "./types";
 
 interface SemanticGraphProps {
   mode: "coverage" | "lineage";
@@ -6,12 +7,36 @@ interface SemanticGraphProps {
   upstream?: string[];
   downstream?: string[];
   consumerName?: string;
+  assetType?: AssetType;
+  assetRevision?: string;
+  ontologyRevision?: string;
+  relations?: AssetRelation[];
 }
 
-export function SemanticGraph({ mode, assetName = "净收入", upstream = ["支付订单", "退款金额"], downstream = ["区域达成率"], consumerName = "Fluxale" }: SemanticGraphProps) {
+const relationLabels: Record<AssetRelation["type"], string> = {
+  measures: "衡量",
+  describes: "描述",
+  depends_on: "依赖",
+  derived_from: "派生自",
+  filters_by: "按其筛选",
+  synonym_of: "同义于",
+  contains: "包含",
+};
+
+function graphLabel(value: string, length = 15) {
+  return value.length > length ? `${value.slice(0, length)}…` : value;
+}
+
+function graphPositions(count: number) {
+  if (count <= 1) return [160];
+  if (count === 2) return [92, 228];
+  return [52, 160, 268];
+}
+
+export function SemanticGraph({ mode, assetName = "净收入", upstream = ["支付订单", "退款金额"], downstream = ["区域达成率"], consumerName = "Fluxale", assetType = "指标", assetRevision = "@12", ontologyRevision = "ontology:commerce@7", relations = [] }: SemanticGraphProps) {
   if (mode === "coverage") {
     return (
-      <div className="semantic-map" role="img" aria-label="语义覆盖关系图">
+      <div className="semantic-map" role="img" aria-label="物理映射关系图">
         <svg viewBox="0 0 900 390" aria-hidden="true">
           <defs>
             <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
@@ -25,91 +50,92 @@ export function SemanticGraph({ mode, assetName = "净收入", upstream = ["支�
           <path className="map-link trace-link trace-delay-4" markerEnd="url(#arrow)" d="M756 188 C800 188 816 188 852 188" />
           <g className="map-node source-node">
             <rect x="36" y="151" width="130" height="86" rx="8" />
-            <text x="54" y="179" className="map-kicker">SOURCE</text>
-            <text x="54" y="207" className="map-title">Cube Core</text>
-            <text x="54" y="226" className="map-meta">3 models · synced</text>
+            <text x="54" y="179" className="map-kicker">数据源</text>
+            <text x="54" y="207" className="map-title">src-ecommerce</text>
+            <text x="54" y="226" className="map-meta">revision 9f2e8a</text>
           </g>
           <g className="map-node domain-node">
             <rect x="328" y="49" width="138" height="86" rx="8" />
-            <text x="346" y="77" className="map-kicker">DOMAIN</text>
-            <text x="346" y="105" className="map-title">电商经营</text>
-            <text x="346" y="124" className="map-meta">58 assets · 96%</text>
+            <text x="346" y="77" className="map-kicker">物理对象</text>
+            <text x="346" y="105" className="map-title">analytics.orders</text>
+            <text x="346" y="124" className="map-meta">42 个字段 · 当前</text>
           </g>
           <g className="map-node domain-node attention-node">
             <rect x="328" y="243" width="138" height="86" rx="8" />
-            <text x="346" y="271" className="map-kicker">DOMAIN</text>
-            <text x="346" y="299" className="map-title">客户增长</text>
-            <text x="346" y="318" className="map-meta">41 assets · 84%</text>
+            <text x="346" y="271" className="map-kicker">物理对象</text>
+            <text x="346" y="299" className="map-title">dim_region</text>
+            <text x="346" y="318" className="map-meta">8 个字段 · 需重验</text>
           </g>
           <g className="map-node release-node">
             <rect x="618" y="145" width="138" height="86" rx="8" />
-            <text x="636" y="173" className="map-kicker">RELEASE</text>
-            <text x="636" y="201" className="map-title">2026.08.3</text>
-            <text x="636" y="220" className="map-meta">148 immutable assets</text>
+            <text x="636" y="173" className="map-kicker">绑定与 Join</text>
+            <text x="636" y="201" className="map-title">Binding Registry</text>
+            <text x="636" y="220" className="map-meta">139 已验证 · 4 待重验</text>
           </g>
           <g className="map-node consumer-node">
             <rect x="792" y="145" width="92" height="86" rx="8" />
-            <text x="808" y="173" className="map-kicker">BOUND</text>
-            <text x="808" y="201" className="map-title">3</text>
-            <text x="808" y="220" className="map-meta">consumers</text>
+            <text x="808" y="173" className="map-kicker">语义资产</text>
+            <text x="808" y="201" className="map-title">148</text>
+            <text x="808" y="220" className="map-meta">个稳定身份</text>
           </g>
         </svg>
         <div className="map-legend" aria-hidden="true">
-          <span><Database size={14} />数据源</span>
+          <span><Database size={14} />SourceRevision</span>
           <ArrowRight size={14} />
-          <span><Gauge size={14} />语义域</span>
+          <span><Gauge size={14} />物理对象</span>
           <ArrowRight size={14} />
-          <span><FileCheck2 size={14} />发布版本</span>
+          <span><FileCheck2 size={14} />Binding / JoinContract</span>
           <ArrowRight size={14} />
-          <span><Users size={14} />消费者</span>
+          <span><Users size={14} />语义资产</span>
         </div>
       </div>
     );
   }
 
+  const semanticUpstream = relations.filter((relation) => relation.type === "depends_on" || relation.type === "derived_from");
+  const semanticRelated = relations.filter((relation) => relation.type !== "depends_on" && relation.type !== "derived_from");
+  const leftNodes = [
+    ...semanticUpstream.map((relation) => ({ id: relation.id, label: relation.targetName, relation: relation.type === "derived_from" ? "派生输入" : "依赖输入", meta: `${relation.type} · ${relation.release}` })),
+    ...upstream.filter((name) => !semanticUpstream.some((relation) => relation.targetName === name)).map((name, index) => ({ id: `upstream-${index}`, label: name, relation: "上游输入", meta: "已解析依赖" })),
+  ].slice(0, 3);
+  const rightNodes = [
+    ...semanticRelated.map((relation) => ({ id: relation.id, label: relation.targetName, relation: relationLabels[relation.type], meta: `${relation.type} · ${relation.release}` })),
+    ...downstream.filter((name) => !semanticRelated.some((relation) => relation.targetName === name)).map((name, index) => ({ id: `downstream-${index}`, label: name, relation: "影响", meta: "下游资产依赖当前资产" })),
+  ].slice(0, 3);
+  const leftPositions = graphPositions(leftNodes.length);
+  const rightPositions = graphPositions(rightNodes.length);
+  const markerId = `lineage-arrow-${assetName.replace(/[^a-zA-Z0-9]/g, "") || "asset"}`;
+
   return (
-    <div className="lineage-map" role="img" aria-label={`${assetName} 血缘关系图`}>
-      <svg viewBox="0 0 800 330" aria-hidden="true">
+    <figure className="lineage-map ontology-lineage-map" aria-labelledby="ontology-lineage-caption">
+      <svg viewBox="0 0 960 372" role="img" aria-label={`${assetName} 的本体关系血缘图`}>
         <defs>
-          <marker id="lineage-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-            <path d="M 0 0 L 10 5 L 0 10 z" className="map-arrow" />
+          <marker id={markerId} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" className="ontology-lineage-arrow" />
           </marker>
         </defs>
-        <path className="map-link trace-link" markerEnd="url(#lineage-arrow)" d="M166 80 C250 80 250 155 320 155" />
-        <path className="map-link trace-link trace-delay-1" markerEnd="url(#lineage-arrow)" d="M166 246 C250 246 250 175 320 175" />
-        <path className="map-link trace-link trace-delay-2" markerEnd="url(#lineage-arrow)" d="M480 165 C548 165 548 78 626 78" />
-        <path className="map-link trace-link trace-delay-3" markerEnd="url(#lineage-arrow)" d="M480 165 C548 165 548 248 626 248" />
-        <g className="map-node source-node">
-          <rect x="32" y="42" width="134" height="76" rx="8" />
-          <text x="48" y="69" className="map-kicker">UPSTREAM</text>
-          <text x="48" y="94" className="map-title">{upstream[0] ?? "原始事实"}</text>
-          <text x="48" y="109" className="map-meta">metric · stable</text>
-        </g>
-        <g className="map-node source-node">
-          <rect x="32" y="208" width="134" height="76" rx="8" />
-          <text x="48" y="235" className="map-kicker">UPSTREAM</text>
-          <text x="48" y="260" className="map-title">{upstream[1] ?? "共享维度"}</text>
-          <text x="48" y="275" className="map-meta">measure · stable</text>
-        </g>
-        <g className="map-node release-node selected-node">
-          <rect x="320" y="121" width="160" height="88" rx="8" />
-          <text x="338" y="150" className="map-kicker">SELECTED ASSET</text>
-          <text x="338" y="179" className="map-title">{assetName}</text>
-          <text x="338" y="198" className="map-meta">published · trusted</text>
-        </g>
-        <g className="map-node consumer-node">
-          <rect x="626" y="40" width="142" height="76" rx="8" />
-          <text x="642" y="67" className="map-kicker">DOWNSTREAM</text>
-          <text x="642" y="92" className="map-title">{downstream[0] ?? "下游指标"}</text>
-          <text x="642" y="107" className="map-meta">metric · 3 consumers</text>
-        </g>
-        <g className="map-node consumer-node">
-          <rect x="626" y="210" width="142" height="76" rx="8" />
-          <text x="642" y="237" className="map-kicker">CONSUMER</text>
-          <text x="642" y="262" className="map-title">{consumerName}</text>
-          <text x="642" y="277" className="map-meta">locked release</text>
-        </g>
+        <text x="28" y="24" className="ontology-column-label">上游语义</text>
+        <text x="390" y="24" className="ontology-column-label">当前资产</text>
+        <text x="744" y="24" className="ontology-column-label">相关与下游</text>
+        {leftNodes.map((node, index) => {
+          const y = leftPositions[index];
+          return <g key={node.id}>
+            <path className={`ontology-lineage-link trace-delay-${Math.min(index, 4)}`} markerEnd={`url(#${markerId})`} d={`M228 ${y + 36} C300 ${y + 36} 302 186 370 186`} />
+            <text x="272" y={(y + 186) / 2 + 14} className="ontology-edge-label">{node.relation}</text>
+            <g className="lineage-node lineage-node-upstream"><title>{node.label} · {node.meta}</title><rect x="28" y={y} width="200" height="72" rx="7" /><text x="46" y={y + 23} className="lineage-node-kicker">语义资产</text><text x="46" y={y + 45} className="lineage-node-title">{graphLabel(node.label)}</text><text x="46" y={y + 62} className="lineage-node-meta">{graphLabel(node.meta, 23)}</text></g>
+          </g>;
+        })}
+        <g className="lineage-node lineage-node-current"><rect x="370" y="137" width="220" height="98" rx="7" /><text x="390" y="164" className="lineage-node-kicker">{assetType} · 当前 revision</text><text x="390" y="193" className="lineage-node-title lineage-node-title-current">{graphLabel(assetName, 17)}</text><text x="390" y="216" className="lineage-node-meta">{assetRevision} · {graphLabel(ontologyRevision, 24)}</text></g>
+        {rightNodes.map((node, index) => {
+          const y = rightPositions[index];
+          return <g key={node.id}>
+            <path className={`ontology-lineage-link trace-delay-${Math.min(index + leftNodes.length, 4)}`} markerEnd={`url(#${markerId})`} d={`M590 186 C658 186 660 ${y + 36} 732 ${y + 36}`} />
+            <text x="642" y={(y + 186) / 2 + 14} className="ontology-edge-label">{node.relation}</text>
+            <g className="lineage-node lineage-node-related"><title>{node.label} · {node.meta}</title><rect x="732" y={y} width="200" height="72" rx="7" /><text x="750" y={y + 23} className="lineage-node-kicker">{node.relation === "影响" ? "下游影响" : "本体关系"}</text><text x="750" y={y + 45} className="lineage-node-title">{graphLabel(node.label)}</text><text x="750" y={y + 62} className="lineage-node-meta">{graphLabel(node.meta, 23)}</text></g>
+          </g>;
+        })}
       </svg>
-    </div>
+      <figcaption id="ontology-lineage-caption"><span><i className="ontology-legend-upstream" />上游依赖</span><span><i className="ontology-legend-current" />当前资产</span><span><i className="ontology-legend-related" />本体关系与影响</span><code>{ontologyRevision}</code><span className="sr-only">消费者示例：{consumerName}</span></figcaption>
+    </figure>
   );
 }
