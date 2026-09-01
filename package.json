@@ -2,7 +2,7 @@
   "name": "semlia",
   "version": "0.0.0",
   "private": true,
-  "description": "AI-first semantic asset control plane",
+  "description": "Enterprise semantic asset platform for governed data and AI context",
   "license": "Apache-2.0",
   "packageManager": "pnpm@11.1.3",
   "engines": {

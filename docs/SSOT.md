@@ -4,14 +4,14 @@
 
 | 字段 | 值 |
 | --- | --- |
-| 文档版本 | 0.4.0 |
+| 文档版本 | 0.7.0 |
 | 状态 | Confirmed |
-| 最后更新 | 2026-08-12 |
+| 最后更新 | 2026-08-31 |
 | 产品名称 | Semlia |
-| 产品类别 | AI-first 数据语义中台 |
+| 产品类别 | 企业语义资产平台 |
 | 主要语言 | 英文产品标识，中文与英文文档 |
 | 维护者 | 创始人和 Semlia Core Maintainers |
-| 审核状态 | 2026-08-12 经创始人确认数据飞轮、私有孵化与完整核心产品闭环方向 |
+| 审核状态 | 2026-08-24 经创始人确认万表语义发现、可信查询解析、执行适配器可选化与风险分流式治理原则 |
 | 更新触发 | 产品边界、核心领域模型、发布治理、数据架构、安全承诺或开源策略发生实质变化 |
 
 本文档是 Semlia 的项目级单一事实来源。它定义产品是什么、为谁服务、哪些能力属于核心、系统如何构建，以及达到世界一流开源产品所必须满足的质量标准。
@@ -20,11 +20,11 @@
 
 ### 1.1 一句话定义
 
-Semlia 是一个以 Cube Core 为可执行语义内核、以 LLM Wiki 为知识组织与协作范式的 AI-first 数据语义中台。
+Semlia 是一个以 LLM Wiki 组织企业含义、以本体表达业务概念、关系与约束的企业语义资产平台。
 
-**Semlia is an AI-first data semantics platform built on Cube's executable semantic layer and a living wiki for organizational meaning.**
+**Semlia is an enterprise semantic asset platform that organizes business meaning as a living LLM Wiki and governed ontology.**
 
-Semlia 把指标、维度、业务概念、关系、证据和消费契约组织成可执行、可验证、可版本化，并可由人、应用与 AI Agent 共同维护和使用的语义资产。
+Semlia 把指标、维度、业务概念、关系、证据、契约和质量信号组织成可执行、可测试、可发布、可版本化且具有消费者兼容性约束的语义资产，并通过 CLI、MCP、API、SDK 和事件接口向人、应用与 AI Agent 交付。
 
 ### 1.2 使命
 
@@ -42,9 +42,25 @@ Semlia 成为语义资产领域的开放控制平面和事实协议：
 
 ### 1.4 产品本质
 
-Semlia 以 Cube Core 提供可执行语义，以 LLM Wiki 组织企业含义，并以语义资产生命周期连接二者。对话和 Agent 是交互方式，资产图谱、权威页面、治理工作流、不可变发布与消费契约才是产品核心。
+Semlia 以 LLM Wiki 组织人类可理解的企业含义，以物理数据图谱承载表、字段、SQL、血缘和 Join 证据，以受治理的本体表达机器可理解的业务概念、关系、约束与物理绑定，并以语义资产生命周期连接发现、治理、契约、质量与交付。查询执行通过可选适配器委托给外部运行时，不构成 Semlia 控制面的前置条件。
+
+Semlia 把业务语义当作可执行、可测试、可发布、具有消费者兼容性约束的软件资产来治理。Web 产品以可信语义问答作为高频入口，并提供知识与语义编辑、治理和发布工作台；CLI、MCP、API、SDK 和事件负责无头交付。通用 ChatBI、看板、Workbook 和任意 NL2SQL 体验不是 Semlia 的产品本体。
 
 LLM Wiki 是由人类与 AI 协作维护的活语义知识系统，不是由模型自由改写的文档集合。每个资产都有一个权威页面，集中呈现定义、计算口径、所有者、血缘、证据、测试、变更历史、使用情况、风险和适合 AI 使用的上下文。AI 负责发现缺口、建立候选关系和生成结构化提案，发布事实仍由验证、策略和审核决定。
+
+Knowledge Block 是从数据库结构、模型定义、业务文档、血缘、查询摘要和授权样本中抽取的最小可引用知识单元。它携带来源、范围、版本、证据权威类型、置信度和关联对象，不替代物理资产或可执行语义资产，也不直接把原始事实行暴露给 LLM。
+
+Semlia 的端到端知识链路采用五层模型：
+
+| 层级 | 名称 | 核心职责 | 主要产物 |
+| --- | --- | --- | --- |
+| L1 | 来源层 | 以只读、最小权限连接仓库 Catalog、DDL/View SQL、dbt/ETL、血缘、业务文档、查询摘要、受控样本和可选语义运行时 | `DataSource`、`SourceRevision`、`DataContract` |
+| L2 | 物理图谱与证据层 | 增量解析表、字段、代码、血缘、键、粒度和 Join 观察，并保留来源、范围、时间、权威类型和置信度 | `PhysicalDataset`、`PhysicalField`、`CodeArtifact`、`LineageEdge`、`KnowledgeBlock`、`Evidence` |
+| L3 | 语义知识层 | 将证据组织为稳定语义身份、权威 Wiki、本体、物理绑定、模型粒度和受治理 Join | `SemanticAsset`、`AssetRevision`、`Ontology`、`PhysicalBinding`、`JoinContract` |
+| L4 | 治理与发布层 | 对变化执行确定性验证、风险评估、策略路由、审核和不可变发布 | `Proposal`、`ValidationRun`、`RiskAssessment`、`Release` |
+| L5 | 解析、交付与反馈层 | 基于明确 release 解析语义、物理绑定和 Join，通过 Web Ask、CLI、MCP、API、SDK 和事件交付，并收集可归因反馈 | `SemanticQuery`、`ResolvedSemanticPlan`、`Binding`、`UsageEvent`、`AttentionItem` |
+
+五层是领域责任和信任边界，不等同于 UI 步骤或五个部署服务。用户旅程仍按接入、发现、定义、治理、发布、解析、消费和反馈展开。层间只传递带 workspace、来源和版本归因的结构化对象；L1/L2 的观察和候选内容、L3 的草稿或 AI 输出都不能绕过 L4 成为 L5 的生产事实。完整可视化见 [知识与治理架构图](./architecture/knowledge-governance.html)。
 
 ### 1.5 可信学习飞轮
 
@@ -64,6 +80,7 @@ Semlia 不把“收集更多数据”本身当作产品优势。它把每次发�
 ### 2.1 解决的问题
 
 - 指标和业务概念散落在 SQL、BI 看板、数据模型、文档和个人经验中。
+- 企业拥有成千上万张表时，用户和 Agent 难以稳定找到正确表、字段、口径、粒度和 Join 路径。
 - 同名指标存在不同口径，变更缺少影响分析和消费者通知。
 - 数据目录描述“有什么”，但通常不能保证“应该如何理解和使用”。
 - 自然语言问数依赖临时 Prompt 和模型猜测，缺少稳定语义与证据。
@@ -72,51 +89,57 @@ Semlia 不把“收集更多数据”本身当作产品优势。它把每次发�
 
 ### 2.2 差异化
 
-Semlia 的差异化不来自更强的 NL2SQL，而来自以下闭环：
+Semlia 的差异化不来自更强的 NL2SQL、另一个查询引擎或被动元数据目录，而来自将业务语义作为软件资产治理的闭环：
 
 1. 从现有系统发现语义和证据。
-2. 由 AI 生成结构化提案，而不是直接改写生产事实。
-3. 使用规则、编译、查询和评测验证提案。
-4. 按资产风险执行分级审核与发布策略。
-5. 将不可变语义版本提供给人、应用与 Agent 消费。
-6. 根据真实使用、事故和反馈持续改进资产质量。
+2. 从表、字段、SQL、血缘、键和查询观察构建可追溯物理图谱。
+3. 由 AI 生成结构化提案，而不是直接改写生产事实。
+4. 使用规则、编译、查询和评测验证提案。
+5. 按变更级风险执行自动、批量或专家审核，并由版本化策略决定发布权限。
+6. 发布不可变语义资产 revision、物理绑定和 JoinContract，以发布批次记录操作来源，并将消费者绑定到明确资产版本契约。
+7. 将业务问题解析为可解释、可拒绝、可验证的 ResolvedSemanticPlan 后再委托执行。
+8. 根据真实使用、质量信号、事故和反馈持续改进资产质量。
 
 ### 2.3 产品边界
 
 Semlia 是：
 
-- 以 Cube Core 可执行语义层和 LLM Wiki 为基础的 AI-first 数据语义中台。
-- 语义资产注册表和关系图谱。
+- 以 LLM Wiki、受治理本体和软件资产生命周期为核心的企业语义资产平台。
+- 语义资产目录、权威 Wiki、本体与关系图谱。
 - AI 辅助的语义工程工作台。
-- 语义治理、验证、审核、发布和回滚系统。
-- 面向应用和 Agent 的语义服务层。
-- Cube Core 的首选语义治理控制面，同时保持执行引擎可插拔。
+- 基于已发布知识、可执行语义和来源引用的可信语义问答界面。
+- 语义治理、契约、质量、验证、审核、发布和回滚系统。
+- 通过 CLI、MCP、API、SDK 和事件面向应用与 Agent 提供的无头语义交付层。
+- 面向仓库、dbt/ETL、文档、血缘系统和可选语义运行时的引擎无关控制面。
 
 Semlia 不是：
 
 - BI 看板或通用数据可视化产品。
+- 通用 ChatBI、Workbook、任意 NL2SQL 或不受 release 与证据约束的问数体验。
 - 自然语言转 SQL 产品。
 - 数据仓库、湖仓、ETL 或数据同步平台。
 - 只收集元数据而不管理语义生命周期的通用数据目录。
 - 新的查询执行引擎或 Cube Core 替代品。
+- 通用数据质量、Pipeline Observability 或数据副本管理平台。
 - 默认允许 AI 无约束修改和发布生产语义的自动化工具。
 
 ### 2.4 产品组合
 
 | 产品 | 定位 | 关系 |
 | --- | --- | --- |
-| Semlia | AI-first 数据语义中台和开源语义治理层 | 组织企业含义，管理语义资产的发现、验证、审核、发布与消费 |
-| Cube Core | 首选可执行语义内核 | 负责编译、查询执行、访问控制和预聚合，执行 Semlia 发布的兼容语义模型 |
-| Fluxale | Agent BI 和参考消费端 | 作为 Semlia 的首个真实消费者和体验验证场 |
+| Semlia | 企业语义资产平台 | 组织企业含义与本体，管理语义资产的目录、治理、契约、质量、验证、发布与无头交付 |
+| Cube Core | 可选语义执行与验证适配器 | 在客户已经采用 Cube 或需要其运行能力时，编译、验证并执行 Semlia 发布的兼容语义模型 |
+| Warehouse query engine | 可选受控 SQL 执行适配器 | 在策略允许时执行由已发布资产、物理绑定和 JoinContract 约束的查询计划 |
+| Fluxale | 外部 Agent BI 和参考消费端 | 通过 Semlia 的无头接口消费已发布语义，承载不属于 Semlia 的终端分析体验 |
 
-### 2.5 Cube 集成边界
+### 2.5 执行适配器边界
 
-- Cube Core 负责语义模型编译、查询规划、查询执行、执行期访问控制和预聚合；Semlia 不复制这些运行时能力。
-- Semlia 负责稳定语义资产身份、LLM Wiki、发现、证据、关系、AI 提案、验证编排、审核策略、不可变 release、消费者 binding 和审计。
-- Semlia 通过公开 Cube 合约和模型工件集成，不 fork Cube，也不依赖 Cube 私有实现。
-- Agent 请求指标结果时，Semlia 解析已发布资产、release、证据和策略上下文，再通过适配器将执行委托给 Cube Core。
-- Cube 的 BI、Dashboard、Workbook、对话分析和执行运维界面不属于 Semlia 产品范围。
-- Cube Core 是第一优先级集成。Semlia 的核心领域模型保持引擎无关，其他语义运行时只在真实需求出现后通过明确适配器接入。
+- Semlia 负责稳定语义身份、LLM Wiki、物理图谱、证据、物理绑定、JoinContract、可信解析、验证编排、审核策略、不可变 release、消费者 binding 和审计。
+- Semlia 不自建 OLAP、SQL 编译器或查询运行时；执行由满足 adapter contract 的 Cube Core、仓库查询引擎或其他受控运行时承担。
+- 数据接入、资产治理、搜索、解析和发布不要求部署 Cube，也不要求在 Go 二进制中嵌入任何外部执行引擎。
+- 请求需要数值结果时，Semlia 先生成绑定明确 release 的 `ResolvedSemanticPlan`，验证资产、字段、粒度、Join、过滤、权限、兼容性和成本，再通过适配器委托执行。
+- LLM 只参与意图理解、候选召回和结果解释；不能绕过已发布资产自由选择物理表、构造 Join 或执行任意 SQL。
+- Cube 通过公开合约和模型工件作为可选外部服务接入。Semlia 不 fork Cube、不依赖其私有实现，也不复制其 BI、Dashboard、Workbook 或运维界面。
 
 ## 3. 产品原则
 
@@ -146,7 +169,7 @@ AI 的每次写入都必须形成可审计提案。是否允许自动发布由�
 
 ### P-007 开放执行生态
 
-Cube Core 是第一优先级集成，不将 Semlia 核心领域模型绑定到单一执行引擎。适配器通过明确契约接入。
+Semlia 的核心领域模型和首个可信资产闭环不绑定单一执行引擎。Cube、仓库 SQL 引擎和其他运行时只通过明确、可测试的适配器契约接入。
 
 ### P-008 默认安全和最小数据暴露
 
@@ -160,6 +183,14 @@ Semlia 默认只读取元数据、语义定义和受控样本，不复制客户�
 
 质量信号必须关联到明确的 workspace 和发生时间，并在相关能力存在时关联 asset、revision、release、consumer；zero-result 等无法归因的结果保留稳定 reason code，不伪造关联。信号保留产生质量结论所需的规则版本和证据窗口。默认不采集客户事实明细、完整查询结果、原始 Prompt 或可恢复敏感业务逻辑的原始 SQL。确定性规则先产生可重算特征，AI 只解释信号或生成受治理的 Proposal。
 
+### P-011 业务语义按软件资产治理
+
+每个生产语义资产必须可通过执行引擎或确定性验证器验证，具有可重现的测试与证据，通过不可变 release 发布，并声明消费者兼容性、迁移和废弃约束。文档页面、本体节点或 AI 输出不能绕过该生命周期成为生产事实。
+
+### P-012 可信解析优先于自由生成
+
+Agent 不得直接在原始 schema 上自由选表、选择口径或拼接 Join。生产查询只能引用已发布语义资产、物理绑定和 JoinContract，并形成可验证、可解释的 `ResolvedSemanticPlan`；存在歧义、证据不足、粒度冲突或未发布 Join 时，系统必须拒绝执行或请求澄清。
+
 ## 4. 目标用户
 
 ### U-001 语义负责人
@@ -168,7 +199,7 @@ Semlia 默认只读取元数据、语义定义和受控样本，不复制客户�
 
 ### U-002 分析工程师
 
-分析工程师维护 Cube、dbt 或 SQL 模型，希望自动发现语义、验证变更、分析影响并减少重复文档工作。
+分析工程师维护仓库、dbt、ETL SQL、Cube 或其他语义模型，希望自动发现语义、验证变更、分析影响并减少重复文档工作。
 
 ### U-003 AI 与应用工程师
 
@@ -187,7 +218,7 @@ Semlia 默认只读取元数据、语义定义和受控样本，不复制客户�
 ### J-001 建立工作区
 
 1. 管理员创建工作区并配置身份、角色和默认发布策略。
-2. 用户连接 Git 仓库、Cube 项目和数据仓库元数据访问凭据。
+2. 用户连接 Git 仓库、数据仓库只读元数据、转换代码和已有文档；Cube 等执行运行时按需配置。
 3. Semlia 只请求完成发现与验证所需的最小权限。
 4. 系统执行连接检查并生成可审计的首次扫描记录。
 
@@ -195,12 +226,13 @@ Semlia 默认只读取元数据、语义定义和受控样本，不复制客户�
 
 ### J-002 发现与导入语义
 
-1. 连接器读取 Cube YAML、数据库结构、查询样本和已有文档。
-2. 系统建立物理字段、模型、维度、度量、指标和业务概念之间的候选关系。
-3. AI 为缺失描述、同义词、负责人、测试和关系生成带证据的提案。
-4. 用户按风险和影响范围批量处理提案。
+1. 连接器读取仓库 Catalog、DDL/View SQL、dbt/ETL 工件、血缘、查询摘要、已有文档和可选 Cube 模型。
+2. 系统建立表、字段、代码、血缘、键、粒度和 Join 观察组成的物理图谱。
+3. 系统将来源内容拆成带权威类型、范围、版本和置信度的 Knowledge Block 与 Evidence。
+4. AI 为缺失描述、同义词、负责人、物理绑定、测试和 JoinContract 生成带字段级证据的候选提案。
+5. 用户按风险和影响范围确认或修正候选，不完整和冲突字段保持未解析。
 
-成功结果：现有语义被结构化导入，来源和不确定项清晰可见。
+成功结果：现有物理资产和语义被结构化导入，任何候选定义、绑定和 Join 的来源、冲突与不确定项清晰可见。
 
 ### J-003 定义和审核资产
 
@@ -220,14 +252,17 @@ Semlia 默认只读取元数据、语义定义和受控样本，不复制客户�
 
 成功结果：任何发布都可复现，任何消费结果都能追溯到具体版本。
 
-### J-005 面向应用和 Agent 消费
+### J-005 可信问答与面向应用和 Agent 的交付
 
-1. 消费者使用稳定 ID 和 release 约束请求语义。
-2. Semlia 根据身份、策略和用途返回允许访问的定义、关系和证据。
-3. MCP 以只读资源和受控工具向 Agent 提供上下文。
-4. 写操作默认创建提案，不能通过 MCP 直接绕过治理发布。
+1. 用户通过 Web Ask 提问，或消费者通过 CLI、MCP、API、SDK 使用稳定 ID 和 release 约束请求语义。
+2. Semlia 根据身份、策略、用途和稳定 release 检索允许访问的语义资产、关系、物理绑定、JoinContract 和证据。
+3. 语义解析器输出候选解释；只有唯一或经用户澄清的解释才能形成 `ResolvedSemanticPlan`。
+4. 计划验证器检查粒度、基数、扇出、时间字段、过滤、权限、兼容性和成本；失败或证据不足时拒绝执行。
+5. 需要数值结果时，Semlia 通过可选执行适配器将已验证计划委托给 Cube 或受控仓库查询引擎，再由 LLM 解释结果、口径和引用。
+6. MCP 向 Agent 提供同一套只读发布上下文和受控解析、规划、验证工具，不提供自由 SQL 执行能力。
+7. 问答中发现的知识缺口和所有写操作默认创建提案，不能绕过治理发布。
 
-成功结果：不同产品使用相同语义事实，并能解释内容来自哪里。
+成功结果：Semlia Web 与外部产品使用相同的已发布语义事实，每条回答都能解释资产、表字段、Join、数值、口径、证据和版本来自哪里；不确定问题被安全拒绝或澄清。
 
 ### J-006 反馈与持续治理
 
@@ -242,23 +277,36 @@ Semlia 默认只读取元数据、语义定义和受控样本，不复制客户�
 
 ## 6. 核心能力地图
 
-### C-001 语义注册表与活的 Wiki
+### C-001 语义资产目录、本体与活的 Wiki
 
 - 稳定资产 ID、别名和命名空间。
 - 结构化定义与适合人类阅读的页面。
+- 主要语义资产类型固定为业务概念、业务实体、语义模型、维度、度量、指标和分群；类型按业务身份定义，不按来源系统或实现技术定义。
+- `policy`、`contract`、`test` 是可寻址治理对象；语义关系、PhysicalBinding、JoinContract、KnowledgeBlock、Evidence 和 OntologyRevision 是独立支撑对象，不进入主要资产类型枚举。
+- 七种主要资产及其类型化关系、约束与物理数据绑定共同构成受治理本体和可执行语义层。
+- 资产详情使用“概览、定义、本体关系、实现、可信度、交付与影响”六个任务视图；没有物理实现能力的业务概念隐藏“实现”。
+- 每种主要资产由版本化 `AssetTypeProfile` 定义内容模板、关系政策、实现要求、发布门禁与空状态；类型验证必须可解释、可复现并输出直接修复建议。
 - 所有者、标签、状态、可信度和认证标识。
 - 血缘、依赖、证据、测试、消费者和历史。
 - 精确、模糊、结构化和语义检索。
 
 ### C-002 发现与连接器
 
-- Cube schema 双向适配器。
-- 数据库和仓库元数据扫描。
-- dbt manifest/catalog 导入作为第二优先级适配器。
-- SQL、文档和查询日志证据提取。
+- 数据库和仓库 Catalog、DDL、View 定义和约束扫描。
+- dbt manifest/catalog/compiled SQL 与通用 ETL SQL 工件导入。
+- 血缘系统、业务文档、查询摘要和授权样本证据提取。
+- Cube schema 作为可选语义模型来源和执行适配器。
 - 增量扫描、差异检测和来源可追溯性。
 
-### C-003 AI 语义工程 Agent
+### C-003 物理图谱、绑定与 JoinContract
+
+- 表、字段、代码工件、血缘边、键、分区、时间字段和模型粒度的一等对象。
+- 语义资产到物理字段或表达式的版本化 `PhysicalBinding`。
+- 区分数据库约束、SQL 推导、查询观察和 LLM 推断的 Join 候选。
+- 发布级 `JoinContract`，声明连接键、基数、左右粒度、必要过滤、扇出风险、有效范围、证据和验证状态。
+- 对物理变更执行绑定失效、Join 影响和消费者兼容性分析。
+
+### C-004 AI 语义工程 Agent
 
 - 缺失语义补全。
 - 重复与冲突检测。
@@ -267,7 +315,7 @@ Semlia 默认只读取元数据、语义定义和受控样本，不复制客户�
 - 兼容性和影响分析解释。
 - 批量提案、失败恢复和人工接管。
 
-### C-004 治理与审核
+### C-005 治理与审核
 
 - 基于资产、工作区和环境的发布策略。
 - 所有者、审核人和职责分离。
@@ -275,16 +323,19 @@ Semlia 默认只读取元数据、语义定义和受控样本，不复制客户�
 - 分级 AI 自主权。
 - 完整审计、回滚和紧急变更流程。
 
-### C-005 验证与评测
+### C-006 验证与评测
 
 - Schema 和引用完整性检查。
-- Cube 编译和查询 dry-run。
+- Schema、SQL、Cube 或其他已配置运行时的编译和查询 dry-run。
 - 数据质量、边界值和一致性测试。
 - Breaking change 检测。
 - 策略和权限检查。
 - 面向 Agent 的语义检索与回答评测集。
+- 面向表选择、物理绑定、Join 路径、粒度冲突和安全拒绝的黄金评测集。
 
-### C-006 发布与注册
+Semlia 管理定义完整度、证据新鲜度、本体一致性、可执行性、测试覆盖、版本兼容性和消费健康等语义质量。底层数据分布、Pipeline Observability 和数据副本监测可由外部质量系统执行；Semlia 编排检查并将结果作为可追溯证据，不重复实现通用数据可观测平台。
+
+### C-007 发布与注册
 
 - 不可变 release 和 manifest。
 - 语义化版本与兼容性声明。
@@ -292,16 +343,17 @@ Semlia 默认只读取元数据、语义定义和受控样本，不复制客户�
 - 发布签名、校验和与供应链元数据。
 - 消费者绑定与变更通知。
 
-### C-007 消费接口
+### C-008 可信解析与无头语义交付
 
 - REST API 作为规范服务契约。
 - MCP 作为 AI Agent 首选接口。
+- 语义查询解析、候选解释、物理绑定、Join 规划、计划验证和拒绝原因。
 - CLI 作为本地开发和 CI 接口。
 - TypeScript SDK；其他语言客户端通过同一 OpenAPI 契约按需求生成。
 - Webhook 和事件订阅。
-- 可导出的 Cube、JSON 和 Markdown 工件。
+- 可导出的 JSON、Markdown、Cube 和其他适配器模型工件。
 
-### C-008 可观测性与反馈
+### C-009 可观测性与反馈
 
 - 资产发现、解析、搜索、使用、错误、反馈和事故事件。
 - 变更影响、废弃进度和消费者健康。
@@ -318,17 +370,44 @@ Semlia 默认只读取元数据、语义定义和受控样本，不复制客户�
 | --- | --- |
 | Workspace | 隔离权限、策略、资产和发布的租户边界 |
 | Repository | 承载语义文件和发布引用的 Git 仓库 |
-| DataSource | Cube、仓库、dbt 或其他发现来源 |
+| DataSource | 仓库、转换工程、文档、血缘系统、查询摘要、Cube 或其他发现来源 |
+| SourceRevision | 来源在特定扫描、提交、快照或内容哈希下的不可变版本 |
+| PhysicalDataset | 表、视图、物化视图、逻辑模型或其他可寻址数据集 |
+| PhysicalField | 属于明确 PhysicalDataset revision 的字段、类型、约束、分区和技术描述 |
+| CodeArtifact | 定义或处理数据集的 DDL、View SQL、dbt model、ETL SQL 或版本化代码工件 |
+| LineageEdge | 带来源、方向、字段映射、有效时间和置信度的数据集或字段血缘 |
+| KnowledgeBlock | 从明确 SourceRevision 抽取的最小可引用知识单元，包含范围、权威类型、证据、置信度和关联对象，不直接等同于生产事实 |
+| Ontology | 在明确领域和版本下组织业务概念、关系、约束与物理绑定的机器可理解模型 |
+| OntologyRevision | 一个领域本体的不可变版本，固定节点成员、RelationType 约束、一致性结果和 release 范围 |
+| OntologyMembership | 将稳定语义资产及其明确 revision 投影到领域本体节点，并记录领域路径和概念层级 |
+| RelationTypeSpec | 声明本体关系的方向、逆关系、允许的端点类型、基数和推理特征 |
 | SemanticAsset | 具有稳定 ID 的语义身份 |
 | AssetRevision | 资产在特定内容哈希下的不可变版本 |
-| AssetRelation | 两个资产或资产与物理引用之间的有类型关系 |
-| Evidence | 支持定义、提案或验证结论的可追溯材料 |
+| LLMWikiContext | 从明确资产 revision 编译的 AI 可用上下文，包含权威摘要、检索词、消歧规则、示例和典型问题 |
+| OwnershipAssignment | 在明确有效时间内把 owner、maintainer、reviewer 或 steward 职责绑定到稳定资产或语义域 |
+| AssetRelation | 两个语义资产之间的有类型关系 |
+| PhysicalBinding | 语义资产 revision 到物理字段、表达式、时间字段和适用粒度的版本化绑定 |
+| ModelGrain | 数据集或语义模型中一行所代表的业务实体、键和时间范围 |
+| EntityKey | 实体在明确数据集中的候选键、约束来源和唯一性验证结果 |
+| JoinObservation | 从数据库约束、代码、血缘、查询历史或模型推断出的 Join 候选，不直接授权生产使用 |
+| JoinContract | 经治理发布的连接契约，声明端点、键表达式、基数、粒度影响、必要过滤、有效范围、证据和风险 |
+| Claim | 资产 revision 中需要治理的字段级主张，使用稳定 field path 和值摘要定位具体结论 |
+| Evidence | 支持定义、绑定、Join、提案或验证结论的不可变可追溯材料，必须声明权威类型、来源 revision、适用范围和观察时间 |
+| ClaimEvidenceLink | 声明证据支持或反驳哪一项 Claim，以及证据在该主张中的作用强度 |
 | Proposal | 针对一个基础版本的结构化变更建议 |
 | Review | 人或受控 AI 审核者对提案的决策 |
+| ValidationSpec | 声明可重复执行的验证器、输入约束、通过条件和规范版本 |
 | ValidationRun | 一组可复现验证器的输入、输出和证据 |
-| Release | 一组不可变资产版本及其兼容性和策略结果 |
+| RiskAssessment | 针对一个具体变更集、基于版本化规则和证据生成的可重算风险结论与治理通道路由 |
+| Release | 一次受治理的发布批次，记录签名、策略结果和不可变 manifest；不替代 `SemanticAsset ID + AssetRevision` 这一资产版本标识 |
+| ReleaseManifestEntry | 固定单个资产 revision、PhysicalBinding、JoinContract、验证结果和兼容性结论的发布清单项 |
+| EnvironmentDeployment | 环境当前指向 release 的可审计指针；切换或回滚不修改 release 与 AssetRevision 历史 |
+| DataContract | 定义 schema、语义、质量、时效、SLA、安全和使用约束的生产者契约 |
+| SemanticQuery | 经身份、用途、时间范围和 release 约束的结构化业务查询意图 |
+| ResolvedSemanticPlan | 将 SemanticQuery 解析为明确资产、物理绑定、JoinContract、过滤和执行适配器能力的可解释计划 |
+| QueryValidationRun | 对解析计划的权限、粒度、基数、扇出、过滤、兼容性、成本和执行能力进行的可复现验证 |
 | Consumer | 使用 Semlia 语义的应用、Agent、团队或服务 |
-| Binding | 消费者与特定 release 或版本范围之间的契约 |
+| Binding | 消费者与特定语义资产 revision 或兼容版本范围之间的消费契约，包含发布批次溯源、兼容、迁移与废弃约束 |
 | UsageEvent | 在真实产品操作中产生、append-only 且带版本归因的读取、搜索、解析、失败或反馈信号 |
 | QualitySnapshot | 在明确截止时间、统计窗口和特征集版本下生成的可重建质量特征快照 |
 | AttentionItem | 由确定性规则从质量快照生成、指向明确资产与治理动作的可解释待办 |
@@ -347,9 +426,23 @@ Semlia 默认只读取元数据、语义定义和受控样本，不复制客户�
 - `contract`：输入、输出和兼容性约束。
 - `test`：针对资产行为和数据结果的可执行验证。
 
-表、列、文件和查询作为 `physical_reference` 管理。它们可以成为语义资产的证据和来源，但不会自动获得业务语义地位。
+物理对象是一等可寻址对象，用于支撑万表检索、血缘、绑定和 Join 规划，但不会自动获得业务语义地位。只有经 L4 发布的 `PhysicalBinding` 和 `JoinContract` 可以进入生产语义解析；`JoinObservation`、查询历史和 AI 推断只能形成候选和证据。
 
-### 7.3 核心关系类型
+本体优先使用上述领域对象和关系表达，不把 RDF、OWL、知识图谱产品或独立图数据库作为首发前置条件。只有明确的互操作或推理需求产生后，才通过导入导出契约扩展。
+
+### 7.3 证据权威类型
+
+| 类型 | 含义 | 默认用途 |
+| --- | --- | --- |
+| `DECLARED` | 由负责人、指标规范、合同或正式文档明确声明 | 支持定义和责任归属，仍需检查版本与冲突 |
+| `CONSTRAINED` | 来自数据库约束、数据契约或机器可验证规则 | 支持键、类型、完整性和兼容性判断 |
+| `DERIVED` | 由 DDL、SQL、dbt、ETL 或血缘确定性推导 | 支持公式、字段映射、血缘和 Join 候选 |
+| `OBSERVED` | 来自查询历史、Profile、运行结果或使用行为 | 支持发现和验证，不单独决定业务定义 |
+| `INFERRED` | 由 LLM 或统计模型推断 | 只能生成候选、冲突提示或待确认字段 |
+
+权威类型不是单一线性分数。系统按字段、来源时效、适用范围和冲突规则组合证据；任何 `INFERRED` 内容都不能仅凭置信度进入发布事实。
+
+### 7.4 核心关系类型
 
 - `contains`
 - `depends_on`
@@ -357,7 +450,7 @@ Semlia 默认只读取元数据、语义定义和受控样本，不复制客户�
 - `measures`
 - `describes`
 - `filters_by`
-- `joins_to`
+- `joins_to`，仅表达发现或导航关系，生产连接行为由 `JoinContract` 决定
 - `synonym_of`
 - `replaces`
 - `validated_by`
@@ -367,7 +460,7 @@ Semlia 默认只读取元数据、语义定义和受控样本，不复制客户�
 
 关系必须包含来源 revision、创建主体、置信度和有效 release 范围。
 
-### 7.4 资产生命周期
+### 7.5 资产生命周期
 
 ```text
 discovered -> draft -> proposed -> validating -> in_review -> released
@@ -381,7 +474,15 @@ discovered -> draft -> proposed -> validating -> in_review -> released
 - `deprecated` 必须包含替代资产、通知范围和截止时间。
 - `retired` 资产仍保留历史和审计，但不能建立新绑定。
 
+### 7.6 契约边界
+
+- 数据契约约束生产者交付给语义资产的 schema、语义、质量、时效、SLA、安全与使用条件。
+- 语义消费契约约束 Semlia 交付给消费者的资产身份、revision、兼容版本范围、发布批次溯源、迁移和废弃策略。
+- Semlia 是契约的注册、审核、验证编排、发布和证据平台；实际查询、数据生产、执行期访问控制和底层质量执行仍由已配置执行适配器、数仓、CI 或专业质量系统完成。
+
 ## 8. AI 自主权与发布治理
+
+Semlia 的治理目标不是让人逐条审核所有知识块，而是让系统自动处理可以被证据和策略证明安全的变化，让人类制定策略、确认同类批次并处理高风险例外。审核对象是相对已发布基线的结构化变更，不是没有变化的资产全文。
 
 ### 8.1 发布等级
 
@@ -394,27 +495,72 @@ discovered -> draft -> proposed -> validating -> in_review -> released
 
 新工作区默认使用 G1。G2 和 G3 必须由管理员按资产类型和环境显式启用，不能由 Agent 自行提升。
 
-### 8.2 风险计算输入
+### 8.2 变更级治理流水线
+
+每次 discovery、编辑或反馈触发的更新都必须经过同一条流水线：
+
+```text
+结构化变更集
+  -> 确定性验证
+  -> 可重算风险评估
+  -> 版本化策略决策
+  -> 自动通道 / 批量确认通道 / 专家审核通道
+  -> 不可变 release 或拒绝
+  -> 观测、回滚与策略校准
+```
+
+- 系统首先与资产当前 released revision 比较；没有语义、计算、权限、契约或证据实质变化的扫描结果不进入人工队列。
+- Schema、引用、编译、测试、策略和消费者影响必须优先由确定性验证器判断；AI 负责解释、归类和生成提案，不能替代可确定计算的门禁。
+- 每个风险结论必须记录规则版本、输入特征、证据窗口、命中的策略和路由原因，并可以在相同输入上重算。
+- 任何自动发布都必须满足资产治理等级、环境策略和变更级风险三者中的最严格约束。
+- 无法解析、证据不足、验证器失败、版本冲突或策略冲突一律降级到人工处理，不得静默放行。
+
+### 8.3 风险计算输入
 
 - 资产类型和业务重要性。
 - 依赖和消费者数量。
-- 是否改变计算结果或访问范围。
+- 结构化 diff 类型，以及是否改变计算结果、访问范围、数据契约或消费契约。
 - 是否属于生产环境。
 - 验证覆盖率和近期失败历史。
 - 提案置信度与证据完整度。
+- 来源可信等级、来源 revision 新鲜度和跨来源冲突。
+- 同类变更的历史接受率、人工修改幅度、验证失败率和发布后回滚率。
 - 提案者、审核者和发布者的职责分离要求。
 
-### 8.3 AI 行为契约
+风险评估不得只输出不可解释的综合分数。系统必须同时提供可操作的风险级别、命中原因、失败门禁、受影响资产与消费者，以及建议治理动作。
+
+### 8.4 三通道审核模型
+
+| 通道 | 准入条件 | 处理方式 | 典型变化 |
+| --- | --- | --- | --- |
+| 自动通道 | 低风险、证据完整、确定性验证全部通过、策略显式允许且无职责分离要求 | 自动发布或进入可自动晋级的 release candidate，并通知 owner | 描述修正、别名补充、证据刷新、结果不变的来源更新 |
+| 批量确认通道 | 同一来源或规则产生、风险原因一致、可以代表性抽样且不包含高风险项 | 按变更族聚类，展示规则、完整 diff 摘要、代表样本和最大风险项后一次确认 | 批量字段映射、新增 owner、同类术语合并、兼容性补充 |
+| 专家审核通道 | 改变计算、权限、契约或高影响资产，存在冲突、验证失败、Breaking Change 或策略要求 | 指定 owner 逐项审核，强制影响分析、职责分离和明确发布决定 | 财务指标口径、访问策略、删除或废弃、生产消费者不兼容变更 |
+
+高风险项不能混入批量操作；批次中任一项目风险升级时必须自动拆出。批量批准必须保存查询范围、分组规则、样本、排除项、审核人和当时的策略版本。
+
+### 8.5 渐进式自动化与运行期保护
+
+- 新的资产类型、来源或策略先运行 shadow evaluation，只给出建议路由，不执行自动发布。
+- 管理员只能在离线评测、历史回放和受控生产观测达到门槛后，将明确范围从 G1 提升到 G2 或 G3。
+- 自动通道优先发布到受约束的 consumer binding 或观察窗口；涉及运行结果的变更支持 canary、自动停止和重新绑定上一稳定 release。
+- 回滚、事故、消费者失败、人工覆写和批量拆分必须反哺风险特征与 Attention Item，但不能直接训练出不可复核的发布权限。
+- 系统必须周期性抽样审计自动通过项；抽样发现重大错误时，冻结对应策略范围并将相关变更重新送审。
+- 人工队列按业务影响、截止时间和风险原因排序，避免用无法解释的 AI 优先级替代负责人判断。
+
+### 8.6 AI 行为契约
 
 - 每个结论返回资产 ID、revision、release 和证据引用。
 - 每个写操作创建 proposal，并记录基础版本和结构化 patch。
 - 模型输出在进入领域层前必须通过 schema 校验。
 - 工具权限由服务端策略强制执行，不能依赖 system prompt。
-- 同一模型输出不能同时充当高风险变更的唯一提案和唯一审核证据。
+- 高风险变更中，同一 Agent run 或同一模型输出不能同时充当唯一提案和唯一审核证据；独立 AI 复核仍不能替代确定性验证与强制人工职责分离。
 - 超时、工具失败、证据不足或版本冲突时进入可恢复状态，不自动扩大权限。
 - 所有 Agent run 记录模型、配置、输入哈希、工具调用、输出、费用、耗时和最终状态。
 
-## 9. 对外服务契约
+## 9. 无头对外交付契约
+
+Semlia 的交付面由 Web Ask、REST、MCP、CLI、SDK、Webhook 和事件组成。Web Ask 是受治理语义能力的第一方参考界面；无头接口向外部产品交付相同的已发布语义、本体上下文、证据、契约和受策略保护的执行能力。这些能力不构成通用 ChatBI、看板或 Workbook 产品。
 
 ### 9.1 REST API
 
@@ -445,6 +591,10 @@ MCP 是 Agent 的首选语义接口：
 - `search_assets`
 - `get_asset`
 - `resolve_metric`
+- `resolve_dataset`
+- `plan_query`
+- `validate_query_plan`
+- `explain_resolution`
 - `explain_lineage`
 - `analyze_impact`
 - `validate_context`
@@ -482,22 +632,25 @@ CLI 输出默认同时支持人类可读格式和稳定 JSON 格式。自动化�
 ### 10.1 架构形态
 
 ```text
-Web / CLI / SDK / MCP / Integrations
-                 |
-          Semlia Control API
-                 |
-  Domain services and policy engine
-        |          |          |
-   PostgreSQL     Git      S3 / MinIO
-        |
- Postgres-backed worker and outbox
-        |
- Cube adapter / dbt adapter / warehouse metadata adapters
-        |
- Cube Core executable semantic kernel and customer data platforms
+L5 解析与交付     Semantic Query -> Resolver -> Physical Binding -> Join Planner
+                                      -> Plan Validation -> Execution Adapter -> Provenance
+                                               |
+L4 治理与发布     Validation -> Risk -> Policy -> Review -> Immutable Release
+                                               |
+L3 语义知识       LLM Wiki / Semantic Assets / Ontology / Bindings / JoinContracts
+                                               |
+L2 物理与证据     Physical Graph / Code / Lineage / Knowledge Blocks / Evidence
+                                               |
+L1 来源           Warehouse Catalog / DDL / dbt / ETL / Documents / Optional Runtimes
+
+横向控制面        Identity / Authorization / Policy / Audit / Jobs / Outbox / Observability
+持久化边界        PostgreSQL / Git / S3-compatible object storage
+执行适配器        Cube Core / governed warehouse SQL / other contract-driven runtimes
 ```
 
-Semlia 的控制平面不进入 Cube Core 的查询执行路径。Cube adapter 将 Semlia 的语义 release、验证请求和运行上下文映射到公开 Cube 模型与 API，并把编译、查询和评测结果作为可追溯证据返回 Semlia。
+五层是领域责任和信任边界，不要求拆成五个部署服务。第一阶段由模块化单体承载，层间通过领域对象和应用服务保持单向依赖；使用反馈可以生成新的 Attention Item 或 Proposal，但不能反向静默改写知识、资产或 release。
+
+Semlia 的控制平面不进入外部运行时内部的查询执行路径。执行 adapter 将 Semlia 的 `ResolvedSemanticPlan`、release、验证请求和策略上下文映射到公开运行时合约，并把编译、查询和评测结果作为可追溯证据返回 Semlia。Cube adapter 是可选实现，Go 控制面不链接 Cube，也不因未配置 Cube 而失去接入、治理、搜索、发布和解析能力。可读、可缩放且包含可信查询解析、风险分流与反馈闭环的架构图见 [knowledge-governance.html](./architecture/knowledge-governance.html)。
 
 ### 10.2 技术基线
 
@@ -513,7 +666,7 @@ Semlia 的控制平面不进入 Cube Core 的查询执行路径。Cube adapter �
 | 文件与证据 | S3 兼容对象存储，开发环境支持本地文件系统 |
 | 语义内容版本 | 内嵌或外部 Git 仓库 |
 | 后台任务 | PostgreSQL job table、outbox、`FOR UPDATE SKIP LOCKED` |
-| 查询执行 | Cube Core 首选，适配器契约保持开放 |
+| 查询执行 | 外部执行适配器；Cube Core 与受控仓库 SQL 均为可选实现 |
 | 可观测性 | OpenTelemetry |
 | 本地部署 | Docker Compose |
 | 集群部署 | Helm 和 Kubernetes |
@@ -536,6 +689,8 @@ Semlia/
   sdk/
     typescript/
   integrations/
+    warehouse/
+    sql/
     cube/
     dbt/
   docs/
@@ -553,7 +708,7 @@ Semlia/
 - PostgreSQL 是工作流、索引、权限、关系和审计状态的权威来源。
 - 对象存储是大型证据和生成工件的权威来源。
 - 客户数仓是事实数据的权威来源。
-- Cube runtime 和本地 SQLite 只保存可重建的执行状态或缓存。
+- 外部执行运行时和本地 SQLite 只保存可重建的执行状态或缓存。
 
 任何内容都不能同时拥有两个无法确定优先级的权威来源。PostgreSQL 中的已发布内容快照必须能由 Git commit 和 content hash 验证。
 
@@ -562,10 +717,13 @@ Semlia/
 ```text
 workspaces, memberships, roles, policies
 repositories, data_sources, connector_runs
+source_revisions, physical_datasets, physical_fields, code_artifacts, lineage_edges
 semantic_assets, asset_revisions, asset_relations
+physical_bindings, model_grains, entity_keys, join_observations, join_contracts
 evidence, proposals, proposal_changes, reviews
 validation_runs, validation_results
 releases, release_assets
+semantic_queries, resolved_semantic_plans, query_validation_runs
 consumers, bindings, usage_events, quality_snapshots, attention_items, incidents
 agent_runs, agent_steps
 jobs, outbox_events, audit_events
@@ -575,7 +733,7 @@ jobs, outbox_events, audit_events
 
 ### 11.3 图、搜索和向量
 
-- 血缘和影响关系首先使用 `asset_relations` 邻接表、索引和递归 CTE。
+- 物理血缘首先使用 `lineage_edges`，语义关系和影响关系使用 `asset_relations`；两者均以邻接表、索引和递归 CTE 实现。
 - 名称、别名和结构化字段首先使用 PostgreSQL 索引和 `pg_trgm`。
 - 英文文档使用 PostgreSQL 全文检索；中文内容采用预分词或经过验证的中文检索扩展。
 - 语义召回达到明确需求后，在 PostgreSQL 中加入 `pgvector`。
@@ -638,7 +796,8 @@ jobs, outbox_events, audit_events
 - 在 100,000 个资产和 1,000,000 条关系的基准工作区中，单资产读取 p95 不高于 150 ms。
 - 结构化搜索 p95 不高于 500 ms。
 - 三跳影响分析 p95 不高于 1 s。
-- 10,000 个资产的增量扫描和基础验证在 5 分钟内完成。
+- 10,000 张表及其字段、代码和血缘的增量扫描与基础验证在 5 分钟内完成。
+- 已建立索引的 10,000 张表工作区中，语义候选检索 p95 不高于 1 s；查询计划验证不含外部执行时间的 p95 不高于 2 s。
 - UI 首次可交互时间在标准宽带和推荐部署规格下不高于 2.5 s。
 
 ### NFR-002 可靠性
@@ -652,6 +811,7 @@ jobs, outbox_events, audit_events
 ### NFR-003 可解释与可复现
 
 - 100% 的生产语义响应可追溯到 release 和 revision。
+- 100% 的生产查询计划可追溯到 SemanticQuery、资产、PhysicalBinding、JoinContract、验证结果和执行适配器。
 - 100% 的 AI 写入可追溯到 proposal、证据和策略决策。
 - validation run 记录工具版本、输入哈希和结果。
 - 相同 release 导出产生确定性内容和哈希。
@@ -678,7 +838,7 @@ jobs, outbox_events, audit_events
 ### NFR-007 自托管体验
 
 - 新用户使用 Docker Compose 在 5 分钟内启动完整本地环境。
-- 从连接示例 Cube 项目到发布首个资产不超过 10 分钟。
+- 从连接示例仓库元数据源到发现首批物理资产不超过 10 分钟；发布首个语义资产不要求配置 Cube。
 - 所有必要配置都有校验、示例和可操作错误信息。
 
 ## 14. 质量与交付标准
@@ -709,7 +869,7 @@ jobs, outbox_events, audit_events
 
 - Schema 和引用完整性通过。
 - 数据库向前与回滚迁移经过验证。
-- Cube 适配器编译和查询验证通过。
+- 本次 release 声明支持的连接器与执行适配器契约、编译和查询验证通过；未配置的可选适配器不阻断核心发布。
 - Breaking change 和影响报告生成。
 - 安全扫描没有未接受的 Critical 或 High 问题。
 - 文档、示例、changelog 和升级说明完整。
@@ -722,7 +882,8 @@ jobs, outbox_events, audit_events
 建议采用 Apache License 2.0。以下能力属于完整可用的开源核心：
 
 - 语义资产模型、注册表和 Wiki。
-- Cube 连接器和开放适配器 SDK。
+- 业务本体、数据契约、语义消费契约和语义质量闭环。
+- 仓库、dbt/ETL、文档和血缘连接器，以及开放执行适配器 SDK。
 - AI 提案、验证、审核和发布工作流。
 - REST、MCP、CLI 和基础 SDK。
 - 本地与单集群自托管。
@@ -742,9 +903,9 @@ jobs, outbox_events, audit_events
 
 ### 15.3 生态飞轮
 
-1. 高质量 Cube 集成带来第一批真实语义资产、来源证据和 discovery 信号。
+1. 高质量仓库、转换代码、文档和血缘接入带来第一批真实物理资产、语义候选、来源证据和 discovery 信号。
 2. Proposal、Validation 和 Review 累积可审计的人类纠错决策。
-3. MCP、REST、CLI 和 SDK 让 AI 与应用获得稳定价值，并产生可归因消费信号。
+3. MCP、REST、CLI 和 SDK 无头交付已发布语义，让 AI 与应用获得稳定价值，并产生可归因消费信号。
 4. 消费、失败、回滚、反馈与事故反哺资产质量、影响分析和新的治理 Proposal。
 5. 社区贡献更多连接器、策略包、验证器和模板，扩大高质量信号和可执行动作范围。
 6. 更丰富且可信的生态提高 Semlia 作为开放语义控制面的标准价值。
@@ -754,7 +915,7 @@ jobs, outbox_events, audit_events
 Semlia 当前使用 Apache License 2.0 进行私有孵化，不把当前 private repository 宣称为已运行的开源社区。转为 public 之前必须同时满足：
 
 - 完成受控的 Go module、包管理器和品牌命名空间，不发布到未掌控的身份下。
-- 至少一条真实 Cube 项目可完成导入、资产浏览、证据追溯和可诊断的失败恢复。
+- 至少一个真实仓库元数据源和一套版本化 SQL/dbt 工件可完成导入、万表检索、资产浏览、证据追溯和可诊断的失败恢复；该路径不依赖 Cube。
 - Fresh-clone、安装、升级、回滚、备份、故障诊断和贡献者路径经独立验证。
 - Public repository 启用受保护分支、必需 CI、依赖漏洞告警、code scanning、secret scanning 和 private vulnerability reporting。
 - 正式 release 提供可验证来源、签名或 attestation、校验和、完整覆盖 Go 与嵌入 Web 依赖的 SBOM、升级说明和兼容性矩阵。
@@ -764,13 +925,13 @@ Semlia 当前使用 Apache License 2.0 进行私有孵化，不把当前 private
 
 ### 16.1 北极星指标
 
-**Weekly Trusted Semantic Resolutions**：每周由已发布资产成功解析，并返回明确 release、revision 和证据的 API、SDK、CLI 或 MCP 请求数量。
+**Weekly Trusted Resolutions**：每周通过 Web Ask、API、SDK、CLI 或 MCP 完成的可信语义解析数量。每次解析必须绑定明确 release，返回已发布资产及其证据；需要数据时还必须绑定 PhysicalBinding、JoinContract、计划验证和执行来源。成功量必须与 unresolved、clarification 和 rejected 分开展示，不能用请求量掩盖错误解析。
 
 ### 16.2 激活指标
 
 - 80% 的新工作区在 10 分钟内完成首个数据源连接。
 - 60% 的新工作区在 30 分钟内发布首个语义资产。
-- 首次 Cube 导入中 90% 的有效模型和指标被正确识别。
+- 首次仓库与转换工件导入中，有效表、字段、模型和指标的识别率通过版本化黄金集独立报告。
 
 ### 16.3 信任指标
 
@@ -778,12 +939,17 @@ Semlia 当前使用 Apache License 2.0 进行私有孵化，不把当前 private
 - 发布后 7 天内因错误语义触发的回滚率低于 1%。
 - 高风险资产所有者覆盖率达到 100%。
 - 已发布资产验证覆盖率达到 95%。
+- 黄金集上的语义资产 Top-K 召回、物理表 Top-K 召回、Join 路径 exact match、粒度冲突检出和应拒绝请求的错误放行率独立展示。
+- 未发布 Join、证据不足或多义问题的静默执行率为 0。
+- 自动通道的错误放行率、抽样审计失败率和策略冻结次数必须独立展示，不能被总体成功率稀释。
 
 ### 16.4 效率指标
 
 - 常规语义变更从提案到发布的中位时间低于 1 个工作日。
 - AI 生成且经用户少量修改后接受的提案比例高于 50%。
 - Breaking change 的已识别消费者覆盖率达到 100%。
+- 分别统计自动、批量和专家通道的变更量、等待时间、人工触点和回滚率，以可验证地降低单位已发布变更的人工审核时间。
+- 批量审核必须报告批次大小、抽样覆盖、拆分率和审核后人工修改幅度，不能用一次点击代表未经检查的批量正确性。
 
 ### 16.5 开源指标
 
@@ -815,34 +981,42 @@ Semlia 当前使用 Apache License 2.0 进行私有孵化，不把当前 private
 
 ### M1 Semantic Registry
 
-目标：从 Cube 项目得到可信、可浏览、可版本化的语义资产。
+目标：从真实仓库、转换代码和现有文档建立可浏览、可追溯、可检索的物理图谱与语义候选。
 
-- Cube 导入与增量扫描。
-- 资产页、关系图、搜索、所有权和证据。
+- 仓库 Catalog、DDL/View SQL 和数据库约束的只读导入与增量扫描。
+- dbt manifest/catalog/compiled SQL 或通用版本化 ETL SQL 工件导入。
+- PhysicalDataset、PhysicalField、CodeArtifact、LineageEdge、键、粒度和 JoinObservation。
+- 物理资产与语义候选的目录、关系图、万表搜索、所有权、证据和冲突状态。
+- 可选 Cube 模型导入通过独立 adapter 验证，不成为 M1 核心路径前置条件。
 - Git 内容存储与 PostgreSQL 索引。
 - 基础 diff、revision 和审计。
 - 服务端只记录真实发生的 `catalog.asset.read` 与 `catalog.search.completed` 使用信号；definition、owner、evidence、source health 和 provenance 从规范状态计算。
 
-退出标准：真实 Cube 项目可以无手工迁移地形成可浏览资产图谱；资产读取可归因至 workspace、asset 和 revision，搜索缺口可在不保存原始搜索文本的前提下被量化。
+退出标准：真实仓库元数据与版本化 SQL/dbt 工件可以无手工重录地形成物理图谱和语义候选；10,000 张表基准下的表检索、字段检索和 Join 候选可使用黄金集评测；资产读取可归因至 workspace、对象和 revision，搜索缺口可在不保存原始搜索文本的前提下被量化。未配置 Cube 时完整退出标准仍可通过。
 
 ### M2 Governed AI Authoring
 
 目标：AI 可以安全参与语义工程，而不是停留在聊天建议。
 
 - Agent run、proposal 和结构化 patch。
-- 验证器框架与 Cube 编译验证。
-- G0/G1 发布等级、审核工作台和 release manifest。
+- PhysicalBinding、ModelGrain、EntityKey 和 JoinContract 的提案、验证与发布。
+- 验证器框架与 SQL、Schema、引用、Join、粒度以及可选 Cube 编译验证。
+- 变更级风险评估、版本化策略决策和可解释路由原因。
+- G0/G1 发布等级、专家审核工作台和 release manifest。
+- 同类变更聚类、批量确认、风险升级自动拆分和完整批次审计。
 - 冲突检测、影响分析和回滚。
 - 记录 AI 建议、人工修改、拒绝原因、验证结果、审核决策和回滚信号。
 
 退出标准：团队可完成“AI 提案、验证、人类审核、发布、回滚”的完整闭环。
 
-### M3 Semantic Distribution
+### M3 Headless Semantic Distribution
 
-目标：其他产品和 Agent 稳定消费 Semlia。
+目标：其他产品和 Agent 通过无头接口稳定解析并消费 Semlia 已发布的语义资产。
 
 - 版本化 REST API。
 - MCP server 与只读资源。
+- SemanticQuery、候选解释、ResolvedSemanticPlan、Join 规划、计划验证和明确拒绝原因。
+- 可选 Cube 与受控仓库 SQL 执行适配器；没有执行适配器时仍支持可信解析和计划解释。
 - CLI 和 TypeScript SDK。
 - 消费者注册、release 绑定、Webhook 和使用事件。
 - 解析、not-found、失败、显式反馈与 consumer impact 信号可归因至 release 和 binding。
@@ -855,15 +1029,17 @@ Semlia 当前使用 Apache License 2.0 进行私有孵化，不把当前 private
 
 - 质量评分、语义债务和负责人队列。
 - 版本化 QualitySnapshot 与可解释 Attention Item，所有派生结果可从规范状态和保留事件重算。
+- G2/G3 shadow evaluation、历史回放、策略范围提升和自动冻结。
+- 低风险自动通道、抽样审计、受约束 consumer canary 和自动回滚。
 - 废弃、迁移和消费者通知。
 - Agent 评测集与 G2 发布等级。
-- dbt 适配器和第二类消费端集成。
+- 第二类来源连接器、执行适配器和消费端集成。
 
 退出标准：资产质量、冲突和废弃进度可以量化，并形成周期性治理闭环。
 
 ### M5 Open Ecosystem
 
-目标：Semlia 成为可扩展的开放语义控制面。
+目标：Semlia 成为可扩展的开放企业语义资产平台。
 
 - 连接器、验证器、策略和导出插件 SDK。
 - Conformance test kit 和兼容性认证。
@@ -876,13 +1052,15 @@ Semlia 当前使用 Apache License 2.0 进行私有孵化，不把当前 private
 
 ### 必须包含
 
-- Cube 项目导入和增量刷新。
+- 仓库 Catalog、DDL/View SQL、数据库约束与版本化 SQL/dbt 工件的导入和增量刷新。
+- 表、字段、代码、血缘、键、粒度和 JoinObservation 构成的物理图谱。
 - 核心资产类型、稳定 ID、revision 和关系。
-- 资产 Wiki 页面、搜索、血缘和影响分析。
+- 资产 Wiki 页面、业务本体、万表检索、血缘和影响分析。
+- PhysicalBinding、ModelGrain、EntityKey 和 JoinContract 的治理与发布。
 - AI 生成结构化 proposal，并展示证据和 diff。
-- Schema、引用、Cube 编译和策略验证。
+- Schema、引用、SQL、Join、粒度、策略以及已配置执行适配器的验证。
 - G0/G1 审核、不可变 release 和回滚。
-- 只读 REST、MCP 和 CLI 消费路径。
+- 只读 REST、MCP 和 CLI 消费路径，以及可解释的 SemanticQuery 解析和计划验证。
 - 可归因的最小读取、搜索、消费、失败和反馈事件，不采集客户事实明细。
 - 工作区 RBAC、密钥保护和审计。
 - Docker Compose、自托管文档和示例项目。
@@ -890,7 +1068,7 @@ Semlia 当前使用 Apache License 2.0 进行私有孵化，不把当前 private
 ### 明确不包含
 
 - 通用 BI 看板设计器。
-- NL2SQL 和自然语言问数主界面。
+- 通用 ChatBI、任意 NL2SQL、Workbook 和缺少发布语义约束的问数界面。
 - 自建 OLAP 或查询引擎。
 - Neo4j、Elasticsearch、Kafka 和独立向量数据库。
 - 无策略约束的 AI 自动发布。
@@ -901,8 +1079,8 @@ Semlia 当前使用 Apache License 2.0 进行私有孵化，不把当前 private
 
 | ID | 决策 | 状态 | 依据 |
 | --- | --- | --- | --- |
-| D-001 | Semlia 定位为语义资产控制平台，不定位为 BI 或 NL2SQL | Accepted | 建立可复用后端能力和清晰产品边界 |
-| D-002 | Cube Core 是首选执行引擎，核心领域模型保持引擎无关 | Accepted | 快速获得成熟执行能力，同时保护生态扩展性 |
+| D-001 | Semlia 定位为企业语义资产平台，内建 Governed Ask；不定位为 BI、通用 ChatBI 或任意 NL2SQL | Accepted | 让高频使用与治理闭环在同一产品成立，同时保持执行和分析产品边界 |
+| D-002 | Cube Core 是可选外部执行与验证适配器，不是接入、治理、发布或可信解析的前置条件 | Accepted | 保留成熟运行能力，同时让只有仓库、SQL 和文档的企业完成核心闭环 |
 | D-003 | Git 管理已发布语义内容，PostgreSQL 管理控制面状态 | Accepted | 同时满足可移植、可 diff、可查询和事务治理 |
 | D-004 | 第一阶段采用模块化单体和 PostgreSQL 任务队列 | Accepted | 降低运维和分布式一致性复杂度 |
 | D-005 | REST 是规范接口，MCP 是 Agent 首选接口，CLI 用于本地与 CI | Accepted | 统一领域能力并覆盖主要消费场景 |
@@ -912,6 +1090,10 @@ Semlia 当前使用 Apache License 2.0 进行私有孵化，不把当前 private
 | D-009 | Semlia 是平台名称，Fluxale 是首个 Agent BI 消费端 | Accepted | 保留现有产品资产并验证平台价值 |
 | D-010 | 数据飞轮使用可归因事件、可重算质量观测和受治理 Proposal | Accepted | 让资产随真实使用改善，同时避免黑盒分数、隐私扩张和 AI 绕过审核 |
 | D-011 | 在真实核心纵向闭环与公开发布门槛满足前保持 private incubation | Accepted | 不把只有工程底座的仓库过早包装为顶级开源产品 |
+| D-012 | 业务语义按可执行、可测试、可发布且具有消费者兼容性约束的软件资产治理 | Accepted | 让目录、LLM Wiki、本体、契约和质量形成可验证的生产闭环 |
+| D-013 | 采用变更级风险分流治理：自动处理可证明安全的变化，批量确认同类变化，人工逐项审核高风险例外 | Accepted | 将人工职责从逐项检查提升为策略治理和例外决策，同时保留可解释、可回滚和职责分离边界 |
+| D-014 | 物理数据图谱、PhysicalBinding 和 JoinContract 是一等领域对象 | Accepted | 让万表检索、指标落表和 Join 选择具有确定性结构、证据和发布边界 |
+| D-015 | Agent 查询必须先形成并验证 ResolvedSemanticPlan；歧义或未发布 Join 必须拒绝或澄清 | Accepted | 防止模型在原始 schema 上自由猜表、口径和 Join |
 
 涉及原则变化的新决策必须先更新此表并重新审核，再创建实现计划。
 
@@ -919,15 +1101,15 @@ Semlia 当前使用 Apache License 2.0 进行私有孵化，不把当前 private
 
 1. 开源许可证采用 Apache License 2.0。
 2. 完整治理闭环保持开源，商业化聚焦托管、支持、合规和高可用能力。
-3. 首批目标用户是已经使用 Cube 或 dbt、正在建设企业 Agent 的 5 至 50 人数据团队。
+3. 首批目标用户是拥有大量仓库表、SQL/dbt/ETL 工件并正在建设企业 Agent 的 5 至 50 人数据团队；是否已经使用 Cube 不构成准入条件。
 4. 产品品牌使用 Semlia，公开发布前完成主要市场商标和域名复核。
-5. 首发适配器聚焦 Cube，dbt 在 M4 进入正式支持。
+5. 首发来源接入聚焦仓库 Catalog、DDL/View SQL 与版本化 SQL/dbt 工件；Cube 作为可选外部执行与验证适配器。
 6. 代码、API 和英文文档优先，核心产品 UI 与入门文档同时提供中文和英文。
 7. 当前仓库为 private incubation；Apache License 2.0 是确定的发布许可证，但只有源码公开且社区与安全入口可用时才对外宣称已运行开源项目。
 
 ## 21. 治理状态
 
 - 本文档是 Semlia 产品与架构的有效项目合同。
-- D-001 至 D-011 是已接受的项目级决策。
+- D-001 至 D-015 是已接受的项目级决策。
 - M0 技术计划和任务图已确认；T007 已接受，T008 exact-ref fresh-clone、完整门禁、交付证据和三轮独立 review 已通过，T008 状态为 `Needs_Review`，M0 release report 状态为 `Ready_For_User_Review`。
 - M1 技术方向已确认；只有创始人明确接受 T008 与 M0 后，才生成可执行 M1 work graph 与 Ready packet。在此之前，M0 acceptance 与所有 M1 planning/implementation 保持阻断。

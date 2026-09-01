@@ -1,0 +1,695 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>Semlia 知识治理架构</title>
+    <style>
+      :root {
+        --canvas: #f3f5f2;
+        --surface: #ffffff;
+        --ink: #18211d;
+        --muted: #5d6862;
+        --line: #c9d1cc;
+        --blue: #2464a5;
+        --cyan: #177d86;
+        --violet: #6653a1;
+        --amber: #a16c08;
+        --green: #277a50;
+        --red: #a6403c;
+        --green-soft: #e9f4ed;
+        --amber-soft: #fbf2dc;
+        --red-soft: #faecea;
+        --shadow: 0 7px 22px rgba(26, 42, 34, 0.07);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        background: var(--canvas);
+        color: var(--ink);
+      }
+
+      body {
+        min-width: 1024px;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+          sans-serif;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      main {
+        width: min(1320px, calc(100% - 64px));
+        margin: 0 auto;
+        padding: 20px 0 10px;
+      }
+
+      header {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 460px;
+        gap: 40px;
+        align-items: center;
+        padding-bottom: 14px;
+        border-bottom: 2px solid var(--ink);
+      }
+
+      .eyebrow,
+      .stage-code,
+      .lane-code {
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 750;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        margin-top: 5px;
+        font-size: 32px;
+        line-height: 1.16;
+        letter-spacing: 0;
+      }
+
+      .subtitle {
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .principle {
+        padding: 14px 16px;
+        border-left: 4px solid var(--green);
+        background: var(--surface);
+        box-shadow: var(--shadow);
+        font-size: 15px;
+        font-weight: 680;
+      }
+
+      .principle strong {
+        color: var(--green);
+      }
+
+      section {
+        padding-top: 16px;
+      }
+
+      .section-heading {
+        display: flex;
+        justify-content: space-between;
+        gap: 28px;
+        align-items: baseline;
+        margin-bottom: 10px;
+      }
+
+      h2 {
+        font-size: 19px;
+        line-height: 1.25;
+      }
+
+      .section-heading p {
+        color: var(--muted);
+        font-size: 12px;
+        text-align: right;
+      }
+
+      .flow {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 18px;
+      }
+
+      .stage {
+        position: relative;
+        min-height: 145px;
+        padding: 15px 14px;
+        border: 1px solid var(--line);
+        border-top: 5px solid var(--accent);
+        border-radius: 5px;
+        background: var(--surface);
+        box-shadow: var(--shadow);
+      }
+
+      .stage:not(:last-child)::after {
+        position: absolute;
+        top: 42px;
+        right: -14px;
+        width: 10px;
+        height: 10px;
+        border-top: 2px solid #89958f;
+        border-right: 2px solid #89958f;
+        content: "";
+        transform: rotate(45deg);
+      }
+
+      .stage h3 {
+        margin: 3px 0 8px;
+        font-size: 17px;
+      }
+
+      .stage p {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .stage-output {
+        display: block;
+        margin-top: 12px;
+        padding-top: 10px;
+        border-top: 1px solid var(--line);
+        color: var(--ink);
+        font-size: 12px;
+        font-weight: 680;
+      }
+
+      .s1 { --accent: var(--blue); }
+      .s2 { --accent: var(--cyan); }
+      .s3 { --accent: var(--violet); }
+      .s4 { --accent: var(--amber); }
+      .s5 { --accent: var(--green); }
+
+      .trust-line {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 18px;
+        margin-top: 13px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .trust-line div {
+        padding-left: 11px;
+        border-left: 3px solid #939e98;
+      }
+
+      .trust-line strong {
+        color: var(--ink);
+      }
+
+      .governance {
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--surface);
+        box-shadow: var(--shadow);
+      }
+
+      .gate {
+        display: grid;
+        grid-template-columns: 1fr 34px 1fr 34px 1fr;
+        align-items: center;
+        margin-bottom: 14px;
+      }
+
+      .gate-step {
+        padding: 10px 12px;
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        background: #f8f9f7;
+        text-align: center;
+      }
+
+      .gate-step strong {
+        display: block;
+        margin-bottom: 2px;
+        font-size: 13px;
+      }
+
+      .gate-step span {
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .arrow {
+        color: #7d8983;
+        font-size: 24px;
+        text-align: center;
+      }
+
+      .lanes {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .lane {
+        min-height: 112px;
+        padding: 13px 14px;
+        border-left: 5px solid var(--accent);
+        border-radius: 4px;
+        background: var(--soft);
+      }
+
+      .lane-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: baseline;
+      }
+
+      .lane h3 {
+        font-size: 16px;
+      }
+
+      .lane-code {
+        color: var(--accent);
+      }
+
+      .lane p {
+        margin-top: 6px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .lane strong {
+        color: var(--ink);
+      }
+
+      .auto { --accent: var(--green); --soft: var(--green-soft); }
+      .batch { --accent: var(--amber); --soft: var(--amber-soft); }
+      .expert { --accent: var(--red); --soft: var(--red-soft); }
+
+      .release {
+        display: grid;
+        grid-template-columns: 190px 1fr;
+        margin-top: 13px;
+        border: 1px solid var(--ink);
+        border-radius: 4px;
+        overflow: hidden;
+      }
+
+      .release strong,
+      .release span {
+        padding: 10px 13px;
+      }
+
+      .release strong {
+        color: #fff;
+        background: var(--ink);
+      }
+
+      .release span {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .runtime {
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--surface);
+        box-shadow: var(--shadow);
+      }
+
+      .runtime-grid {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 13px;
+      }
+
+      .runtime-step {
+        position: relative;
+        min-height: 102px;
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-top: 4px solid var(--accent);
+        border-radius: 4px;
+        background: #f8f9f7;
+      }
+
+      .runtime-step:not(:last-child)::after {
+        position: absolute;
+        top: 42px;
+        right: -11px;
+        width: 8px;
+        height: 8px;
+        border-top: 2px solid #89958f;
+        border-right: 2px solid #89958f;
+        content: "";
+        transform: rotate(45deg);
+      }
+
+      .runtime-step strong {
+        display: block;
+        margin-bottom: 5px;
+        font-size: 13px;
+      }
+
+      .runtime-step span {
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .r1 { --accent: var(--blue); }
+      .r2 { --accent: var(--violet); }
+      .r3 { --accent: var(--cyan); }
+      .r4 { --accent: var(--amber); }
+      .r5 { --accent: var(--green); }
+      .r6 { --accent: var(--ink); }
+
+      .uncertainty-gate {
+        display: grid;
+        grid-template-columns: 220px 1fr;
+        margin-top: 12px;
+        border: 1px solid var(--red);
+        border-radius: 4px;
+        overflow: hidden;
+      }
+
+      .uncertainty-gate strong,
+      .uncertainty-gate span {
+        padding: 9px 12px;
+      }
+
+      .uncertainty-gate strong {
+        color: #fff;
+        background: var(--red);
+      }
+
+      .uncertainty-gate span {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .feedback {
+        display: grid;
+        grid-template-columns: 1fr 56px 1fr 56px 1fr 56px 1fr;
+        align-items: center;
+        padding: 14px 16px;
+        border: 1px dashed #8e9993;
+        background: rgba(255, 255, 255, 0.55);
+      }
+
+      .feedback-step {
+        text-align: center;
+      }
+
+      .feedback-step strong {
+        display: block;
+        font-size: 13px;
+      }
+
+      .feedback-step span {
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .return {
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 11px;
+        text-align: center;
+      }
+
+      footer {
+        display: flex;
+        justify-content: space-between;
+        gap: 24px;
+        margin-top: 14px;
+        padding-top: 10px;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      @media (max-width: 1120px) {
+        main {
+          width: calc(100% - 40px);
+          padding-top: 24px;
+        }
+
+        header {
+          grid-template-columns: minmax(0, 1fr) 360px;
+          gap: 24px;
+        }
+
+        h1 {
+          font-size: 28px;
+        }
+
+        .flow {
+          gap: 10px;
+        }
+
+        .stage {
+          min-height: 180px;
+          padding: 13px 11px;
+        }
+
+        .stage:not(:last-child)::after {
+          right: -9px;
+        }
+
+        .runtime-grid {
+          gap: 9px;
+        }
+
+        .runtime-step {
+          padding: 10px 8px;
+        }
+
+        .runtime-step:not(:last-child)::after {
+          right: -8px;
+        }
+      }
+
+      @media print {
+        @page {
+          size: A3 landscape;
+          margin: 12mm;
+        }
+
+        body {
+          min-width: 0;
+          background: #fff;
+          print-color-adjust: exact;
+          -webkit-print-color-adjust: exact;
+        }
+
+        main {
+          width: 100%;
+          padding: 0;
+        }
+
+        .stage,
+        .governance,
+        .principle {
+          box-shadow: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <div class="eyebrow">Semlia / Knowledge Governance</div>
+          <h1>从万表证据到可信使用</h1>
+          <p class="subtitle">离线构建可信语义，在线解析表、口径与 Join，全程绑定证据和版本。</p>
+        </div>
+        <div class="principle">
+          <strong>治理原则：</strong>系统自动发现、验证和分流；新工作区默认人工发布，只有显式授权的低风险范围可以自动发布。
+        </div>
+      </header>
+
+      <section aria-labelledby="flow-title">
+        <div class="section-heading">
+          <h2 id="flow-title">五层主链路</h2>
+          <p>来源形成证据，证据形成候选，只有治理后的版本可以进入生产使用</p>
+        </div>
+
+        <div class="flow">
+          <article class="stage s1">
+            <div class="stage-code">L1 / Source</div>
+            <h3>企业数据来源</h3>
+            <p>只读连接仓库 Catalog、DDL/View SQL、dbt/ETL、血缘、文档与可选 Cube。</p>
+            <span class="stage-output">产物：Source Revision</span>
+          </article>
+
+          <article class="stage s2">
+            <div class="stage-code">L2 / Evidence</div>
+            <h3>物理图谱与证据</h3>
+            <p>解析表、字段、SQL、血缘、键、粒度和 Join 观察，抽取可引用知识单元。</p>
+            <span class="stage-output">产物：Physical Graph + Evidence</span>
+          </article>
+
+          <article class="stage s3">
+            <div class="stage-code">L3 / Semantics</div>
+            <h3>语义资产</h3>
+            <p>形成稳定定义、指标口径、本体、物理绑定、粒度和受治理 JoinContract。</p>
+            <span class="stage-output">产物：Asset + Ontology + Contract</span>
+          </article>
+
+          <article class="stage s4">
+            <div class="stage-code">L4 / Governance</div>
+            <h3>治理发布</h3>
+            <p>只审核相对已发布基线的变化，验证后形成不可变版本。</p>
+            <span class="stage-output">产物：可信 Release</span>
+          </article>
+
+          <article class="stage s5">
+            <div class="stage-code">L5 / Delivery</div>
+            <h3>解析与交付</h3>
+            <p>基于明确 Release 解析语义、物理绑定和 Join，再向人、应用与 AI 交付。</p>
+            <span class="stage-output">产物：Resolved Plan + Provenance</span>
+          </article>
+        </div>
+
+        <div class="trust-line">
+          <div><strong>来源不等于事实：</strong>抽取内容必须带出处。</div>
+          <div><strong>观察不等于定义：</strong>查询历史和 Profile 只能作为证据。</div>
+          <div><strong>候选不等于发布：</strong>LLM 输出必须经过验证和治理。</div>
+          <div><strong>使用必须绑定版本：</strong>生产消费只读取明确 Release。</div>
+        </div>
+      </section>
+
+      <section aria-labelledby="governance-title">
+        <div class="section-heading">
+          <h2 id="governance-title">L4 如何减少人工审核</h2>
+          <p>审核变化，不重复阅读资产全文</p>
+        </div>
+
+        <div class="governance">
+          <div class="gate">
+            <div class="gate-step">
+              <strong>结构化 Diff</strong>
+              <span>无实质变化直接忽略</span>
+            </div>
+            <div class="arrow">→</div>
+            <div class="gate-step">
+              <strong>规则与测试</strong>
+              <span>Schema、编译、权限、影响</span>
+            </div>
+            <div class="arrow">→</div>
+            <div class="gate-step">
+              <strong>风险与策略路由</strong>
+              <span>不确定或失败一律降级</span>
+            </div>
+          </div>
+
+          <div class="lanes">
+            <article class="lane auto">
+              <div class="lane-head">
+                <h3>策略内自动处理</h3>
+                <span class="lane-code">G2 / G3</span>
+              </div>
+              <p><strong>条件：</strong>限定资产范围、证据完整、验证通过、管理员显式授权。</p>
+              <p><strong>例如：</strong>结果不变的描述、别名和证据刷新。</p>
+            </article>
+
+            <article class="lane batch">
+              <div class="lane-head">
+                <h3>批量确认</h3>
+                <span class="lane-code">Same Pattern</span>
+              </div>
+              <p><strong>条件：</strong>同一来源与风险原因，可查看样本和最大风险项。</p>
+              <p><strong>例如：</strong>字段映射、owner、术语合并。</p>
+            </article>
+
+            <article class="lane expert">
+              <div class="lane-head">
+                <h3>专家审核</h3>
+                <span class="lane-code">High Risk</span>
+              </div>
+              <p><strong>条件：</strong>改变计算、权限、契约，或存在冲突与失败。</p>
+              <p><strong>例如：</strong>财务口径、删除、Breaking Change。</p>
+            </article>
+          </div>
+
+          <div class="release">
+            <strong>不可变 Release</strong>
+            <span>低风险项接受抽样审计；运行异常可停止、回滚或冻结对应策略。</span>
+          </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="runtime-title">
+        <div class="section-heading">
+          <h2 id="runtime-title">Agent 如何找对表、口径与 Join</h2>
+          <p>LLM 负责理解问题，不拥有自由选表、拼 Join 或执行任意 SQL 的权限</p>
+        </div>
+
+        <div class="runtime">
+          <div class="runtime-grid">
+            <div class="runtime-step r1">
+              <strong>1. 受控问题</strong>
+              <span>身份、用途、时间范围、业务术语与稳定 Release。</span>
+            </div>
+            <div class="runtime-step r2">
+              <strong>2. 语义解析</strong>
+              <span>检索已发布指标、实体、维度和候选解释。</span>
+            </div>
+            <div class="runtime-step r3">
+              <strong>3. 物理绑定</strong>
+              <span>解析表、字段、粒度、时间字段与受治理 JoinContract。</span>
+            </div>
+            <div class="runtime-step r4">
+              <strong>4. 计划验证</strong>
+              <span>校验权限、基数、扇出、过滤、兼容性和成本。</span>
+            </div>
+            <div class="runtime-step r5">
+              <strong>5. 执行适配器</strong>
+              <span>委托给 Cube 或受控 SQL 引擎；Semlia 不自建查询内核。</span>
+            </div>
+            <div class="runtime-step r6">
+              <strong>6. 可解释结果</strong>
+              <span>返回结果、口径、表字段、Join、Release 和证据。</span>
+            </div>
+          </div>
+          <div class="uncertainty-gate">
+            <strong>不确定性门禁</strong>
+            <span>资产歧义、证据不足、Join 未发布、粒度冲突或验证失败时，必须拒绝执行或请求澄清，不能静默猜测。</span>
+          </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="feedback-title">
+        <div class="section-heading">
+          <h2 id="feedback-title">使用反馈只形成新待办或提案</h2>
+          <p>观察信号不是事实，不会直接改写知识、Join 或已经发布的语义</p>
+        </div>
+
+        <div class="feedback">
+          <div class="feedback-step">
+            <strong>真实使用</strong>
+            <span>成功、失败、反馈、事故</span>
+          </div>
+          <div class="arrow">→</div>
+          <div class="feedback-step">
+            <strong>版本归因</strong>
+            <span>Asset / Release / Consumer</span>
+          </div>
+          <div class="arrow">→</div>
+          <div class="feedback-step">
+            <strong>治理待办</strong>
+            <span>可解释规则与证据</span>
+          </div>
+          <div class="arrow">→</div>
+          <div class="feedback-step">
+            <strong>重新进入 L4</strong>
+            <span>验证、分流、发布</span>
+          </div>
+        </div>
+        <div class="return">Identity · Authorization · Policy · Provenance · Audit · Observability 贯穿离线治理与在线解析</div>
+      </section>
+
+      <footer>
+        <span>Semlia SSOT 0.7.0</span>
+        <span>docs/architecture/knowledge-governance.html</span>
+      </footer>
+    </main>
+  </body>
+</html>
