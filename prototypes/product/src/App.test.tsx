@@ -427,7 +427,7 @@ describe("Semlia product prototype", () => {
     await user.click(screen.getByRole("button", { name: "系统设置" }));
     const context = screen.getByRole("complementary", { name: "治理上下文" });
     expect(within(context).getByRole("button", { name: /成员.*24 名成员/ })).toBeVisible();
-    expect(within(context).queryByRole("button", { name: /策略与权限/ })).not.toBeInTheDocument();
+    expect(within(context).getByRole("button", { name: /访问控制/ })).toBeVisible();
     expect(within(context).queryByRole("button", { name: "搜索资产、变更与功能" })).not.toBeInTheDocument();
     expect(within(document.querySelector(".topbar") as HTMLElement).getByText("成员", { exact: true })).toBeVisible();
     expect(screen.queryByRole("heading", { name: "工作区与成员" })).not.toBeInTheDocument();
@@ -442,6 +442,122 @@ describe("Semlia product prototype", () => {
     await user.type(within(directory).getByRole("searchbox", { name: "搜索成员" }), "许言");
     expect(within(memberList).getByText("EMP-10005")).toBeVisible();
     expect(within(memberList).queryByText("EMP-10001")).not.toBeInTheDocument();
+  });
+
+  it("inspects roles and grouped permissions from access control", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "系统设置" }));
+    const context = screen.getByRole("complementary", { name: "治理上下文" });
+    await user.click(within(context).getByRole("button", { name: /访问控制/ }));
+
+    const accessControl = screen.getByRole("region", { name: "访问控制" });
+    expect(within(accessControl).getByRole("tab", { name: "角色与权限" })).toHaveAttribute("aria-selected", "true");
+    expect(within(accessControl).getByRole("tab", { name: "角色分配" })).toBeVisible();
+    expect(within(accessControl).getByRole("tab", { name: "有效权限检查" })).toBeVisible();
+    expect(within(accessControl).getByRole("button", { name: "查看角色 Workspace Admin" })).toBeVisible();
+    expect(within(accessControl).getByRole("button", { name: "查看角色 Reviewer" })).toBeVisible();
+
+    await user.click(within(accessControl).getByRole("button", { name: "查看角色 Reviewer" }));
+    const roleDialog = screen.getByRole("dialog", { name: "Reviewer 角色详情" });
+    expect(within(roleDialog).getByText("proposal.review")).toBeVisible();
+    expect(within(roleDialog).getByText("审核语义提案并记录评审结论。", { exact: true })).toBeVisible();
+    expect(within(roleDialog).queryByText("release.publish")).not.toBeInTheDocument();
+    expect(within(roleDialog).queryByRole("button", { name: "编辑角色" })).not.toBeInTheDocument();
+    await user.click(within(roleDialog).getByRole("button", { name: "基于此角色创建" }));
+
+    const editor = screen.getByRole("dialog", { name: "基于 Reviewer 创建角色" });
+    expect(within(editor).getByText("发布通过治理门禁的候选版本。", { exact: true })).toBeVisible();
+    const roleName = within(editor).getByLabelText("角色名称");
+    await user.clear(roleName);
+    await user.type(roleName, "收入域高级评审");
+    await user.click(within(editor).getByRole("checkbox", { name: "配置权限 asset.edit" }));
+    await user.click(within(editor).getByRole("button", { name: "预览角色变更" }));
+    expect(within(editor).getByRole("region", { name: "角色变更预览" })).toHaveTextContent("新增 1 项权限");
+    await user.click(within(editor).getByRole("button", { name: "创建自定义角色" }));
+
+    expect(within(accessControl).getByText("收入域高级评审")).toBeVisible();
+    expect(screen.getByRole("status")).toHaveTextContent("收入域高级评审已创建");
+    await user.click(within(accessControl).getByRole("button", { name: "查看角色 收入域高级评审" }));
+    const customRoleDialog = screen.getByRole("dialog", { name: "收入域高级评审 角色详情" });
+    await user.click(within(customRoleDialog).getByRole("button", { name: "编辑角色" }));
+    const customRoleEditor = screen.getByRole("dialog", { name: "编辑角色 收入域高级评审" });
+    expect(within(customRoleEditor).getByRole("checkbox", { name: "配置权限 asset.edit" })).toBeChecked();
+    await user.click(within(customRoleEditor).getByRole("checkbox", { name: "配置权限 asset.edit" }));
+    await user.click(within(customRoleEditor).getByRole("button", { name: "预览角色变更" }));
+    expect(within(customRoleEditor).getByRole("region", { name: "角色变更预览" })).toHaveTextContent("移除 1 项权限");
+    await user.click(within(customRoleEditor).getByRole("button", { name: "保存角色变更" }));
+    expect(screen.getByRole("status")).toHaveTextContent("收入域高级评审已更新");
+  });
+
+  it("assigns scoped roles with a review step and session version update", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: "系统设置" }));
+    const context = screen.getByRole("complementary", { name: "治理上下文" });
+    await user.click(within(context).getByRole("button", { name: /访问控制/ }));
+    const accessControl = screen.getByRole("region", { name: "访问控制" });
+    await user.click(within(accessControl).getByRole("tab", { name: "角色分配" }));
+    await user.click(within(accessControl).getByRole("button", { name: "分配角色" }));
+
+    const dialog = screen.getByRole("dialog", { name: "分配角色" });
+    await user.selectOptions(within(dialog).getByRole("combobox", { name: "授权主体" }), "AGENT-GOVERNANCE");
+    await user.selectOptions(within(dialog).getByRole("combobox", { name: "角色" }), "ROLE-AUDITOR");
+    await user.selectOptions(within(dialog).getByRole("combobox", { name: "资源范围" }), "workspace:WS-SEMLIA");
+    await user.click(within(dialog).getByRole("button", { name: "预览授权" }));
+    expect(within(dialog).getByRole("region", { name: "授权变更预览" })).toHaveTextContent("新增 10 项操作权限");
+    await user.click(within(dialog).getByRole("button", { name: "确认分配" }));
+
+    expect(within(accessControl).getByText("治理建议 Agent")).toBeVisible();
+    expect(within(accessControl).getAllByText("Auditor").length).toBeGreaterThan(1);
+    expect(within(accessControl).getByText("authzv-2026.09.01-002")).toBeVisible();
+    expect(screen.getByRole("status")).toHaveTextContent("角色分配已创建");
+  });
+
+  it("blocks conflicting roles in protected scopes", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: "系统设置" }));
+    const context = screen.getByRole("complementary", { name: "治理上下文" });
+    await user.click(within(context).getByRole("button", { name: /访问控制/ }));
+    const accessControl = screen.getByRole("region", { name: "访问控制" });
+    await user.click(within(accessControl).getByRole("tab", { name: "角色分配" }));
+    await user.click(within(accessControl).getByRole("button", { name: "分配角色" }));
+    const dialog = screen.getByRole("dialog", { name: "分配角色" });
+    await user.selectOptions(within(dialog).getByRole("combobox", { name: "授权主体" }), "USR-REVIEWER");
+    await user.selectOptions(within(dialog).getByRole("combobox", { name: "角色" }), "ROLE-PUBLISHER");
+    await user.selectOptions(within(dialog).getByRole("combobox", { name: "资源范围" }), "asset:METRIC-NET-REVENUE");
+    await user.click(within(dialog).getByRole("button", { name: "预览授权" }));
+
+    expect(within(dialog).getByRole("alert")).toHaveTextContent("评审者与发布者必须相互独立");
+    expect(within(dialog).getByRole("button", { name: "确认分配" })).toBeDisabled();
+  });
+
+  it("explains effective access and keeps business titles separate from roles", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: "系统设置" }));
+    const context = screen.getByRole("complementary", { name: "治理上下文" });
+    const directory = screen.getByRole("region", { name: "成员目录" });
+    expect(within(directory).getByRole("row", { name: /EMP-10001.*语义产品经理.*Workspace Admin/ })).toBeVisible();
+    expect(within(directory).getByText("已停用", { exact: true })).toBeVisible();
+
+    await user.click(within(context).getByRole("button", { name: /访问控制/ }));
+    const accessControl = screen.getByRole("region", { name: "访问控制" });
+    await user.click(within(accessControl).getByRole("tab", { name: "有效权限检查" }));
+    await user.click(within(accessControl).getByRole("button", { name: "检查有效权限" }));
+    let result = within(accessControl).getByRole("region", { name: "有效权限结果" });
+    expect(result).toHaveTextContent("拒绝");
+    expect(result).toHaveTextContent("NO_MATCHING_GRANT");
+    expect(result).toHaveTextContent("authzv-2026.09.01-001");
+
+    await user.selectOptions(within(accessControl).getByRole("combobox", { name: "检查主体" }), "EMP-10001");
+    await user.click(within(accessControl).getByRole("button", { name: "检查有效权限" }));
+    result = within(accessControl).getByRole("region", { name: "有效权限结果" });
+    expect(result).toHaveTextContent("允许");
+    expect(result).toHaveTextContent("Workspace Admin");
+    expect(result).toHaveTextContent("Semlia 工作区");
   });
 
   it("configures LLM and Embedding models as separate system settings", async () => {
@@ -500,7 +616,9 @@ describe("Semlia product prototype", () => {
     const auditRuntime = screen.getByRole("region", { name: "审计与运行" });
     expect(within(auditRuntime).getByRole("tab", { name: "运行记录" })).toHaveAttribute("aria-selected", "true");
     const rebuildRun = screen.getByRole("dialog", { name: "知识目录向量索引重建" });
-    expect(within(rebuildRun).getByRole("region", { name: "运行进度" })).toHaveTextContent("生成向量");
+    const globalRebuildProgress = within(rebuildRun).getByRole("region", { name: "运行进度" });
+    expect(globalRebuildProgress).toHaveTextContent("生成向量");
+    expect(globalRebuildProgress).toHaveTextContent("1,436 / 3,420 个知识块");
     expect(within(rebuildRun).getByRole("log", { name: "全局运行执行日志" })).toHaveTextContent("扫描知识块");
   });
 
@@ -579,6 +697,53 @@ describe("Semlia product prototype", () => {
     expect(screen.getByRole("region", { name: "工作台待办队列" })).toBeVisible();
     expect(screen.queryByRole("heading", { name: "待办" })).not.toBeInTheDocument();
     expect(within(context).queryByRole("button", { name: /动态/ })).not.toBeInTheDocument();
+  });
+
+  it("scopes machine clients with expiry and explicit revocation", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: "系统设置" }));
+    const context = screen.getByRole("complementary", { name: "治理上下文" });
+    await user.click(within(context).getByRole("button", { name: /接口与集成/ }));
+    const integrations = screen.getByRole("region", { name: "接口与集成" });
+
+    expect(within(integrations).getByText("已过期", { exact: true })).toBeVisible();
+    await user.click(within(integrations).getByRole("button", { name: "撤销客户端 Fluxale Production" }));
+    expect(within(integrations).getByText("已撤销", { exact: true })).toBeVisible();
+
+    await user.click(within(integrations).getByRole("button", { name: "创建客户端" }));
+    const dialog = screen.getByRole("dialog", { name: "创建客户端" });
+    expect(within(dialog).queryByText("工作区全量权限")).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("checkbox", { name: "semantic.resolve" })).toBeChecked();
+    expect(within(dialog).getByRole("checkbox", { name: "semantic.execute" })).toBeChecked();
+    await user.type(within(dialog).getByLabelText("客户端名称"), "受限查询 Agent");
+    await user.click(within(dialog).getByRole("checkbox", { name: "semantic.execute" }));
+    await user.clear(within(dialog).getByLabelText("到期时间"));
+    await user.type(within(dialog).getByLabelText("到期时间"), "2027-01-31");
+    await user.click(within(dialog).getByRole("button", { name: "创建客户端" }));
+    await user.click(screen.getByRole("button", { name: "完成" }));
+    expect(within(integrations).getByText("受限查询 Agent")).toBeVisible();
+    expect(within(integrations).getByText("1 项权限")).toBeVisible();
+    expect(within(integrations).getByText("2027-01-31")).toBeVisible();
+  });
+
+  it("blocks protected publish conflicts while preserving an independent publisher path", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: "变更与发布" }));
+    await user.click(screen.getByRole("button", { name: "查看候选资产版本 客单价 @9" }));
+    await user.click(screen.getByRole("button", { name: "审核候选版本 客单价 @9" }));
+    const reviewDialog = screen.getByRole("dialog", { name: "审核 客单价 · @9" });
+    expect(within(reviewDialog).getByText("陈默 · Reviewer")).toBeVisible();
+    expect(reviewDialog).toHaveTextContent("发布者必须是独立主体");
+    await user.click(within(reviewDialog).getByRole("button", { name: "模拟批准版本" }));
+    await user.click(screen.getByRole("button", { name: "模拟发布 @9" }));
+    const publishDialog = screen.getByRole("dialog", { name: "发布客单价 @9" });
+    expect(within(publishDialog).getByRole("combobox", { name: "发布身份" })).toHaveValue("USR-PUBLISHER");
+    expect(within(publishDialog).getByText("陈默评审 · 周岚发布")).toBeVisible();
+    await user.selectOptions(within(publishDialog).getByRole("combobox", { name: "发布身份" }), "USR-REVIEWER");
+    expect(within(publishDialog).getByRole("alert")).toHaveTextContent("评审者与发布者必须相互独立");
+    expect(within(publishDialog).getByRole("button", { name: "确认模拟发布并生效" })).toBeDisabled();
   });
 
   it("uses the workbench as an actionable queue instead of a duplicate status dashboard", async () => {

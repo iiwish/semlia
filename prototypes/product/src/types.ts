@@ -353,3 +353,119 @@ export interface AssetVersionRelease {
   changes: string[];
   consumers: Consumer[];
 }
+
+export type PermissionAction =
+  | "workspace.read"
+  | "workspace.manage"
+  | "member.read"
+  | "member.manage"
+  | "group.manage"
+  | "role.read"
+  | "role.manage"
+  | "role.assign"
+  | "authorization.inspect"
+  | "asset.read"
+  | "asset.propose"
+  | "asset.edit"
+  | "evidence.read"
+  | "proposal.review"
+  | "validation.run"
+  | "release.publish"
+  | "release.rollback"
+  | "source.read"
+  | "source.manage"
+  | "ingestion.run"
+  | "binding.read"
+  | "binding.manage"
+  | "semantic.resolve"
+  | "semantic.execute"
+  | "audit.read"
+  | "runtime.read"
+  | "runtime.manage";
+
+export type AuthorizationPrincipalKind = "user" | "group" | "service_account" | "api_client" | "agent";
+
+export type AuthorizationScopeType = "workspace" | "domain" | "asset" | "source" | "environment" | "release" | "consumer";
+
+export interface AuthorizationScope {
+  type: AuthorizationScopeType;
+  id: string;
+  label: string;
+  protected?: boolean;
+}
+
+export interface AuthorizationResource {
+  type: AuthorizationScopeType;
+  id: string;
+  domainId?: string;
+  environment?: string;
+  protected?: boolean;
+}
+
+export interface AuthorizationPrincipal {
+  id: string;
+  kind: AuthorizationPrincipalKind;
+  name: string;
+  detail: string;
+  status: "active" | "suspended" | "revoked";
+}
+
+export interface AuthorizationRole {
+  id: string;
+  name: string;
+  description: string;
+  category: "system" | "custom";
+  permissions: PermissionAction[];
+  baseRoleId?: string;
+  incompatibleRoleIds?: string[];
+}
+
+export interface AuthorizationBinding {
+  id: string;
+  principalId: string;
+  roleId: string;
+  scope: AuthorizationScope;
+  assignedBy: string;
+  assignedAt: string;
+  expiresAt?: string;
+  status: "active" | "expired" | "revoked";
+}
+
+export interface CapabilitySession {
+  principalId: string;
+  version: string;
+  capabilities: PermissionAction[];
+}
+
+export type AuthorizationReasonCode =
+  | "ROLE_GRANT"
+  | "SESSION_CAPABILITY"
+  | "NO_MATCHING_GRANT"
+  | "PRINCIPAL_INACTIVE"
+  | "SEPARATION_OF_DUTY";
+
+export interface AuthorizationDecision {
+  allowed: boolean;
+  action: PermissionAction;
+  principalId: string;
+  reasonCode: AuthorizationReasonCode;
+  explanation: string;
+  authorizationVersion: string;
+  roleId?: string;
+  bindingId?: string;
+  scope?: AuthorizationScope;
+}
+
+export interface SeparationOfDutyConflict {
+  code: "PROTECTED_REVIEW_PUBLISH_CONFLICT";
+  message: string;
+  blocking: boolean;
+  conflictingBindingId: string;
+}
+
+export interface PermissionGroup {
+  id: string;
+  label: string;
+  description: string;
+  actions: PermissionAction[];
+}
