@@ -1,4 +1,4 @@
-import { createElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createElement, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -21,6 +21,7 @@ import {
   LayoutDashboard,
   ListFilter,
   Link2,
+  LockKeyhole,
   Network,
   PackageCheck,
   PanelLeftClose,
@@ -41,6 +42,8 @@ import {
 import type { LucideIcon } from "lucide-react";
 
 import { assetVersionReleases, assets, proposals } from "./data";
+import { CapabilityProvider, useCan } from "./authorization";
+import { AccessControlView } from "./AccessControlView";
 import { assetTypeProfileFor, evaluateAssetTypeRules, type AssetEmptyStateConfig } from "./assetTypeProfiles";
 import { AuditRuntimeView } from "./AuditRuntimeView";
 import { SourcesView } from "./JourneyViews";
@@ -292,6 +295,7 @@ const contextItems: Record<ViewId, Array<{ label: string; meta: string; tone?: "
   releases: changeReleaseContextItems,
   settings: [
     { label: "成员", meta: "24 名成员" },
+    { label: "访问控制", meta: "9 个系统角色" },
     { label: "模型配置", meta: "LLM · Embedding" },
     { label: "接口与集成", meta: "4 种接口" },
     { label: "审计与运行", meta: "全局记录" },
@@ -376,6 +380,10 @@ function ActivityRail({ view, onChange }: { view: ViewId; onChange: (view: ViewI
 function ContextPanel({ view, activeIndex, width, recentAssets, activeAssetId, assetDetailOpen, activeWorkbenchTask, askConversationTitles, conversationSearchRequestEpoch, onSelect, onOpenRecentAsset, onOpenWorkbenchTask, onOpenCatalogSearch, onOpenWorkbenchSearch, onCollapse, onResize }: { view: ViewId; activeIndex: number; width: number; recentAssets: Asset[]; activeAssetId: string; assetDetailOpen: boolean; activeWorkbenchTask: WorkbenchTask | null; askConversationTitles: Record<number, string>; conversationSearchRequestEpoch: number; onSelect: (index: number) => void; onOpenRecentAsset: (id: string) => void; onOpenWorkbenchTask: (task: WorkbenchTask) => void; onOpenCatalogSearch: () => void; onOpenWorkbenchSearch: () => void; onCollapse: () => void; onResize: (width: number) => void }) {
   const isAssetCatalog = view === "assets";
   const hasContextSearch = view !== "sources" && view !== "releases" && view !== "settings";
+  const canReadRoles = useCan("role.read");
+  const canAssignRoles = useCan("role.assign");
+  const canInspectAuthorization = useCan("authorization.inspect");
+  const canViewAccessControl = canReadRoles || canAssignRoles || canInspectAuthorization;
   const resizeState = useRef<{ pointerId: number; startX: number; startWidth: number } | null>(null);
   const contextListRef = useRef<HTMLDivElement>(null);
   const conversationSearchRef = useRef<HTMLInputElement>(null);
@@ -451,7 +459,7 @@ function ContextPanel({ view, activeIndex, width, recentAssets, activeAssetId, a
             <span><strong>{title}</strong><small>{item.meta}</small></span>
             <ChevronRight size={14} />
           </button>
-        )) : <div className="context-search-empty"><Search size={16} /><strong>没有匹配会话</strong><span>尝试搜索其他会话标题。</span></div> : contextItems[view].map((item, index) => (
+        )) : <div className="context-search-empty"><Search size={16} /><strong>没有匹配会话</strong><span>尝试搜索其他会话标题。</span></div> : contextItems[view].map((item, index) => ({ item, index })).filter(({ index }) => view !== "settings" || index !== 1 || canViewAccessControl).map(({ item, index }) => (
           <button className={index === activeIndex ? "context-item context-item-active" : "context-item"} type="button" key={item.label} onClick={() => onSelect(index)}>
             <span className={`context-dot${item.tone ? ` context-dot-${item.tone}` : ""}`} />
             <span><strong>{item.label}</strong><small>{item.meta}</small></span>
@@ -462,6 +470,15 @@ function ContextPanel({ view, activeIndex, width, recentAssets, activeAssetId, a
       <div className="context-resize-handle" role="separator" aria-label="调整二级菜单宽度" aria-orientation="vertical" aria-valuemin={contextPanelWidthRange.min} aria-valuemax={contextPanelWidthRange.max} aria-valuenow={Math.round(width)} tabIndex={0} onPointerDown={handleResizeStart} onKeyDown={handleResizeKeyDown} />
     </aside>
   );
+}
+
+function AccessControlGate({ children }: { children: ReactNode }) {
+  const canReadRoles = useCan("role.read");
+  const canAssignRoles = useCan("role.assign");
+  const canInspectAuthorization = useCan("authorization.inspect");
+  const allowed = canReadRoles || canAssignRoles || canInspectAuthorization;
+  if (allowed) return children;
+  return <section className="view settings-view access-control-view" aria-label="访问控制"><div className="access-inspector-empty"><LockKeyhole size={22} /><strong>没有访问控制权限</strong><span>需要角色读取、角色分配或有效权限检查能力。</span></div></section>;
 }
 
 function Topbar({ view, contextLabel, onNewConversation, onRenameContext, onBack, backLabel = "返回" }: { view: ViewId; contextLabel?: string; onNewConversation: () => void; onRenameContext?: (title: string) => void; onBack?: () => void; backLabel?: string }) {
@@ -617,21 +634,26 @@ function MembersSettingsView() {
         <label><Search size={14} /><input type="search" aria-label="搜索成员" placeholder="搜索员工 ID、姓名或邮箱" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} />{searchQuery && <button type="button" aria-label="清除成员搜索" title="清除搜索" onClick={() => setSearchQuery("")}><X size={13} /></button>}</label>
       </div>
       <section className="member-directory-table" aria-label="成员列表">
-        <div className="member-directory-head" aria-hidden="true"><span>员工 ID</span><span>姓名</span><span>邮箱</span><span>部门</span><span>职位</span><span>状态</span></div>
+        <div className="member-directory-head" role="row"><span>员工 ID</span><span>姓名</span><span>邮箱</span><span>部门</span><span>职位</span><span>授权角色</span><span>状态</span></div>
         <div className="member-directory-body">
-          {visibleMembers.map((member) => <div className="member-directory-row" key={member.id}><code>{member.id}</code><strong>{member.name}</strong><span className="member-email">{member.email}</span><span>{member.department}</span><span>{member.title}</span><span className="member-state">在职</span></div>)}
+          {visibleMembers.map((member) => {
+            const role = member.id === "EMP-10001" ? "Workspace Admin" : member.id === "EMP-10009" ? "Reviewer" : "未分配";
+            const suspended = member.id === "EMP-10008";
+            return <div className="member-directory-row" role="row" key={member.id}><code>{member.id}</code><strong>{member.name}</strong><span className="member-email">{member.email}</span><span>{member.department}</span><span>{member.title}</span><span className={role === "未分配" ? "member-role member-role-empty" : "member-role"}>{role}</span><span className={suspended ? "member-state member-state-suspended" : "member-state"}>{suspended ? "已停用" : "在职"}</span></div>;
+          })}
           {visibleMembers.length === 0 && <div className="member-directory-empty"><Users size={19} /><strong>没有匹配成员</strong><span>尝试搜索其他员工 ID、姓名、邮箱或部门。</span><button type="button" onClick={() => setSearchQuery("")}>清除搜索</button></div>}
         </div>
       </section>
-      <div className="member-directory-disclosure">原型成员数据 · 暂不包含角色和权限</div>
+      <div className="member-directory-disclosure">业务职位与授权角色分别维护 · 原型授权数据仅用于演示</div>
     </section>
   );
 }
 
 function SettingsView({ focusIndex, rebuildRun, auditRunRequestId, onAuditRunRequestHandled, onStartEmbeddingRebuild, onOpenRebuildRun, onNotify }: { focusIndex: number; rebuildRun: EmbeddingRebuildRun | null; auditRunRequestId?: string; onAuditRunRequestHandled: () => void; onStartEmbeddingRebuild: (modelId: string) => void; onOpenRebuildRun: () => void; onNotify: (message: string) => void }) {
   if (focusIndex === 0) return <MembersSettingsView />;
-  if (focusIndex === 1) return <ModelConfigurationView rebuildRun={rebuildRun} onStartEmbeddingRebuild={onStartEmbeddingRebuild} onOpenRebuildRun={onOpenRebuildRun} onNotify={onNotify} />;
-  if (focusIndex === 2) return <IntegrationSettingsView onNotify={onNotify} />;
+  if (focusIndex === 1) return <AccessControlGate><AccessControlView onNotify={onNotify} /></AccessControlGate>;
+  if (focusIndex === 2) return <ModelConfigurationView rebuildRun={rebuildRun} onStartEmbeddingRebuild={onStartEmbeddingRebuild} onOpenRebuildRun={onOpenRebuildRun} onNotify={onNotify} />;
+  if (focusIndex === 3) return <IntegrationSettingsView onNotify={onNotify} />;
   return <AuditRuntimeView embeddingRebuildRun={rebuildRun} initialRunId={auditRunRequestId} onInitialRunHandled={onAuditRunRequestHandled} onNotify={onNotify} />;
 }
 
@@ -1378,6 +1400,7 @@ function ReviewDialog({ proposal, onClose, onDecision }: { proposal: Proposal; o
               <div className={`validation-item validation-${item.state}`} key={item.name}><span>{validationIcon(item.state)}</span><div><strong>{validationLabel(item.name)}</strong><small>{item.detail}</small></div></div>
             ))}
           </div>
+          <div className="release-sod-check"><ShieldCheck size={17} /><span><strong>职责分离检查通过</strong><small><b>陈默 · Reviewer</b> 负责本次版本评审；发布者必须是独立主体，并持有目标生产范围的 <code>release.publish</code>。</small></span></div>
           {hasFailedValidation && <div className="version-review-blocker"><CircleAlert size={16} /><span><strong>候选版本存在失败门禁</strong><small>可以退回版本，但必须修复验证后才能批准发布。</small></span></div>}
           <label className="review-note"><span>审核意见</span><textarea placeholder="记录判断依据，原型中不会保存。" /></label>
         </div>
@@ -1417,8 +1440,10 @@ function CreateProposalDialog({ onClose, onCreate }: { onClose: () => void; onCr
 
 function PublishDialog({ proposal, onClose, onPublish }: { proposal: Proposal; onClose: () => void; onPublish: () => void }) {
   const closeRef = useRef<HTMLButtonElement>(null);
+  const [publisherId, setPublisherId] = useState("USR-PUBLISHER");
   const target = candidateTargetFor(proposal);
   const asset = assets.find((item) => item.id === proposal.assetId);
+  const hasSeparationConflict = publisherId === "USR-REVIEWER";
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
     document.addEventListener("keydown", handleKeyDown);
@@ -1435,9 +1460,11 @@ function PublishDialog({ proposal, onClose, onPublish }: { proposal: Proposal; o
           <div><CheckCircle2 size={17} /><span><strong>结构与引用验证</strong><small>{proposal.validations.length} / {proposal.validations.length} 通过</small></span></div>
           <div><CheckCircle2 size={17} /><span><strong>治理策略</strong><small>已满足 G1 负责人审核要求</small></span></div>
           <div><CheckCircle2 size={17} /><span><strong>消费影响</strong><small>{proposal.impact.length} 个对象已完成检查</small></span></div>
+          <label className="publish-identity"><span>发布身份</span><select aria-label="发布身份" value={publisherId} onChange={(event) => setPublisherId(event.target.value)}><option value="USR-PUBLISHER">周岚 · Publisher</option><option value="USR-REVIEWER">陈默 · Reviewer</option></select><small>{hasSeparationConflict ? "与当前评审主体冲突" : "陈默评审 · 周岚发布"}</small></label>
+          {hasSeparationConflict ? <div className="release-sod-conflict" role="alert"><CircleAlert size={17} /><span><strong>职责分离冲突</strong><small>受保护范围的评审者与发布者必须相互独立。请切换到周岚或其他具备生产发布权限的独立主体。</small></span></div> : <div className="release-sod-check"><ShieldCheck size={17} /><span><strong>独立发布者已确认</strong><small>当前发布身份持有生产环境 <code>release.publish</code>，且未参与本次版本评审。</small></span></div>}
           <div className="publish-target"><span>资产版本</span><code>{asset?.key} · {target?.revision}</code><small>发布批次 release-2026.08.4-session</small></div>
         </div>
-        <footer><span /><div><button className="secondary-button" type="button" onClick={onClose}>取消</button><button className="primary-button" type="button" onClick={onPublish}><PackageCheck size={16} />确认模拟发布并生效</button></div></footer>
+        <footer><span /><div><button className="secondary-button" type="button" onClick={onClose}>取消</button><button className="primary-button" type="button" disabled={hasSeparationConflict} onClick={onPublish}><PackageCheck size={16} />确认模拟发布并生效</button></div></footer>
       </section>
     </div>
   );
@@ -1612,7 +1639,7 @@ export function App() {
     setActiveWorkbenchTask(null);
     setAuditRunRequestId(runId);
     setView("settings");
-    setContextIndex(3);
+    setContextIndex(4);
   };
 
   const startEmbeddingRebuild = (modelId: string) => {
@@ -1636,7 +1663,7 @@ export function App() {
     setContextPanelOpen(true);
     setAuditRunRequestId(embeddingRebuildRun.id);
     setView("settings");
-    setContextIndex(3);
+    setContextIndex(4);
   };
 
   const handleAuditRunRequest = useCallback(() => setAuditRunRequestId(undefined), []);
@@ -1797,6 +1824,7 @@ export function App() {
   const contextLabel = view === "overview" ? activeWorkbenchTask?.title ?? "待办" : view === "assets" ? (assetDetailRequest ? selectedAsset?.name : "知识目录") : view === "ask" ? askConversationTitles[contextIndex] ?? contextItems[view][contextIndex]?.label : contextItems[view][contextIndex]?.label;
 
   return (
+    <CapabilityProvider>
     <div className={contextPanelOpen ? "app-shell" : "app-shell context-panel-collapsed"} style={{ "--context-panel-width": `${contextPanelOpen ? contextPanelWidth : 0}px` } as React.CSSProperties}>
       <ActivityRail view={view} onChange={navigate} />
       {contextPanelOpen && <ContextPanel view={view} activeIndex={contextIndex} width={contextPanelWidth} recentAssets={recentAssets} activeAssetId={selectedAssetId} assetDetailOpen={assetDetailRequest} activeWorkbenchTask={activeWorkbenchTask} askConversationTitles={askConversationTitles} conversationSearchRequestEpoch={conversationSearchRequestEpoch} onSelect={selectContext} onOpenRecentAsset={openAssetDetail} onOpenWorkbenchTask={setActiveWorkbenchTask} onOpenCatalogSearch={openCatalogSearch} onOpenWorkbenchSearch={openWorkbenchSearch} onCollapse={() => setContextPanelOpen(false)} onResize={setContextPanelWidth} />}
@@ -1819,5 +1847,6 @@ export function App() {
       {commandOpen && <CommandPalette onClose={() => setCommandOpen(false)} onNavigate={navigate} onSelectAsset={openAssetDetail} onSelectProposal={(id) => { const proposal = proposals.find((item) => item.id === id); if (proposal) openCandidateVersion(proposal); }} onCreateProposal={() => setCreatingProposal(true)} />}
       {toast && <div className="toast" role="status"><CheckCircle2 size={17} /><span>{toast}</span></div>}
     </div>
+    </CapabilityProvider>
   );
 }

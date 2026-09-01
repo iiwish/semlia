@@ -1,4 +1,7 @@
 import { expect, test } from "@playwright/test";
+import { resolve } from "node:path";
+
+const accessControlEvidenceDirectory = resolve(process.cwd(), "../../docs/evidence/access-control-prototype/T005/screenshots");
 
 test("database-to-answer journey stays inspectable", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
@@ -186,7 +189,9 @@ test("database-to-answer journey stays inspectable", async ({ page }) => {
   await buildRunDetail.getByRole("button", { name: "打开下游运行" }).click();
   const downstreamDialog = page.getByRole("dialog", { name: "客户增长知识增量构建" });
   await expect(downstreamDialog).toContainText("上游接入 RUN-240824-1432");
+  await downstreamDialog.getByRole("button", { name: "关闭", exact: true }).click();
 
+  await page.getByRole("button", { name: "变更与发布", exact: true }).click();
   await page.getByRole("button", { name: "查看候选资产版本 客单价 @9" }).click();
   const releaseContext = page.getByRole("complementary", { name: "治理上下文" });
   await expect(releaseContext.getByRole("button", { name: "搜索资产、变更与功能" })).toHaveCount(0);
@@ -343,7 +348,8 @@ test("system settings separates LLM inference from Embedding indexing", async ({
   await expect(context.getByRole("button", { name: "搜索资产、变更与功能" })).toHaveCount(0);
   const memberDirectory = page.getByRole("region", { name: "成员目录" });
   await expect(memberDirectory.getByText("EMP-10001")).toBeVisible();
-  await expect(memberDirectory.getByText("yue.lin@semlia.example")).toBeVisible();
+  await expect(memberDirectory.getByText("yue.lin@semlia.example")).toBeHidden();
+  await expect(memberDirectory.getByText("Workspace Admin", { exact: true })).toBeVisible();
   await memberDirectory.getByRole("searchbox", { name: "搜索成员" }).fill("许言");
   await expect(memberDirectory.getByText("EMP-10005")).toBeVisible();
   await expect(memberDirectory.getByText("EMP-10001")).toHaveCount(0);
@@ -445,7 +451,7 @@ test("audit and runtime unify global execution, traceability and settings", asyn
   await runTable.getByRole("button", { name: "查看运行 客户增长知识增量构建" }).click();
   const runDialog = page.getByRole("dialog", { name: "客户增长知识增量构建" });
   await expect(runDialog.getByRole("log", { name: "全局运行执行日志" })).toContainText("加载上下文");
-  await runDialog.getByRole("button", { name: "关闭" }).click();
+  await runDialog.getByRole("button", { name: "关闭", exact: true }).click();
 
   await runtime.getByRole("tab", { name: "审计日志" }).click();
   const auditTable = runtime.getByRole("region", { name: "审计事件" });
@@ -455,7 +461,7 @@ test("audit and runtime unify global execution, traceability and settings", asyn
   await auditTable.getByRole("button", { name: "查看审计事件 调用语义检索" }).click();
   const auditDialog = page.getByRole("dialog", { name: "调用语义检索" });
   await expect(auditDialog).toContainText("tr_d219a4");
-  await auditDialog.getByRole("button", { name: "关闭" }).click();
+  await auditDialog.getByRole("button", { name: "关闭", exact: true }).click();
 
   await runtime.getByRole("tab", { name: "运行设置" }).click();
   await runtime.getByRole("spinbutton", { name: "最大并发任务" }).fill("6");
@@ -510,5 +516,83 @@ test("answer feedback becomes a governed knowledge revision", async ({ page }) =
   await expect(page.getByText(/confirmed_refund_amount/)).toBeVisible();
   await page.getByRole("tab", { name: /变更来源.*1/ }).click();
   await expect(page.getByText("人工知识修订")).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)).toBe(false);
+});
+
+test("access control remains explainable across supported desktop viewports", async ({ page }, testInfo) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
+  await page.getByRole("button", { name: "系统设置" }).click();
+  const context = page.getByRole("complementary", { name: "治理上下文" });
+  await expect(context.getByRole("button", { name: /访问控制/ })).toBeVisible();
+  await context.getByRole("button", { name: /访问控制/ }).click();
+  const accessControl = page.getByRole("region", { name: "访问控制" });
+  await expect(accessControl.getByRole("button", { name: "查看角色 Workspace Admin" })).toBeVisible();
+  await page.screenshot({ path: resolve(accessControlEvidenceDirectory, `${testInfo.project.name}-roles.png`), fullPage: true });
+
+  await accessControl.getByRole("button", { name: "查看角色 Reviewer" }).click();
+  const roleDialog = page.getByRole("dialog", { name: "Reviewer 角色详情" });
+  await expect(roleDialog.getByText("proposal.review", { exact: true })).toBeVisible();
+  await expect(roleDialog.getByText("审核语义提案并记录评审结论。", { exact: true })).toBeVisible();
+  await expect(roleDialog.getByText("release.publish", { exact: true })).toHaveCount(0);
+  await expect(roleDialog.getByRole("button", { name: "编辑角色" })).toHaveCount(0);
+  await roleDialog.getByRole("button", { name: "基于此角色创建" }).click();
+  const roleEditor = page.getByRole("dialog", { name: "基于 Reviewer 创建角色" });
+  await expect(roleEditor.getByRole("checkbox", { name: "配置权限 release.publish" })).toBeVisible();
+  await expect(roleEditor.getByText("发布通过治理门禁的候选版本。", { exact: true })).toBeVisible();
+  const roleEditorBox = await roleEditor.boundingBox();
+  const roleEditorActionBox = await roleEditor.getByRole("button", { name: "预览角色变更" }).boundingBox();
+  expect(roleEditorBox).not.toBeNull();
+  expect(roleEditorActionBox).not.toBeNull();
+  expect((roleEditorBox?.x ?? -1) + (roleEditorBox?.width ?? 0)).toBeLessThanOrEqual(testInfo.project.name === "compact-desktop" ? 1024 : 1440);
+  expect((roleEditorActionBox?.y ?? -1) + (roleEditorActionBox?.height ?? 0)).toBeLessThanOrEqual(testInfo.project.name === "compact-desktop" ? 768 : 900);
+  await page.screenshot({ path: resolve(accessControlEvidenceDirectory, `${testInfo.project.name}-role-editor.png`), fullPage: true });
+  await page.keyboard.press("Escape");
+  await expect(roleEditor).toBeHidden();
+
+  await accessControl.getByRole("tab", { name: "角色分配" }).click();
+  await accessControl.getByRole("button", { name: "分配角色" }).click();
+  const assignmentDialog = page.getByRole("dialog", { name: "分配角色" });
+  await assignmentDialog.getByRole("button", { name: "预览授权" }).click();
+  await expect(assignmentDialog.getByRole("alert")).toContainText("评审者与发布者必须相互独立");
+  await expect(assignmentDialog.getByRole("button", { name: "确认分配" })).toBeDisabled();
+  await page.screenshot({ path: resolve(accessControlEvidenceDirectory, `${testInfo.project.name}-assignment-conflict.png`), fullPage: true });
+  await assignmentDialog.getByRole("button", { name: "关闭角色分配" }).click();
+
+  await accessControl.getByRole("tab", { name: "有效权限检查" }).click();
+  await accessControl.getByRole("button", { name: "检查有效权限" }).click();
+  const decision = accessControl.getByRole("region", { name: "有效权限结果" });
+  await expect(decision).toContainText("拒绝");
+  await accessControl.getByRole("combobox", { name: "检查主体" }).selectOption("EMP-10001");
+  await accessControl.getByRole("button", { name: "检查有效权限" }).click();
+  await expect(decision).toContainText("允许");
+  await expect(decision).toContainText("Workspace Admin");
+  await page.screenshot({ path: resolve(accessControlEvidenceDirectory, `${testInfo.project.name}-effective-access.png`), fullPage: true });
+
+  await context.getByRole("button", { name: /成员.*24 名成员/ }).click();
+  const members = page.getByRole("region", { name: "成员目录" });
+  await expect(members.getByRole("row", { name: /EMP-10001.*语义产品经理.*Workspace Admin/ })).toBeVisible();
+  await expect(members.getByText("已停用", { exact: true })).toBeVisible();
+  await page.screenshot({ path: resolve(accessControlEvidenceDirectory, `${testInfo.project.name}-members.png`), fullPage: true });
+
+  await context.getByRole("button", { name: /接口与集成/ }).click();
+  const integrations = page.getByRole("region", { name: "接口与集成" });
+  await expect(integrations.getByText("已过期", { exact: true })).toBeVisible();
+  await expect(integrations.getByRole("button", { name: "撤销客户端 Fluxale Production" })).toBeVisible();
+  await page.screenshot({ path: resolve(accessControlEvidenceDirectory, `${testInfo.project.name}-machine-clients.png`), fullPage: true });
+
+  await page.getByRole("button", { name: "变更与发布" }).click();
+  await page.getByRole("button", { name: "查看候选资产版本 客单价 @9" }).click();
+  await page.getByRole("button", { name: "审核候选版本 客单价 @9" }).click();
+  await page.getByRole("dialog", { name: "审核 客单价 · @9" }).getByRole("button", { name: "模拟批准版本" }).click();
+  await page.getByRole("button", { name: "模拟发布 @9" }).click();
+  const publishDialog = page.getByRole("dialog", { name: "发布客单价 @9" });
+  await publishDialog.getByRole("combobox", { name: "发布身份" }).selectOption("USR-REVIEWER");
+  await expect(publishDialog.getByRole("alert")).toContainText("评审者与发布者必须相互独立");
+  await expect(publishDialog.getByRole("button", { name: "确认模拟发布并生效" })).toBeDisabled();
+  await page.screenshot({ path: resolve(accessControlEvidenceDirectory, `${testInfo.project.name}-publish-conflict.png`), fullPage: true });
+
+  const clippedElements = await page.locator(".access-control-view, .access-role-table, .assignment-table, .access-inspector-form, .member-directory-table, .integration-client-table, .review-dialog").evaluateAll((elements) => elements.filter((element) => element.scrollWidth > element.clientWidth + 1).length);
+  expect(clippedElements).toBe(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)).toBe(false);
 });

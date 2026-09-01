@@ -1,6 +1,8 @@
 import { createPortal } from "react-dom";
 import { useState, type FormEvent } from "react";
-import { BookOpenText, Bot, Braces, Cable, Check, Clipboard, KeyRound, Pause, Play, Plus, RotateCw, Search, Server, ShieldCheck, Terminal, X } from "lucide-react";
+import { Ban, BookOpenText, Bot, Braces, Cable, Check, Clipboard, KeyRound, Pause, Play, Plus, RotateCw, Search, Server, ShieldCheck, Terminal, X } from "lucide-react";
+
+import type { PermissionAction } from "./types";
 
 interface IntegrationChannel {
   id: "rest" | "mcp" | "cli" | "sdk";
@@ -19,6 +21,10 @@ interface IntegrationClient {
   credential: string;
   lastUsed: string;
   enabled: boolean;
+  permissions: PermissionAction[];
+  expiresAt: string;
+  assignmentSource: string;
+  revokedAt?: string;
 }
 
 interface IntegrationGuide {
@@ -29,6 +35,21 @@ interface IntegrationGuide {
 }
 
 const channelIcons = { rest: Cable, mcp: Bot, cli: Terminal, sdk: Braces } as const;
+const clientPermissionOptions: Array<{ action: PermissionAction; label: string }> = [
+  { action: "asset.read", label: "读取已发布语义资产" },
+  { action: "evidence.read", label: "读取证据与版本来源" },
+  { action: "semantic.resolve", label: "解析语义与已发布版本" },
+  { action: "semantic.execute", label: "执行语义查询" },
+  { action: "validation.run", label: "运行只读验证" },
+];
+const prototypeToday = "2026-09-01";
+
+function clientStatus(client: IntegrationClient) {
+  if (client.revokedAt) return "revoked" as const;
+  if (client.expiresAt < prototypeToday) return "expired" as const;
+  if (!client.enabled) return "disabled" as const;
+  return "active" as const;
+}
 
 const channelGuides: Record<IntegrationChannel["id"], IntegrationGuide> = {
   rest: {
@@ -72,21 +93,21 @@ export function IntegrationSettingsView({ onNotify }: { onNotify: (message: stri
     { id: "sdk", name: "SDK", description: "在应用服务中使用类型化客户端调用 Semlia。", endpoint: "@semlia/sdk", capability: "TypeScript · Python", enabled: true },
   ]);
   const [clients, setClients] = useState<IntegrationClient[]>([
-    { id: "client-fluxale", name: "Fluxale Production", channel: "REST API", environment: "生产", credential: "sk_live_••••7K2A", lastUsed: "2 分钟前", enabled: true },
-    { id: "client-codex", name: "Codex MCP Workspace", channel: "MCP", environment: "开发", credential: "mcp_••••91HF", lastUsed: "18 分钟前", enabled: true },
-    { id: "client-ci", name: "Semantic Release CI", channel: "CLI", environment: "生产", credential: "sk_ci_••••4DPQ", lastUsed: "昨天 23:10", enabled: true },
+    { id: "client-fluxale", name: "Fluxale Production", channel: "REST API", environment: "生产", credential: "sk_live_••••7K2A", lastUsed: "2 分钟前", enabled: true, permissions: ["asset.read", "semantic.resolve", "semantic.execute"], expiresAt: "2027-02-28", assignmentSource: "安全管理员 · 林悦" },
+    { id: "client-codex", name: "Codex MCP Workspace", channel: "MCP", environment: "开发", credential: "mcp_••••91HF", lastUsed: "18 分钟前", enabled: true, permissions: ["asset.read", "evidence.read", "semantic.resolve", "semantic.execute"], expiresAt: "2026-11-30", assignmentSource: "安全管理员 · 林悦" },
+    { id: "client-ci", name: "Semantic Release CI", channel: "CLI", environment: "生产", credential: "sk_ci_••••4DPQ", lastUsed: "昨天 23:10", enabled: true, permissions: ["asset.read", "validation.run"], expiresAt: "2026-08-31", assignmentSource: "自动迁移 · v1" },
   ]);
   const [query, setQuery] = useState("");
   const [creatingClient, setCreatingClient] = useState(false);
   const [guideChannelId, setGuideChannelId] = useState<IntegrationChannel["id"] | null>(null);
   const [createdCredential, setCreatedCredential] = useState<{ name: string; secret: string } | null>(null);
-  const [draft, setDraft] = useState({ name: "", channel: "REST API" as IntegrationClient["channel"], environment: "生产" as IntegrationClient["environment"] });
+  const [draft, setDraft] = useState({ name: "", channel: "REST API" as IntegrationClient["channel"], environment: "生产" as IntegrationClient["environment"], permissions: ["semantic.resolve", "semantic.execute"] as PermissionAction[], expiresAt: "2026-12-31" });
   const normalizedQuery = query.trim().toLocaleLowerCase("zh-CN");
   const visibleClients = clients.filter((client) => !normalizedQuery || `${client.name} ${client.channel} ${client.environment} ${client.credential}`.toLocaleLowerCase("zh-CN").includes(normalizedQuery));
   const guideChannel = channels.find((channel) => channel.id === guideChannelId) ?? null;
 
   const openCreateClient = () => {
-    setDraft({ name: "", channel: "REST API", environment: "生产" });
+    setDraft({ name: "", channel: "REST API", environment: "生产", permissions: ["semantic.resolve", "semantic.execute"], expiresAt: "2026-12-31" });
     setCreatedCredential(null);
     setCreatingClient(true);
   };
@@ -94,7 +115,7 @@ export function IntegrationSettingsView({ onNotify }: { onNotify: (message: stri
   const createClient = (event: FormEvent) => {
     event.preventDefault();
     const secret = draft.channel === "MCP" ? "mcp_session_9Fx2R7kL3a" : "sk_session_7Kp2Nc4Q8m";
-    setClients((current) => [{ id: `client-${current.length + 1}`, name: draft.name.trim(), channel: draft.channel, environment: draft.environment, credential: `${secret.slice(0, 8)}••••${secret.slice(-4)}`, lastUsed: "尚未使用", enabled: true }, ...current]);
+    setClients((current) => [{ id: `client-${current.length + 1}`, name: draft.name.trim(), channel: draft.channel, environment: draft.environment, credential: `${secret.slice(0, 8)}••••${secret.slice(-4)}`, lastUsed: "尚未使用", enabled: true, permissions: draft.permissions, expiresAt: draft.expiresAt, assignmentSource: "手动创建 · 林悦" }, ...current]);
     setCreatedCredential({ name: draft.name.trim(), secret });
     onNotify(`${draft.name.trim()} 已创建。凭据只在当前窗口显示一次。`);
   };
@@ -125,8 +146,13 @@ export function IntegrationSettingsView({ onNotify }: { onNotify: (message: stri
       <section className="integration-client-section" aria-labelledby="integration-client-title">
         <header><div><h2 id="integration-client-title">客户端凭据</h2><span>用于 MCP、API 与自动化调用，不继承浏览器会话</span></div><strong>{visibleClients.length} 个客户端</strong></header>
         <div className="integration-client-table" aria-label="集成客户端列表">
-          <div className="integration-client-head" aria-hidden="true"><span>客户端</span><span>接口</span><span>环境</span><span>凭据</span><span>最近调用</span><span>状态与操作</span></div>
-          {visibleClients.map((client) => <div className="integration-client-row" key={client.id}><span><strong>{client.name}</strong><small>{client.id}</small></span><span>{client.channel}</span><span>{client.environment}</span><code>{client.credential}</code><span>{client.lastUsed}</span><span className="integration-client-actions"><span className={client.enabled ? "integration-channel-state is-enabled" : "integration-channel-state"}>{client.enabled ? "启用" : "停用"}</span><button className="icon-button" type="button" aria-label={`轮换 ${client.name} 的凭据`} title="轮换凭据" onClick={() => onNotify(`${client.name} 的凭据轮换已模拟完成。`)}><RotateCw size={14} /></button><button className="icon-button" type="button" aria-label={`${client.enabled ? "停用" : "启用"}客户端 ${client.name}`} title={client.enabled ? "停用客户端" : "启用客户端"} onClick={() => setClients((current) => current.map((item) => item.id === client.id ? { ...item, enabled: !item.enabled } : item))}>{client.enabled ? <Pause size={14} /> : <Play size={14} />}</button></span></div>)}
+          <div className="integration-client-head" aria-hidden="true"><span>客户端</span><span>接口 / 环境</span><span>有效权限</span><span>到期时间</span><span>分配来源</span><span>凭据</span><span>状态与操作</span></div>
+          {visibleClients.map((client) => {
+            const status = clientStatus(client);
+            const statusLabel = status === "active" ? "有效" : status === "disabled" ? "已停用" : status === "expired" ? "已过期" : "已撤销";
+            const mutable = status === "active" || status === "disabled";
+            return <div className="integration-client-row" key={client.id}><span><strong>{client.name}</strong><small>{client.id}</small></span><span><strong>{client.channel}</strong><small>{client.environment}</small></span><span><strong>{client.permissions.length} 项权限</strong><small>{client.permissions.slice(0, 2).join(" · ")}</small></span><span>{client.expiresAt}</span><span>{client.assignmentSource}</span><code>{client.credential}</code><span className="integration-client-actions"><span className={`integration-client-status status-${status}`}>{statusLabel}</span><button className="icon-button" type="button" aria-label={`轮换 ${client.name} 的凭据`} title="轮换凭据" disabled={!mutable} onClick={() => onNotify(`${client.name} 的凭据轮换已模拟完成。`)}><RotateCw size={14} /></button><button className="icon-button" type="button" aria-label={`${client.enabled ? "停用" : "启用"}客户端 ${client.name}`} title={client.enabled ? "停用客户端" : "启用客户端"} disabled={!mutable} onClick={() => setClients((current) => current.map((item) => item.id === client.id ? { ...item, enabled: !item.enabled } : item))}>{client.enabled ? <Pause size={14} /> : <Play size={14} />}</button>{status !== "revoked" && <button className="icon-button" type="button" aria-label={`撤销客户端 ${client.name}`} title="永久撤销客户端" onClick={() => { setClients((current) => current.map((item) => item.id === client.id ? { ...item, revokedAt: "2026-09-01 16:30", enabled: false } : item)); onNotify(`${client.name} 已撤销，后续调用将被拒绝并写入审计日志。`); }}><Ban size={14} /></button>}</span></div>;
+          })}
           {visibleClients.length === 0 && <div className="integration-client-empty"><Search size={17} /><strong>没有匹配的客户端</strong><span>调整搜索词或创建新的接入客户端。</span></div>}
         </div>
       </section>
@@ -149,9 +175,11 @@ export function IntegrationSettingsView({ onNotify }: { onNotify: (message: stri
           <label><span>客户端名称</span><input autoFocus value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} placeholder="例如：经营分析 Agent" /></label>
           <label><span>调用方式</span><select value={draft.channel} onChange={(event) => setDraft((current) => ({ ...current, channel: event.target.value as IntegrationClient["channel"] }))}><option>REST API</option><option>MCP</option><option>CLI</option></select></label>
           <label><span>环境</span><select value={draft.environment} onChange={(event) => setDraft((current) => ({ ...current, environment: event.target.value as IntegrationClient["environment"] }))}><option>生产</option><option>测试</option><option>开发</option></select></label>
-          <div className="integration-client-scope"><ShieldCheck size={15} /><span><strong>当前 MVP 使用工作区全量权限</strong><small>所有 MCP/API 调用仍会记录客户端、工具、资产版本与执行结果。</small></span></div>
+          <label><span>到期时间</span><input aria-label="到期时间" type="date" min="2026-09-02" value={draft.expiresAt} onChange={(event) => setDraft((current) => ({ ...current, expiresAt: event.target.value }))} /></label>
+          <fieldset className="integration-client-permissions"><legend>操作权限</legend>{clientPermissionOptions.map((permission) => <label key={permission.action}><input type="checkbox" aria-label={permission.action} checked={draft.permissions.includes(permission.action)} onChange={(event) => setDraft((current) => ({ ...current, permissions: event.target.checked ? [...current.permissions, permission.action] : current.permissions.filter((action) => action !== permission.action) }))} /><span><code>{permission.action}</code><small>{permission.label}</small></span></label>)}</fieldset>
+          <div className="integration-client-scope"><ShieldCheck size={15} /><span><strong>最小权限与独立身份</strong><small>客户端仅获得所选操作；不继承浏览器会话，创建、到期、撤销和调用都会进入审计日志。</small></span></div>
         </form>}</div>
-        <footer><span className="model-dialog-boundary"><KeyRound size={13} />凭据由工作区托管</span><div>{createdCredential ? <button className="primary-button" type="button" onClick={closeCreateClient}>完成</button> : <><button className="secondary-button" type="button" onClick={closeCreateClient}>取消</button><button className="primary-button" type="submit" form="integration-client-form" disabled={!draft.name.trim()}><Server size={14} />创建客户端</button></>}</div></footer>
+        <footer><span className="model-dialog-boundary"><KeyRound size={13} />凭据由工作区托管</span><div>{createdCredential ? <button className="primary-button" type="button" onClick={closeCreateClient}>完成</button> : <><button className="secondary-button" type="button" onClick={closeCreateClient}>取消</button><button className="primary-button" type="submit" form="integration-client-form" disabled={!draft.name.trim() || draft.permissions.length === 0 || !draft.expiresAt}><Server size={14} />创建客户端</button></>}</div></footer>
       </section></div>}
     </section>
   );

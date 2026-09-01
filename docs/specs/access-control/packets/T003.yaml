@@ -1,0 +1,79 @@
+schema_version: 1
+packet_id: ACCESS-CONTROL-T003-A001
+task_id: T003
+feature_id: access-control
+mode: execute_one_task
+adapter: codex
+governance_inputs:
+  product_contract: docs/specs/access-control/product-design.md
+  technical_decisions: docs/specs/access-control/technology-decision-record.md
+  feature_plan: docs/specs/access-control/plan.md
+  work_graph: docs/specs/access-control/tasks.md
+  analysis: docs/specs/access-control/analysis.md
+  approval_gates:
+    product_or_spec: Confirmed by user on 2026-09-01
+    technical_plan_and_work_graph: Confirmed by user on 2026-09-01
+    analysis: No unresolved Critical/High findings
+work_unit:
+  title: Add role assignments, member projection and effective-access inspector
+  goal: Complete human access administration with scoped assignment preview, SoD blocking and explainable decisions.
+  epic: E001
+  story: S003
+  requirements: [US-001, US-002, US-003, FR-006, FR-007, FR-008, FR-009, NFR-002, NFR-004]
+  priority: P0
+  depends_on: [T001, T002]
+  blocks: [T004, T005]
+  parallel: false
+  conflicts_with: [T002, T004]
+codebase_context:
+  local_instructions: [AGENTS.md]
+  relevant_files: [prototypes/product/src/AccessControlView.tsx, prototypes/product/src/App.tsx, prototypes/product/src/authorization.tsx]
+  existing_patterns:
+    - Access-control state is session-only and uses typed fixtures.
+    - Mutation dialogs preview effects before confirmation.
+  interfaces_or_contracts: [prototypes/product/src/types.ts, prototypes/product/src/data.ts]
+  forbidden_changes: [Do not add backend calls, browser storage, mobile behavior or role-name guards.]
+execution_constraints:
+  branch_or_worktree: current
+  allowed_files:
+    - prototypes/product/src/App.tsx
+    - prototypes/product/src/AccessControlView.tsx
+    - prototypes/product/src/styles.css
+    - prototypes/product/src/App.test.tsx
+  test_targets: [prototypes/product/src/App.test.tsx]
+  ownership_notes: [Preserve T001 and T002 outputs and unrelated user work.]
+tdd_plan:
+  required: true
+  exception: null
+  red:
+    command: pnpm --filter @semlia/product-prototype exec vitest run src/App.test.tsx -t "assigns scoped roles|blocks conflicting roles|explains effective access"
+    expected_failure: Assignment and inspector surfaces are placeholders.
+  green:
+    command: pnpm --filter @semlia/product-prototype exec vitest run src/App.test.tsx -t "assigns scoped roles|blocks conflicting roles|explains effective access"
+    expected_signal: Focused T003 tests pass.
+  refactor:
+    command: pnpm --filter @semlia/product-prototype typecheck && pnpm --filter @semlia/product-prototype lint
+    expected_signal: Types and lint remain clean.
+validation_loop:
+  commands:
+    - pnpm --filter @semlia/product-prototype exec vitest run src/App.test.tsx
+    - pnpm --filter @semlia/product-prototype typecheck
+    - pnpm --filter @semlia/product-prototype lint
+  retry_budget: 2
+  failure_policy:
+    first_failure: Fix issues directly related to T003.
+    second_failure: Classify scope, specification, or environment blocker.
+    beyond_budget: Stop and record blocked evidence.
+evidence_contract:
+  summary: docs/evidence/access-control-prototype/T003/summary.md
+  diff: docs/evidence/access-control-prototype/T003/diff.patch
+  test_results: docs/evidence/access-control-prototype/T003/test-results.md
+  required: [changed files, RED/GREEN/REFACTOR results, validation results, diff summary, residual risks]
+review_contract:
+  required_passes: [spec_compliance, bug_code_quality, qa_acceptance]
+  acceptance_rule: User acceptance is required before marking Accepted.
+handoff:
+  external_issue: null
+  pull_request: null
+  finish_options: [keep current worktree, push and create PR, discard with explicit confirmation]
+stop_conditions: [missing dependency, dirty worktree touching allowed files, missing approval gate, validation command unavailable]

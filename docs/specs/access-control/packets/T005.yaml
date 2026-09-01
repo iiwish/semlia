@@ -1,0 +1,87 @@
+schema_version: 1
+packet_id: ACCESS-CONTROL-T005-A001
+task_id: T005
+feature_id: access-control
+mode: execute_one_task
+adapter: codex
+governance_inputs:
+  product_contract: docs/specs/access-control/product-design.md
+  technical_decisions: docs/specs/access-control/technology-decision-record.md
+  feature_plan: docs/specs/access-control/plan.md
+  work_graph: docs/specs/access-control/tasks.md
+  analysis: docs/specs/access-control/analysis.md
+  approval_gates:
+    product_or_spec: Confirmed by user on 2026-09-01
+    technical_plan_and_work_graph: Confirmed by user on 2026-09-01
+    analysis: No unresolved Critical/High findings
+work_unit:
+  title: Complete desktop QA, regression and delivery evidence
+  goal: Prove the approved access-control prototype at 1440x900 and 1024x768 with full regression evidence.
+  epic: E001
+  story: S005
+  requirements: [US-001, US-002, US-003, US-004, US-005]
+  priority: P0
+  depends_on: [T002, T003, T004]
+  blocks: []
+  parallel: false
+  conflicts_with: []
+codebase_context:
+  local_instructions: [AGENTS.md]
+  relevant_files: [prototypes/product/e2e/product-journey.spec.ts, prototypes/product/src/App.test.tsx, prototypes/product/src/AccessControlView.tsx]
+  existing_patterns:
+    - Playwright runs the same journey at desktop and compact-desktop viewports.
+    - Screenshots and overflow assertions are committed as delivery evidence.
+  interfaces_or_contracts: [docs/specs/access-control/product-design.md, docs/specs/access-control/plan.md]
+  forbidden_changes: [Do not add mobile acceptance tests, backend calls or unrelated visual redesign.]
+execution_constraints:
+  branch_or_worktree: current
+  allowed_files:
+    - prototypes/product/e2e/product-journey.spec.ts
+    - prototypes/product/src/App.test.tsx
+    - prototypes/product/src/App.tsx
+    - prototypes/product/src/AccessControlView.tsx
+    - prototypes/product/src/AuditRuntimeView.tsx
+    - prototypes/product/src/IntegrationSettingsView.tsx
+    - prototypes/product/src/JourneyViews.tsx
+    - prototypes/product/src/authorization.tsx
+    - prototypes/product/src/styles.css
+    - docs/evidence/access-control-prototype/**
+  test_targets: [prototypes/product/e2e/product-journey.spec.ts, prototypes/product/src/App.test.tsx, prototypes/product/src/authorization.test.tsx]
+  ownership_notes: [Preserve T001 through T004 outputs and unrelated user work.]
+tdd_plan:
+  required: true
+  exception: null
+  red:
+    command: pnpm --filter @semlia/product-prototype test:e2e
+    expected_failure: New access-control browser journey is not yet represented and stale existing assertions may fail.
+  green:
+    command: pnpm --filter @semlia/product-prototype test:e2e
+    expected_signal: Desktop and compact-desktop journeys pass with screenshots and no overflow.
+  refactor:
+    command: pnpm --filter @semlia/product-prototype test && pnpm --filter @semlia/product-prototype build
+    expected_signal: Component regression and production build pass.
+validation_loop:
+  commands:
+    - pnpm --filter @semlia/product-prototype lint
+    - pnpm --filter @semlia/product-prototype typecheck
+    - pnpm --filter @semlia/product-prototype test
+    - pnpm --filter @semlia/product-prototype build
+    - pnpm --filter @semlia/product-prototype test:e2e
+  retry_budget: 2
+  failure_policy:
+    first_failure: Fix approved-task regressions and stale assertions on exercised paths.
+    second_failure: Classify scope, specification, environment or pre-existing blocker.
+    beyond_budget: Stop and record blocked evidence.
+evidence_contract:
+  summary: docs/evidence/access-control-prototype/T005/summary.md
+  diff: docs/evidence/access-control-prototype/T005/diff.patch
+  test_results: docs/evidence/access-control-prototype/T005/test-results.md
+  required: [changed files, full validation results, screenshot manifest, diff summary, three-layer review, residual risks]
+review_contract:
+  required_passes: [spec_compliance, bug_code_quality, qa_acceptance]
+  acceptance_rule: User acceptance is required before marking Accepted.
+handoff:
+  external_issue: null
+  pull_request: null
+  finish_options: [keep current worktree, push and create PR, discard with explicit confirmation]
+stop_conditions: [missing dependency, dirty worktree touching allowed files, missing approval gate, validation command unavailable]
