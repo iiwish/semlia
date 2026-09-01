@@ -4,7 +4,7 @@ Thank you for helping build a trustworthy open semantic control plane. Semlia is
 
 ## Start Here
 
-1. Read `docs/SSOT.md` and `docs/README.md`.
+1. Read the [project SSOT](SSOT.md) and [documentation index](README.md).
 2. Check the relevant confirmed plan, work graph, and task packet.
 3. Discuss scope before implementing a new capability or changing a public contract.
 4. Do not mix unrelated refactors into a governed task.
@@ -57,4 +57,4 @@ Implementation is not accepted until required validation evidence exists and a m
 
 ## Community Conduct and Security
 
-Participation is governed by `CODE_OF_CONDUCT.md`. Report vulnerabilities through the private process in `SECURITY.md`, never through a public issue.
+Participation is governed by the [Code of Conduct](CODE_OF_CONDUCT.md). Report vulnerabilities through the process in the [Security Policy](SECURITY.md), never through a public issue.

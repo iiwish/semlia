@@ -1,143 +1,148 @@
+<div align="center">
+
 # Semlia
 
-> **Semlia is an enterprise semantic asset platform that organizes business meaning as a living LLM Wiki and governed ontology.**
->
-> **Semlia 是一个以 LLM Wiki 组织企业含义、以本体表达业务概念与关系的企业语义资产平台。**
+**The open semantic asset control plane for trusted data and AI.**
 
-Semlia governs business semantics as executable, testable, releasable software assets with explicit consumer compatibility constraints. It turns metrics, dimensions, business concepts, relationships, evidence, contracts, and quality signals into trusted assets that people, applications, and AI agents can use through stable headless interfaces.
+Turn business concepts, metrics, relationships, evidence, and physical bindings into
+versioned assets that people, applications, and AI agents can safely share.
 
-It combines four product ideas:
+[English](README.md) | [简体中文](README.zh-CN.md)
 
-- **A living semantic wiki:** every semantic asset has an authoritative page for its meaning, calculation, owner, lineage, evidence, tests, history, consumers, and AI context.
-- **A governed business ontology:** concepts, entities, metrics, relationships, constraints, and physical bindings form a shared machine-readable model of organizational meaning.
-- **A software-grade asset lifecycle:** AI can discover gaps and propose changes, while tests, policy, evidence, review, immutable releases, and compatibility contracts determine what becomes published truth.
-- **Trusted semantic resolution:** CLI, MCP, REST, SDKs, and events resolve released semantics to governed physical bindings and join contracts before optional execution adapters are invoked.
+[![Status: pre-alpha](https://img.shields.io/badge/status-pre--alpha-EA580C)](#project-status)
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-2563EB)](LICENSE)
+[![CI](https://github.com/iiwish/semlia/actions/workflows/ci.yml/badge.svg)](https://github.com/iiwish/semlia/actions/workflows/ci.yml)
 
-> Project status: pre-alpha, under Private incubation. The M0 engineering foundation is implemented and is undergoing fresh-clone acceptance; M1 product capabilities are not implemented. The product prototype uses repository-local mock data and is isolated from the production runtime. This repository is not production-ready and does not yet operate as an active public community project.
+</div>
 
-## Product Positioning
+![Semlia governed semantic answer prototype](docs/assets/semlia-product-overview.jpg)
 
-Semlia is an enterprise semantic asset platform and governance control plane around executable semantic runtimes. It helps teams:
+<p align="center"><sub>Product prototype with repository-local mock data. The production application is being rebuilt against real service contracts.</sub></p>
 
-1. discover physical datasets, fields, SQL lineage, existing semantics, and supporting evidence;
-2. define metrics and business meaning as stable assets rather than prompt fragments;
-3. validate changes against schemas, references, SQL, joins, grain, configured execution adapters, policies, and evaluation cases;
-4. review AI-generated proposals without allowing models to silently rewrite production truth;
-5. publish immutable semantic releases and bind consumers to explicit versions;
-6. resolve the same released definitions, physical bindings, join contracts, and evidence for people, applications, and AI agents;
-7. improve semantic quality from usage, failures, drift, and incidents.
+## What is Semlia?
 
-Semlia includes Governed Ask, a first-party reference interface for questions grounded in released knowledge and semantic assets. It is not a BI dashboard, workbook, unrestricted ChatBI, general-purpose text-to-SQL product, data warehouse, or new query execution engine.
+Semlia is an enterprise semantic asset platform and governance control plane. It gives every important business concept and metric an authoritative, machine-readable home for its definition, calculation, owner, lineage, evidence, tests, history, consumers, and AI context.
 
-## Execution Runtime Boundary
+Instead of scattering meaning across SQL, dashboards, documents, and prompts, Semlia manages semantics as software assets: **discoverable, testable, reviewable, releasable, and compatibility-aware**.
 
-Semlia does not require Cube to ingest warehouse metadata, build a physical graph, govern semantic assets, publish releases, or resolve a semantic query. Query execution is delegated through optional, capability-scoped adapters. Cube Core is one supported adapter for teams that already use it or need its compilation, access-control, and pre-aggregation capabilities.
+Semlia is built around four ideas:
 
-| Concern | Primary responsibility |
+- **Living LLM Wiki**: authoritative pages connect human-readable meaning with evidence, ownership, history, and context suitable for AI.
+- **Governed ontology**: concepts, entities, metrics, relationships, constraints, and physical bindings form one machine-readable model.
+- **Software-grade lifecycle**: AI may propose changes, but tests, policy, evidence, and review determine what becomes published truth.
+- **Trusted resolution**: CLI, MCP, REST, SDKs, and events resolve released semantics before an optional execution adapter runs a query.
+
+Semlia is not a BI dashboard, workbook, unrestricted ChatBI product, data warehouse, or query engine. It is the semantic control plane around those systems.
+
+## How It Works
+
+```text
+Sources              Evidence               Semantics              Governance             Delivery
+Catalogs / SQL  -->  Physical graph    -->  Assets + ontology -->  Validate + review -->  REST / MCP / SDK
+dbt / documents      lineage + provenance   bindings + contracts   immutable releases     optional execution
+```
+
+1. **Discover** datasets, fields, SQL lineage, existing definitions, and supporting evidence.
+2. **Model** metrics, concepts, relationships, constraints, physical bindings, and join contracts as stable assets.
+3. **Validate** schemas, references, SQL, grain, fanout, compatibility, authorization, and adapter capabilities.
+4. **Govern** proposed changes through evidence, policy, risk routing, human review, and immutable releases.
+5. **Deliver** the same released meaning to people, applications, and agents through stable headless interfaces.
+
+For the complete product and architecture contract, read the [project SSOT](docs/SSOT.md) and the [knowledge governance architecture](docs/architecture/knowledge-governance.html).
+
+## Project Status
+
+> [!WARNING]
+> Semlia is **pre-alpha** and under **Private incubation**. It is not production-ready and is not currently accepting public contributions.
+
+| Surface | Current state |
 | --- | --- |
-| Warehouse catalog, DDL, SQL, lineage, keys, and grain discovery | Semlia source adapters |
-| Semantic query resolution, physical binding, and join planning | Semlia |
-| Plan policy, grain, fanout, compatibility, and capability validation | Semlia |
-| Semantic model compilation and query execution | Optional Cube or governed warehouse adapter |
-| Execution-time access enforcement and pre-aggregations | Configured execution runtime |
-| Stable semantic asset identity and living wiki pages | Semlia |
-| Physical graph, discovery, evidence, ownership, and relationship graph | Semlia |
-| AI proposals, validation orchestration, review, and policy | Semlia |
-| Immutable semantic releases, consumer bindings, and audit | Semlia |
-| Governed context and released semantics for agents and applications | Semlia, delegating only validated plans when execution is required |
+| Product prototype | Complete north-star desktop prototype; repository-local mock data only |
+| Engineering foundation | Go control server, PostgreSQL migrations, worker, embedded Web status app, contracts, CI, security gates, and release tooling |
+| Production semantic product | Backend domain, API, persistence, and production Web integration are the next development phase |
+| Public release | Blocked on production capabilities, self-hosting proof, security intake, compatibility, and release acceptance |
 
-Semlia integrates with execution runtimes through public contracts and versioned model or query-plan artifacts. It does not fork Cube, duplicate warehouse query runtimes, or reproduce BI, dashboard, workbook, or unrestricted conversational analytics surfaces. Governed Ask and external consumers use the same released definitions, ontology context, physical bindings, join contracts, evidence, and permitted execution capabilities.
+The prototype communicates product intent; it does not prove production behavior, authorization, tenant isolation, scale, or external-system safety.
 
-An agent cannot choose arbitrary physical tables, invent joins, or execute unrestricted SQL. Semlia first produces a release-bound resolved semantic plan and validates ambiguity, grain, cardinality, fanout, filters, authorization, compatibility, and adapter capabilities. Unresolved or unsafe plans are rejected or returned for clarification.
+## Quick Start
 
-## Product Principles
+### Inspect the product prototype
 
-- Semantics are versioned assets, not prompt fragments.
-- Business semantics are governed like software: executable, testable, releasable, and compatibility-aware.
-- AI proposes changes; policy, evidence, and review determine what is published.
-- Every production semantic response resolves to an immutable release and revision.
-- Git stores reviewable semantic content; the product does not require users to understand Git.
-- REST is the canonical service contract; MCP is the primary agent interface.
-- Execution runtimes execute validated plans; Semlia governs how physical evidence and semantic assets are discovered, bound, joined, tested, released, resolved, and delivered.
-
-The canonical product and architecture contract lives in [docs/SSOT.md](docs/SSOT.md). The confirmed M0 plan and task graph are indexed in [docs/README.md](docs/README.md).
-
-## Development
-
-For a first local run, follow the [quickstart](docs/quickstart.md). Maintainers should also read the [local development runbook](docs/operations/local-development.md) and [troubleshooting guide](docs/operations/troubleshooting.md).
-
-Prerequisites are pinned in `.tool-versions`:
-
-- Go 1.26.5
-- Node.js 24.15.0
-- pnpm 11.1.3
-- GNU Make, Git, and Docker
-
-Node.js and pnpm are build-time tools for the Web workspace. The production control plane is distributed as a Go executable and does not require a Node.js runtime.
-
-Check the local environment and install locked dependencies:
+Install the versions pinned in `.tool-versions`: Go 1.26.5, Node.js 24.15.0, pnpm 11.1.3, plus Git and GNU Make.
 
 ```bash
 make doctor
 make bootstrap
-```
-
-Run the repository and public contract checks:
-
-```bash
-make test-repository
-make test-contracts
-make contracts-check
-```
-
-Run the complete pull-request gate locally:
-
-```bash
-make check
-```
-
-The source, integrated smoke, and security portions are also available as `make check-source`, `make check-smoke`, and `make security-check`. CI runs those independent gates in parallel while `make check` remains the local superset.
-
-Start or build the inspectable product prototype:
-
-```bash
 make prototype
-make prototype-build
 ```
 
-Start the complete M0 environment:
+Vite prints the local prototype URL after startup. The prototype is isolated from the production runtime and uses mock data.
+
+### Run the engineering foundation
+
+With Docker and Compose available:
 
 ```bash
 make dev
+make smoke
 ```
 
-This builds one release image and starts PostgreSQL, the explicit migration step, the control server, and the worker. The server embeds the Web status application, so the full local surface is available at `http://127.0.0.1:8080`. PostgreSQL is exposed only on `127.0.0.1:5433`; the host's port `5432` is not used by Semlia.
-
-`make dev` creates random local credentials in the ignored `.semlia/dev.env` file with owner-only permissions. `.env.example` documents the available local settings without containing usable credentials.
-
-Verify, inspect, and stop the environment with:
+Open `http://127.0.0.1:8080` for the embedded status application. Stop the stack without deleting its PostgreSQL volume:
 
 ```bash
-make smoke
-./scripts/dev/compose.sh logs --follow server worker
 make dev-down
 ```
 
-`make dev-down` removes the local containers and network while preserving the PostgreSQL volume for the next start.
+The smoke test is disruptive to this checkout's local Compose stack. The full setup, port rules, and recovery paths are documented in the [quickstart](docs/quickstart.md), [local development runbook](docs/operations/local-development.md), and [troubleshooting guide](docs/operations/troubleshooting.md).
 
-Build a versioned release bundle and a standalone CycloneDX SBOM with:
+## Development
 
-```bash
-SEMLIA_VERSION=0.1.0 make release
-make sbom
+The root `Makefile` is the stable developer interface:
+
+| Command | Purpose |
+| --- | --- |
+| `make doctor` | Validate required tools and local capabilities |
+| `make bootstrap` | Install locked Go and pnpm dependencies |
+| `make prototype` | Start the inspectable product prototype |
+| `make build` | Build the Semlia control-plane binary |
+| `make test-repository` | Check repository structure and policy contracts |
+| `make contracts-check` | Detect drift in generated API contracts |
+| `make check` | Run the complete local pull-request gate |
+| `make release` | Build a versioned bundle, SBOM, and checksums |
+
+## Repository Guide
+
+```text
+api/          OpenAPI contract and generated public types
+cmd/          Semlia command entry point
+db/           sqlc configuration and queries
+deploy/       Container and deployment assets
+docs/         Product SSOT, architecture, specs, operations, and community policies
+internal/     Go domain, application, adapter, and platform packages
+migrations/   Versioned PostgreSQL migrations
+prototypes/   Product design reference; never a production data path
+sdk/          Generated and maintained client SDKs
+tests/        Contract, integration, acceptance, smoke, and repository tests
+web/          Production Web application
 ```
 
-Release output is written to the ignored `build/release/` directory. Each bundle records the complete source commit and target platform, includes migrations, notices, and its SBOM, and is accompanied by `SHA256SUMS` for verification and signing. The GitHub workflow is configured to request provenance attestation for tags; a successful tagged attestation under the current Private repository plan is not yet claimed and remains a public-release gate.
+Start at the [documentation index](docs/README.md). Architecture decisions live in [ADRs](docs/adr/), while current product behavior and boundaries are defined by the [SSOT](docs/SSOT.md), not by prototype mock data.
 
-## Contributing
+## Roadmap
 
-Semlia is in Private incubation, so the repository is not currently accepting public contributions. The contribution contract is prepared for the future public phase: read [CONTRIBUTING.md](CONTRIBUTING.md), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md), and [SECURITY.md](SECURITY.md) before participating once the repository opens. Contributions use the Developer Certificate of Origin sign-off.
+- **M0, foundation**: control server, database, jobs, contracts, local stack, CI, security, and release mechanics.
+- **M1, semantic registry**: real source discovery, physical graph, semantic catalog, revisions, evidence, ownership, search, and production Web foundations.
+- **M2, governed authoring**: AI proposals, validation orchestration, policy, review, and publishing.
+- **M3+, distribution and continuous governance**: trusted resolution, MCP/SDK delivery, consumer bindings, feedback, drift, and an open adapter ecosystem.
+
+Milestone scope and exit criteria are canonical in the [SSOT roadmap](docs/SSOT.md#17-路线图).
+
+## Contributing and Security
+
+Semlia is not yet open for public contributions. The future contribution contract is documented in [Contributing](docs/CONTRIBUTING.md), and all participation is governed by the [Code of Conduct](docs/CODE_OF_CONDUCT.md).
+
+Do not report vulnerabilities in a public issue. Read the [Security Policy](docs/SECURITY.md) for the current private-incubation limitations and future reporting process.
 
 ## License
 
-Semlia is licensed under the [Apache License 2.0](LICENSE).
+Semlia is licensed under the [Apache License 2.0](LICENSE). See [NOTICE](NOTICE) for attribution information.
