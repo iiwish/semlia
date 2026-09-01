@@ -36,7 +36,13 @@ func TestM0DocumentationContract(t *testing.T) {
 			"docs/operations/local-development.md",
 			"docs/operations/troubleshooting.md",
 		},
-		"SECURITY.md": {
+		"README.zh-CN.md": {
+			"私有孵化",
+			"docs/quickstart.md",
+			"docs/operations/local-development.md",
+			"docs/operations/troubleshooting.md",
+		},
+		"docs/SECURITY.md": {
 			"private vulnerability reporting is not enabled",
 			"public issue",
 			"not production-ready",
@@ -82,11 +88,11 @@ func TestM0DocumentationContract(t *testing.T) {
 		}
 	}
 
-	security := readRepositoryFile(t, "SECURITY.md")
+	security := readRepositoryFile(t, "docs/SECURITY.md")
 	if strings.Contains(security, "Use GitHub private vulnerability reporting for the Semlia repository.") {
-		t.Error("SECURITY.md must not direct reporters to a feature that is not enabled")
+		t.Error("docs/SECURITY.md must not direct reporters to a feature that is not enabled")
 	}
 	if strings.Contains(security, "Dependabot monitors") {
-		t.Error("SECURITY.md must distinguish version updates from disabled vulnerability alerts")
+		t.Error("docs/SECURITY.md must distinguish version updates from disabled vulnerability alerts")
 	}
 }

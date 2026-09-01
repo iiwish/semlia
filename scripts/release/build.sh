@@ -38,7 +38,7 @@ cd "${ROOT}"
 CGO_ENABLED=0 GOOS="${TARGET_OS}" GOARCH="${TARGET_ARCH}" \
   "${GO_COMMAND}" build -trimpath -ldflags="-s -w" -o "${staging}/${executable}" ./cmd/semlia
 cp migrations/*.sql "${staging}/migrations/"
-cp LICENSE NOTICE SECURITY.md "${staging}/"
+cp LICENSE NOTICE docs/SECURITY.md "${staging}/"
 
 CGO_ENABLED=0 GOOS="${HOST_OS}" GOARCH="${HOST_ARCH}" \
   "${GO_COMMAND}" run ./scripts/release/manifest.go manifest \

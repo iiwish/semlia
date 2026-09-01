@@ -1,51 +1,90 @@
-# Semlia Documentation
+# Semlia 文档中心
 
-本目录是 Semlia 的项目级事实来源。产品、架构、治理和交付决策以 [SSOT.md](./SSOT.md) 为准。
+[English README](../README.md) | [中文 README](../README.zh-CN.md)
 
-## 文档状态
+本目录是 Semlia 的产品、架构、研发、运维与项目政策入口。产品定义、核心边界和路线图以 [SSOT](SSOT.md) 为唯一事实来源；原型、规格、ADR 和实现证据不得形成与 SSOT 竞争的定义。
 
-| 文档 | 作用 | 当前状态 |
+## 推荐阅读路径
+
+| 目标 | 从这里开始 | 接下来阅读 |
 | --- | --- | --- |
-| [SSOT.md](./SSOT.md) | 企业语义资产平台的产品宪法、范围、领域模型、架构、质量标准和路线图 | Confirmed |
-| [知识与治理架构图](./architecture/knowledge-governance.html) | 万表物理图谱、五层知识链路、可信查询解析、风险分流和反馈闭环的可视化 | Current |
-| [语义资产设计](./specs/semantic-assets/semantic-asset-design.md) | 七种主要资产类型、规范对象边界、六视图详情信息架构与发布消费契约 | Confirmed |
-| [产品导航设计](./specs/product-prototype/navigation-design.md) | 一级责任域、二级入口、知识资产详情和跨模块深链规则 | Confirmed |
-| [产品原型设计契约](./specs/product-prototype/product-design.md) | 桌面原型的核心旅程、状态、视觉约束与验收边界 | Confirmed |
-| [M0 TDR](./adr/0001-m0-technical-foundation.md) | M0 技术选择、取舍、风险和任务影响 | Confirmed |
-| [M0 Plan](./specs/m0-foundation/plan.md) | M0 范围、需求、交付顺序和退出标准 | Confirmed |
-| [M0 Work Graph](./specs/m0-foundation/tasks.md) | Epic、Story、Task、依赖、文件边界和验证命令 | Confirmed |
-| [M0 Requirements Checklist](./specs/m0-foundation/checklists/requirements.md) | M0 需求完整性、可测性和覆盖检查 | Completed |
-| [M0 Consistency Analysis](./specs/m0-foundation/analysis.md) | SSOT、TDR、计划和工作图一致性分析 | Completed |
-| [M0 T008 Packet](./specs/m0-foundation/packets/T008.yaml) | Fresh-clone、module identity、文档与 release report 的自包含执行包 | T008 `Needs_Review` |
-| [M0 Release Report](./specs/m0-foundation/release-report.md) | M0 requirement、场景、性能、安全、工件和残余门槛 | `Ready_For_User_Review` |
-| [T008 Evidence](./evidence/T008/summary.md) | Exact-ref fresh-clone、失败恢复、review 与 rollback 证据 | `Needs_Review` |
-| [Quickstart](./quickstart.md) | Private clone 到 M0 首次请求的当前入门路径 | Current |
-| [Local Development](./operations/local-development.md) | 本地堆栈、迁移、验证、清理和 release runbook | Current |
-| [Troubleshooting](./operations/troubleshooting.md) | 工具链、端口、Compose、API、数据库和 gate 诊断 | Current |
-| [M1 TDR](./adr/0002-m1-product-and-semantic-execution.md) | M1 前端依赖、仓库优先接入、物理图谱、可选执行适配器和质量门禁 | Confirmed；实现等待 M0 验收 |
-| [M1 Frontend Baseline Audit](./specs/m1-semantic-registry/frontend-baseline-audit.md) | 当前生产 Web 与产品原型的文档符合性、视觉和交互基线 | Completed |
+| 了解产品 | [中文 README](../README.zh-CN.md) | [SSOT](SSOT.md)、[知识治理架构](architecture/knowledge-governance.html) |
+| 运行项目 | [Quickstart](quickstart.md) | [本地开发](operations/local-development.md)、[故障排查](operations/troubleshooting.md) |
+| 开始后端开发 | [M1 TDR](adr/0002-m1-product-and-semantic-execution.md) | [SSOT 系统架构](SSOT.md#10-系统架构)、相关 `specs/` 与 OpenAPI 契约 |
+| 参与项目 | [贡献指南](CONTRIBUTING.md) | [行为准则](CODE_OF_CONDUCT.md)、[安全政策](SECURITY.md) |
 
-## 使用规则
+## 产品与架构
 
-1. 产品范围、术语、核心流程和技术边界只在 `SSOT.md` 中定义一次。
-2. 功能规格、ADR、API 合约和运行手册必须引用对应的 SSOT 条款，不得复制后形成第二套定义。
-3. 任何改变产品定位、资产模型、发布治理、安全边界或兼容性承诺的决策，都必须先更新 SSOT 并经过维护者审核。
-4. 已发布行为与 SSOT 不一致时，该问题按 P0 文档或实现缺陷处理。
-5. `Confirmed` SSOT 是产品和技术计划的阻断性项目政策；与其冲突的实现必须先修改 SSOT 并重新审核。
+| 文档 | 作用 | 状态 |
+| --- | --- | --- |
+| [项目 SSOT](SSOT.md) | 产品宪法、范围、领域模型、架构、安全、质量标准和路线图 | Confirmed |
+| [知识治理架构](architecture/knowledge-governance.html) | 五层知识链路、可信解析、风险分流与反馈闭环 | Current |
+| [语义资产设计](specs/semantic-assets/semantic-asset-design.md) | 核心资产类型、详情信息架构与发布消费契约 | Confirmed |
+| [产品导航设计](specs/product-prototype/navigation-design.md) | 一级责任域、二级入口、深链与返回规则 | Confirmed |
+| [产品原型设计契约](specs/product-prototype/product-design.md) | 桌面原型旅程、状态、视觉约束与验收边界 | Confirmed |
+| [访问控制设计](specs/access-control/product-design.md) | 身份、角色、权限、策略与职责分离体验 | Current |
+| [M0 TDR](adr/0001-m0-technical-foundation.md) | 工程基础的技术选择、取舍与质量门禁 | Confirmed |
+| [M1 TDR](adr/0002-m1-product-and-semantic-execution.md) | 生产 Web、来源发现、物理图谱和可选执行适配器边界 | Confirmed |
 
-## 后续文档布局
+## 开发与运维
+
+| 文档 | 作用 |
+| --- | --- |
+| [Quickstart](quickstart.md) | 从私有仓库 Clone 到本地首次请求 |
+| [本地开发](operations/local-development.md) | Compose、迁移、服务、Worker、验证、清理和发布操作 |
+| [故障排查](operations/troubleshooting.md) | 工具链、端口、Compose、API、数据库和质量门禁诊断 |
+| [API 契约](../api/README.md) | OpenAPI、生成类型与契约演进规则 |
+| [数据库](../db/README.md) | sqlc 查询、索引、迁移与保留策略 |
+
+仓库根目录的 `Makefile` 是稳定开发接口。优先使用 `make doctor`、`make bootstrap`、`make test-repository`、`make contracts-check` 和 `make check`，不要在文档中建立第二套命令入口。
+
+## 交付与证据
+
+`specs/` 保存经确认的产品规格、计划、任务、检查清单和执行包；`evidence/` 保存相应实现、测试、评审与视觉验收证据。
+
+M0 的计划、工作图、需求检查、分析和发布报告位于 [`specs/m0-foundation/`](specs/m0-foundation/)。产品原型与访问控制的当前设计记录分别位于 [`specs/product-prototype/`](specs/product-prototype/) 和 [`specs/access-control/`](specs/access-control/)。
+
+证据是对特定提交和验收范围的记录，不替代 SSOT、ADR 或当前运行手册。
+
+## 社区政策
+
+- [贡献指南](CONTRIBUTING.md)：开发流程、测试、Commit sign-off 与评审要求。
+- [行为准则](CODE_OF_CONDUCT.md)：参与规范、问题报告与处置原则。
+- [安全政策](SECURITY.md)：支持范围、漏洞报告和安全门禁。
+- [Apache License 2.0](../LICENSE) 与 [NOTICE](../NOTICE)：许可证与归属信息。
+
+这些文件位于 `docs/` 顶层，保持 GitHub 社区健康文件的标准命名，同时减少仓库根目录中的非构建入口。
+
+## 文件布局约定
 
 ```text
-docs/
-  README.md
-  SSOT.md
-  adr/                 # 已接受的技术决策
-  specs/               # 经确认的功能规格
-    feature-id/packets/ # 单任务自包含执行包
-  contracts/           # OpenAPI、事件和插件契约
-  evidence/             # 实现、验证与评审证据
-  operations/          # 部署、备份、恢复和安全运行手册
-  contributing/        # 开发、测试、评审和发布指南
+repository root
+  README.md              英文项目入口
+  README.zh-CN.md        中文项目入口
+  LICENSE / NOTICE       分发所需的法律文件
+  Makefile               稳定开发命令入口
+  compose*.yaml          默认本地 Compose 入口
+  go.mod / package.json  工作区与工具链入口
+  docs/
+    README.md            文档导航
+    SSOT.md              产品与架构事实来源
+    CONTRIBUTING.md      社区健康文件
+    CODE_OF_CONDUCT.md   社区健康文件
+    SECURITY.md          社区健康文件
+    adr/                 已接受的技术决策
+    architecture/        架构说明与可视化
+    assets/              README 与文档使用的稳定媒体资源
+    specs/               产品规格、计划和执行材料
+    evidence/            测试、评审与验收证据
+    operations/          开发、部署、备份、恢复与安全手册
 ```
 
-只有在对应内容产生时才创建子目录，避免空文档和重复治理。
+根目录只保留代码托管平台、工具链、构建、依赖、许可证和首次阅读所需的标准入口。新文档应按职责进入 `docs/`，不要把临时分析、截图或实现记录散落到根目录。
+
+## 文档规则
+
+1. 产品范围、术语、核心流程和技术边界只在 `SSOT.md` 中定义一次。
+2. 功能规格、ADR、API 契约和运行手册必须引用对应 SSOT 条款，不复制形成第二套定义。
+3. 改变产品定位、资产模型、发布治理、安全边界或兼容性承诺的决策，必须先更新 SSOT 并经过维护者审核。
+4. 文档使用当前时态描述最新事实；变更历史只进入 Changelog、ADR、迁移说明或证据记录。
+5. 已发布行为与 Confirmed SSOT 不一致时，该问题按阻断性文档或实现缺陷处理。

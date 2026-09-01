@@ -17,6 +17,7 @@ var root = repositoryRoot()
 
 var requiredFiles = []string{
 	"README.md",
+	"README.zh-CN.md",
 	"LICENSE",
 	"NOTICE",
 	".gitignore",
@@ -27,9 +28,9 @@ var requiredFiles = []string{
 	"pnpm-workspace.yaml",
 	"pnpm-lock.yaml",
 	"Makefile",
-	"CONTRIBUTING.md",
-	"CODE_OF_CONDUCT.md",
-	"SECURITY.md",
+	"docs/CONTRIBUTING.md",
+	"docs/CODE_OF_CONDUCT.md",
+	"docs/SECURITY.md",
 	"scripts/doctor.sh",
 }
 
@@ -479,10 +480,10 @@ func TestDocumentationContainsNoPersonalAbsolutePaths(t *testing.T) {
 
 func TestOpenSourcePolicyFilesAreActionable(t *testing.T) {
 	checks := map[string][]string{
-		"LICENSE":            {"Apache License", "Version 2.0, January 2004", "END OF TERMS AND CONDITIONS"},
-		"CONTRIBUTING.md":    {"Developer Certificate of Origin", "Signed-off-by:", "make bootstrap"},
-		"SECURITY.md":        {"private vulnerability reporting", "public issue"},
-		"CODE_OF_CONDUCT.md": {"Contributor Covenant 3.0", "Reporting an Issue"},
+		"LICENSE":                 {"Apache License", "Version 2.0, January 2004", "END OF TERMS AND CONDITIONS"},
+		"docs/CONTRIBUTING.md":    {"Developer Certificate of Origin", "Signed-off-by:", "make bootstrap"},
+		"docs/SECURITY.md":        {"private vulnerability reporting", "public issue"},
+		"docs/CODE_OF_CONDUCT.md": {"Contributor Covenant 3.0", "Reporting an Issue"},
 	}
 	for path, phrases := range checks {
 		content := read(t, path)
