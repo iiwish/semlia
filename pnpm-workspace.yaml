@@ -1,6 +1,5 @@
 packages:
   - "web"
-  - "prototypes/*"
   - "sdk/*"
   - "integrations/*"
 

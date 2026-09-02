@@ -4,7 +4,7 @@ SHELL := /usr/bin/env bash
 GO ?= go
 PNPM ?= pnpm
 
-.PHONY: help bootstrap build build-image server web-embed web-embed-check dev dev-down smoke contracts contracts-check doctor clean prototype prototype-build test test-contracts test-repository db-generate db-generate-check db-test db-migrate-up db-migrate-down db-migrate-version format-check lint typecheck check-source check-smoke security-check check sbom release
+.PHONY: help bootstrap build build-image server web-embed web-embed-check dev dev-down smoke contracts contracts-check doctor clean test test-contracts test-repository db-generate db-generate-check db-test db-migrate-up db-migrate-down db-migrate-version format-check lint typecheck check-source check-smoke security-check check sbom release
 
 help:
 	@printf '%s\n' \
@@ -28,8 +28,6 @@ help:
 		'  make db-test          Run isolated PostgreSQL integration tests' \
 		'  make db-migrate-up    Apply migrations to SEMLIA_DATABASE_URL' \
 		'  make db-migrate-down  Revert migrations on SEMLIA_DATABASE_URL' \
-		'  make prototype       Start the inspectable product prototype' \
-		'  make prototype-build Build the product prototype' \
 		'  make test-contracts  Run public contract tests' \
 		'  make test-repository Run the repository contract' \
 		'  make clean           Remove generated local state'
@@ -97,12 +95,6 @@ db-migrate-down:
 
 db-migrate-version:
 	SEMLIA_MIGRATIONS_PATH="$(CURDIR)/migrations" $(GO) run ./cmd/semlia migrate version
-
-prototype:
-	$(PNPM) --filter @semlia/product-prototype dev
-
-prototype-build:
-	$(PNPM) --filter @semlia/product-prototype build
 
 test-contracts:
 	$(GO) test ./tests/contracts/...

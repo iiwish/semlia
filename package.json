@@ -13,8 +13,6 @@
     "check": "make check",
     "check:source": "make check-source",
     "check:repository": "go test ./tests/repository",
-    "prototype": "pnpm --filter @semlia/product-prototype dev",
-    "prototype:build": "pnpm --filter @semlia/product-prototype build",
     "release:build": "make release",
     "security:check": "make security-check"
   }

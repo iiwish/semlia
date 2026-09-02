@@ -15,9 +15,9 @@
 
 </div>
 
-![Semlia 可信语义问答产品原型](docs/assets/semlia-product-overview.jpg)
+![Semlia 可信语义治理工作区](docs/assets/semlia-product-overview.jpg)
 
-<p align="center"><sub>产品原型使用仓库内 Mock 数据；生产应用将基于真实服务契约重新实现。</sub></p>
+<p align="center"><sub>生产桌面工作区将真实 PostgreSQL 语义注册中心与明确标识的后续里程碑预览能力合为一体。</sub></p>
 
 ## Semlia 是什么？
 
@@ -57,37 +57,30 @@ dbt / 业务文档        血缘 + Provenance       绑定 + 契约             
 
 | 产品面 | 当前状态 |
 | --- | --- |
-| 产品原型 | 桌面端北极星原型已完成，仅使用仓库内 Mock 数据 |
-| 工程基础 | 已具备 Go 控制服务、PostgreSQL 迁移、Worker、嵌入式 Web 状态页、契约、CI、安全门禁和发布工具 |
-| 生产语义产品 | 后端领域模型、API、持久化与生产 Web 集成是下一开发阶段 |
+| 生产 Web | 唯一的嵌入式桌面工作区；M1 工作区与 Catalog 使用生成契约和 PostgreSQL |
+| 语义注册中心 | 已具备稳定 TypeID、不可变 Revision、证据、有界本体关系、发现适配器、审计、Outbox、Usage 与 Git 投影 |
+| 预览能力 | 语义问答、治理式创作、发布编排、来源配置与系统管理保留已确认体验，并等待对应后端里程碑 |
 | 公开发布 | 仍需完成生产能力、自托管验证、安全报告渠道、兼容性与发布验收 |
 
-产品原型用于表达经过确认的产品意图，不代表生产行为，也不能证明权限、租户隔离、规模能力或外部系统安全性。
+M1 Catalog 已接入真实业务数据，可用于本地业务验收。预览和会话态能力不会宣称已经具备持久化、权限强制执行或外部系统副作用。
 
 ## 快速开始
 
-### 查看产品原型
-
 安装 `.tool-versions` 固定的 Go 1.26.6、Node.js 24.15.0、pnpm 11.1.3，以及 Git 和 GNU Make。
-
-```bash
-make doctor
-make bootstrap
-make prototype
-```
-
-Vite 启动后会输出本地原型地址。原型与生产运行时隔离，并使用 Mock 数据。
-
-### 运行工程基础环境
 
 确认 Docker 与 Compose 可用后运行：
 
 ```bash
+make doctor
+make bootstrap
 make dev
 make smoke
 ```
 
-打开 `http://127.0.0.1:8080` 查看嵌入式状态应用。停止环境并保留 PostgreSQL 数据卷：
+打开 `http://127.0.0.1:8080` 使用 Semlia 产品工作区。真实 M1 Catalog 支持工作区初始化、
+搜索、筛选、资产创建、不可变详情、证据和有界关系；系统诊断保留在 `/status`。
+
+停止环境并保留 PostgreSQL 数据卷：
 
 ```bash
 make dev-down
@@ -103,7 +96,6 @@ Smoke 测试会暂时重建当前 checkout 的本地 Compose 环境。完整安�
 | --- | --- |
 | `make doctor` | 检查必需工具和本地能力 |
 | `make bootstrap` | 安装锁定版本的 Go 与 pnpm 依赖 |
-| `make prototype` | 启动可查看的产品原型 |
 | `make build` | 构建 Semlia 控制平面二进制文件 |
 | `make test-repository` | 检查仓库结构和项目政策契约 |
 | `make contracts-check` | 检测生成 API 契约是否漂移 |
@@ -120,13 +112,12 @@ deploy/       容器和部署资源
 docs/         产品 SSOT、架构、规格、运维和社区政策
 internal/     Go 领域、应用、适配器和平台包
 migrations/   版本化 PostgreSQL 迁移
-prototypes/   产品设计参考，不得成为生产数据路径
 sdk/          生成与维护的客户端 SDK
 tests/        契约、集成、验收、Smoke 和仓库测试
-web/          生产 Web 应用
+web/          唯一的生产 Web 应用与桌面产品体验
 ```
 
-从[文档索引](docs/README.md)开始阅读。架构决策位于 [ADR](docs/adr/)；当前产品行为与边界以[项目 SSOT](docs/SSOT.md)为准，不以原型 Mock 数据为准。
+从[文档索引](docs/README.md)开始阅读。架构决策位于 [ADR](docs/adr/)；当前产品行为与边界以[项目 SSOT](docs/SSOT.md)为准。
 
 ## 路线图
 

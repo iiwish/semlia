@@ -57,7 +57,7 @@ func TestM0DocumentationContract(t *testing.T) {
 			"http://127.0.0.1:8080/health/ready",
 			"http://127.0.0.1:8080/api/v1/system/info",
 			"make dev-down",
-			"mock data",
+			"preview",
 			"disruptive",
 		},
 		"docs/operations/local-development.md": {

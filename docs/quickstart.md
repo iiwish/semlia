@@ -1,6 +1,10 @@
 # Semlia Quickstart
 
-Semlia is in Private incubation and pre-alpha. This quickstart exercises the implemented M0 engineering foundation: a Go control server, PostgreSQL, migration job, worker, embedded status Web application, contracts, and operational checks. The semantic registry and Cube-backed product loop begin in M1 and are not available yet. The current inspectable product prototype uses repository-local mock data.
+Semlia is in Private incubation and pre-alpha. This quickstart runs the production-shaped local
+stack: Go control server, PostgreSQL, migrations, worker, embedded desktop Web application,
+generated contracts and operational checks. The M1 workspace and semantic Catalog are live;
+future-milestone authoring, release and administration surfaces identify their preview or session
+scope in the product.
 
 ## Prerequisites
 
@@ -52,7 +56,10 @@ curl --fail --show-error http://127.0.0.1:8080/api/v1/system/info
 
 `make smoke` is disruptive: it briefly stops PostgreSQL and recreates this checkout's containers and network while preserving its data volume. Do not run it against a shared development stack or while another command is using the same `COMPOSE_PROJECT_NAME`.
 
-Open `http://127.0.0.1:8080` to inspect the embedded status application. A healthy readiness response includes a 32-character `traceId`. The system-info response reports the build and runtime identity.
+Open `http://127.0.0.1:8080` to use the embedded Semlia workspace. Create or select a workspace,
+then use **知识资产** to create, search and inspect PostgreSQL-backed semantic assets. System
+diagnostics are available at `http://127.0.0.1:8080/status`. A healthy readiness response includes
+a 32-character `traceId`; system info reports the build and runtime identity.
 
 ## Stop Semlia
 

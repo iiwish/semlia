@@ -43,6 +43,7 @@ vi.mock("./catalog", () => ({
       evidence: [],
     },
   }),
+  listAssetRelations: vi.fn().mockResolvedValue({ items: [], maxDepth: 1 }),
   createWorkspace: vi.fn(),
   createAsset: vi.fn(),
 }));
@@ -52,12 +53,13 @@ describe("production catalog", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    expect(screen.getByRole("heading", { name: "Catalog" })).toBeVisible();
-    expect(await screen.findByText("Net revenue")).toBeVisible();
-    expect(screen.getByText("commerce.net_revenue")).toBeVisible();
+    expect(await screen.findByRole("button", { name: "知识资产" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "知识资产" }));
+    expect((await screen.findAllByText("Net revenue")).length).toBeGreaterThan(0);
+    expect(screen.getByText("net_revenue")).toBeVisible();
 
-    await user.click(screen.getByRole("row", { name: /Net revenue/ }));
-    expect(await screen.findByRole("complementary", { name: "Asset detail" })).toHaveTextContent("Revision 3");
-    expect(screen.getByText("2", { selector: "dd" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "打开语义资产 Net revenue" }));
+    expect(await screen.findByRole("heading", { name: "Net revenue" })).toBeVisible();
+    expect(screen.getByText("@3")).toBeVisible();
   });
 });

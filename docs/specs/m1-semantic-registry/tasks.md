@@ -7,6 +7,7 @@
 - `Needs_Review`: implementation and evidence pass; user acceptance remains.
 - `Accepted`: explicitly accepted or included in an accepted milestone.
 - `Blocked`: a named condition prevents safe progress.
+- `Superseded`: a later founder decision replaces the task's product direction.
 
 ## Work Units
 
@@ -118,7 +119,7 @@ Acceptance: included in the founder's continuous M1 execution authorization on 2
 
 ### T008 Production Catalog workspace
 
-Status: Needs_Review
+Status: Superseded
 Depends on: T007
 Blocks: first user-visible M1 milestone acceptance
 
@@ -135,4 +136,30 @@ with audited workspace bootstrap, asset search/filter/create/detail, and system 
 `/status`. Source, Compose smoke and supported desktop visual gates pass. Evidence:
 `docs/evidence/M1-T008/summary.md`.
 
-Acceptance: awaiting founder review of the first user-visible M1 milestone.
+Disposition: the founder rejected the parallel minimal Catalog implementation on 2026-09-02 and
+directed Semlia to promote the accepted product prototype into the sole production Web application.
+T009 preserves T008's real backend capabilities while replacing its duplicate frontend.
+
+### T009 Single production frontend convergence
+
+Status: Needs_Review
+Depends on: T007, founder product direction on 2026-09-02
+Blocks: first user-visible M1 milestone acceptance
+
+Promote the accepted product prototype into `web`, preserve its complete desktop product
+experience, connect the M1 workspace and semantic Catalog flows to generated API contracts and
+PostgreSQL, retain `/status`, and delete the duplicate frontend package and obsolete run targets.
+Surfaces whose backend milestones do not yet exist remain visibly preview or session-only rather
+than pretending to persist.
+
+Design: `docs/specs/m1-semantic-registry/t009-frontend-convergence-design.md`. Packet:
+`docs/specs/m1-semantic-registry/packets/T009.yaml`.
+
+Execution: `web` is the sole frontend package and serves the complete accepted desktop product
+experience. Workspace and semantic Catalog operations use generated contracts and PostgreSQL;
+future-milestone workflows remain explicitly preview or session-only. The duplicate prototype
+package and obsolete run targets are removed, while `/status` remains available. Source, Compose,
+end-to-end and supported desktop visual gates pass. Evidence:
+`docs/evidence/M1-T009/summary.md`.
+
+Acceptance: ready for founder review as the first visible frontend convergence milestone.

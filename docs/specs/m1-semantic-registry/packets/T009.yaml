@@ -1,0 +1,52 @@
+schema_version: 1
+packet_id: M1-T009-A001
+task_id: T009
+feature_id: single-production-frontend
+mode: execute_one_task
+status: Needs_Review
+
+goal: >-
+  Promote the accepted product experience into the sole production Web application and connect
+  the M1 semantic Catalog to generated APIs and PostgreSQL.
+
+dependencies:
+  - T007 Accepted
+  - founder product direction on 2026-09-02
+  - docs/specs/m1-semantic-registry/t009-frontend-convergence-design.md
+
+allowed_files:
+  - web/**
+  - prototypes/product/**
+  - sdk/typescript/**
+  - tests/**
+  - scripts/**
+  - docs/**
+  - Makefile
+  - package.json
+  - pnpm-workspace.yaml
+  - pnpm-lock.yaml
+  - README.md
+  - README.zh-CN.md
+
+forbidden_changes:
+  - Do not retain a second runnable frontend.
+  - Do not use fixture data as a production Catalog fallback.
+  - Do not add mobile product scope.
+  - Do not claim persistence for future-milestone or session-only workflows.
+  - Do not expose storage UUIDs.
+
+validation:
+  - pnpm --filter @semlia/web lint
+  - pnpm --filter @semlia/web typecheck
+  - pnpm --filter @semlia/web test
+  - pnpm --filter @semlia/web build
+  - pnpm --filter @semlia/web test:e2e
+  - make check-source
+  - make check-smoke
+  - git diff --check
+
+acceptance:
+  - The accepted product experience is served at the production root.
+  - A user can bootstrap a workspace and create, find and inspect real semantic assets.
+  - Only @semlia/web remains as a frontend package.
+  - The embedded application passes 1440x900 and 1024x768 visual QA.

@@ -15,9 +15,9 @@ versioned assets that people, applications, and AI agents can safely share.
 
 </div>
 
-![Semlia governed semantic answer prototype](docs/assets/semlia-product-overview.jpg)
+![Semlia governed semantic workspace](docs/assets/semlia-product-overview.jpg)
 
-<p align="center"><sub>Product prototype with repository-local mock data. The production application is being rebuilt against real service contracts.</sub></p>
+<p align="center"><sub>The production desktop workspace combines a live PostgreSQL semantic registry with clearly marked preview surfaces for later milestones.</sub></p>
 
 ## What is Semlia?
 
@@ -57,37 +57,32 @@ For the complete product and architecture contract, read the [project SSOT](docs
 
 | Surface | Current state |
 | --- | --- |
-| Product prototype | Complete north-star desktop prototype; repository-local mock data only |
-| Engineering foundation | Go control server, PostgreSQL migrations, worker, embedded Web status app, contracts, CI, security gates, and release tooling |
-| Production semantic product | Backend domain, API, persistence, and production Web integration are the next development phase |
+| Production Web | One embedded desktop workspace; M1 workspace and Catalog flows use generated contracts and PostgreSQL |
+| Semantic registry | Stable TypeIDs, immutable revisions, evidence, bounded ontology relations, discovery adapters, audit, outbox, usage, and Git projection |
+| Preview surfaces | Ask, governed authoring, release orchestration, source setup, and administration preserve the accepted product experience while their backend milestones are delivered |
 | Public release | Blocked on production capabilities, self-hosting proof, security intake, compatibility, and release acceptance |
 
-The prototype communicates product intent; it does not prove production behavior, authorization, tenant isolation, scale, or external-system safety.
+M1 Catalog behavior is real and suitable for local business acceptance. Preview and session-only
+surfaces do not claim persistence, authorization enforcement, or external-system effects.
 
 ## Quick Start
 
-### Inspect the product prototype
-
 Install the versions pinned in `.tool-versions`: Go 1.26.6, Node.js 24.15.0, pnpm 11.1.3, plus Git and GNU Make.
-
-```bash
-make doctor
-make bootstrap
-make prototype
-```
-
-Vite prints the local prototype URL after startup. The prototype is isolated from the production runtime and uses mock data.
-
-### Run the engineering foundation
 
 With Docker and Compose available:
 
 ```bash
+make doctor
+make bootstrap
 make dev
 make smoke
 ```
 
-Open `http://127.0.0.1:8080` for the embedded status application. Stop the stack without deleting its PostgreSQL volume:
+Open `http://127.0.0.1:8080` for the Semlia product workspace. The live M1 Catalog supports
+workspace bootstrap, search, filtering, asset creation, immutable detail, evidence, and bounded
+relations. System diagnostics remain at `/status`.
+
+Stop the stack without deleting its PostgreSQL volume:
 
 ```bash
 make dev-down
@@ -103,7 +98,6 @@ The root `Makefile` is the stable developer interface:
 | --- | --- |
 | `make doctor` | Validate required tools and local capabilities |
 | `make bootstrap` | Install locked Go and pnpm dependencies |
-| `make prototype` | Start the inspectable product prototype |
 | `make build` | Build the Semlia control-plane binary |
 | `make test-repository` | Check repository structure and policy contracts |
 | `make contracts-check` | Detect drift in generated API contracts |
@@ -120,13 +114,12 @@ deploy/       Container and deployment assets
 docs/         Product SSOT, architecture, specs, operations, and community policies
 internal/     Go domain, application, adapter, and platform packages
 migrations/   Versioned PostgreSQL migrations
-prototypes/   Product design reference; never a production data path
 sdk/          Generated and maintained client SDKs
 tests/        Contract, integration, acceptance, smoke, and repository tests
-web/          Production Web application
+web/          Sole production Web application and desktop product experience
 ```
 
-Start at the [documentation index](docs/README.md). Architecture decisions live in [ADRs](docs/adr/), while current product behavior and boundaries are defined by the [SSOT](docs/SSOT.md), not by prototype mock data.
+Start at the [documentation index](docs/README.md). Architecture decisions live in [ADRs](docs/adr/), while current product behavior and boundaries are defined by the [SSOT](docs/SSOT.md).
 
 ## Roadmap
 

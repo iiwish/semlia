@@ -41,7 +41,9 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-import { assetVersionReleases, assets, proposals } from "./data";
+import { assetVersionReleases, assets as previewAssets, proposals } from "./data";
+import { useCatalogRuntime } from "./catalogRuntime";
+import { CatalogWorkspaceControl, CreateCatalogAssetButton } from "./CatalogControls";
 import { CapabilityProvider, useCan } from "./authorization";
 import { AccessControlView } from "./AccessControlView";
 import { assetTypeProfileFor, evaluateAssetTypeRules, type AssetEmptyStateConfig } from "./assetTypeProfiles";
@@ -102,14 +104,20 @@ interface KnowledgeCatalogItem {
   aliases: string[];
 }
 
-const initialRecentAssetIds = [
-  "metric_01J4NETREVENUE8W4Q9D7K2",
-  "model_01J4ORDERS7K8M2Q5N9P",
-  "segment_01J4HIGHVALUE4X7P2K9M6N",
-];
-
 const assetTypes: AssetType[] = ["业务概念", "业务实体", "语义模型", "维度", "度量", "指标", "分群"];
 const catalogObjectTypes: CatalogObjectType[] = [...assetTypes, "语义关系", "物理绑定", "JoinContract"];
+
+function assetTypeFromCatalogType(type: CatalogObjectType | "全部") {
+  return ({
+    业务概念: "concept",
+    业务实体: "entity",
+    语义模型: "semantic_model",
+    维度: "dimension",
+    度量: "measure",
+    指标: "metric",
+    分群: "segment",
+  } as const)[type as AssetType] ?? "";
+}
 
 function assetTypeIcon(type: AssetType) {
   if (type === "指标") return Sigma;
@@ -196,7 +204,8 @@ function compatibilityLabel(state: Asset["consumerBindings"][number]["compatibil
   return ({ compatible: "兼容", conditional: "需确认", breaking: "不兼容", not_evaluated: "未评估" } as const)[state];
 }
 
-const knowledgeCatalogItems: KnowledgeCatalogItem[] = assets.flatMap((asset) => {
+function knowledgeCatalogItemsFor(assets: Asset[]): KnowledgeCatalogItem[] {
+  return assets.flatMap((asset) => {
   const assetItem: KnowledgeCatalogItem = {
     id: asset.id,
     assetId: asset.id,
@@ -208,7 +217,7 @@ const knowledgeCatalogItems: KnowledgeCatalogItem[] = assets.flatMap((asset) => 
     domain: asset.domain,
     owner: asset.owner,
     maintainer: asset.maintainer,
-    scope: `${asset.relations.length} 条关系 · ${asset.bindings.length} 个绑定`,
+    scope: `${asset.detailLoaded === false ? "关系待加载" : `${asset.relations.length} 条关系`} · ${asset.bindings.length} 个绑定`,
     detail: `${asset.joinContracts.length} 个 JoinContract`,
     aliases: asset.aliases,
   };
@@ -257,8 +266,9 @@ const knowledgeCatalogItems: KnowledgeCatalogItem[] = assets.flatMap((asset) => 
     detail: join.cardinality,
     aliases: [],
   }));
-  return [assetItem, ...relations, ...bindings, ...joins];
-});
+    return [assetItem, ...relations, ...bindings, ...joins];
+  });
+}
 
 function readinessSummary(asset: Asset) {
   const applicable = asset.readiness.filter((gate) => gate.state !== "not_applicable");
@@ -518,6 +528,7 @@ function Topbar({ view, contextLabel, onNewConversation, onRenameContext, onBack
     <header className="topbar">
       <div className="workspace-breadcrumb">{onBack && <button className="topbar-back-button" type="button" aria-label={backLabel} title={backLabel} onClick={onBack}><ArrowLeft size={16} /></button>}{contextLabel && (onRenameContext ? (isEditingTitle ? <input ref={titleInputRef} className="workspace-title-input" aria-label="编辑会话标题" value={draftTitle} onChange={(event) => setDraftTitle(event.target.value)} onBlur={commitTitle} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); commitTitle(); } if (event.key === "Escape") { event.preventDefault(); cancelTitle(); } }} /> : <button className="workspace-title-button" type="button" aria-label={`编辑会话标题：${contextLabel}`} onClick={() => setIsEditingTitle(true)}>{contextLabel}</button>) : <strong>{contextLabel}</strong>)}</div>
       <div className="topbar-actions">
+        <CatalogWorkspaceControl />
         {view === "ask" && <button className="primary-button" type="button" onClick={onNewConversation}><MessageSquareText size={16} />新建会话</button>}
       </div>
     </header>
@@ -742,6 +753,7 @@ function AssetDefinition({ asset, onNotify, onStartRevision }: { asset: Asset; o
 }
 
 function AssetRelations({ asset, focusedObjectId, onNotify, onStartRevision }: { asset: Asset; focusedObjectId?: string; onNotify: (message: string) => void; onStartRevision: (request: KnowledgeRevisionRequest) => void }) {
+  const { assets } = useCatalogRuntime();
   const profile = assetTypeProfileFor(asset);
   const [perspective, setPerspective] = useState<OntologyPerspective>("semantic");
   const perspectiveOptions: Array<{ id: OntologyPerspective; label: string }> = [
@@ -919,6 +931,8 @@ function KnowledgeRevisionLauncher({ asset, active, onStart }: { asset: Asset; a
 }
 
 function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, requestedCatalogType, requestedRevision, focusSearchRequestEpoch, detailBackRequestEpoch, onSelect, onDetailChange, onNotify, onRevisionSubmit }: { selectedId: string; domainFilter: string; requestedTab: AssetTab; requestedDetail: boolean; requestedCatalogType: CatalogObjectType | "全部"; requestedRevision: KnowledgeRevisionRequest | null; focusSearchRequestEpoch: number; detailBackRequestEpoch: number; onSelect: (id: string) => void; onDetailChange: (open: boolean) => void; onNotify: (message: string) => void; onRevisionSubmit: (submission: KnowledgeRevisionSubmission) => void }) {
+  const { assets, ensureAsset, error: catalogError, setQuery: setCatalogQuery } = useCatalogRuntime();
+  const knowledgeCatalogItems = useMemo(() => knowledgeCatalogItemsFor(assets), [assets]);
   const [query, setQuery] = useState("");
   const [type, setType] = useState<CatalogObjectType | "全部">(requestedCatalogType);
   const [assetStatus, setAssetStatus] = useState<Asset["status"] | "全部">("全部");
@@ -933,7 +947,7 @@ function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, r
   const [selectedDetailBackEpoch, setSelectedDetailBackEpoch] = useState(detailBackRequestEpoch);
   const catalogScrollPosition = useRef(0);
   const catalogSearchRef = useRef<HTMLInputElement>(null);
-  const domains = useMemo(() => Array.from(new Set(assets.map((asset) => asset.domain))), []);
+  const domains = useMemo(() => Array.from(new Set(assets.map((asset) => asset.domain))), [assets]);
   const normalizedQuery = query.trim().toLowerCase();
   const isGovernedObjectType = type === "语义关系" || type === "物理绑定" || type === "JoinContract";
   const catalogGroups = useMemo(() => {
@@ -962,7 +976,7 @@ function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, r
       if (readinessDelta !== 0) return readinessDelta;
       return left.asset.name.localeCompare(right.asset.name, "zh-CN");
     });
-  }, [assetStatus, domain, isGovernedObjectType, normalizedQuery, sort, type]);
+  }, [assetStatus, assets, domain, isGovernedObjectType, knowledgeCatalogItems, normalizedQuery, sort, type]);
   const visibleChildCount = catalogGroups.reduce((total, group) => total + group.visibleChildren.length, 0);
   const selected = assets.find((asset) => asset.id === selectedId) ?? assets[0];
   const focusedObject = focusedObjectId ? knowledgeCatalogItems.find((item) => item.key === focusedObjectId) : undefined;
@@ -971,6 +985,11 @@ function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, r
   useEffect(() => {
     if (focusSearchRequestEpoch > 0) catalogSearchRef.current?.focus();
   }, [focusSearchRequestEpoch]);
+
+  useEffect(() => {
+    const semanticType = assetTypeFromCatalogType(type);
+    setCatalogQuery(query.trim(), semanticType);
+  }, [query, setCatalogQuery, type]);
 
   const scrollWorkspaceTo = (top: number) => {
     window.requestAnimationFrame(() => {
@@ -999,6 +1018,7 @@ function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, r
     setRevisionRequest(null);
     setFocusedObjectId(item.id === item.assetId ? undefined : item.key);
     onSelect(item.assetId);
+    void ensureAsset(item.assetId);
     onDetailChange(true);
     setTab(item.openTab);
     setMode("detail");
@@ -1048,6 +1068,7 @@ function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, r
 
   return (
     <section className="view view-assets asset-directory">
+      {catalogError && <div className="catalog-runtime-error" role="alert"><CircleAlert size={16} /><span>{catalogError}</span></div>}
       <section className="asset-catalog" aria-label="知识目录">
         <div className="catalog-toolbar">
           <label className="search-field">
@@ -1059,6 +1080,7 @@ function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, r
           <label className="catalog-filter"><span>资产状态</span><select aria-label="筛选资产发布状态" value={assetStatus} onChange={(event) => setAssetStatus(event.target.value as Asset["status"] | "全部")}><option value="全部">全部状态</option><option value="已发布">已发布</option><option value="需关注">需关注</option><option value="草稿">草稿</option></select></label>
           <label className="catalog-filter"><span>语义域</span><select aria-label="筛选语义域" value={domain} onChange={(event) => setDomain(event.target.value)}><option value="全部">全部语义域</option>{domains.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
           <button className="catalog-clear-button" type="button" aria-label="清除全部筛选" title="清除全部筛选" disabled={!hasFilters} onClick={() => { setQuery(""); setType("全部"); setAssetStatus("全部"); setDomain("全部"); }}><X size={15} /></button>
+          <CreateCatalogAssetButton onCreated={(assetId) => { onSelect(assetId); void ensureAsset(assetId); onDetailChange(true); setMode("detail"); }} />
         </div>
         <div className="catalog-summary">
           <span>显示 <strong>{catalogGroups.length}</strong> / {assets.length} 个语义资产{isGovernedObjectType && <> · {visibleChildCount} 个{type}</>}</span>
@@ -1077,7 +1099,7 @@ function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, r
                   <button className="asset-row-open" type="button" aria-label={`打开语义资产 ${asset.name}`} onClick={() => openDetail(assetItem)}>
                     <span className="asset-row-identity"><AssetTypeMark type={asset.type} /><span className="asset-row-copy"><strong>{asset.name}</strong><code>{asset.key}</code></span></span>
                     <span className="asset-row-taxonomy"><strong>{asset.type}</strong><small>{asset.domain}</small></span>
-                    <span className="asset-row-scope"><strong>{asset.relations.length} 关系 · {asset.bindings.length} 绑定</strong><small>{asset.joinContracts.length} 个 JoinContract</small></span>
+                    <span className="asset-row-scope"><strong>{asset.detailLoaded === false ? "打开后加载关系" : `${asset.relations.length} 关系`} · {asset.bindings.length} 绑定</strong><small>{asset.joinContracts.length} 个 JoinContract</small></span>
                     <span className="asset-row-owner"><strong>{asset.owner}</strong><small>{asset.maintainer}</small></span>
                     <span className="asset-row-readiness"><span><b>{readiness.passed}/{readiness.total}</b><small>{readiness.warnings > 0 ? `${readiness.warnings} 项需关注` : "门禁通过"}</small></span><progress max={readiness.total} value={readiness.passed} aria-label={`${asset.name}就绪度 ${readiness.passed}/${readiness.total}`} /></span>
                     <StatusBadge tone={statusTone(asset.status)}>{asset.status}</StatusBadge>
@@ -1123,13 +1145,13 @@ const candidateTargets: Record<string, { revision: string; previousRevision: str
 function candidateTargetFor(proposal: Proposal) {
   const knownTarget = candidateTargets[proposal.id];
   if (knownTarget) return knownTarget;
-  const asset = assets.find((item) => item.id === proposal.assetId);
+  const asset = previewAssets.find((item) => item.id === proposal.assetId);
   if (!asset) return undefined;
   return { revision: `@${asset.revisionRecord.sequence + 1}`, previousRevision: asset.revision, source: "人工知识修订" };
 }
 
 function assetVersionCandidateFor(proposal: Proposal): AssetVersionCandidate | undefined {
-  const asset = assets.find((item) => item.id === proposal.assetId);
+  const asset = previewAssets.find((item) => item.id === proposal.assetId);
   const target = candidateTargetFor(proposal);
   return asset && target ? { key: `candidate:${proposal.id}`, proposal, asset, ...target } : undefined;
 }
@@ -1453,7 +1475,7 @@ function CreateProposalDialog({ onClose, onCreate }: { onClose: () => void; onCr
         <header><div><span className="panel-kicker">人工发起</span><h2 id="create-proposal-title">创建变更事项</h2></div><button ref={closeRef} className="icon-button" type="button" aria-label="关闭变更事项创建" onClick={onClose}><X size={18} /></button></header>
         <div className="prototype-notice"><CircleAlert size={17} /><span>原型会创建可见的会话草稿，但不会持久化语义资产。</span></div>
         <div className="dialog-body proposal-form">
-          <label><span>基础资产</span><select aria-label="基础资产" defaultValue={assets[1].id}>{assets.map((asset) => <option key={asset.id} value={asset.id}>{asset.name} · {asset.key}</option>)}</select></label>
+          <label><span>基础资产</span><select aria-label="基础资产" defaultValue={previewAssets[1].id}>{previewAssets.map((asset) => <option key={asset.id} value={asset.id}>{asset.name} · {asset.key}</option>)}</select></label>
           <label><span>变更意图</span><textarea aria-label="变更意图" defaultValue="补充客单价退款订单口径的业务边界与验证证据。" /></label>
           <div className="proposal-policy"><ShieldCheck size={18} /><span><strong>治理级别 G1</strong><small>AI 可补全草稿和运行预检，发布前必须由资产负责人审核。</small></span></div>
         </div>
@@ -1467,7 +1489,7 @@ function PublishDialog({ proposal, onClose, onPublish }: { proposal: Proposal; o
   const closeRef = useRef<HTMLButtonElement>(null);
   const [publisherId, setPublisherId] = useState("USR-PUBLISHER");
   const target = candidateTargetFor(proposal);
-  const asset = assets.find((item) => item.id === proposal.assetId);
+  const asset = previewAssets.find((item) => item.id === proposal.assetId);
   const hasSeparationConflict = publisherId === "USR-REVIEWER";
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
@@ -1496,6 +1518,7 @@ function PublishDialog({ proposal, onClose, onPublish }: { proposal: Proposal; o
 }
 
 function CommandPalette({ onClose, onNavigate, onSelectAsset, onSelectProposal, onCreateProposal }: { onClose: () => void; onNavigate: (view: ViewId) => void; onSelectAsset: (id: string) => void; onSelectProposal: (id: string) => void; onCreateProposal: () => void }) {
+  const { assets } = useCatalogRuntime();
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -1536,7 +1559,17 @@ function CommandPalette({ onClose, onNavigate, onSelectAsset, onSelectProposal, 
   );
 }
 
-export function App() {
+export function ProductApp() {
+  const { assets } = useCatalogRuntime();
+  const preferredRecentAssetIds = [
+    "metric_01J4NETREVENUE8W4Q9D7K2",
+    "model_01J4ORDERS7K8M2Q5N9P",
+    "segment_01J4HIGHVALUE4X7P2K9M6N",
+  ];
+  const initialRecentAssetIds = [
+    ...preferredRecentAssetIds.filter((id) => assets.some((asset) => asset.id === id)),
+    ...assets.map((asset) => asset.id),
+  ].filter((id, index, values) => values.indexOf(id) === index).slice(0, 3);
   const [view, setView] = useState<ViewId>("ask");
   const [contextPanelOpen, setContextPanelOpen] = useState(true);
   const [contextPanelWidth, setContextPanelWidth] = useState(initialContextPanelWidth);
@@ -1550,7 +1583,7 @@ export function App() {
   const [auditRunRequestId, setAuditRunRequestId] = useState<string | undefined>();
   const [releaseDetailOpen, setReleaseDetailOpen] = useState(false);
   const [releaseDetailBackRequestEpoch, setReleaseDetailBackRequestEpoch] = useState(0);
-  const [selectedAssetId, setSelectedAssetId] = useState(assets[0].id);
+  const [selectedAssetId, setSelectedAssetId] = useState(assets[0]?.id ?? "");
   const [recentAssetIds, setRecentAssetIds] = useState(initialRecentAssetIds);
   const recentAssetOpenSequence = useRef(initialRecentAssetIds.length);
   const recentAssetOpenedAt = useRef<Record<string, number>>(Object.fromEntries(initialRecentAssetIds.map((id, index) => [id, initialRecentAssetIds.length - index])));

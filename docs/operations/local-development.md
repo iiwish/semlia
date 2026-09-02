@@ -10,7 +10,7 @@ Docker Compose starts four services:
 | --- | --- | --- |
 | `postgres` | PostgreSQL 18 data store | Running and healthy |
 | `migrate` | Applies committed SQL migrations before the application starts | Exited successfully |
-| `server` | Serves health endpoints, the M0 API, and embedded Web status application | Running and healthy |
+| `server` | Serves health and M1 APIs plus the embedded Semlia desktop application | Running and healthy |
 | `worker` | Executes durable jobs backed by PostgreSQL | Running |
 
 The server binds to `127.0.0.1:8080` and PostgreSQL to `127.0.0.1:5433` by default. Internal services use the Compose-only `backend` network.
