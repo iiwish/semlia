@@ -13,7 +13,7 @@
 
 ### T001 Authorization foundation
 
-Status: Ready
+Status: Needs_Review
 Depends on: M1 Accepted, D6/D7 verdicts recorded 2026-09-02
 Blocks: T002, T006
 
@@ -24,9 +24,13 @@ without it.
 
 Packet: `docs/specs/m2-governed-authoring/packets/T001.yaml`.
 
+Execution: implementation `cdba99a`; deny-by-default evaluation with full decision audit, the four
+packet red scenarios, real-PostgreSQL integration suites and the complete validation set pass.
+Evidence: `docs/evidence/M2-T001/summary.md`.
+
 ### T002 Proposal and governance data model
 
-Status: Ready
+Status: Needs_Review
 Depends on: T001
 Blocks: T003, T008, T009
 
@@ -34,6 +38,11 @@ Add the proposal, change-set, review, validation run, policy decision, release, 
 schema with the SSOT §7.5 state machine, following the M1 transaction and immutability patterns.
 
 Packet: `docs/specs/m2-governed-authoring/packets/T002.yaml`.
+
+Execution: implementation `e2adaf9`; the ten-table model, domain transition table, concurrent
+immutability attacks, policy recomputability, populated-migration lifecycle and atomic
+audit+outbox commits pass the complete source gate. Evidence:
+`docs/evidence/M2-T002/summary.md`.
 
 ### T003 Proposal API and AI output contract
 
