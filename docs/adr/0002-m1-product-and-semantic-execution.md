@@ -227,7 +227,10 @@ M1 计划至少包含以下工作流：
 8. 真实仓库与版本化 SQL/dbt fixture 的端到端导入、10,000 表检索基准、fresh-workspace 验收、信号归因和交付证据。
 9. 可选 Cube adapter 的独立 contract test，证明启用与未启用两种路径均不污染核心领域模型。
 
-M1 task 不得直接复制 `prototypes/product/**` 到 `web/**`。原型只提供产品合同和交互意图；生产实现必须按 feature 边界重建、使用生成 API 类型，并解决前端基线审计中的阻断问题。
+`web/**` 是唯一可运行并由 Go 服务嵌入的前端。已确认的产品体验直接在该 package
+维护；M1 Catalog 使用生成 API 类型和真实 PostgreSQL 数据。尚未进入对应后端里程碑的
+流程必须标明预览或会话边界，且不得在生产请求失败时回退到 fixture。仓库不维护并行原型
+package。
 
 ## 8. 支持材料
 

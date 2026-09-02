@@ -1,11 +1,16 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { App } from "./App";
+import { CatalogRuntimeProvider } from "./catalogRuntime";
+import { ProductApp } from "./ProductApp";
 import { assetTypeProfiles, evaluateAssetTypeRules } from "./assetTypeProfiles";
 import { assets } from "./data";
 
-describe("Semlia product prototype", () => {
+function App() {
+  return <CatalogRuntimeProvider fixtureAssets={assets}><ProductApp /></CatalogRuntimeProvider>;
+}
+
+describe("Semlia product workspace", () => {
   it("uses a three-layer semantic operations workspace", () => {
     render(<App />);
 

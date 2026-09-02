@@ -16,7 +16,7 @@ export default defineConfig({
     { name: "compact-desktop", use: { viewport: { width: 1024, height: 768 } } },
   ],
   webServer: {
-    command: "pnpm dev --port 4174",
+    command: "VITE_CATALOG_FIXTURE=1 pnpm dev --port 4174",
     url: "http://127.0.0.1:4174",
     reuseExistingServer: true,
     timeout: 30_000,

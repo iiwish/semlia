@@ -4,7 +4,7 @@ const traceId = "4bf92f3577b34da6a3ce929d0e0e4736";
 
 test("renders the real ready contract without overflow", async ({ page }, testInfo) => {
   await routeReady(page);
-  await page.goto("/");
+  await page.goto("/status");
 
   await expect(page.getByText("Control plane ready")).toBeVisible();
   await expect(page.getByText("test-build")).toBeVisible();
@@ -15,7 +15,7 @@ test("renders the real ready contract without overflow", async ({ page }, testIn
 
 test("shows dependency error code and trace", async ({ page }, testInfo) => {
   await routeDependencyUnavailable(page);
-  await page.goto("/");
+  await page.goto("/status");
 
   await expect(page.getByRole("alert")).toContainText("Dependency unavailable");
   await expect(page.getByText("DEPENDENCY_UNAVAILABLE")).toBeVisible();
@@ -26,7 +26,7 @@ test("shows dependency error code and trace", async ({ page }, testInfo) => {
 
 test("shows a safe configuration error when the API is unreachable", async ({ page }, testInfo) => {
   await page.route("**/health/live", (route) => route.abort("connectionrefused"));
-  await page.goto("/");
+  await page.goto("/status");
 
   await expect(page.getByRole("alert")).toContainText("Control API unreachable");
   await expect(page.getByText("CONFIGURATION_ERROR")).toBeVisible();
@@ -51,7 +51,7 @@ test("supports keyboard refresh and reduced motion", async ({ page }) => {
     await json(route, 200, { status: "live", traceId });
   });
   await routeReadyRemainder(page);
-  await page.goto("/");
+  await page.goto("/status");
   await expect(page.getByText("Control plane ready")).toBeVisible();
   const initialRequests = livenessRequests;
 

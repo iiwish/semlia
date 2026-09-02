@@ -61,4 +61,4 @@ The backend remains a modular Go monolith with PostgreSQL. It does not introduce
 - LLM-generated proposals, automated approval and release policy routing belong to M2.
 - Semantic query resolution, MCP distribution and governed execution belong to M3.
 - Full OWL/RDF reasoning, arbitrary predicates and unbounded graph traversal are not M1 ontology requirements.
-- Production Web reconstruction is a separate M1 stream and consumes only generated API contracts.
+- `web` is the single production frontend. Its M1 workspace and Catalog surfaces consume generated API contracts; future-milestone surfaces retain explicit preview or session boundaries.

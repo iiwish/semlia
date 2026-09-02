@@ -16,6 +16,7 @@ import {
   type StatusLoader,
   type SystemStatus,
 } from "./status";
+import "./status.css";
 
 interface AppProps {
   loadStatus?: StatusLoader;
@@ -57,7 +58,7 @@ export function StatusView({ loadStatus = loadSystemStatus }: AppProps) {
   const info = status.kind === "ready" ? status.info : status.kind === "dependency_unavailable" ? status.info : undefined;
 
   return (
-    <div className="app-shell" data-state={status.kind}>
+    <div className="system-status-root" data-state={status.kind}>
       <header className="topbar">
         <div className="topbar-inner">
           <a className="brand" href="/" aria-label="Semlia system status">

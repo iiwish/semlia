@@ -6,7 +6,7 @@ export type AssetStatus = "已发布" | "需关注" | "草稿";
 export type ReadinessState = "passed" | "warning" | "not_applicable";
 export type EvidenceAuthority = "DECLARED" | "CONSTRAINED" | "DERIVED" | "OBSERVED" | "INFERRED";
 
-export type AssetLifecycleState = "active" | "deprecated" | "retired";
+export type AssetLifecycleState = "active" | "deprecated" | "retired" | "draft" | "archived";
 export type AssetWorkflowState = "draft" | "proposed" | "in_review" | "released";
 export type DeploymentState = "unreleased" | "staging" | "production";
 export type AssetHealthState = "healthy" | "warning" | "blocked";
@@ -280,6 +280,7 @@ export interface Asset {
   // This is a denormalized detail projection. Canonical identity, revision,
   // deployment and quality records remain independently addressable.
   id: string;
+  detailLoaded?: boolean;
   revision: string;
   namespace: string;
   key: string;
