@@ -28,7 +28,7 @@ Acceptance: founder explicitly accepted T001 on 2026-09-02.
 
 ### T002 PostgreSQL registry foundation
 
-Status: Needs_Review
+Status: Accepted
 Depends on: T001
 Blocks: T003, T004
 
@@ -38,13 +38,17 @@ Design: `docs/specs/m1-semantic-registry/t002-migration-design.md`. Founder conf
 
 Execution: implementation `a6987af`; PostgreSQL 17/18 migration lifecycle, populated M0 rollback, typed repository, workspace isolation, immutability, relation policy and ontology publication tests pass. Evidence: `docs/evidence/M1-T002/summary.md`.
 
+Acceptance: founder explicitly accepted T002 on 2026-09-02 and authorized T003 execution.
+
 ### T003 Source discovery adapters
 
-Status: Draft
+Status: Running
 Depends on: T002
 Blocks: T004
 
 Implement Catalog, PostgreSQL DDL/View SQL and dbt artifact adapters. Use maintained parsers/schema validation, immutable source revisions, incremental fingerprints and explicit unresolved findings.
+
+Design: `docs/specs/m1-semantic-registry/t003-discovery-design.md`. Packet: `docs/specs/m1-semantic-registry/packets/T003.yaml`.
 
 ### T004 Catalog and revision API
 
