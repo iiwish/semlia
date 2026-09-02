@@ -28,13 +28,15 @@ Acceptance: founder explicitly accepted T001 on 2026-09-02.
 
 ### T002 PostgreSQL registry foundation
 
-Status: Running
+Status: Needs_Review
 Depends on: T001
 Blocks: T003, T004
 
 Add tested forward migrations for M0 identity conversion and the normalized M1 schema, sqlc queries and repository ports. Prove empty and populated M0 upgrades, downgrade/upgrade, invariants, immutability and workspace isolation.
 
 Design: `docs/specs/m1-semantic-registry/t002-migration-design.md`. Founder confirmed the design on 2026-09-02. Packet: `docs/specs/m1-semantic-registry/packets/T002.yaml`.
+
+Execution: implementation `a6987af`; PostgreSQL 17/18 migration lifecycle, populated M0 rollback, typed repository, workspace isolation, immutability, relation policy and ontology publication tests pass. Evidence: `docs/evidence/M1-T002/summary.md`.
 
 ### T003 Source discovery adapters
 
