@@ -16,8 +16,9 @@ import (
 )
 
 const (
-	headerTraceID = "X-Trace-ID"
-	retryAfter    = "5"
+	headerTraceID   = "X-Trace-ID"
+	headerPrincipal = "X-Semlia-Principal"
+	retryAfter      = "5"
 )
 
 type Handler struct {

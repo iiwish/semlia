@@ -13,7 +13,9 @@ import (
 	"strings"
 	"time"
 
+	authorizationapp "github.com/iiwish/semlia/internal/application/authorization"
 	usageapp "github.com/iiwish/semlia/internal/application/usage"
+	authz "github.com/iiwish/semlia/internal/domain/authorization"
 	domain "github.com/iiwish/semlia/internal/domain/catalog"
 	"github.com/iiwish/semlia/internal/domain/semantic"
 	"github.com/iiwish/semlia/pkg/identity"
@@ -47,12 +49,22 @@ type Service struct {
 	repository Repository
 	clock      Clock
 	usage      *usageapp.Service
+	authorizer authorizationapp.Evaluator
 }
 
 type Option func(*Service)
 
 func WithUsage(service *usageapp.Service) Option {
 	return func(catalog *Service) { catalog.usage = service }
+}
+
+// WithAuthorizer attaches the single capability-evaluation enforcement point.
+// Production wiring always sets it; when it is absent the service runs in the
+// pre-M2 mode used by unit-test harnesses, mirroring the optional usage
+// service. Enforcement is server-side only (FR-012): client capability state
+// can never satisfy these checks.
+func WithAuthorizer(evaluator authorizationapp.Evaluator) Option {
+	return func(catalog *Service) { catalog.authorizer = evaluator }
 }
 
 func NewService(repository Repository, clock Clock, options ...Option) *Service {
@@ -95,6 +107,7 @@ type CreateAssetRequest struct {
 	Content       json.RawMessage
 	CreatedBy     string
 	EvidenceIDs   []identity.EvidenceID
+	PrincipalRef  string
 	TraceID       string
 }
 
@@ -105,6 +118,7 @@ type AppendRevisionRequest struct {
 	Content       json.RawMessage
 	CreatedBy     string
 	EvidenceIDs   []identity.EvidenceID
+	PrincipalRef  string
 	TraceID       string
 }
 
@@ -195,6 +209,18 @@ func (service *Service) CreateAsset(ctx context.Context, request CreateAssetRequ
 		request.CreatedBy == "" || len(request.CreatedBy) > 256 || len(request.EvidenceIDs) > 100 || !validTraceID(request.TraceID) {
 		return domain.AssetDetail{}, domain.ErrInvalidArgument
 	}
+	// Asset create authoring action: creating a semantic asset proposes new
+	// governed content, so the command maps to the FR-003 asset.propose
+	// identifier evaluated at workspace scope.
+	if err := service.authorize(ctx, authorizationapp.EvaluationRequest{
+		PrincipalRef: request.PrincipalRef,
+		WorkspaceID:  request.WorkspaceID,
+		Action:       authz.ActionAssetPropose,
+		Resource:     authz.Resource{Type: authz.ScopeWorkspace, ID: request.WorkspaceID.UUID()},
+		TraceID:      request.TraceID,
+	}); err != nil {
+		return domain.AssetDetail{}, err
+	}
 	content, digest, err := canonicalContent(request.Content, request.SchemaVersion)
 	if err != nil {
 		return domain.AssetDetail{}, err
@@ -223,6 +249,22 @@ func (service *Service) CreateAsset(ctx context.Context, request CreateAssetRequ
 
 func (service *Service) GetAsset(ctx context.Context, workspace identity.WorkspaceID, asset identity.AssetID) (domain.AssetDetail, error) {
 	return service.repository.GetCatalogAsset(ctx, workspace, asset)
+}
+
+// authorize runs the shared M2 capability evaluation. Denials carry the audited
+// decision so the HTTP boundary can answer with 403 and the stable reason code.
+func (service *Service) authorize(ctx context.Context, request authorizationapp.EvaluationRequest) error {
+	if service.authorizer == nil {
+		return nil
+	}
+	decision, err := service.authorizer.Evaluate(ctx, request)
+	if err != nil {
+		return err
+	}
+	if decision.Allowed {
+		return nil
+	}
+	return &authz.DenialError{Decision: decision}
 }
 
 type ReadObservation struct {
@@ -295,6 +337,18 @@ func (service *Service) AppendRevision(ctx context.Context, request AppendRevisi
 	request.CreatedBy = strings.TrimSpace(request.CreatedBy)
 	if request.CreatedBy == "" || len(request.CreatedBy) > 256 || len(request.EvidenceIDs) > 100 || !validTraceID(request.TraceID) {
 		return domain.Revision{}, domain.ErrInvalidArgument
+	}
+	// Revision append authoring action: appending an immutable revision edits
+	// the asset's governed content, so the command maps to the FR-003
+	// asset.edit identifier evaluated against the asset resource.
+	if err := service.authorize(ctx, authorizationapp.EvaluationRequest{
+		PrincipalRef: request.PrincipalRef,
+		WorkspaceID:  request.WorkspaceID,
+		Action:       authz.ActionAssetEdit,
+		Resource:     authz.Resource{Type: authz.ScopeAsset, ID: request.AssetID.UUID()},
+		TraceID:      request.TraceID,
+	}); err != nil {
+		return domain.Revision{}, err
 	}
 	content, digest, err := canonicalContent(request.Content, request.SchemaVersion)
 	if err != nil {

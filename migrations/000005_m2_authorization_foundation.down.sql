@@ -1,0 +1,12 @@
+DROP TRIGGER IF EXISTS workspaces_seed_authorization ON workspaces;
+DROP FUNCTION IF EXISTS seed_workspace_authorization;
+DROP TABLE IF EXISTS authorization_events;
+DROP TABLE IF EXISTS role_bindings;
+DROP TABLE IF EXISTS principals;
+DROP TABLE IF EXISTS role_actions;
+DROP TABLE IF EXISTS roles;
+DROP TABLE IF EXISTS actions;
+DROP FUNCTION IF EXISTS validate_principal_owner;
+DROP FUNCTION IF EXISTS seed_authorization_vocabulary;
+DROP FUNCTION IF EXISTS semlia_seed_uuidv7(text, text, timestamptz);
+ALTER TABLE workspaces DROP COLUMN IF EXISTS authorization_version;

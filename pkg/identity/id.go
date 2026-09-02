@@ -27,6 +27,8 @@ const (
 	Release                 Prefix = "rls"
 	Run                     Prefix = "run"
 	Event                   Prefix = "evt"
+	Principal               Prefix = "prn"
+	RoleBinding             Prefix = "bnd"
 	SourceConnection        Prefix = "src"
 	SourceRevision          Prefix = "srv"
 	PhysicalDataset         Prefix = "pds"
@@ -47,6 +49,8 @@ var registeredPrefixes = []Prefix{
 	Release,
 	Run,
 	Event,
+	Principal,
+	RoleBinding,
 	SourceConnection,
 	SourceRevision,
 	PhysicalDataset,
@@ -229,6 +233,8 @@ type evidenceKind struct{}
 type releaseKind struct{}
 type runKind struct{}
 type eventKind struct{}
+type principalKind struct{}
+type roleBindingKind struct{}
 type sourceConnectionKind struct{}
 type sourceRevisionKind struct{}
 type physicalDatasetKind struct{}
@@ -247,6 +253,8 @@ func (evidenceKind) resourcePrefix() Prefix                { return Evidence }
 func (releaseKind) resourcePrefix() Prefix                 { return Release }
 func (runKind) resourcePrefix() Prefix                     { return Run }
 func (eventKind) resourcePrefix() Prefix                   { return Event }
+func (principalKind) resourcePrefix() Prefix               { return Principal }
+func (roleBindingKind) resourcePrefix() Prefix             { return RoleBinding }
 func (sourceConnectionKind) resourcePrefix() Prefix        { return SourceConnection }
 func (sourceRevisionKind) resourcePrefix() Prefix          { return SourceRevision }
 func (physicalDatasetKind) resourcePrefix() Prefix         { return PhysicalDataset }
@@ -265,6 +273,8 @@ type EvidenceID = TypedID[evidenceKind]
 type ReleaseID = TypedID[releaseKind]
 type RunID = TypedID[runKind]
 type EventID = TypedID[eventKind]
+type PrincipalID = TypedID[principalKind]
+type BindingID = TypedID[roleBindingKind]
 type SourceConnectionID = TypedID[sourceConnectionKind]
 type SourceRevisionID = TypedID[sourceRevisionKind]
 type PhysicalDatasetID = TypedID[physicalDatasetKind]
@@ -283,6 +293,8 @@ func NewEvidenceID() (EvidenceID, error)                 { return newTypedID[evi
 func NewReleaseID() (ReleaseID, error)                   { return newTypedID[releaseKind]() }
 func NewRunID() (RunID, error)                           { return newTypedID[runKind]() }
 func NewEventID() (EventID, error)                       { return newTypedID[eventKind]() }
+func NewPrincipalID() (PrincipalID, error)               { return newTypedID[principalKind]() }
+func NewBindingID() (BindingID, error)                   { return newTypedID[roleBindingKind]() }
 func NewSourceConnectionID() (SourceConnectionID, error) { return newTypedID[sourceConnectionKind]() }
 func NewSourceRevisionID() (SourceRevisionID, error)     { return newTypedID[sourceRevisionKind]() }
 func NewPhysicalDatasetID() (PhysicalDatasetID, error)   { return newTypedID[physicalDatasetKind]() }
@@ -305,6 +317,8 @@ func ParseEvidenceID(value string) (EvidenceID, error)   { return parseTypedID[e
 func ParseReleaseID(value string) (ReleaseID, error)     { return parseTypedID[releaseKind](value) }
 func ParseRunID(value string) (RunID, error)             { return parseTypedID[runKind](value) }
 func ParseEventID(value string) (EventID, error)         { return parseTypedID[eventKind](value) }
+func ParsePrincipalID(value string) (PrincipalID, error) { return parseTypedID[principalKind](value) }
+func ParseBindingID(value string) (BindingID, error)     { return parseTypedID[roleBindingKind](value) }
 func ParseSourceConnectionID(value string) (SourceConnectionID, error) {
 	return parseTypedID[sourceConnectionKind](value)
 }
@@ -351,6 +365,12 @@ func OntologyIDFromUUIDBytes(value [16]byte) (OntologyID, error) {
 }
 func EvidenceIDFromUUIDBytes(value [16]byte) (EvidenceID, error) {
 	return typedIDFromUUIDBytes[evidenceKind](value)
+}
+func PrincipalIDFromUUIDBytes(value [16]byte) (PrincipalID, error) {
+	return typedIDFromUUIDBytes[principalKind](value)
+}
+func BindingIDFromUUIDBytes(value [16]byte) (BindingID, error) {
+	return typedIDFromUUIDBytes[roleBindingKind](value)
 }
 func SourceConnectionIDFromUUIDBytes(value [16]byte) (SourceConnectionID, error) {
 	return typedIDFromUUIDBytes[sourceConnectionKind](value)
