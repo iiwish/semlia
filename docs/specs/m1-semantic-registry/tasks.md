@@ -42,13 +42,19 @@ Acceptance: founder explicitly accepted T002 on 2026-09-02 and authorized T003 e
 
 ### T003 Source discovery adapters
 
-Status: Running
+Status: Needs_Review
 Depends on: T002
 Blocks: T004
 
 Implement Catalog, PostgreSQL DDL/View SQL and dbt artifact adapters. Use maintained parsers/schema validation, immutable source revisions, incremental fingerprints and explicit unresolved findings.
 
 Design: `docs/specs/m1-semantic-registry/t003-discovery-design.md`. Packet: `docs/specs/m1-semantic-registry/packets/T003.yaml`.
+
+Execution: implementation `7ac5197`; adapter contract, race, real PostgreSQL incremental/rollback,
+sqlc drift, parser benchmark and complete `make check-source` gates pass. Evidence:
+`docs/evidence/M1-T003/summary.md`.
+
+Acceptance: founder review is required before T004 execution.
 
 ### T004 Catalog and revision API
 
