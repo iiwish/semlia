@@ -4,12 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	application "github.com/iiwish/semlia/internal/application/catalog"
+	usageapp "github.com/iiwish/semlia/internal/application/usage"
 	domain "github.com/iiwish/semlia/internal/domain/catalog"
 	"github.com/iiwish/semlia/internal/domain/semantic"
+	usagedomain "github.com/iiwish/semlia/internal/domain/usage"
 	"github.com/iiwish/semlia/pkg/identity"
 )
 
@@ -85,19 +88,56 @@ func TestInvalidMutationFailsBeforeRepository(t *testing.T) {
 	}
 }
 
+func TestCatalogRecordsFailedSearchWithoutChangingRepositoryError(t *testing.T) {
+	repository := &fakeRepository{listErr: errors.New("database unavailable")}
+	usageRepository := &usageRepository{}
+	clock := application.ClockFunc(func() time.Time { return time.Date(2026, 9, 2, 10, 0, 0, 0, time.UTC) })
+	usageService, err := usageapp.NewService(usageRepository, usageapp.ClockFunc(clock), []byte(strings.Repeat("s", 32)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := application.NewService(repository, clock, application.WithUsage(usageService))
+	_, err = service.ListAssets(context.Background(), application.ListAssetsRequest{
+		WorkspaceID: mustID(t, identity.NewWorkspaceID), Search: "sensitive phrase", Channel: "api",
+		TraceID: "4bf92f3577b34da6a3ce929d0e0e4736",
+	})
+	if !errors.Is(err, repository.listErr) {
+		t.Fatalf("catalog error = %v", err)
+	}
+	if len(usageRepository.events) != 1 || usageRepository.events[0].Outcome != "failed" ||
+		usageRepository.events[0].ReasonCode != "CATALOG_QUERY_FAILED" {
+		t.Fatalf("failed usage = %+v", usageRepository.events)
+	}
+}
+
 type fakeRepository struct {
 	assets         []domain.AssetSummary
 	lastAssetQuery domain.ListAssetsQuery
 	created        domain.CreateAssetCommand
 	createCalls    int
+	listErr        error
 }
 
 func (repository *fakeRepository) ListCatalogAssets(_ context.Context, query domain.ListAssetsQuery) ([]domain.AssetSummary, error) {
 	repository.lastAssetQuery = query
+	if repository.listErr != nil {
+		return nil, repository.listErr
+	}
 	if query.Cursor == nil {
 		return append([]domain.AssetSummary(nil), repository.assets...), nil
 	}
 	return nil, nil
+}
+
+type usageRepository struct{ events []usagedomain.Event }
+
+func (repository *usageRepository) RecordUsageEvent(_ context.Context, event usagedomain.Event) error {
+	repository.events = append(repository.events, event)
+	return nil
+}
+
+func (repository *usageRepository) DeleteExpiredUsageEvents(context.Context, time.Time, int) (int64, error) {
+	return 0, nil
 }
 
 func (repository *fakeRepository) GetCatalogAsset(context.Context, identity.WorkspaceID, identity.AssetID) (domain.AssetDetail, error) {

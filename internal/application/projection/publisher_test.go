@@ -29,12 +29,19 @@ func TestPublisherLoadsExactRevisionAndPassesOptimisticBase(t *testing.T) {
 	loader := &loaderStub{asset: projection}
 	writer := &writerStub{}
 	publisher := application.NewPublisher(loader, writer)
-	payload, _ := json.Marshal(map[string]any{
+	eventID := mustNew(t, identity.NewEventID)
+	data := map[string]any{
 		"specVersion": "semlia.catalog/v1", "action": "revision.created", "assetId": asset.String(),
 		"revisionId": revision.String(), "baseRevisionId": base.String(), "sequence": 2,
+	}
+	payload, _ := json.Marshal(map[string]any{
+		"specVersion": "semlia.events/v1", "id": eventID.String(), "type": application.CatalogAssetChanged,
+		"source": "urn:semlia:control-plane", "workspaceId": workspace.String(),
+		"time": time.Unix(100, 0).UTC().Format(time.RFC3339), "traceId": "4bf92f3577b34da6a3ce929d0e0e4736", "data": data,
 	})
 	err := publisher.Publish(context.Background(), jobs.OutboxEvent{
-		WorkspaceID: workspace, Type: application.CatalogAssetChanged, Payload: payload,
+		ID: eventID, WorkspaceID: workspace, Type: application.CatalogAssetChanged, Payload: payload,
+		TraceID: "4bf92f3577b34da6a3ce929d0e0e4736",
 	})
 	if err != nil {
 		t.Fatal(err)

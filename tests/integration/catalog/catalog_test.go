@@ -116,6 +116,7 @@ func TestAssetRevisionJourneyIsAtomicAndImmutable(t *testing.T) {
 		"semantic_assets": 1, "asset_revisions": 2, "revision_evidence_links": 2,
 		"audit_events": 2, "outbox_events": 2,
 	})
+	assertCatalogEventEnvelope(t, pool, workspaceID)
 
 	invalidEvidence := mustID(t, identity.NewEvidenceID)
 	_, err = service.CreateAsset(context.Background(), application.CreateAssetRequest{
@@ -129,6 +130,40 @@ func TestAssetRevisionJourneyIsAtomicAndImmutable(t *testing.T) {
 	assertCounts(t, pool, map[string]int{
 		"semantic_assets": 1, "asset_revisions": 2, "audit_events": 2, "outbox_events": 2,
 	})
+}
+
+func assertCatalogEventEnvelope(t *testing.T, pool *pgstore.Pool, workspace identity.WorkspaceID) {
+	t.Helper()
+	var eventType, traceID string
+	var payload []byte
+	if err := pool.QueryRow(context.Background(), `
+		SELECT event_type, trace_id, payload
+		FROM outbox_events
+		WHERE workspace_id = $1
+		ORDER BY created_at, id
+		LIMIT 1`, workspace.UUID()).Scan(&eventType, &traceID, &payload); err != nil {
+		t.Fatal(err)
+	}
+	var envelope struct {
+		SpecVersion string          `json:"specVersion"`
+		ID          string          `json:"id"`
+		Type        string          `json:"type"`
+		Source      string          `json:"source"`
+		WorkspaceID string          `json:"workspaceId"`
+		TraceID     string          `json:"traceId"`
+		Data        json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal(payload, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if envelope.SpecVersion != "semlia.events/v1" || envelope.Type != eventType ||
+		envelope.WorkspaceID != workspace.String() || envelope.TraceID != traceID ||
+		envelope.Source != "urn:semlia:control-plane" || envelope.ID == "" || len(envelope.Data) == 0 {
+		t.Fatalf("event envelope = %+v", envelope)
+	}
+	if _, err := identity.ParseEventID(envelope.ID); err != nil {
+		t.Fatalf("event envelope ID = %s: %v", envelope.ID, err)
+	}
 }
 
 func TestCatalogSearchPaginationAndWorkspaceIsolation(t *testing.T) {

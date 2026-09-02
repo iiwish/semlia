@@ -12,14 +12,13 @@
 
 ## Milestone Requirements
 
-- [ ] Real PostgreSQL proves every schema and transaction invariant.
-- [ ] Source credentials remain outside domain payloads and logs.
-- [ ] Prior source and asset revisions remain addressable.
-- [ ] Every physical and semantic claim can resolve provenance and evidence.
-- [ ] Invalid ontology endpoints/predicates fail closed.
-- [ ] API cursors are opaque and ordering is deterministic.
-- [ ] Git projections are deterministic and replay-safe.
-- [ ] Usage signals contain no raw search text or customer fact rows.
+- [x] Real PostgreSQL proves every schema and transaction invariant.
+- [x] Source credentials remain outside domain payloads and logs.
+- [x] Prior source and asset revisions remain addressable.
+- [x] Every physical and semantic claim can resolve provenance and evidence.
+- [x] Invalid ontology endpoints/predicates fail closed.
+- [x] API cursors are opaque and ordering is deterministic.
+- [x] Git projections are deterministic and replay-safe.
+- [x] Usage signals contain no raw search text or customer fact rows.
 - [ ] 10,000-table benchmark and golden retrieval set are recorded.
 - [ ] Exact-ref acceptance, security and release gates pass.
-

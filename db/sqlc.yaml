@@ -5,6 +5,7 @@ sql:
       - ../migrations/000001_m0_foundation.up.sql
       - ../migrations/000002_foundation_uuidv7.up.sql
       - ../migrations/000003_semantic_registry_foundation.up.sql
+      - ../migrations/000004_usage_events.up.sql
     queries:
       - queries
     gen:

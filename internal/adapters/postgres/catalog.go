@@ -555,16 +555,26 @@ func createCatalogMutationEvents(ctx context.Context, queries *dbgen.Queries, ev
 	if event.BaseRevisionID != nil {
 		payloadData["baseRevisionId"] = event.BaseRevisionID.String()
 	}
-	payload, _ := json.Marshal(payloadData)
+	auditPayload, _ := json.Marshal(payloadData)
 	createdAt := event.CreatedAt.UTC()
 	if err := queries.CreateAuditEvent(ctx, dbgen.CreateAuditEventParams{
 		ID: auditID, WorkspaceID: workspaceID, EventType: "catalog.asset." + event.Action,
-		ActorID: textValue(event.Actor), Payload: payload, TraceID: event.TraceID, CreatedAt: timestamp(createdAt),
+		ActorID: textValue(event.Actor), Payload: auditPayload, TraceID: event.TraceID, CreatedAt: timestamp(createdAt),
 	}); err != nil {
 		return repositoryError("create catalog audit event", err)
 	}
+	outboxPayload, _ := json.Marshal(map[string]any{
+		"specVersion": "semlia.events/v1",
+		"id":          event.OutboxID.String(),
+		"type":        "catalog.asset.changed",
+		"source":      "urn:semlia:control-plane",
+		"workspaceId": event.WorkspaceID.String(),
+		"time":        createdAt.Format(time.RFC3339Nano),
+		"traceId":     event.TraceID,
+		"data":        payloadData,
+	})
 	if err := queries.EnqueueOutboxEvent(ctx, dbgen.EnqueueOutboxEventParams{
-		ID: outboxID, WorkspaceID: workspaceID, EventType: "catalog.asset.changed", Payload: payload,
+		ID: outboxID, WorkspaceID: workspaceID, EventType: "catalog.asset.changed", Payload: outboxPayload,
 		MaxAttempts: 8, AvailableAt: timestamp(createdAt), TraceID: event.TraceID,
 	}); err != nil {
 		return repositoryError("enqueue catalog outbox event", err)

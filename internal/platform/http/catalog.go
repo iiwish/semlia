@@ -124,7 +124,9 @@ func (handler *Handler) routeCatalog(
 	}
 	switch route.kind {
 	case routeCatalogAsset:
-		value, getErr := handler.catalog.GetAsset(request.Context(), workspaceID, assetID)
+		value, getErr := handler.catalog.GetAssetObserved(request.Context(), workspaceID, assetID, catalogapp.ReadObservation{
+			Channel: "api", TraceID: traceID,
+		})
 		if getErr != nil {
 			return writeCatalogError(response, getErr, traceID)
 		}
@@ -167,7 +169,7 @@ func (handler *Handler) listCatalogAssets(
 		WorkspaceID: workspaceID, Search: request.URL.Query().Get("search"),
 		AssetType: semantic.AssetType(request.URL.Query().Get("assetType")),
 		Lifecycle: request.URL.Query().Get("lifecycleState"), Limit: limit,
-		Cursor: request.URL.Query().Get("cursor"),
+		Cursor: request.URL.Query().Get("cursor"), Channel: "api", TraceID: traceID,
 	})
 	if err != nil {
 		return writeCatalogError(response, err, traceID)
