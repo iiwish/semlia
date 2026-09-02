@@ -6,7 +6,7 @@
 | --- | --- |
 | Task | T001 Identity and public contracts |
 | Status | `Needs_Review` |
-| Implementation | `ffb2eb7` |
+| Implementation | `ffb2eb7`; review correction `7ba8289` |
 | Date | 2026-09-02 |
 | Packet | `docs/specs/m1-semantic-registry/packets/T001.yaml` |
 
@@ -14,6 +14,7 @@
 
 - Pinned stable `go.jetify.com/typeid` v1.3.0 and wrapped it in public `pkg/identity` types.
 - Added runtime prefix validation, UUIDv7 enforcement, UUID/TypeID round trip, zero-ID rejection and JSON/text encoding.
+- Separated durable run identity (`run_`) from audit/outbox event identity (`evt_`) and narrowed EventEnvelope fields to their exact generated types.
 - Added compile-time-distinct Go resource IDs through generated OpenAPI aliases and branded TypeScript ID helpers.
 - Replaced the obsolete uppercase ULID contract with lowercase TypeID patterns and M1 resource schemas.
 - Added dependency-free semantic address, immutable revision and typed ontology relation validation aligned with the accepted prototype.
@@ -33,6 +34,6 @@ The complete Go run includes the real PostgreSQL integration, worker, repository
 
 ## Review
 
-The implementation matches TDR-0003: PostgreSQL-facing UUID values and public TypeIDs remain one identity, prefixes are centrally registered, and auto-increment behavior is not introduced. Generated Go contracts import the public identity package rather than an `internal` package, so downstream Go consumers are not blocked by visibility rules.
+The implementation matches TDR-0003: PostgreSQL-facing UUID values and public TypeIDs remain one identity, prefixes are centrally registered, and auto-increment behavior is not introduced. Generated Go contracts import the public identity package rather than an `internal` package, so downstream Go consumers are not blocked by visibility rules. Review also proved event and run identifiers are not interchangeable.
 
 Residual work belongs to T002: add the forward M0 identity migration, M1 tables, sqlc queries and real PostgreSQL invariant tests. T001 is ready for founder acceptance.

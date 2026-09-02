@@ -32,6 +32,8 @@ Blocks: T003, T004
 
 Add tested forward migrations for M0 identity conversion and the normalized M1 schema, sqlc queries and repository ports. Prove empty and populated M0 upgrades, downgrade/upgrade, invariants, immutability and workspace isolation.
 
+Design: `docs/specs/m1-semantic-registry/t002-migration-design.md`. Readiness: all design checks pass; the T001 founder-acceptance dependency remains open, so no Ready packet or persistence edit exists.
+
 ### T003 Source discovery adapters
 
 Status: Draft
