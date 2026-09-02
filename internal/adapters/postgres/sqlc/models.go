@@ -281,6 +281,30 @@ type SourceRevision struct {
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 }
 
+type UsageEvent struct {
+	ID                pgtype.UUID        `json:"id"`
+	WorkspaceID       pgtype.UUID        `json:"workspace_id"`
+	EventType         string             `json:"event_type"`
+	IdempotencyKey    string             `json:"idempotency_key"`
+	DataVersion       int16              `json:"data_version"`
+	ActorID           pgtype.Text        `json:"actor_id"`
+	AssetID           pgtype.UUID        `json:"asset_id"`
+	RevisionID        pgtype.UUID        `json:"revision_id"`
+	Channel           string             `json:"channel"`
+	Outcome           string             `json:"outcome"`
+	ReasonCode        pgtype.Text        `json:"reason_code"`
+	TraceID           string             `json:"trace_id"`
+	SearchFingerprint pgtype.Text        `json:"search_fingerprint"`
+	SearchLanguage    pgtype.Text        `json:"search_language"`
+	TokenBucket       pgtype.Text        `json:"token_bucket"`
+	ResultBucket      pgtype.Text        `json:"result_bucket"`
+	AssetTypeFilter   pgtype.Text        `json:"asset_type_filter"`
+	LifecycleFilter   pgtype.Text        `json:"lifecycle_filter"`
+	OccurredAt        pgtype.Timestamptz `json:"occurred_at"`
+	ReceivedAt        pgtype.Timestamptz `json:"received_at"`
+	ExpiresAt         pgtype.Timestamptz `json:"expires_at"`
+}
+
 type Workspace struct {
 	LegacyID    pgtype.Text        `json:"legacy_id"`
 	Slug        string             `json:"slug"`

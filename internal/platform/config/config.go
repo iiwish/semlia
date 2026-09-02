@@ -28,6 +28,7 @@ type Config struct {
 	Environment    Environment
 	HTTPAddress    string
 	DatabaseURL    string
+	GitRepository  string
 	AllowedOrigins []string
 	SecretKey      string
 	BuildVersion   string
@@ -51,6 +52,7 @@ func Load(lookup LookupEnv) (Config, error) {
 		Environment:    environment,
 		HTTPAddress:    valueOrDefault(lookup, "SEMLIA_HTTP_ADDR", "127.0.0.1:8080"),
 		DatabaseURL:    value(lookup, "SEMLIA_DATABASE_URL"),
+		GitRepository:  value(lookup, "SEMLIA_GIT_REPOSITORY"),
 		AllowedOrigins: splitValues(value(lookup, "SEMLIA_ALLOWED_ORIGINS")),
 		SecretKey:      value(lookup, "SEMLIA_SECRET_KEY"),
 		BuildVersion:   valueOrDefault(lookup, "SEMLIA_BUILD_VERSION", "dev"),

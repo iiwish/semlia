@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	usageapp "github.com/iiwish/semlia/internal/application/usage"
 	domain "github.com/iiwish/semlia/internal/domain/catalog"
 	"github.com/iiwish/semlia/internal/domain/semantic"
 	"github.com/iiwish/semlia/pkg/identity"
@@ -42,13 +43,26 @@ func (clock ClockFunc) Now() time.Time { return clock() }
 type Service struct {
 	repository Repository
 	clock      Clock
+	usage      *usageapp.Service
 }
 
-func NewService(repository Repository, clock Clock) *Service {
+type Option func(*Service)
+
+func WithUsage(service *usageapp.Service) Option {
+	return func(catalog *Service) { catalog.usage = service }
+}
+
+func NewService(repository Repository, clock Clock, options ...Option) *Service {
 	if repository == nil || clock == nil {
 		panic("catalog repository and clock are required")
 	}
-	return &Service{repository: repository, clock: clock}
+	service := &Service{repository: repository, clock: clock}
+	for _, option := range options {
+		if option != nil {
+			option(service)
+		}
+	}
+	return service
 }
 
 type ListAssetsRequest struct {
@@ -58,6 +72,9 @@ type ListAssetsRequest struct {
 	Lifecycle   string
 	Limit       int
 	Cursor      string
+	ActorID     string
+	Channel     string
+	TraceID     string
 }
 
 type AssetPage struct {
@@ -117,6 +134,7 @@ func (service *Service) ListAssets(ctx context.Context, request ListAssetsReques
 		Lifecycle: request.Lifecycle, Limit: limit + 1, Cursor: cursor,
 	})
 	if err != nil {
+		service.recordSearch(ctx, request, 0, true)
 		return AssetPage{}, err
 	}
 	page := AssetPage{Items: items, Limit: limit}
@@ -127,6 +145,7 @@ func (service *Service) ListAssets(ctx context.Context, request ListAssetsReques
 			Kind: "asset", Filter: filter, Rank: last.Rank, UpdatedAt: last.UpdatedAt, ID: last.ID.String(),
 		})
 	}
+	service.recordSearch(ctx, request, len(page.Items), false)
 	return page, nil
 }
 
@@ -165,6 +184,42 @@ func (service *Service) CreateAsset(ctx context.Context, request CreateAssetRequ
 
 func (service *Service) GetAsset(ctx context.Context, workspace identity.WorkspaceID, asset identity.AssetID) (domain.AssetDetail, error) {
 	return service.repository.GetCatalogAsset(ctx, workspace, asset)
+}
+
+type ReadObservation struct {
+	ActorID string
+	Channel string
+	TraceID string
+}
+
+func (service *Service) GetAssetObserved(
+	ctx context.Context,
+	workspace identity.WorkspaceID,
+	asset identity.AssetID,
+	observation ReadObservation,
+) (domain.AssetDetail, error) {
+	detail, err := service.repository.GetCatalogAsset(ctx, workspace, asset)
+	if err != nil {
+		return domain.AssetDetail{}, err
+	}
+	if service.usage != nil && detail.CurrentRevision != nil && validTraceID(observation.TraceID) {
+		_ = service.usage.RecordAssetRead(ctx, usageapp.ReadInput{
+			WorkspaceID: workspace, AssetID: asset, RevisionID: detail.CurrentRevision.ID,
+			ActorID: observation.ActorID, Channel: observation.Channel, TraceID: observation.TraceID,
+		})
+	}
+	return detail, nil
+}
+
+func (service *Service) recordSearch(ctx context.Context, request ListAssetsRequest, resultCount int, failed bool) {
+	if service.usage == nil || request.Search == "" || !validTraceID(request.TraceID) {
+		return
+	}
+	_ = service.usage.RecordSearch(ctx, usageapp.SearchInput{
+		WorkspaceID: request.WorkspaceID, Query: request.Search, AssetTypeFilter: string(request.AssetType),
+		LifecycleFilter: request.Lifecycle, ResultCount: resultCount, Failed: failed,
+		ReasonCode: "CATALOG_QUERY_FAILED", ActorID: request.ActorID, Channel: request.Channel, TraceID: request.TraceID,
+	})
 }
 
 func (service *Service) ListRevisions(ctx context.Context, request ListRevisionsRequest) (RevisionPage, error) {

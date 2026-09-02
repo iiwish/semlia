@@ -71,14 +71,20 @@ services:
   worker:
     <<: *semlia-app
     command: ["worker"]
+    environment:
+      <<: *semlia-environment
+      SEMLIA_GIT_REPOSITORY: /var/lib/semlia/content
     depends_on:
       migrate:
         condition: service_completed_successfully
     restart: unless-stopped
     stop_grace_period: 15s
+    volumes:
+      - git-content:/var/lib/semlia/content
 
 networks:
   backend:
 
 volumes:
   postgres-data:
+  git-content:

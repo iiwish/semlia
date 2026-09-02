@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/iiwish/semlia/internal/application/jobs"
 	domain "github.com/iiwish/semlia/internal/domain/projection"
@@ -39,7 +40,7 @@ func (publisher *Publisher) Publish(ctx context.Context, event jobs.OutboxEvent)
 	if event.Type != CatalogAssetChanged {
 		return domain.ErrUnsupported
 	}
-	payload, err := decodeCatalogEvent(event.Payload)
+	payload, err := decodeCatalogEvent(event)
 	if err != nil {
 		return err
 	}
@@ -80,8 +81,36 @@ type catalogEvent struct {
 	Sequence       int64  `json:"sequence"`
 }
 
-func decodeCatalogEvent(value json.RawMessage) (catalogEvent, error) {
-	decoder := json.NewDecoder(bytes.NewReader(value))
+type eventEnvelope struct {
+	SpecVersion string          `json:"specVersion"`
+	ID          string          `json:"id"`
+	Type        string          `json:"type"`
+	Source      string          `json:"source"`
+	WorkspaceID string          `json:"workspaceId"`
+	Time        string          `json:"time"`
+	TraceID     string          `json:"traceId"`
+	Data        json.RawMessage `json:"data"`
+}
+
+func decodeCatalogEvent(event jobs.OutboxEvent) (catalogEvent, error) {
+	decoder := json.NewDecoder(bytes.NewReader(event.Payload))
+	decoder.DisallowUnknownFields()
+	var envelope eventEnvelope
+	if err := decoder.Decode(&envelope); err != nil {
+		return catalogEvent{}, domain.ErrInvalid
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return catalogEvent{}, domain.ErrInvalid
+	}
+	if envelope.SpecVersion != "semlia.events/v1" || envelope.ID != event.ID.String() ||
+		envelope.Type != event.Type || envelope.Source != "urn:semlia:control-plane" ||
+		envelope.WorkspaceID != event.WorkspaceID.String() || envelope.TraceID != event.TraceID {
+		return catalogEvent{}, domain.ErrInvalid
+	}
+	if _, err := time.Parse(time.RFC3339Nano, envelope.Time); err != nil {
+		return catalogEvent{}, domain.ErrInvalid
+	}
+	decoder = json.NewDecoder(bytes.NewReader(envelope.Data))
 	decoder.DisallowUnknownFields()
 	var payload catalogEvent
 	if err := decoder.Decode(&payload); err != nil {

@@ -13,10 +13,13 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/iiwish/semlia/internal/adapters/gitcontent"
 	pgstore "github.com/iiwish/semlia/internal/adapters/postgres"
 	"github.com/iiwish/semlia/internal/application"
 	catalogapp "github.com/iiwish/semlia/internal/application/catalog"
 	"github.com/iiwish/semlia/internal/application/jobs"
+	projectionapp "github.com/iiwish/semlia/internal/application/projection"
+	usageapp "github.com/iiwish/semlia/internal/application/usage"
 	"github.com/iiwish/semlia/internal/domain"
 	"github.com/iiwish/semlia/internal/platform/config"
 	httpapi "github.com/iiwish/semlia/internal/platform/http"
@@ -26,7 +29,7 @@ import (
 
 const (
 	apiVersion    = "v1"
-	schemaVersion = "0.3.0"
+	schemaVersion = "0.4.0"
 )
 
 var (
@@ -82,7 +85,7 @@ func run(ctx context.Context, args []string, lookup config.LookupEnv, stdout, st
 		if cfg.LogFormat == config.LogFormatJSON {
 			workerLogger.Info("worker starting")
 		}
-		if err := runWorker(ctx, cfg.DatabaseURL); err != nil {
+		if err := runWorker(ctx, cfg); err != nil {
 			if cfg.LogFormat == config.LogFormatJSON {
 				workerLogger.Error("worker stopped", "error_code", "OPERATION_FAILED")
 			} else {
@@ -168,21 +171,45 @@ func migrationFailureStage(err error) string {
 	}
 }
 
-func runWorker(ctx context.Context, databaseURL string) error {
-	pool, err := pgstore.Open(ctx, databaseURL)
+func runWorker(ctx context.Context, cfg config.Config) error {
+	pool, err := pgstore.Open(ctx, cfg.DatabaseURL)
 	if err != nil {
 		return err
 	}
 	defer pool.Close()
 
+	store := pgstore.NewStore(pool)
 	worker := jobs.NewWorker(
-		pgstore.NewStore(pool),
+		store,
 		jobs.ClockFunc(time.Now),
 		jobs.BackoffFunc(workerBackoff),
 		30*time.Second,
 	)
 	owner := fmt.Sprintf("worker-%d", os.Getpid())
-	return worker.Run(ctx, owner, 500*time.Millisecond)
+	if strings.TrimSpace(cfg.GitRepository) == "" {
+		return worker.Run(ctx, owner, 500*time.Millisecond)
+	}
+	writer, err := gitcontent.Open(cfg.GitRepository)
+	if err != nil {
+		return err
+	}
+	router := jobs.NewRouterPublisher()
+	router.Register(projectionapp.CatalogAssetChanged, projectionapp.NewPublisher(store, writer))
+	dispatcher := jobs.NewDispatcher(
+		store, router, jobs.ClockFunc(time.Now), jobs.BackoffFunc(workerBackoff), 30*time.Second,
+	)
+	workerCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	results := make(chan error, 2)
+	go func() { results <- worker.Run(workerCtx, owner+"-jobs", 500*time.Millisecond) }()
+	go func() { results <- dispatcher.Run(workerCtx, owner+"-outbox", 500*time.Millisecond) }()
+	first := <-results
+	cancel()
+	second := <-results
+	if first != nil {
+		return first
+	}
+	return second
 }
 
 func workerBackoff(attempt int32) time.Duration {
@@ -224,7 +251,16 @@ func serve(ctx context.Context, cfg config.Config, output io.Writer) error {
 			return errors.New("catalog database configuration is invalid")
 		}
 		defer catalogPool.Close()
-		catalogService := catalogapp.NewService(pgstore.NewStore(catalogPool), catalogapp.ClockFunc(time.Now))
+		catalogStore := pgstore.NewStore(catalogPool)
+		catalogOptions := make([]catalogapp.Option, 0, 1)
+		if len(cfg.SecretKey) >= 32 {
+			usageService, usageErr := usageapp.NewService(catalogStore, usageapp.ClockFunc(time.Now), []byte(cfg.SecretKey))
+			if usageErr != nil {
+				return errors.New("usage service configuration is invalid")
+			}
+			catalogOptions = append(catalogOptions, catalogapp.WithUsage(usageService))
+		}
+		catalogService := catalogapp.NewService(catalogStore, catalogapp.ClockFunc(time.Now), catalogOptions...)
 		options = append(options, httpapi.WithCatalog(catalogService))
 	}
 	apiHandler := httpapi.NewHandler(service, logger, provider.Tracer("github.com/iiwish/semlia"), options...)

@@ -64,7 +64,7 @@ func TestMigrationLifecycleAndTenantSchema(t *testing.T) {
 	if err := migrator.Up(); err != nil {
 		t.Fatalf("upgrade empty database: %v", err)
 	}
-	assertVersion(t, migrator, 3, true)
+	assertVersion(t, migrator, 4, true)
 	if err := migrator.Up(); err != nil {
 		t.Fatalf("repeat upgrade: %v", err)
 	}
@@ -77,12 +77,12 @@ func TestMigrationLifecycleAndTenantSchema(t *testing.T) {
 		"outbox_events", "physical_dataset_revisions", "physical_datasets", "physical_field_revisions",
 		"physical_fields", "relation_type_policies", "resource_aliases", "revision_evidence_links",
 		"schema_migrations", "semantic_assets", "semantic_relations", "source_connections", "source_revisions",
-		"workspaces",
+		"usage_events", "workspaces",
 	}
 	if strings.Join(firstInventory, ",") != strings.Join(wantTables, ",") {
 		t.Fatalf("table inventory = %v, want %v", firstInventory, wantTables)
 	}
-	t.Logf("%s migration version 3 inventory: %v", postgresImage, firstInventory)
+	t.Logf("%s migration version 4 inventory: %v", postgresImage, firstInventory)
 	assertTenantForeignKeys(t, pool)
 
 	if err := migrator.Down(); err != nil {
@@ -146,10 +146,10 @@ func TestPopulatedM0UpgradeAndRollbackPreserveFoundationRows(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := migrator.Steps(2); err != nil {
+	if err := migrator.Steps(3); err != nil {
 		t.Fatalf("upgrade populated M0: %v", err)
 	}
-	assertVersion(t, migrator, 3, true)
+	assertVersion(t, migrator, 4, true)
 
 	for _, table := range []string{"workspaces", "audit_events", "jobs", "outbox_events"} {
 		var count int
@@ -205,7 +205,10 @@ func TestPopulatedM0UpgradeAndRollbackPreserveFoundationRows(t *testing.T) {
 	}
 
 	if err := migrator.Steps(-1); err != nil {
-		t.Fatalf("remove M1 schema: %v", err)
+		t.Fatalf("remove usage schema: %v", err)
+	}
+	if err := migrator.Steps(-1); err != nil {
+		t.Fatalf("remove M1 registry schema: %v", err)
 	}
 	if err := migrator.Steps(-1); err != nil {
 		t.Fatalf("rollback UUIDv7 conversion: %v", err)
@@ -279,7 +282,7 @@ func TestPostgres17MigrationLifecycle(t *testing.T) {
 	if err := migrator.Up(); err != nil {
 		t.Fatalf("PostgreSQL 17 upgrade: %v", err)
 	}
-	assertVersion(t, migrator, 3, true)
+	assertVersion(t, migrator, 4, true)
 	pool, err := pgstore.Open(ctx, url)
 	if err != nil {
 		t.Fatal(err)
@@ -534,7 +537,7 @@ func assertTenantForeignKeys(t *testing.T, pool *pgstore.Pool) {
 	}
 	want := []string{
 		"audit_events", "evidence_artifacts", "jobs", "ontology_revisions", "outbox_events",
-		"semantic_assets", "semantic_relations", "source_connections",
+		"semantic_assets", "semantic_relations", "source_connections", "usage_events",
 	}
 	if strings.Join(tables, ",") != strings.Join(want, ",") {
 		t.Fatalf("workspace foreign keys = %v, want %v", tables, want)

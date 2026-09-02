@@ -4,7 +4,7 @@ Semlia uses PostgreSQL 18 as its only transactional database. Schema changes are
 
 ## Migration baseline
 
-`000001_m0_foundation` owns the M0 workspace identity, immutable audit facts, leased jobs, and transactional outbox tables. The down migration removes those tables in dependency order. PostgreSQL check constraints keep lease and terminal-state fields consistent.
+`000001_m0_foundation` owns the M0 workspace identity, immutable audit facts, leased jobs, and transactional outbox tables. `000002` converts public identities to UUIDv7, `000003` owns the semantic registry, and `000004` owns privacy-bounded usage facts. Down migrations remove tables in dependency order. PostgreSQL check constraints keep lease, terminal-state, ontology and usage shapes consistent.
 
 ## Query and index policy
 
@@ -14,6 +14,7 @@ Job and outbox claim queries order available work by `available_at`, `created_at
 
 - Retain succeeded jobs for 30 days and dead-letter jobs for 90 days.
 - Retain published outbox events for 7 days; retain retryable and dead-letter events until resolved.
-- Retain audit events according to the product's audit policy. M0 does not implement audit deletion.
+- Retain usage events for 90 days; the bounded cleanup query deletes expired rows safely.
+- Retain audit events according to the product's audit policy.
 
-Retention is operational guidance for a later maintenance job. This migration deliberately contains no automatic deletion or partition policy.
+Job, outbox and audit retention remain operational policy. Usage cleanup is explicit and does not rely on automatic partition deletion.

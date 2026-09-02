@@ -74,6 +74,33 @@ func (dispatcher *Dispatcher) RunOne(ctx context.Context, owner string) (bool, e
 	return true, nil
 }
 
+func (dispatcher *Dispatcher) Run(ctx context.Context, owner string, pollInterval time.Duration) error {
+	if pollInterval <= 0 {
+		return errors.New("poll interval must be positive")
+	}
+	for {
+		processed, err := dispatcher.RunOne(ctx, owner)
+		if err != nil {
+			return err
+		}
+		if processed {
+			continue
+		}
+		timer := time.NewTimer(pollInterval)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+			return nil
+		case <-timer.C:
+		}
+	}
+}
+
 func (dispatcher *Dispatcher) publish(ctx context.Context, event OutboxEvent) (code string) {
 	defer func() {
 		if recover() != nil {

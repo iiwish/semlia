@@ -90,15 +90,21 @@ Acceptance: included in the founder's continuous M1 execution authorization on 2
 
 ### T006 Audit, outbox and usage
 
-Status: Running
+Status: Accepted
 Depends on: T004
 Blocks: T007
 
 Complete M1 event envelopes, delivery handlers and the two privacy-bounded usage producers. Add retention and deletion behavior without raw search text or customer fact rows.
 
+Design: `docs/specs/m1-semantic-registry/t006-events-usage-design.md`. Execution adds complete
+event envelopes, fail-closed routing, configured worker projection delivery, two trusted usage
+producers and bounded 90-day retention. Evidence: `docs/evidence/M1-T006/summary.md`.
+
+Acceptance: included in the founder's continuous M1 execution authorization on 2026-09-02.
+
 ### T007 Production acceptance
 
-Status: Draft
+Status: Running
 Depends on: T005, T006
 Blocks: M1 milestone acceptance
 

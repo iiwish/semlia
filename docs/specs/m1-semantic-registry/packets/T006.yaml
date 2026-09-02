@@ -1,0 +1,80 @@
+schema_version: 1
+packet_id: M1-T006-A001
+task_id: T006
+feature_id: m1-semantic-registry
+mode: execute_one_task
+status: Accepted
+
+goal: >-
+  Complete M1 event delivery and add the two privacy-bounded server-side usage producers with
+  deterministic retention.
+
+dependencies:
+  - T004 and T005 Accepted under continuous execution authorization
+  - docs/adr/0002-m1-product-and-semantic-execution.md#tdr-016-飞轮事实流与-m1-最小信号
+  - docs/specs/m1-semantic-registry/t006-events-usage-design.md
+
+allowed_files:
+  - migrations/000004_usage_events.*.sql
+  - db/queries/usage.sql
+  - db/queries/outbox.sql
+  - db/sqlc.yaml
+  - internal/domain/usage/**
+  - internal/application/usage/**
+  - internal/application/catalog/**
+  - internal/application/jobs/**
+  - internal/adapters/postgres/**
+  - internal/platform/config/**
+  - internal/platform/http/**
+  - internal/adapters/gitcontent/**
+  - cmd/semlia/**
+  - compose.yaml
+  - tests/integration/usage/**
+  - tests/integration/projection/**
+  - tests/integration/worker/**
+  - docs/specs/m1-semantic-registry/**
+  - docs/evidence/M1-T006/**
+
+forbidden_changes:
+  - Do not add a generic public usage ingest endpoint or accept client-defined event payloads.
+  - Do not persist raw search text, customer fact rows, credentials or arbitrary usage JSON.
+  - Do not add Kafka, event sourcing, a stream processor or a workflow engine.
+  - Do not silently publish unsupported outbox event types.
+
+tdd:
+  red:
+    - Add event envelope/router tests and worker delivery proof.
+    - Add matched, zero-result, failed search and detail-read producer tests.
+    - Add real PostgreSQL idempotency, privacy and bounded-retention tests.
+  green:
+    - Add the usage migration, domain contract, HMAC classifier and sqlc repository.
+    - Instrument successful detail reads and non-empty catalog searches.
+    - Wire the projection router and dispatcher into the configured worker runtime.
+  refactor:
+    - Keep raw search text inside request scope and centralize privacy classification.
+
+validation:
+  - go test -race ./internal/domain/usage/... ./internal/application/usage/... ./internal/application/catalog/... ./internal/application/jobs/...
+  - go test -count=1 ./tests/integration/usage/... ./tests/integration/projection/... ./tests/integration/worker/...
+  - make db-generate-check
+  - make check-source
+  - git diff --check
+
+acceptance:
+  - Outbox rows contain complete valid event envelopes and route only registered types.
+  - Product usage has exactly two trusted producer types with closed outcomes and attribution.
+  - Raw search text and customer fact rows cannot enter usage persistence.
+  - Usage idempotency and bounded 90-day deletion pass real PostgreSQL tests.
+  - Configured worker delivery projects catalog events and marks them published.
+
+execution:
+  implementation_commit: pending
+  evidence: docs/evidence/M1-T006/summary.md
+  result: >-
+    Event, privacy, retention, race, PostgreSQL 17/18 migration, sqlc drift and complete source
+    gates pass.
+
+acceptance_record:
+  accepted_by: founder
+  accepted_on: 2026-09-02
+  authorization: continuous M1 execution through the first user-visible milestone
