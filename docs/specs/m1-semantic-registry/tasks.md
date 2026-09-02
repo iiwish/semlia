@@ -12,7 +12,7 @@
 
 ### T001 Identity and public contracts
 
-Status: Ready
+Status: Needs_Review
 Depends on: M0 Accepted, TDR-0002, TDR-0003
 Blocks: T002, T004
 
@@ -21,6 +21,8 @@ Deliver a shared prefix-safe TypeID/UUIDv7 package, correct the obsolete ULID Op
 Validation: focused unit tests, `make contracts`, `make contracts-check`, `go test ./...`, `go vet ./...`.
 
 Packet: `docs/specs/m1-semantic-registry/packets/T001.yaml`.
+
+Execution: implementation `ffb2eb7`; focused identity/domain/contract tests, TypeScript typecheck and the complete `make check-source` gate pass. Evidence: `docs/evidence/M1-T001/summary.md`.
 
 ### T002 PostgreSQL registry foundation
 
@@ -69,4 +71,3 @@ Depends on: T005, T006
 Blocks: M1 milestone acceptance
 
 Run the exact-ref source-to-detail journey, 10,000-table benchmark, migration/recovery tests, contract drift checks, security/release gates and independent spec, code-quality and QA reviews.
-
