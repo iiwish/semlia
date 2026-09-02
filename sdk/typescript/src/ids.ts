@@ -1,6 +1,6 @@
 const typeIdBrand: unique symbol = Symbol("SemliaTypeId");
 
-export type ResourcePrefix = "wsp" | "ast" | "rev" | "rel" | "ont" | "evd" | "rls" | "run";
+export type ResourcePrefix = "wsp" | "ast" | "rev" | "rel" | "ont" | "evd" | "rls" | "run" | "evt";
 export type TypeId<Prefix extends ResourcePrefix> = string & { readonly [typeIdBrand]: Prefix };
 
 export type WorkspaceId = TypeId<"wsp">;
@@ -11,6 +11,7 @@ export type OntologyRevisionId = TypeId<"ont">;
 export type EvidenceArtifactId = TypeId<"evd">;
 export type ReleaseId = TypeId<"rls">;
 export type RunId = TypeId<"run">;
+export type EventId = TypeId<"evt">;
 
 const suffixPattern = "[0-7][0-9a-hjkmnp-tv-z]{25}";
 

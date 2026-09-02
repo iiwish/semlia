@@ -181,6 +181,15 @@ components:
       x-go-type-import:
         path: github.com/iiwish/semlia/pkg/identity
         name: identity
+    EventId:
+      type: string
+      format: typeid
+      pattern: "^evt_[0-7][0-9a-hjkmnp-tv-z]{25}$"
+      example: evt_01arz3ndektsv4rrffq69g5fav
+      x-go-type: identity.EventID
+      x-go-type-import:
+        path: github.com/iiwish/semlia/pkg/identity
+        name: identity
     SemanticAddress:
       type: string
       description: Workspace-scoped human-readable namespace and stable key.
@@ -294,7 +303,7 @@ components:
           enum:
             - semlia.events/v1
         id:
-          $ref: "#/components/schemas/ResourceId"
+          $ref: "#/components/schemas/EventId"
         type:
           $ref: "#/components/schemas/EventType"
         source:
@@ -304,7 +313,7 @@ components:
         subject:
           $ref: "#/components/schemas/ResourceId"
         workspaceId:
-          $ref: "#/components/schemas/ResourceId"
+          $ref: "#/components/schemas/WorkspaceId"
         time:
           $ref: "#/components/schemas/Timestamp"
         traceId:

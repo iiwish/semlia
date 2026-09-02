@@ -4,6 +4,7 @@ export type { SemliaClient, SemliaClientOptions } from "./client";
 export type {
   AssetRevisionId,
   EvidenceArtifactId,
+  EventId,
   OntologyRevisionId,
   ReleaseId,
   ResourcePrefix,
