@@ -1113,3 +1113,4 @@ Semlia 当前使用 Apache License 2.0 进行私有孵化，不把当前 private
 - D-001 至 D-015 是已接受的项目级决策。
 - M0 技术计划和任务图已确认；T007 已接受，T008 exact-ref fresh-clone、完整门禁、交付证据和三轮独立 review 已通过。创始人于 2026-09-02 明确接受 T008 与 M0，M0 release report 状态为 `Accepted`。
 - M1 技术方向已确认，规划闸门已打开；M1 实现必须基于用户确认的 plan、work graph、checklist、analysis 和 Ready execution packet。
+- M1 工作图 T001 至 T007 已接受，T008 按创始人 2026-09-02 决策标记为 `Superseded`；创始人于 2026-09-02 通过实时浏览器验收接受 T009（真实创建/查找/查看语义资产、服务端搜索、修订与证据详情、无存储 UUID 泄露、1440x900 与 1024x768 视觉 QA、单一生产前端包）。首个用户可见 M1 里程碑验收完成，M1 完成审计与 10,000 资产基准证据齐备（`docs/evidence/M1-COMPLETION-AUDIT/summary.md`、`docs/evidence/M1-T007/summary.md`、`docs/evidence/M1-T009/summary.md`），M1 里程碑状态为 `Accepted`。
