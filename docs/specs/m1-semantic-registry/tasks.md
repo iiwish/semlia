@@ -12,7 +12,7 @@
 
 ### T001 Identity and public contracts
 
-Status: Needs_Review
+Status: Accepted
 Depends on: M0 Accepted, TDR-0002, TDR-0003
 Blocks: T002, T004
 
@@ -24,15 +24,17 @@ Packet: `docs/specs/m1-semantic-registry/packets/T001.yaml`.
 
 Execution: implementation `ffb2eb7`; focused identity/domain/contract tests, TypeScript typecheck and the complete `make check-source` gate pass. Evidence: `docs/evidence/M1-T001/summary.md`.
 
+Acceptance: founder explicitly accepted T001 on 2026-09-02.
+
 ### T002 PostgreSQL registry foundation
 
-Status: Draft
+Status: Running
 Depends on: T001
 Blocks: T003, T004
 
 Add tested forward migrations for M0 identity conversion and the normalized M1 schema, sqlc queries and repository ports. Prove empty and populated M0 upgrades, downgrade/upgrade, invariants, immutability and workspace isolation.
 
-Design: `docs/specs/m1-semantic-registry/t002-migration-design.md`. Readiness: all design checks pass; the T001 founder-acceptance dependency remains open, so no Ready packet or persistence edit exists.
+Design: `docs/specs/m1-semantic-registry/t002-migration-design.md`. Founder confirmed the design on 2026-09-02. Packet: `docs/specs/m1-semantic-registry/packets/T002.yaml`.
 
 ### T003 Source discovery adapters
 
