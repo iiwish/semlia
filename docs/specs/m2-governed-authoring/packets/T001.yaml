@@ -1,0 +1,64 @@
+schema_version: 1
+packet_id: M2-T001-A001
+task_id: T001
+feature_id: m2-governed-authoring
+mode: execute_one_task
+status: Ready
+
+goal: >-
+  Introduce backend actor identity, RBAC capability enforcement and authorization audit so every
+  M2 write path is server-side authorized, without adding product authoring behavior.
+
+dependencies:
+  - M1 Accepted (2026-09-02)
+  - founder M2 planning authorization (2026-09-02)
+  - docs/specs/access-control/product-design.md (FR-003, FR-004, FR-007, FR-011, NFR-001)
+  - docs/specs/m2-governed-authoring/analysis.md decision register D6/D7 verdicts
+
+allowed_files:
+  - internal/**
+  - api/openapi/**
+  - db/**
+  - migrations/**
+  - sdk/typescript/**
+  - tests/**
+  - scripts/**
+  - docs/specs/m2-governed-authoring/**
+  - docs/evidence/M2-T001/**
+  - Makefile
+
+forbidden_changes:
+  - Do not add proposal, validation, release or agent-run behavior in this task.
+  - Do not enforce authorization by role names; actions are the identifiers (FR-003).
+  - Do not allow client-side capability results to satisfy server-side checks (FR-012).
+  - Do not expose storage UUIDs; TypeIDs on the wire per ADR-0003.
+  - Do not weaken M1 catalog endpoints; existing behavior and contracts stay compatible.
+
+tdd:
+  red:
+    - Deny-by-default: a protected command without a matching binding returns the stable denial
+      reason code and writes an authorization event.
+    - Workspace scoping: a binding in another workspace never grants access.
+    - Agent principal: an agent principal can hold scoped capabilities and is rejected where the
+      action requires a human principal.
+    - Role vocabulary: the nine FR-004 system roles seed idempotently and cannot be deleted.
+  green:
+    - Principals, roles, bindings and authorization events persist per data-model.md.
+    - Protected M1 catalog write commands (asset create, revision append) evaluate capabilities
+      with zero behavior change for authorized actors.
+  refactor:
+    - Extract capability evaluation behind a single application-layer interface so M2 tasks reuse
+      one enforcement point.
+
+validation:
+  - go test ./...
+  - go vet ./...
+  - make contracts-check
+  - pnpm --filter @semlia/web typecheck
+  - git diff --check
+
+acceptance:
+  - Every protected command evaluates capabilities server-side and records a decision event.
+  - Deny reasons use stable codes aligned with the frontend reason-code contract.
+  - Agent principals are first-class, workspace-scoped and accountable to an owner principal.
+  - M1 catalog behavior is unchanged for authorized actors; contract drift checks pass.

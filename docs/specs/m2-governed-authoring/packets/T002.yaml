@@ -1,0 +1,64 @@
+schema_version: 1
+packet_id: M2-T002-A001
+task_id: T002
+feature_id: m2-governed-authoring
+mode: execute_one_task
+status: Ready
+
+goal: >-
+  Add the governed-authoring persistence model — proposals, structured change-sets, reviews,
+  validation runs, policy decisions, releases and agent runs — with the SSOT §7.5 state machine,
+  without exposing new API endpoints.
+
+dependencies:
+  - T001 Accepted
+  - docs/SSOT.md §7.5, §8.2, §11.2, §8.6
+  - docs/specs/m2-governed-authoring/data-model.md
+
+allowed_files:
+  - internal/**
+  - db/**
+  - migrations/**
+  - tests/**
+  - docs/specs/m2-governed-authoring/**
+  - docs/evidence/M2-T002/**
+
+forbidden_changes:
+  - Do not expose new HTTP endpoints; contracts arrive with T003.
+  - Do not allow proposal_changes or releases to update or delete in place; immutability is a
+    repository invariant tested under concurrency.
+  - Do not collapse workflow, lifecycle, deployment or health state into one enum (semantic-asset
+    design §4.8).
+  - Do not store raw model prompts or provider credentials; agent runs record hashes and digests.
+  - Do not migrate or alter M0/M1 table semantics.
+
+tdd:
+  red:
+    - State machine: illegal transitions (draft→released, rejected→in_review) are rejected in the
+      domain layer.
+    - Immutability: concurrent update/delete attempts on submitted change-sets and cut releases
+      fail with invariant errors.
+    - Recomputability: two policy decisions with identical inputs and rule version produce
+      identical decisions and the same inputs_digest.
+    - Migration lifecycle: populated M1 upgrade, downgrade and re-upgrade preserve M1 rows.
+  green:
+    - The ten `000006` tables persist per data-model.md with workspace scoping.
+    - Proposal submission reuses the M1 transaction pattern (row lock, audit + outbox in one
+      commit) and emits `proposal.changed` on the strict `semlia.events/v1` envelope.
+  refactor:
+    - Factor the shared mutation-event transaction helper so proposal and release commits reuse
+      the M1 catalog event plumbing.
+
+validation:
+  - go test ./...
+  - go vet ./...
+  - make check-source
+  - git diff --check
+
+acceptance:
+  - Proposals walk draft→proposed→validating→in_review→released|rejected with legal transitions
+    only, enforced in the domain layer.
+  - Change-sets are structured patches against a released baseline with before/after digests.
+  - Releases and their manifest entries are immutable; rollback rows reference prior releases.
+  - Agent runs record model, config revision, input hash, tool calls, output digest, cost,
+    duration and final state.
