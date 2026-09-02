@@ -167,6 +167,9 @@ type ApiVersion = string
 // AssetRevisionId Example: rev_01arz3ndektsv4rrffq69g5fav
 type AssetRevisionId = identity.RevisionID
 
+// CodeArtifactId defines model for CodeArtifactId.
+type CodeArtifactId = identity.CodeArtifactID
+
 // Cursor Opaque pagination cursor that clients must not interpret.
 type Cursor = string
 
@@ -253,6 +256,9 @@ type HealthResponse struct {
 // HealthResponseStatus defines model for HealthResponse.Status.
 type HealthResponseStatus string
 
+// LineageEdgeId defines model for LineageEdgeId.
+type LineageEdgeId = identity.LineageEdgeID
+
 // OntologyRevisionId Example: ont_01arz3ndektsv4rrffq69g5fav
 type OntologyRevisionId = identity.OntologyID
 
@@ -263,6 +269,18 @@ type PageInfo struct {
 	// NextCursor Opaque pagination cursor that clients must not interpret.
 	NextCursor *Cursor `json:"nextCursor,omitempty"`
 }
+
+// PhysicalDatasetId defines model for PhysicalDatasetId.
+type PhysicalDatasetId = identity.PhysicalDatasetID
+
+// PhysicalDatasetRevisionId defines model for PhysicalDatasetRevisionId.
+type PhysicalDatasetRevisionId = identity.PhysicalDatasetRevisionID
+
+// PhysicalFieldId defines model for PhysicalFieldId.
+type PhysicalFieldId = identity.PhysicalFieldID
+
+// PhysicalFieldRevisionId defines model for PhysicalFieldRevisionId.
+type PhysicalFieldRevisionId = identity.PhysicalFieldRevisionID
 
 // RelationAssertionState defines model for RelationAssertionState.
 type RelationAssertionState string
@@ -296,6 +314,12 @@ type SemanticAssetType string
 
 // SemanticRelationId Example: rel_01arz3ndektsv4rrffq69g5fav
 type SemanticRelationId = identity.RelationID
+
+// SourceConnectionId defines model for SourceConnectionId.
+type SourceConnectionId = identity.SourceConnectionID
+
+// SourceRevisionId defines model for SourceRevisionId.
+type SourceRevisionId = identity.SourceRevisionID
 
 // SystemInfo defines model for SystemInfo.
 type SystemInfo struct {

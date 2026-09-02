@@ -7,29 +7,32 @@ package dbgen
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createWorkspace = `-- name: CreateWorkspace :one
 INSERT INTO workspaces (id, slug, display_name)
 VALUES ($1, $2, $3)
-RETURNING id, slug, display_name, created_at, updated_at
+RETURNING legacy_id, slug, display_name, created_at, updated_at, id
 `
 
 type CreateWorkspaceParams struct {
-	ID          string `json:"id"`
-	Slug        string `json:"slug"`
-	DisplayName string `json:"display_name"`
+	ID          pgtype.UUID `json:"id"`
+	Slug        string      `json:"slug"`
+	DisplayName string      `json:"display_name"`
 }
 
 func (q *Queries) CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams) (Workspace, error) {
 	row := q.db.QueryRow(ctx, createWorkspace, arg.ID, arg.Slug, arg.DisplayName)
 	var i Workspace
 	err := row.Scan(
-		&i.ID,
+		&i.LegacyID,
 		&i.Slug,
 		&i.DisplayName,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ID,
 	)
 	return i, err
 }

@@ -21,8 +21,8 @@ INSERT INTO audit_events (
 `
 
 type CreateAuditEventParams struct {
-	ID          string             `json:"id"`
-	WorkspaceID string             `json:"workspace_id"`
+	ID          pgtype.UUID        `json:"id"`
+	WorkspaceID pgtype.UUID        `json:"workspace_id"`
 	EventType   string             `json:"event_type"`
 	ActorID     pgtype.Text        `json:"actor_id"`
 	Payload     []byte             `json:"payload"`

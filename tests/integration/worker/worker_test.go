@@ -14,6 +14,7 @@ import (
 
 	pgstore "github.com/iiwish/semlia/internal/adapters/postgres"
 	"github.com/iiwish/semlia/internal/application/jobs"
+	"github.com/iiwish/semlia/pkg/identity"
 	"github.com/testcontainers/testcontainers-go"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 )
@@ -71,10 +72,12 @@ func TestMain(m *testing.M) {
 func TestConcurrentClaimCreatesOneLease(t *testing.T) {
 	pool, store := newStore(t)
 	resetData(t, pool)
-	createWorkspace(t, pool, "workspace_claim")
+	workspaceID := newWorkspaceID(t)
+	createWorkspace(t, pool, workspaceID, "workspace-claim")
+	jobID := newRunID(t)
 	now := time.Date(2026, 8, 10, 8, 0, 0, 0, time.UTC)
 	job, err := store.EnqueueJob(context.Background(), jobs.EnqueueJobParams{
-		ID: "job_claim", WorkspaceID: "workspace_claim", Type: "discover.source",
+		ID: jobID, WorkspaceID: workspaceID, Type: "discover.source",
 		Payload: []byte(`{"source":"fixture"}`), MaxAttempts: 3,
 		AvailableAt: now, IdempotencyKey: "claim-once", TraceID: traceID,
 	})
@@ -127,11 +130,12 @@ func TestConcurrentClaimCreatesOneLease(t *testing.T) {
 func TestConcurrentEnqueueIsIdempotentPerWorkspace(t *testing.T) {
 	pool, store := newStore(t)
 	resetData(t, pool)
-	createWorkspace(t, pool, "workspace_idempotency")
+	workspaceID := newWorkspaceID(t)
+	createWorkspace(t, pool, workspaceID, "workspace-idempotency")
 	now := time.Date(2026, 8, 10, 8, 0, 0, 0, time.UTC)
 
 	start := make(chan struct{})
-	ids := make(chan string, 8)
+	ids := make(chan identity.RunID, 8)
 	errs := make(chan error, 8)
 	var wg sync.WaitGroup
 	for i := range 8 {
@@ -140,7 +144,7 @@ func TestConcurrentEnqueueIsIdempotentPerWorkspace(t *testing.T) {
 			defer wg.Done()
 			<-start
 			job, err := store.EnqueueJob(context.Background(), jobs.EnqueueJobParams{
-				ID: fmt.Sprintf("job_idempotent_%d", i), WorkspaceID: "workspace_idempotency",
+				ID: newRunID(t), WorkspaceID: workspaceID,
 				Type: "discover.source", Payload: []byte(`{}`), MaxAttempts: 3,
 				AvailableAt: now, IdempotencyKey: "same-request", TraceID: traceID,
 			})
@@ -159,7 +163,7 @@ func TestConcurrentEnqueueIsIdempotentPerWorkspace(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	unique := map[string]struct{}{}
+	unique := map[identity.RunID]struct{}{}
 	for id := range ids {
 		unique[id] = struct{}{}
 	}
@@ -169,7 +173,7 @@ func TestConcurrentEnqueueIsIdempotentPerWorkspace(t *testing.T) {
 	var count int
 	if err := pool.QueryRow(context.Background(), `
 		SELECT count(*) FROM jobs
-		WHERE workspace_id = 'workspace_idempotency' AND idempotency_key = 'same-request'`).Scan(&count); err != nil {
+		WHERE workspace_id = $1 AND idempotency_key = 'same-request'`, workspaceID.UUID()).Scan(&count); err != nil {
 		t.Fatal(err)
 	}
 	if count != 1 {
@@ -181,7 +185,9 @@ func TestConcurrentEnqueueIsIdempotentPerWorkspace(t *testing.T) {
 func TestWorkerRetriesThenDeadLettersWithStableErrorCode(t *testing.T) {
 	pool, store := newStore(t)
 	resetData(t, pool)
-	createWorkspace(t, pool, "workspace_retry")
+	workspaceID := newWorkspaceID(t)
+	createWorkspace(t, pool, workspaceID, "workspace-retry")
+	jobID := newRunID(t)
 	now := time.Date(2026, 8, 10, 8, 0, 0, 0, time.UTC)
 	clock := &fakeClock{now: now}
 	worker := jobs.NewWorker(store, clock, jobs.BackoffFunc(func(int32) time.Duration {
@@ -191,7 +197,7 @@ func TestWorkerRetriesThenDeadLettersWithStableErrorCode(t *testing.T) {
 		return errors.New("postgres://user:database-secret@private.invalid/semlia")
 	})
 	job, err := store.EnqueueJob(context.Background(), jobs.EnqueueJobParams{
-		ID: "job_retry", WorkspaceID: "workspace_retry", Type: "discover.source",
+		ID: jobID, WorkspaceID: workspaceID, Type: "discover.source",
 		Payload: []byte(`{}`), MaxAttempts: 2, AvailableAt: now,
 		IdempotencyKey: "retry", TraceID: traceID,
 	})
@@ -217,7 +223,7 @@ func TestWorkerRetriesThenDeadLettersWithStableErrorCode(t *testing.T) {
 		SELECT EXISTS (
 			SELECT 1 FROM jobs
 			WHERE id = $1 AND row_to_json(jobs)::text LIKE '%database-secret%'
-		) FROM jobs WHERE id = $1`, job.ID).Scan(&leaked); err != nil {
+		) FROM jobs WHERE id = $1`, job.ID.UUID()).Scan(&leaked); err != nil {
 		t.Fatal(err)
 	}
 	if leaked {
@@ -228,23 +234,26 @@ func TestWorkerRetriesThenDeadLettersWithStableErrorCode(t *testing.T) {
 func TestExpiredLeaseIsRequeuedOrDeadLettered(t *testing.T) {
 	pool, store := newStore(t)
 	resetData(t, pool)
-	createWorkspace(t, pool, "workspace_expiry")
+	workspaceID := newWorkspaceID(t)
+	createWorkspace(t, pool, workspaceID, "workspace-expiry")
 	now := time.Date(2026, 8, 10, 8, 0, 0, 0, time.UTC)
+	retryID := newRunID(t)
+	deadLetterID := newRunID(t)
 	for _, input := range []struct {
-		id          string
+		id          identity.RunID
 		maxAttempts int32
 		wantStatus  string
 	}{
-		{"job_expired_retry", 2, "retryable"},
-		{"job_expired_dead", 1, "dead_letter"},
+		{retryID, 2, "retryable"},
+		{deadLetterID, 1, "dead_letter"},
 	} {
 		if _, err := store.EnqueueJob(context.Background(), jobs.EnqueueJobParams{
-			ID: input.id, WorkspaceID: "workspace_expiry", Type: "expiry.test", Payload: []byte(`{}`),
-			MaxAttempts: input.maxAttempts, AvailableAt: now, IdempotencyKey: input.id, TraceID: traceID,
+			ID: input.id, WorkspaceID: workspaceID, Type: "expiry.test", Payload: []byte(`{}`),
+			MaxAttempts: input.maxAttempts, AvailableAt: now, IdempotencyKey: input.id.String(), TraceID: traceID,
 		}); err != nil {
 			t.Fatal(err)
 		}
-		claimed, err := store.ClaimJob(context.Background(), input.id+"-owner", now, time.Second)
+		claimed, err := store.ClaimJob(context.Background(), input.id.String()+"-owner", now, time.Second)
 		if err != nil || claimed == nil {
 			t.Fatalf("claim %s: %+v %v", input.id, claimed, err)
 		}
@@ -252,25 +261,26 @@ func TestExpiredLeaseIsRequeuedOrDeadLettered(t *testing.T) {
 	if err := store.ReapExpiredJobs(context.Background(), now.Add(2*time.Second)); err != nil {
 		t.Fatal(err)
 	}
-	assertJobStatus(t, pool, "job_expired_retry", "retryable")
-	assertJobStatus(t, pool, "job_expired_dead", "dead_letter")
+	assertJobStatus(t, pool, retryID, "retryable")
+	assertJobStatus(t, pool, deadLetterID, "dead_letter")
 }
 
 func TestAuditAndOutboxCommitAtomically(t *testing.T) {
 	pool, store := newStore(t)
 	resetData(t, pool)
-	createWorkspace(t, pool, "workspace_tx")
+	workspaceID := newWorkspaceID(t)
+	createWorkspace(t, pool, workspaceID, "workspace-tx")
 	now := time.Date(2026, 8, 10, 8, 0, 0, 0, time.UTC)
 
 	err := store.WithTx(context.Background(), func(tx *pgstore.TxStore) error {
 		if err := tx.CreateAuditEvent(context.Background(), jobs.AuditEvent{
-			ID: "audit_rollback", WorkspaceID: "workspace_tx", Type: "source.created",
+			ID: newEventID(t), WorkspaceID: workspaceID, Type: "source.created",
 			ActorID: "founder", Payload: []byte(`{"source":"fixture"}`), TraceID: traceID, CreatedAt: now,
 		}); err != nil {
 			return err
 		}
 		if err := tx.EnqueueOutbox(context.Background(), jobs.OutboxEvent{
-			ID: "outbox_rollback", WorkspaceID: "workspace_tx", Type: "source.created",
+			ID: newEventID(t), WorkspaceID: workspaceID, Type: "source.created",
 			Payload: []byte(`{"source":"fixture"}`), MaxAttempts: 3,
 			AvailableAt: now, TraceID: traceID,
 		}); err != nil {
@@ -285,13 +295,13 @@ func TestAuditAndOutboxCommitAtomically(t *testing.T) {
 
 	if err := store.WithTx(context.Background(), func(tx *pgstore.TxStore) error {
 		if err := tx.CreateAuditEvent(context.Background(), jobs.AuditEvent{
-			ID: "audit_commit", WorkspaceID: "workspace_tx", Type: "source.created",
+			ID: newEventID(t), WorkspaceID: workspaceID, Type: "source.created",
 			ActorID: "founder", Payload: []byte(`{"source":"fixture"}`), TraceID: traceID, CreatedAt: now,
 		}); err != nil {
 			return err
 		}
 		return tx.EnqueueOutbox(context.Background(), jobs.OutboxEvent{
-			ID: "outbox_commit", WorkspaceID: "workspace_tx", Type: "source.created",
+			ID: newEventID(t), WorkspaceID: workspaceID, Type: "source.created",
 			Payload: []byte(`{"source":"fixture"}`), MaxAttempts: 3,
 			AvailableAt: now, TraceID: traceID,
 		})
@@ -304,12 +314,15 @@ func TestAuditAndOutboxCommitAtomically(t *testing.T) {
 func TestOutboxDispatcherPublishesRetriesAndDeadLetters(t *testing.T) {
 	pool, store := newStore(t)
 	resetData(t, pool)
-	createWorkspace(t, pool, "workspace_outbox")
+	workspaceID := newWorkspaceID(t)
+	createWorkspace(t, pool, workspaceID, "workspace-outbox")
 	now := time.Date(2026, 8, 10, 8, 0, 0, 0, time.UTC)
 	clock := &fakeClock{now: now}
+	retryID := newEventID(t)
+	publishID := newEventID(t)
 	publisher := &fakePublisher{failures: map[string]int{
-		"outbox_a_retry":   2,
-		"outbox_z_publish": 1,
+		retryID.String():   2,
+		publishID.String(): 1,
 	}}
 	dispatcher := jobs.NewDispatcher(store, publisher, clock, jobs.BackoffFunc(func(int32) time.Duration {
 		return 2 * time.Minute
@@ -317,8 +330,8 @@ func TestOutboxDispatcherPublishesRetriesAndDeadLetters(t *testing.T) {
 
 	if err := store.WithTx(context.Background(), func(tx *pgstore.TxStore) error {
 		for _, event := range []jobs.OutboxEvent{
-			{ID: "outbox_a_retry", WorkspaceID: "workspace_outbox", Type: "source.created", Payload: []byte(`{}`), MaxAttempts: 2, AvailableAt: now, TraceID: traceID},
-			{ID: "outbox_z_publish", WorkspaceID: "workspace_outbox", Type: "source.updated", Payload: []byte(`{}`), MaxAttempts: 2, AvailableAt: now, TraceID: traceID},
+			{ID: retryID, WorkspaceID: workspaceID, Type: "source.created", Payload: []byte(`{}`), MaxAttempts: 2, AvailableAt: now, TraceID: traceID},
+			{ID: publishID, WorkspaceID: workspaceID, Type: "source.updated", Payload: []byte(`{}`), MaxAttempts: 2, AvailableAt: now, TraceID: traceID},
 		} {
 			if err := tx.EnqueueOutbox(context.Background(), event); err != nil {
 				return err
@@ -333,27 +346,27 @@ func TestOutboxDispatcherPublishesRetriesAndDeadLetters(t *testing.T) {
 	if err != nil || !processed {
 		t.Fatalf("dispatch retry processed=%t err=%v", processed, err)
 	}
-	assertOutboxState(t, pool, "outbox_a_retry", "retryable", 1, "PUBLISH_FAILED")
+	assertOutboxState(t, pool, retryID, "retryable", 1, "PUBLISH_FAILED")
 
 	processed, err = dispatcher.RunOne(context.Background(), "dispatcher-a")
 	if err != nil || !processed {
 		t.Fatalf("dispatch publish processed=%t err=%v", processed, err)
 	}
-	assertOutboxState(t, pool, "outbox_z_publish", "retryable", 1, "PUBLISH_FAILED")
+	assertOutboxState(t, pool, publishID, "retryable", 1, "PUBLISH_FAILED")
 
 	clock.now = now.Add(2 * time.Minute)
 	processed, err = dispatcher.RunOne(context.Background(), "dispatcher-a")
 	if err != nil || !processed {
 		t.Fatalf("dispatch dead letter processed=%t err=%v", processed, err)
 	}
-	assertOutboxState(t, pool, "outbox_a_retry", "dead_letter", 2, "PUBLISH_FAILED")
+	assertOutboxState(t, pool, retryID, "dead_letter", 2, "PUBLISH_FAILED")
 
 	processed, err = dispatcher.RunOne(context.Background(), "dispatcher-a")
 	if err != nil || !processed {
 		t.Fatalf("dispatch success processed=%t err=%v", processed, err)
 	}
-	assertOutboxState(t, pool, "outbox_z_publish", "published", 2, "")
-	if got := publisher.publishedIDs(); fmt.Sprint(got) != fmt.Sprint([]string{"outbox_z_publish"}) {
+	assertOutboxState(t, pool, publishID, "published", 2, "")
+	if got := publisher.publishedIDs(); fmt.Sprint(got) != fmt.Sprint([]string{publishID.String()}) {
 		t.Fatalf("published IDs = %v", got)
 	}
 	var leaked bool
@@ -384,11 +397,12 @@ type fakePublisher struct {
 func (publisher *fakePublisher) Publish(_ context.Context, event jobs.OutboxEvent) error {
 	publisher.mu.Lock()
 	defer publisher.mu.Unlock()
-	if publisher.failures[event.ID] > 0 {
-		publisher.failures[event.ID]--
+	id := event.ID.String()
+	if publisher.failures[id] > 0 {
+		publisher.failures[id]--
 		return errors.New("publisher-secret")
 	}
-	publisher.published = append(publisher.published, event.ID)
+	publisher.published = append(publisher.published, id)
 	return nil
 }
 
@@ -417,22 +431,22 @@ func resetData(t *testing.T, pool *pgstore.Pool) {
 	}
 }
 
-func createWorkspace(t *testing.T, pool *pgstore.Pool, id string) {
+func createWorkspace(t *testing.T, pool *pgstore.Pool, id identity.WorkspaceID, slug string) {
 	t.Helper()
 	if _, err := pool.Exec(context.Background(), `
-		INSERT INTO workspaces (id, slug, display_name) VALUES ($1, $2, $3)`, id, id, id); err != nil {
+		INSERT INTO workspaces (id, slug, display_name) VALUES ($1, $2, $3)`, id.UUID(), slug, slug); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func assertJobState(t *testing.T, pool *pgstore.Pool, id, status string, attempt int32, code string, available time.Time) {
+func assertJobState(t *testing.T, pool *pgstore.Pool, id identity.RunID, status string, attempt int32, code string, available time.Time) {
 	t.Helper()
 	var gotStatus, gotCode string
 	var gotAttempt int32
 	var gotAvailable time.Time
 	if err := pool.QueryRow(context.Background(), `
 		SELECT status, attempt, COALESCE(last_error_code, ''), available_at
-		FROM jobs WHERE id = $1`, id).Scan(&gotStatus, &gotAttempt, &gotCode, &gotAvailable); err != nil {
+		FROM jobs WHERE id = $1`, id.UUID()).Scan(&gotStatus, &gotAttempt, &gotCode, &gotAvailable); err != nil {
 		t.Fatal(err)
 	}
 	if gotStatus != status || gotAttempt != attempt || gotCode != code {
@@ -443,10 +457,10 @@ func assertJobState(t *testing.T, pool *pgstore.Pool, id, status string, attempt
 	}
 }
 
-func assertJobStatus(t *testing.T, pool *pgstore.Pool, id, want string) {
+func assertJobStatus(t *testing.T, pool *pgstore.Pool, id identity.RunID, want string) {
 	t.Helper()
 	var got string
-	if err := pool.QueryRow(context.Background(), "SELECT status FROM jobs WHERE id = $1", id).Scan(&got); err != nil {
+	if err := pool.QueryRow(context.Background(), "SELECT status FROM jobs WHERE id = $1", id.UUID()).Scan(&got); err != nil {
 		t.Fatal(err)
 	}
 	if got != want {
@@ -468,18 +482,45 @@ func assertCounts(t *testing.T, pool *pgstore.Pool, audit, outbox int) {
 	}
 }
 
-func assertOutboxState(t *testing.T, pool *pgstore.Pool, id, status string, attempt int32, code string) {
+func assertOutboxState(t *testing.T, pool *pgstore.Pool, id identity.EventID, status string, attempt int32, code string) {
 	t.Helper()
 	var gotStatus, gotCode string
 	var gotAttempt int32
 	if err := pool.QueryRow(context.Background(), `
 		SELECT status, attempt, COALESCE(last_error_code, '')
-		FROM outbox_events WHERE id = $1`, id).Scan(&gotStatus, &gotAttempt, &gotCode); err != nil {
+		FROM outbox_events WHERE id = $1`, id.UUID()).Scan(&gotStatus, &gotAttempt, &gotCode); err != nil {
 		t.Fatal(err)
 	}
 	if gotStatus != status || gotAttempt != attempt || gotCode != code {
 		t.Fatalf("outbox state = %s attempt=%d code=%s", gotStatus, gotAttempt, gotCode)
 	}
+}
+
+func newWorkspaceID(t *testing.T) identity.WorkspaceID {
+	t.Helper()
+	id, err := identity.NewWorkspaceID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
+func newRunID(t *testing.T) identity.RunID {
+	t.Helper()
+	id, err := identity.NewRunID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
+func newEventID(t *testing.T) identity.EventID {
+	t.Helper()
+	id, err := identity.NewEventID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
 }
 
 func repositoryRoot() string {

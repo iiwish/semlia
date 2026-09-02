@@ -115,6 +115,22 @@ export interface components {
          * @example evt_01arz3ndektsv4rrffq69g5fav
          */
         EventId: string;
+        /** Format: typeid */
+        SourceConnectionId: string;
+        /** Format: typeid */
+        SourceRevisionId: string;
+        /** Format: typeid */
+        PhysicalDatasetId: string;
+        /** Format: typeid */
+        PhysicalDatasetRevisionId: string;
+        /** Format: typeid */
+        PhysicalFieldId: string;
+        /** Format: typeid */
+        PhysicalFieldRevisionId: string;
+        /** Format: typeid */
+        CodeArtifactId: string;
+        /** Format: typeid */
+        LineageEdgeId: string;
         /**
          * @description Workspace-scoped human-readable namespace and stable key.
          * @example commerce.net_revenue

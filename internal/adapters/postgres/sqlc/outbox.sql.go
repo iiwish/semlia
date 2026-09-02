@@ -30,7 +30,7 @@ SET status = 'publishing',
     updated_at = $3
 FROM candidate
 WHERE outbox_events.id = candidate.id
-RETURNING outbox_events.id, outbox_events.workspace_id, outbox_events.event_type, outbox_events.payload, outbox_events.status, outbox_events.attempt, outbox_events.max_attempts, outbox_events.available_at, outbox_events.leased_until, outbox_events.lease_owner, outbox_events.last_error_code, outbox_events.trace_id, outbox_events.created_at, outbox_events.updated_at, outbox_events.published_at
+RETURNING outbox_events.legacy_id, outbox_events.legacy_workspace_id, outbox_events.event_type, outbox_events.payload, outbox_events.status, outbox_events.attempt, outbox_events.max_attempts, outbox_events.available_at, outbox_events.leased_until, outbox_events.lease_owner, outbox_events.last_error_code, outbox_events.trace_id, outbox_events.created_at, outbox_events.updated_at, outbox_events.published_at, outbox_events.id, outbox_events.workspace_id
 `
 
 type ClaimOutboxEventParams struct {
@@ -43,8 +43,8 @@ func (q *Queries) ClaimOutboxEvent(ctx context.Context, arg ClaimOutboxEventPara
 	row := q.db.QueryRow(ctx, claimOutboxEvent, arg.LeasedUntil, arg.LeaseOwner, arg.ClaimedAt)
 	var i OutboxEvent
 	err := row.Scan(
-		&i.ID,
-		&i.WorkspaceID,
+		&i.LegacyID,
+		&i.LegacyWorkspaceID,
 		&i.EventType,
 		&i.Payload,
 		&i.Status,
@@ -58,6 +58,8 @@ func (q *Queries) ClaimOutboxEvent(ctx context.Context, arg ClaimOutboxEventPara
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.PublishedAt,
+		&i.ID,
+		&i.WorkspaceID,
 	)
 	return i, err
 }
@@ -72,8 +74,8 @@ INSERT INTO outbox_events (
 `
 
 type EnqueueOutboxEventParams struct {
-	ID          string             `json:"id"`
-	WorkspaceID string             `json:"workspace_id"`
+	ID          pgtype.UUID        `json:"id"`
+	WorkspaceID pgtype.UUID        `json:"workspace_id"`
 	EventType   string             `json:"event_type"`
 	Payload     []byte             `json:"payload"`
 	MaxAttempts int32              `json:"max_attempts"`
@@ -111,7 +113,7 @@ type MarkOutboxEventFailedParams struct {
 	AvailableAt pgtype.Timestamptz `json:"available_at"`
 	ErrorCode   pgtype.Text        `json:"error_code"`
 	FailedAt    pgtype.Timestamptz `json:"failed_at"`
-	ID          string             `json:"id"`
+	ID          pgtype.UUID        `json:"id"`
 	LeaseOwner  pgtype.Text        `json:"lease_owner"`
 }
 
@@ -144,7 +146,7 @@ WHERE id = $2
 
 type MarkOutboxEventPublishedParams struct {
 	PublishedAt pgtype.Timestamptz `json:"published_at"`
-	ID          string             `json:"id"`
+	ID          pgtype.UUID        `json:"id"`
 	LeaseOwner  pgtype.Text        `json:"lease_owner"`
 }
 
