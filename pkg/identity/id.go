@@ -26,6 +26,7 @@ const (
 	Evidence  Prefix = "evd"
 	Release   Prefix = "rls"
 	Run       Prefix = "run"
+	Event     Prefix = "evt"
 )
 
 var registeredPrefixes = []Prefix{
@@ -37,6 +38,7 @@ var registeredPrefixes = []Prefix{
 	Evidence,
 	Release,
 	Run,
+	Event,
 }
 
 type ID struct {
@@ -191,6 +193,7 @@ type ontologyKind struct{}
 type evidenceKind struct{}
 type releaseKind struct{}
 type runKind struct{}
+type eventKind struct{}
 
 func (workspaceKind) resourcePrefix() Prefix { return Workspace }
 func (assetKind) resourcePrefix() Prefix     { return Asset }
@@ -200,6 +203,7 @@ func (ontologyKind) resourcePrefix() Prefix  { return Ontology }
 func (evidenceKind) resourcePrefix() Prefix  { return Evidence }
 func (releaseKind) resourcePrefix() Prefix   { return Release }
 func (runKind) resourcePrefix() Prefix       { return Run }
+func (eventKind) resourcePrefix() Prefix     { return Event }
 
 type WorkspaceID = TypedID[workspaceKind]
 type AssetID = TypedID[assetKind]
@@ -209,6 +213,7 @@ type OntologyID = TypedID[ontologyKind]
 type EvidenceID = TypedID[evidenceKind]
 type ReleaseID = TypedID[releaseKind]
 type RunID = TypedID[runKind]
+type EventID = TypedID[eventKind]
 
 func NewWorkspaceID() (WorkspaceID, error) { return newTypedID[workspaceKind]() }
 func NewAssetID() (AssetID, error)         { return newTypedID[assetKind]() }
@@ -218,6 +223,7 @@ func NewOntologyID() (OntologyID, error)   { return newTypedID[ontologyKind]() }
 func NewEvidenceID() (EvidenceID, error)   { return newTypedID[evidenceKind]() }
 func NewReleaseID() (ReleaseID, error)     { return newTypedID[releaseKind]() }
 func NewRunID() (RunID, error)             { return newTypedID[runKind]() }
+func NewEventID() (EventID, error)         { return newTypedID[eventKind]() }
 
 func ParseWorkspaceID(value string) (WorkspaceID, error) { return parseTypedID[workspaceKind](value) }
 func ParseAssetID(value string) (AssetID, error)         { return parseTypedID[assetKind](value) }
@@ -227,6 +233,7 @@ func ParseOntologyID(value string) (OntologyID, error)   { return parseTypedID[o
 func ParseEvidenceID(value string) (EvidenceID, error)   { return parseTypedID[evidenceKind](value) }
 func ParseReleaseID(value string) (ReleaseID, error)     { return parseTypedID[releaseKind](value) }
 func ParseRunID(value string) (RunID, error)             { return parseTypedID[runKind](value) }
+func ParseEventID(value string) (EventID, error)         { return parseTypedID[eventKind](value) }
 
 func isRegistered(prefix Prefix) bool {
 	for _, candidate := range registeredPrefixes {

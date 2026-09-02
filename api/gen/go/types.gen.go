@@ -195,10 +195,8 @@ type ErrorResponse struct {
 type EventEnvelope struct {
 	Data map[string]interface{} `json:"data"`
 
-	// Id Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
-	//
-	// Example: ast_01arz3ndektsv4rrffq69g5fav
-	Id ResourceId `json:"id"`
+	// Id Example: evt_01arz3ndektsv4rrffq69g5fav
+	Id EventId `json:"id"`
 
 	// Source Example: urn:semlia:control-plane
 	Source      string                   `json:"source"`
@@ -224,14 +222,15 @@ type EventEnvelope struct {
 	// Example: system.readiness.changed
 	Type EventType `json:"type"`
 
-	// WorkspaceId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
-	//
-	// Example: ast_01arz3ndektsv4rrffq69g5fav
-	WorkspaceId *ResourceId `json:"workspaceId,omitempty"`
+	// WorkspaceId Example: wsp_01arz3ndektsv4rrffq69g5fav
+	WorkspaceId *WorkspaceId `json:"workspaceId,omitempty"`
 }
 
 // EventEnvelopeSpecVersion defines model for EventEnvelope.SpecVersion.
 type EventEnvelopeSpecVersion string
+
+// EventId Example: evt_01arz3ndektsv4rrffq69g5fav
+type EventId = identity.EventID
 
 // EventType Namespaced event type using lowercase dot-separated segments.
 //

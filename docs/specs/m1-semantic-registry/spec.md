@@ -21,6 +21,7 @@ The backend remains a modular Go monolith with PostgreSQL. It does not introduce
 ## Required Capabilities
 
 - Generate UUIDv7 identities in the application, persist them as PostgreSQL `uuid`, and expose the same values as prefix-checked TypeIDs.
+- Keep durable run identity (`run_`) distinct from audit and outbox event identity (`evt_`).
 - Register read-only source connections and immutable source revisions without storing credentials in domain payloads.
 - Discover PostgreSQL catalog metadata, versioned DDL/View SQL and dbt manifest/catalog artifacts through adapter contracts.
 - Persist physical datasets, fields, code artifacts, lineage edges and unresolved discovery findings with provenance.
@@ -59,4 +60,3 @@ The backend remains a modular Go monolith with PostgreSQL. It does not introduce
 - Semantic query resolution, MCP distribution and governed execution belong to M3.
 - Full OWL/RDF reasoning, arbitrary predicates and unbounded graph traversal are not M1 ontology requirements.
 - Production Web reconstruction is a separate M1 stream and consumes only generated API contracts.
-

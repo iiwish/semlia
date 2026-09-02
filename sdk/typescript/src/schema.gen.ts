@@ -111,6 +111,11 @@ export interface components {
          */
         RunId: string;
         /**
+         * Format: typeid
+         * @example evt_01arz3ndektsv4rrffq69g5fav
+         */
+        EventId: string;
+        /**
          * @description Workspace-scoped human-readable namespace and stable key.
          * @example commerce.net_revenue
          */
@@ -160,7 +165,7 @@ export interface components {
         EventEnvelope: {
             /** @enum {string} */
             specVersion: "semlia.events/v1";
-            id: components["schemas"]["ResourceId"];
+            id: components["schemas"]["EventId"];
             type: components["schemas"]["EventType"];
             /**
              * Format: uri
@@ -168,7 +173,7 @@ export interface components {
              */
             source: string;
             subject?: components["schemas"]["ResourceId"];
-            workspaceId?: components["schemas"]["ResourceId"];
+            workspaceId?: components["schemas"]["WorkspaceId"];
             time: components["schemas"]["Timestamp"];
             traceId: components["schemas"]["TraceId"];
             data: {
