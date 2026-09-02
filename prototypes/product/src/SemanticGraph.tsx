@@ -1,6 +1,8 @@
 import { ArrowRight, Database, FileCheck2, Gauge, Users } from "lucide-react";
 import type { AssetRelation, AssetType } from "./types";
 
+export type OntologyPerspective = "taxonomy" | "semantic" | "dependency";
+
 interface SemanticGraphProps {
   mode: "coverage" | "lineage";
   assetName?: string;
@@ -11,6 +13,8 @@ interface SemanticGraphProps {
   assetRevision?: string;
   ontologyRevision?: string;
   relations?: AssetRelation[];
+  perspective?: OntologyPerspective;
+  parentConcepts?: string[];
 }
 
 const relationLabels: Record<AssetRelation["type"], string> = {
@@ -21,6 +25,17 @@ const relationLabels: Record<AssetRelation["type"], string> = {
   filters_by: "按其筛选",
   synonym_of: "同义于",
   contains: "包含",
+  broader_than: "上位于",
+  narrower_than: "下位于",
+  equivalent_to: "等价于",
+  disjoint_with: "互斥于",
+};
+
+const assertionLabels: Record<AssetRelation["assertionState"], string> = {
+  asserted: "人工声明",
+  inferred: "证据推导",
+  candidate: "候选关系",
+  deprecated: "已废弃",
 };
 
 function graphLabel(value: string, length = 15) {
@@ -33,7 +48,7 @@ function graphPositions(count: number) {
   return [52, 160, 268];
 }
 
-export function SemanticGraph({ mode, assetName = "净收入", upstream = ["支付订单", "退款金额"], downstream = ["区域达成率"], consumerName = "Fluxale", assetType = "指标", assetRevision = "@12", ontologyRevision = "ontology:commerce@7", relations = [] }: SemanticGraphProps) {
+export function SemanticGraph({ mode, assetName = "净收入", upstream = ["支付订单", "退款金额"], downstream = ["区域达成率"], consumerName = "Fluxale", assetType = "指标", assetRevision = "@12", ontologyRevision = "ontology:commerce@7", relations = [], perspective = "semantic", parentConcepts = [] }: SemanticGraphProps) {
   if (mode === "coverage") {
     return (
       <div className="semantic-map" role="img" aria-label="物理映射关系图">
@@ -92,37 +107,49 @@ export function SemanticGraph({ mode, assetName = "净收入", upstream = ["支�
     );
   }
 
-  const semanticUpstream = relations.filter((relation) => relation.type === "depends_on" || relation.type === "derived_from");
-  const semanticRelated = relations.filter((relation) => relation.type !== "depends_on" && relation.type !== "derived_from");
-  const leftNodes = [
-    ...semanticUpstream.map((relation) => ({ id: relation.id, label: relation.targetName, relation: relation.type === "derived_from" ? "派生输入" : "依赖输入", meta: `${relation.type} · ${relation.release}` })),
-    ...upstream.filter((name) => !semanticUpstream.some((relation) => relation.targetName === name)).map((name, index) => ({ id: `upstream-${index}`, label: name, relation: "上游输入", meta: "已解析依赖" })),
-  ].slice(0, 3);
-  const rightNodes = [
-    ...semanticRelated.map((relation) => ({ id: relation.id, label: relation.targetName, relation: relationLabels[relation.type], meta: `${relation.type} · ${relation.release}` })),
-    ...downstream.filter((name) => !semanticRelated.some((relation) => relation.targetName === name)).map((name, index) => ({ id: `downstream-${index}`, label: name, relation: "影响", meta: "下游资产依赖当前资产" })),
-  ].slice(0, 3);
+  const perspectiveRelations = relations.filter((relation) => relation.plane === perspective);
+  const perspectiveCopy = {
+    taxonomy: { aria: "本体层级图", left: "上位概念", right: "下位 / 对等概念", leftEmpty: "无直接上位概念", rightEmpty: "无直接下位或对等概念" },
+    semantic: { aria: "语义关系图", left: "入向关系", right: "出向关系", leftEmpty: "无入向语义关系", rightEmpty: "无出向语义关系" },
+    dependency: { aria: "依赖与影响图", left: "依赖输入", right: "下游影响", leftEmpty: "无直接依赖", rightEmpty: "无已知下游影响" },
+  }[perspective];
+  const relationNodes = perspectiveRelations.map((relation) => ({ id: relation.id, type: relation.type, label: relation.targetName, relation: perspective === "dependency" ? relation.type === "derived_from" ? "派生输入" : "被依赖" : relationLabels[relation.type], meta: `${assertionLabels[relation.assertionState]} · ${relation.release}`, kicker: perspective === "taxonomy" ? "概念关系" : perspective === "dependency" ? "语义依赖" : "语义关系", direction: relation.direction }));
+  const taxonomyLeft = [
+    ...parentConcepts.map((name, index) => ({ id: `parent-${index}`, type: "narrower_than" as const, label: name, relation: "上位于", meta: "本体层级声明", kicker: "上位概念", direction: "outgoing" as const })),
+    ...relationNodes.filter((node) => node.type === "narrower_than").map((node) => ({ ...node, relation: "上位于", kicker: "上位概念" })),
+  ];
+  const taxonomyRight = relationNodes.filter((node) => node.type !== "narrower_than");
+  const dependencyRelations = perspectiveRelations.filter((relation) => relation.type === "depends_on" || relation.type === "derived_from");
+  const dependencyLeft = [
+    ...relationNodes,
+    ...upstream.filter((name) => !dependencyRelations.some((relation) => relation.targetName === name)).map((name, index) => ({ id: `upstream-${index}`, label: name, relation: "依赖输入", meta: "已解析依赖", kicker: "语义依赖", direction: "incoming" as const })),
+  ];
+  const dependencyRight = downstream.map((name, index) => ({ id: `downstream-${index}`, label: name, relation: "受其影响", meta: "下游资产引用当前 revision", kicker: "下游影响", direction: "outgoing" as const }));
+  const leftNodes = (perspective === "taxonomy" ? taxonomyLeft : perspective === "dependency" ? dependencyLeft : relationNodes.filter((node) => node.direction === "incoming")).slice(0, 3);
+  const rightNodes = (perspective === "taxonomy" ? taxonomyRight : perspective === "dependency" ? dependencyRight : relationNodes.filter((node) => node.direction === "outgoing")).slice(0, 3);
   const leftPositions = graphPositions(leftNodes.length);
   const rightPositions = graphPositions(rightNodes.length);
   const markerId = `lineage-arrow-${assetName.replace(/[^a-zA-Z0-9]/g, "") || "asset"}`;
 
   return (
     <figure className="lineage-map ontology-lineage-map" aria-labelledby="ontology-lineage-caption">
-      <svg viewBox="0 0 960 372" role="img" aria-label={`${assetName} 的本体关系血缘图`}>
+      <svg viewBox="0 0 960 372" role="img" aria-label={`${assetName} 的${perspectiveCopy.aria}`}>
         <defs>
           <marker id={markerId} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
             <path d="M 0 0 L 10 5 L 0 10 z" className="ontology-lineage-arrow" />
           </marker>
         </defs>
-        <text x="28" y="24" className="ontology-column-label">上游语义</text>
+        <text x="28" y="24" className="ontology-column-label">{perspectiveCopy.left}</text>
         <text x="390" y="24" className="ontology-column-label">当前资产</text>
-        <text x="744" y="24" className="ontology-column-label">相关与下游</text>
+        <text x="744" y="24" className="ontology-column-label">{perspectiveCopy.right}</text>
+        {leftNodes.length === 0 && <text x="28" y="184" className="ontology-empty-label">{perspectiveCopy.leftEmpty}</text>}
+        {rightNodes.length === 0 && <text x="744" y="184" className="ontology-empty-label">{perspectiveCopy.rightEmpty}</text>}
         {leftNodes.map((node, index) => {
           const y = leftPositions[index];
           return <g key={node.id}>
             <path className={`ontology-lineage-link trace-delay-${Math.min(index, 4)}`} markerEnd={`url(#${markerId})`} d={`M228 ${y + 36} C300 ${y + 36} 302 186 370 186`} />
             <text x="272" y={(y + 186) / 2 + 14} className="ontology-edge-label">{node.relation}</text>
-            <g className="lineage-node lineage-node-upstream"><title>{node.label} · {node.meta}</title><rect x="28" y={y} width="200" height="72" rx="7" /><text x="46" y={y + 23} className="lineage-node-kicker">语义资产</text><text x="46" y={y + 45} className="lineage-node-title">{graphLabel(node.label)}</text><text x="46" y={y + 62} className="lineage-node-meta">{graphLabel(node.meta, 23)}</text></g>
+            <g className="lineage-node lineage-node-upstream"><title>{node.label} · {node.meta}</title><rect x="28" y={y} width="200" height="72" rx="7" /><text x="46" y={y + 23} className="lineage-node-kicker">{node.kicker}</text><text x="46" y={y + 45} className="lineage-node-title">{graphLabel(node.label)}</text><text x="46" y={y + 62} className="lineage-node-meta">{graphLabel(node.meta, 23)}</text></g>
           </g>;
         })}
         <g className="lineage-node lineage-node-current"><rect x="370" y="137" width="220" height="98" rx="7" /><text x="390" y="164" className="lineage-node-kicker">{assetType} · 当前 revision</text><text x="390" y="193" className="lineage-node-title lineage-node-title-current">{graphLabel(assetName, 17)}</text><text x="390" y="216" className="lineage-node-meta">{assetRevision} · {graphLabel(ontologyRevision, 24)}</text></g>
@@ -131,11 +158,11 @@ export function SemanticGraph({ mode, assetName = "净收入", upstream = ["支�
           return <g key={node.id}>
             <path className={`ontology-lineage-link trace-delay-${Math.min(index + leftNodes.length, 4)}`} markerEnd={`url(#${markerId})`} d={`M590 186 C658 186 660 ${y + 36} 732 ${y + 36}`} />
             <text x="642" y={(y + 186) / 2 + 14} className="ontology-edge-label">{node.relation}</text>
-            <g className="lineage-node lineage-node-related"><title>{node.label} · {node.meta}</title><rect x="732" y={y} width="200" height="72" rx="7" /><text x="750" y={y + 23} className="lineage-node-kicker">{node.relation === "影响" ? "下游影响" : "本体关系"}</text><text x="750" y={y + 45} className="lineage-node-title">{graphLabel(node.label)}</text><text x="750" y={y + 62} className="lineage-node-meta">{graphLabel(node.meta, 23)}</text></g>
+            <g className="lineage-node lineage-node-related"><title>{node.label} · {node.meta}</title><rect x="732" y={y} width="200" height="72" rx="7" /><text x="750" y={y + 23} className="lineage-node-kicker">{node.kicker}</text><text x="750" y={y + 45} className="lineage-node-title">{graphLabel(node.label)}</text><text x="750" y={y + 62} className="lineage-node-meta">{graphLabel(node.meta, 23)}</text></g>
           </g>;
         })}
       </svg>
-      <figcaption id="ontology-lineage-caption"><span><i className="ontology-legend-upstream" />上游依赖</span><span><i className="ontology-legend-current" />当前资产</span><span><i className="ontology-legend-related" />本体关系与影响</span><code>{ontologyRevision}</code><span className="sr-only">消费者示例：{consumerName}</span></figcaption>
+      <figcaption id="ontology-lineage-caption"><span><i className="ontology-legend-upstream" />{perspectiveCopy.left}</span><span><i className="ontology-legend-current" />当前资产</span><span><i className="ontology-legend-related" />{perspectiveCopy.right}</span><code>{ontologyRevision}</code><span className="sr-only">消费者示例：{consumerName}</span></figcaption>
     </figure>
   );
 }

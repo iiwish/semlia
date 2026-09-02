@@ -135,6 +135,8 @@ AssetTypeProfile
 | `type` | 使用受控类型枚举，不允许来源系统自定义类型覆盖核心语义 |
 | `domain` | 负责该含义的业务语义域 |
 
+稳定身份遵循 [TDR-0003](../../adr/0003-resource-identifiers.md)：PostgreSQL 保存 UUIDv7，公共契约使用同值 TypeID，普通产品界面展示 `namespace.key` 语义地址。随机技术 ID 不进入名称、key 或业务定义；key 变更保留 alias 解析，关系和 release manifest 始终引用不可变 ID。
+
 ### 4.2 语义定义
 
 所有资产包含：
@@ -148,15 +150,18 @@ AssetTypeProfile
 
 ### 4.3 关系
 
-关系分为三层，界面和领域模型不能混用：
+本体关系与物理实现分为四个平面，界面和领域模型不能混用：
 
 | 层次 | 回答的问题 | 典型关系 |
 | --- | --- | --- |
-| 语义关系 | 这个资产在业务上与什么有关？ | `contains`、`measures`、`describes`、`filters_by`、`synonym_of`、`replaces` |
-| 依赖关系 | 这个资产由什么定义并影响什么？ | `depends_on`、`derived_from`、`validated_by`、`consumed_by` |
-| 物理关系 | 这个含义如何落到数据并安全连接？ | `PhysicalBinding`、`EntityKey`、`ModelGrain`、`JoinContract` |
+| 概念层级 | 这个概念的上位、下位、等价和互斥概念是什么？ | `broader_than`、`narrower_than`、`equivalent_to`、`disjoint_with`、`synonym_of` |
+| 语义关系 | 这个资产在业务上与什么有关？ | `contains`、`measures`、`describes`、`filters_by`、`replaces` |
+| 依赖与影响 | 这个资产由什么定义并影响什么？ | `depends_on`、`derived_from`、`validated_by`、`consumed_by` |
+| 物理实现 | 这个含义如何落到数据并安全连接？ | `PhysicalBinding`、`EntityKey`、`ModelGrain`、`JoinContract` |
 
-每条关系包含来源 revision、创建主体、证据、状态和有效 release 范围。`joins_to` 只表达发现或导航关系；生产连接必须使用声明键、基数、粒度影响、必要过滤和扇出风险的 `JoinContract`。
+前三个平面属于 `SemanticRelation`，物理实现是独立治理对象。每条语义关系包含来源 revision、创建主体、证据、断言状态和有效 release 范围；断言状态固定为 `asserted`、`inferred`、`candidate` 或 `deprecated`。推导关系必须可以定位推理规则和证据，候选关系不能进入生产默认解析。
+
+每个 `RelationType` 声明 source/target 类型约束、inverse、cardinality、directed/symmetric 推理行为和当前 `OntologyRevision` 下的校验结果。`joins_to` 只表达发现或导航关系；生产连接必须使用声明键、基数、粒度影响、必要过滤和扇出风险的 `JoinContract`。
 
 ### 4.4 物理实现
 
@@ -194,6 +199,8 @@ status: validated
 
 - owner 对业务含义负责，maintainer 对实现和验证负责，两者通过带有效时间的 `OwnershipAssignment` 关联资产。
 - `SemanticAsset` 是稳定身份，`AssetRevision` 是不可变内容，资产版本标识固定为 `asset_id + revision_id`。
+- `asset_id` 与 `revision_id` 在数据库中使用 UUIDv7，在 API、事件、Git、日志、CLI 和 MCP 中使用同值 TypeID；界面默认以 `namespace.key@sequence` 提供可读地址。
+- revision sequence 只在单个资产内递增，不能作为跨资产主键；核心对象不得仅使用数据库自增 ID。
 - `Release` 是一次发布批次及其不可变 manifest，`ReleaseManifestEntry` 固定具体资产 revision、实现对象和兼容性结论。
 - `EnvironmentDeployment` 表达环境当前指向的 release，不修改 `AssetRevision` 或发布历史。
 - `released` revision 是唯一允许生产消费者默认使用的内容；候选内容属于 `ChangeSet`、`Proposal` 或审核中的候选快照。
@@ -315,11 +322,11 @@ LLM Wiki 与本体不是两套资产，也不对应两个独立仓库。它们�
 | `LLMWikiContext` | 业务用户、治理者与 LLM | 权威摘要、检索词、别名、消歧规则、正反例、典型问题和字段证据 | 只能由明确资产 revision 编译，不能由 Prompt 或会话自由改写 |
 | `OntologyContext` | 解析器、Agent、开发者与治理者 | 领域路径、概念层级、类型化关系、RelationType 约束、本体一致性和 release 范围 | 所有节点与边必须指向稳定资产和不可变 revision |
 
-资产详情默认是一张权威 Wiki 页面。“定义”展示 LLM 可用上下文和类型专属契约；“本体关系”以局部血缘图和可审计关系列表展示当前资产在本体中的上游、相关对象和下游影响；“实现”展示 PhysicalBinding、粒度、JoinContract 和执行适配器。图用于理解语义路径，结构化列表和契约仍是审核与 API 的事实来源。
+资产详情默认是一张权威 Wiki 页面。“定义”展示 LLM 可用上下文和类型专属契约；“本体关系”把概念层级、语义关系、依赖与影响拆成三个明确视角，并用可审计关系列表展示 predicate、方向、断言状态、证据和 release；“实现”展示 PhysicalBinding、粒度、JoinContract 和执行适配器。图用于理解局部路径，结构化列表和 RelationType contract 仍是审核与 API 的事实来源。
 
-本体关系图默认只加载当前资产的一跳邻域，避免把完整知识图谱压缩为不可读画布。用户按需扩展路径或进入影响分析；关系的方向、类型、证据、约束和发布范围不得仅依赖图形位置或颜色表达。
+本体关系图默认只加载当前资产的一跳邻域，避免把完整知识图谱压缩为不可读画布。用户按需切换关系平面、扩展路径或进入影响分析；关系的方向、类型、断言状态、证据、约束和发布范围不得仅依赖图形位置或颜色表达。关系修订进入 proposal，不在图中直接改变权威事实。
 
-`OntologyRevision` 与单个 `AssetRevision` 独立演进。资产详情必须同时标明当前资产 revision 和本体 revision，不能用资产序号推导本体版本；release manifest 负责固定二者的组合。
+`OntologyRevision` 与单个 `AssetRevision` 独立演进。资产详情必须同时标明当前资产 revision 和本体 revision，提供相邻本体 revision 的关系与约束差异，不能用资产序号推导本体版本；release manifest 负责固定二者的组合。
 
 ## 5. 可发布就绪度
 
@@ -378,7 +385,7 @@ discovered -> draft -> proposed -> validating -> in_review -> released
 | --- | --- |
 | 概览 | 当前 revision 的核心语义摘要、发布上下文、阻断优先的生产判断和专业视图入口；不重复专业明细 |
 | 定义 | LLM Wiki 上下文、规范定义、类型专属语义规格、口径边界、示例、公式、时间与单位 |
-| 本体关系 | 领域路径、本体 revision、一跳血缘图、类型化语义关系、关系约束和一致性结论 |
+| 本体关系 | 领域路径、本体 revision、一跳局部图、概念层级、语义关系、依赖与影响、断言状态、RelationType 约束和一致性结论 |
 | 实现 | PhysicalBinding、来源 revision、表达式、粒度、时间字段、JoinContract 和执行适配器 |
 | 可信度 | 字段主张与证据、权威类型、来源 revision、验证运行、适用策略、冲突和门禁结论 |
 | 交付与影响 | 稳定交付地址、部署指针、release、消费者 Binding、版本约束、解析活动、兼容性、废弃与迁移计划 |

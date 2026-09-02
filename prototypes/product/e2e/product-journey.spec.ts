@@ -47,12 +47,17 @@ test("database-to-answer journey stays inspectable", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "权威语义页" })).toBeVisible();
   await expect(page.getByText("AI 检索词")).toBeVisible();
   await page.getByRole("tab", { name: "本体关系" }).click();
-  const ontologyGraph = page.getByRole("img", { name: "净收入 的本体关系血缘图" });
+  const ontologyGraph = page.getByRole("img", { name: "净收入 的语义关系图" });
   await expect(ontologyGraph).toBeVisible();
   const ontologyGraphSize = await ontologyGraph.evaluate((element) => { const rect = element.getBoundingClientRect(); return { width: rect.width, height: rect.height }; });
   expect(ontologyGraphSize.width).toBeGreaterThan(560);
   expect(ontologyGraphSize.height).toBeGreaterThan(240);
-  const clippedOntologyElements = await page.locator(".asset-wiki-authority, .asset-ontology-context, .ontology-lineage-map").evaluateAll((elements) => elements.filter((element) => element.scrollWidth > element.clientWidth + 1).length);
+  await page.getByRole("button", { name: "概念层级" }).click();
+  await expect(page.getByRole("img", { name: "净收入 的本体层级图" })).toBeVisible();
+  await page.getByRole("button", { name: "依赖与影响" }).click();
+  await expect(page.getByRole("img", { name: "净收入 的依赖与影响图" })).toBeVisible();
+  await expect(page.getByRole("table", { name: "本体关系类型约束" })).toBeVisible();
+  const clippedOntologyElements = await page.locator(".asset-wiki-authority, .asset-ontology-context, .ontology-lineage-map, .asset-relation-list, .asset-ontology-constraints").evaluateAll((elements) => elements.filter((element) => element.scrollWidth > element.clientWidth + 1).length);
   expect(clippedOntologyElements).toBe(0);
 
   await page.getByRole("button", { name: "工作台" }).click();
