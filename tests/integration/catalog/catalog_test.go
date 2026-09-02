@@ -288,6 +288,55 @@ func TestBoundedRelationsAndDiscoveryRunProjection(t *testing.T) {
 	}
 }
 
+func TestRelationPlanesProjectHierarchySemanticAndImpact(t *testing.T) {
+	pool, store, service := fixture(t)
+	workspaceID := createWorkspace(t, pool, "catalog-relation-planes")
+	root := createAsset(t, service, workspaceID, "commerce.net_revenue", semantic.Metric, `{"name":"Net revenue"}`)
+	taxonomyTarget := createAsset(t, service, workspaceID, "commerce.gross_revenue", semantic.Metric, `{"name":"Gross revenue"}`)
+	semanticTarget := createAsset(t, service, workspaceID, "commerce.order", semantic.Entity, `{"name":"Order"}`)
+	impactTarget := createAsset(t, service, workspaceID, "commerce.recognized_revenue", semantic.Metric, `{"name":"Recognized revenue"}`)
+
+	relations := []semantic.RelationRecord{
+		{
+			ID: mustID(t, identity.NewRelationID), WorkspaceID: workspaceID,
+			SubjectAssetID: root.ID, Predicate: semantic.BroaderThan, ObjectAssetID: taxonomyTarget.ID,
+			Plane: semantic.TaxonomyPlane, AssertionState: semantic.Asserted, CreatedBy: "founder",
+		},
+		{
+			ID: mustID(t, identity.NewRelationID), WorkspaceID: workspaceID,
+			SubjectAssetID: root.ID, Predicate: semantic.Measures, ObjectAssetID: semanticTarget.ID,
+			Plane: semantic.SemanticPlane, AssertionState: semantic.Asserted, CreatedBy: "founder",
+		},
+		{
+			ID: mustID(t, identity.NewRelationID), WorkspaceID: workspaceID,
+			SubjectAssetID: root.ID, Predicate: semantic.DerivedFrom, ObjectAssetID: impactTarget.ID,
+			Plane: semantic.DependencyPlane, AssertionState: semantic.Asserted, CreatedBy: "founder",
+		},
+	}
+	for _, relation := range relations {
+		if _, err := store.CreateRelation(context.Background(), relation); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	expected := map[semantic.RelationPlane]semantic.RelationPredicate{
+		semantic.TaxonomyPlane:   semantic.BroaderThan,
+		semantic.SemanticPlane:   semantic.Measures,
+		semantic.DependencyPlane: semantic.DerivedFrom,
+	}
+	for plane, predicate := range expected {
+		projected, err := service.ListRelations(context.Background(), domain.ListRelationsQuery{
+			WorkspaceID: workspaceID, AssetID: root.ID, Direction: "outgoing", Plane: plane, Depth: 1,
+		})
+		if err != nil {
+			t.Fatalf("project %s relations: %v", plane, err)
+		}
+		if len(projected) != 1 || projected[0].Plane != plane || projected[0].Predicate != predicate {
+			t.Fatalf("%s projection = %+v, want only %s", plane, projected, predicate)
+		}
+	}
+}
+
 func fixture(t *testing.T) (*pgstore.Pool, *pgstore.Store, *application.Service) {
 	t.Helper()
 	pool, err := pgstore.Open(context.Background(), databaseURL)

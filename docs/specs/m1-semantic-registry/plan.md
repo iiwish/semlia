@@ -5,9 +5,10 @@
 | Field | Value |
 | --- | --- |
 | Version | 1.0.0 |
-| Status | Confirmed |
+| Status | Accepted |
 | Authorization | Founder accepted T008/M0 and requested M1 backend development on 2026-09-02 |
 | Scope | Backend vertical slice only; production Web is a dependent stream |
+| Completion evidence | `docs/evidence/M1-COMPLETION-AUDIT/summary.md` |
 
 ## Delivery Strategy
 
@@ -54,4 +55,3 @@ flowchart LR
 - Generated OpenAPI/sqlc artifacts are committed and drift checked.
 - Every task produces a scoped evidence summary and exact validation commands.
 - T007 cannot claim M1 accepted until source-to-detail, immutable revision, ontology constraint, Git replay, privacy and performance scenarios all pass.
-

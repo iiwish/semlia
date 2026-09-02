@@ -6,8 +6,10 @@
 | --- | --- |
 | Milestone | M1 Semantic Registry backend |
 | Version | 1.0.0 |
-| Status | Confirmed |
+| Status | Accepted |
 | Confirmed | 2026-09-02 by founder authorization to begin M1 |
+| Accepted | 2026-09-02 under continuous M1 execution authorization |
+| Completion evidence | `docs/evidence/M1-COMPLETION-AUDIT/summary.md` |
 | Product contract | `docs/SSOT.md` |
 | Technical direction | `docs/adr/0002-m1-product-and-semantic-execution.md` |
 | Identity contract | `docs/adr/0003-resource-identifiers.md` |
