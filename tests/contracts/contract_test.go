@@ -49,8 +49,8 @@ func TestCanonicalSpecificationIsValidAndMinimal(t *testing.T) {
 	if doc.OpenAPI != "3.0.3" {
 		t.Errorf("OpenAPI version = %q, want 3.0.3", doc.OpenAPI)
 	}
-	if doc.Info.Version != "0.1.0" {
-		t.Errorf("contract bundle version = %q, want 0.1.0", doc.Info.Version)
+	if doc.Info.Version != "0.2.0" {
+		t.Errorf("contract bundle version = %q, want 0.2.0", doc.Info.Version)
 	}
 	if version := doc.Extensions["x-semlia-contract-version"]; version == nil {
 		t.Error("missing x-semlia-contract-version")
@@ -59,6 +59,17 @@ func TestCanonicalSpecificationIsValidAndMinimal(t *testing.T) {
 	requiredSchemas := []string{
 		"ApiVersion",
 		"ResourceId",
+		"WorkspaceId",
+		"SemanticAssetId",
+		"AssetRevisionId",
+		"SemanticRelationId",
+		"OntologyRevisionId",
+		"EvidenceArtifactId",
+		"RunId",
+		"SemanticAddress",
+		"SemanticAssetType",
+		"RelationPredicate",
+		"RelationAssertionState",
 		"Timestamp",
 		"TraceId",
 		"PageInfo",
@@ -89,14 +100,6 @@ func TestCanonicalSpecificationIsValidAndMinimal(t *testing.T) {
 		}
 	}
 
-	for name := range doc.Components.Schemas {
-		lower := strings.ToLower(name)
-		for _, forbidden := range []string{"asset", "proposal", "review", "release", "metric", "dimension", "measure"} {
-			if strings.Contains(lower, forbidden) {
-				t.Errorf("M1 business schema leaked into M0 contract: %s", name)
-			}
-		}
-	}
 }
 
 func TestSharedSchemaValidationMatrix(t *testing.T) {
@@ -107,9 +110,14 @@ func TestSharedSchemaValidationMatrix(t *testing.T) {
 		payload    string
 		shouldPass bool
 	}{
-		{"resource ID", "ResourceId", `"event_01ARZ3NDEKTSV4RRFFQ69G5FAV"`, true},
-		{"resource ID lowercase ULID", "ResourceId", `"event_01arz3ndektsv4rrffq69g5fav"`, false},
-		{"resource ID without prefix", "ResourceId", `"01ARZ3NDEKTSV4RRFFQ69G5FAV"`, false},
+		{"resource ID", "ResourceId", `"ast_01arz3ndektsv4rrffq69g5fav"`, true},
+		{"resource ID uppercase", "ResourceId", `"ast_01ARZ3NDEKTSV4RRFFQ69G5FAV"`, false},
+		{"resource ID without prefix", "ResourceId", `"01arz3ndektsv4rrffq69g5fav"`, false},
+		{"resource ID invalid high suffix", "ResourceId", `"ast_81arz3ndektsv4rrffq69g5fav"`, false},
+		{"workspace ID", "WorkspaceId", `"wsp_01arz3ndektsv4rrffq69g5fav"`, true},
+		{"workspace ID wrong prefix", "WorkspaceId", `"ast_01arz3ndektsv4rrffq69g5fav"`, false},
+		{"semantic address", "SemanticAddress", `"commerce.net_revenue"`, true},
+		{"semantic address uppercase", "SemanticAddress", `"Commerce.net_revenue"`, false},
 		{"timestamp", "Timestamp", `"2026-08-08T08:00:00Z"`, true},
 		{"timestamp with offset", "Timestamp", `"2026-08-08T16:00:00+08:00"`, false},
 		{"timestamp without timezone", "Timestamp", `"2026-08-08T08:00:00"`, false},
@@ -119,13 +127,13 @@ func TestSharedSchemaValidationMatrix(t *testing.T) {
 		{"error response", "ErrorResponse", `{"code":"DEPENDENCY_UNAVAILABLE","message":"database unavailable","traceId":"4bf92f3577b34da6a3ce929d0e0e4736","details":{},"retryable":true}`, true},
 		{"error response missing details", "ErrorResponse", `{"code":"DEPENDENCY_UNAVAILABLE","message":"database unavailable","traceId":"4bf92f3577b34da6a3ce929d0e0e4736"}`, false},
 		{"error response invalid code", "ErrorResponse", `{"code":"dependency-unavailable","message":"database unavailable","traceId":"4bf92f3577b34da6a3ce929d0e0e4736","details":{}}`, false},
-		{"event envelope", "EventEnvelope", `{"specVersion":"semlia.events/v1","id":"event_01ARZ3NDEKTSV4RRFFQ69G5FAV","type":"system.readiness.changed","source":"urn:semlia:control-plane","time":"2026-08-08T08:00:00Z","traceId":"4bf92f3577b34da6a3ce929d0e0e4736","data":{"ready":true}}`, true},
-		{"event envelope invalid type", "EventEnvelope", `{"specVersion":"semlia.events/v1","id":"event_01ARZ3NDEKTSV4RRFFQ69G5FAV","type":"SystemReady","source":"urn:semlia:control-plane","time":"2026-08-08T08:00:00Z","traceId":"4bf92f3577b34da6a3ce929d0e0e4736","data":{}}`, false},
-		{"event envelope extra field", "EventEnvelope", `{"specVersion":"semlia.events/v1","id":"event_01ARZ3NDEKTSV4RRFFQ69G5FAV","type":"system.readiness.changed","source":"urn:semlia:control-plane","time":"2026-08-08T08:00:00Z","traceId":"4bf92f3577b34da6a3ce929d0e0e4736","data":{},"secret":"no"}`, false},
+		{"event envelope", "EventEnvelope", `{"specVersion":"semlia.events/v1","id":"run_01arz3ndektsv4rrffq69g5fav","type":"system.readiness.changed","source":"urn:semlia:control-plane","time":"2026-08-08T08:00:00Z","traceId":"4bf92f3577b34da6a3ce929d0e0e4736","data":{"ready":true}}`, true},
+		{"event envelope invalid type", "EventEnvelope", `{"specVersion":"semlia.events/v1","id":"run_01arz3ndektsv4rrffq69g5fav","type":"SystemReady","source":"urn:semlia:control-plane","time":"2026-08-08T08:00:00Z","traceId":"4bf92f3577b34da6a3ce929d0e0e4736","data":{}}`, false},
+		{"event envelope extra field", "EventEnvelope", `{"specVersion":"semlia.events/v1","id":"run_01arz3ndektsv4rrffq69g5fav","type":"system.readiness.changed","source":"urn:semlia:control-plane","time":"2026-08-08T08:00:00Z","traceId":"4bf92f3577b34da6a3ce929d0e0e4736","data":{},"secret":"no"}`, false},
 		{"health response", "HealthResponse", `{"status":"ready","traceId":"4bf92f3577b34da6a3ce929d0e0e4736"}`, true},
 		{"health response invalid status", "HealthResponse", `{"status":"down","traceId":"4bf92f3577b34da6a3ce929d0e0e4736"}`, false},
-		{"system info", "SystemInfo", `{"service":"semlia","apiVersion":"v1","schemaVersion":"0.1.0","buildVersion":"dev","traceId":"4bf92f3577b34da6a3ce929d0e0e4736"}`, true},
-		{"system info invalid API version", "SystemInfo", `{"service":"semlia","apiVersion":"1","schemaVersion":"0.1.0","buildVersion":"dev","traceId":"4bf92f3577b34da6a3ce929d0e0e4736"}`, false},
+		{"system info", "SystemInfo", `{"service":"semlia","apiVersion":"v1","schemaVersion":"0.2.0","buildVersion":"dev","traceId":"4bf92f3577b34da6a3ce929d0e0e4736"}`, true},
+		{"system info invalid API version", "SystemInfo", `{"service":"semlia","apiVersion":"1","schemaVersion":"0.2.0","buildVersion":"dev","traceId":"4bf92f3577b34da6a3ce929d0e0e4736"}`, false},
 	}
 
 	for _, test := range tests {
@@ -175,6 +183,8 @@ func TestGeneratedArtifactsArePortable(t *testing.T) {
 			"Code generated by github.com/oapi-codegen/oapi-codegen/v2 version v2.8.0 DO NOT EDIT.",
 			"type ErrorResponse struct",
 			"type EventEnvelope struct",
+			"type WorkspaceId = identity.WorkspaceID",
+			"type SemanticAssetId = identity.AssetID",
 		},
 		"sdk/typescript/src/schema.gen.ts": {
 			"This file was auto-generated by openapi-typescript.",

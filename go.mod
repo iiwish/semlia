@@ -16,6 +16,7 @@ require (
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/testcontainers/testcontainers-go v0.44.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.44.0
+	go.jetify.com/typeid v1.3.0
 	go.opentelemetry.io/otel v1.44.0
 	go.opentelemetry.io/otel/sdk v1.44.0
 	go.opentelemetry.io/otel/trace v1.44.0
@@ -58,6 +59,7 @@ require (
 	github.com/go-openapi/swag/jsonname v0.26.0 // indirect
 	github.com/go-sql-driver/mysql v1.9.3 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
+	github.com/gofrs/uuid/v5 v5.2.0 // indirect
 	github.com/google/cel-go v0.28.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
