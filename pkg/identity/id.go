@@ -29,6 +29,14 @@ const (
 	Event                   Prefix = "evt"
 	Principal               Prefix = "prn"
 	RoleBinding             Prefix = "bnd"
+	Proposal                Prefix = "prp"
+	ProposalChange          Prefix = "chg"
+	Review                  Prefix = "rvw"
+	ValidationRun           Prefix = "val"
+	ValidationResult        Prefix = "vlr"
+	PolicyDecision          Prefix = "pol"
+	AgentRun                Prefix = "agr"
+	AgentStep               Prefix = "ags"
 	SourceConnection        Prefix = "src"
 	SourceRevision          Prefix = "srv"
 	PhysicalDataset         Prefix = "pds"
@@ -51,6 +59,14 @@ var registeredPrefixes = []Prefix{
 	Event,
 	Principal,
 	RoleBinding,
+	Proposal,
+	ProposalChange,
+	Review,
+	ValidationRun,
+	ValidationResult,
+	PolicyDecision,
+	AgentRun,
+	AgentStep,
 	SourceConnection,
 	SourceRevision,
 	PhysicalDataset,
@@ -235,6 +251,14 @@ type runKind struct{}
 type eventKind struct{}
 type principalKind struct{}
 type roleBindingKind struct{}
+type proposalKind struct{}
+type proposalChangeKind struct{}
+type reviewKind struct{}
+type validationRunKind struct{}
+type validationResultKind struct{}
+type policyDecisionKind struct{}
+type agentRunKind struct{}
+type agentStepKind struct{}
 type sourceConnectionKind struct{}
 type sourceRevisionKind struct{}
 type physicalDatasetKind struct{}
@@ -255,6 +279,14 @@ func (runKind) resourcePrefix() Prefix                     { return Run }
 func (eventKind) resourcePrefix() Prefix                   { return Event }
 func (principalKind) resourcePrefix() Prefix               { return Principal }
 func (roleBindingKind) resourcePrefix() Prefix             { return RoleBinding }
+func (proposalKind) resourcePrefix() Prefix                { return Proposal }
+func (proposalChangeKind) resourcePrefix() Prefix          { return ProposalChange }
+func (reviewKind) resourcePrefix() Prefix                  { return Review }
+func (validationRunKind) resourcePrefix() Prefix           { return ValidationRun }
+func (validationResultKind) resourcePrefix() Prefix        { return ValidationResult }
+func (policyDecisionKind) resourcePrefix() Prefix          { return PolicyDecision }
+func (agentRunKind) resourcePrefix() Prefix                { return AgentRun }
+func (agentStepKind) resourcePrefix() Prefix               { return AgentStep }
 func (sourceConnectionKind) resourcePrefix() Prefix        { return SourceConnection }
 func (sourceRevisionKind) resourcePrefix() Prefix          { return SourceRevision }
 func (physicalDatasetKind) resourcePrefix() Prefix         { return PhysicalDataset }
@@ -275,6 +307,14 @@ type RunID = TypedID[runKind]
 type EventID = TypedID[eventKind]
 type PrincipalID = TypedID[principalKind]
 type BindingID = TypedID[roleBindingKind]
+type ProposalID = TypedID[proposalKind]
+type ProposalChangeID = TypedID[proposalChangeKind]
+type ReviewID = TypedID[reviewKind]
+type ValidationRunID = TypedID[validationRunKind]
+type ValidationResultID = TypedID[validationResultKind]
+type PolicyDecisionID = TypedID[policyDecisionKind]
+type AgentRunID = TypedID[agentRunKind]
+type AgentStepID = TypedID[agentStepKind]
 type SourceConnectionID = TypedID[sourceConnectionKind]
 type SourceRevisionID = TypedID[sourceRevisionKind]
 type PhysicalDatasetID = TypedID[physicalDatasetKind]
@@ -295,6 +335,14 @@ func NewRunID() (RunID, error)                           { return newTypedID[run
 func NewEventID() (EventID, error)                       { return newTypedID[eventKind]() }
 func NewPrincipalID() (PrincipalID, error)               { return newTypedID[principalKind]() }
 func NewBindingID() (BindingID, error)                   { return newTypedID[roleBindingKind]() }
+func NewProposalID() (ProposalID, error)                 { return newTypedID[proposalKind]() }
+func NewProposalChangeID() (ProposalChangeID, error)     { return newTypedID[proposalChangeKind]() }
+func NewReviewID() (ReviewID, error)                     { return newTypedID[reviewKind]() }
+func NewValidationRunID() (ValidationRunID, error)       { return newTypedID[validationRunKind]() }
+func NewValidationResultID() (ValidationResultID, error) { return newTypedID[validationResultKind]() }
+func NewPolicyDecisionID() (PolicyDecisionID, error)     { return newTypedID[policyDecisionKind]() }
+func NewAgentRunID() (AgentRunID, error)                 { return newTypedID[agentRunKind]() }
+func NewAgentStepID() (AgentStepID, error)               { return newTypedID[agentStepKind]() }
 func NewSourceConnectionID() (SourceConnectionID, error) { return newTypedID[sourceConnectionKind]() }
 func NewSourceRevisionID() (SourceRevisionID, error)     { return newTypedID[sourceRevisionKind]() }
 func NewPhysicalDatasetID() (PhysicalDatasetID, error)   { return newTypedID[physicalDatasetKind]() }
@@ -319,6 +367,24 @@ func ParseRunID(value string) (RunID, error)             { return parseTypedID[r
 func ParseEventID(value string) (EventID, error)         { return parseTypedID[eventKind](value) }
 func ParsePrincipalID(value string) (PrincipalID, error) { return parseTypedID[principalKind](value) }
 func ParseBindingID(value string) (BindingID, error)     { return parseTypedID[roleBindingKind](value) }
+func ParseProposalID(value string) (ProposalID, error)   { return parseTypedID[proposalKind](value) }
+func ParseProposalChangeID(value string) (ProposalChangeID, error) {
+	return parseTypedID[proposalChangeKind](value)
+}
+func ParseReviewID(value string) (ReviewID, error) { return parseTypedID[reviewKind](value) }
+func ParseValidationRunID(value string) (ValidationRunID, error) {
+	return parseTypedID[validationRunKind](value)
+}
+func ParseValidationResultID(value string) (ValidationResultID, error) {
+	return parseTypedID[validationResultKind](value)
+}
+func ParsePolicyDecisionID(value string) (PolicyDecisionID, error) {
+	return parseTypedID[policyDecisionKind](value)
+}
+func ParseAgentRunID(value string) (AgentRunID, error) { return parseTypedID[agentRunKind](value) }
+func ParseAgentStepID(value string) (AgentStepID, error) {
+	return parseTypedID[agentStepKind](value)
+}
 func ParseSourceConnectionID(value string) (SourceConnectionID, error) {
 	return parseTypedID[sourceConnectionKind](value)
 }
@@ -348,6 +414,9 @@ func WorkspaceIDFromUUIDBytes(value [16]byte) (WorkspaceID, error) {
 	return typedIDFromUUIDBytes[workspaceKind](value)
 }
 func RunIDFromUUIDBytes(value [16]byte) (RunID, error) { return typedIDFromUUIDBytes[runKind](value) }
+func ReleaseIDFromUUIDBytes(value [16]byte) (ReleaseID, error) {
+	return typedIDFromUUIDBytes[releaseKind](value)
+}
 func EventIDFromUUIDBytes(value [16]byte) (EventID, error) {
 	return typedIDFromUUIDBytes[eventKind](value)
 }
@@ -371,6 +440,30 @@ func PrincipalIDFromUUIDBytes(value [16]byte) (PrincipalID, error) {
 }
 func BindingIDFromUUIDBytes(value [16]byte) (BindingID, error) {
 	return typedIDFromUUIDBytes[roleBindingKind](value)
+}
+func ProposalIDFromUUIDBytes(value [16]byte) (ProposalID, error) {
+	return typedIDFromUUIDBytes[proposalKind](value)
+}
+func ProposalChangeIDFromUUIDBytes(value [16]byte) (ProposalChangeID, error) {
+	return typedIDFromUUIDBytes[proposalChangeKind](value)
+}
+func ReviewIDFromUUIDBytes(value [16]byte) (ReviewID, error) {
+	return typedIDFromUUIDBytes[reviewKind](value)
+}
+func ValidationRunIDFromUUIDBytes(value [16]byte) (ValidationRunID, error) {
+	return typedIDFromUUIDBytes[validationRunKind](value)
+}
+func ValidationResultIDFromUUIDBytes(value [16]byte) (ValidationResultID, error) {
+	return typedIDFromUUIDBytes[validationResultKind](value)
+}
+func PolicyDecisionIDFromUUIDBytes(value [16]byte) (PolicyDecisionID, error) {
+	return typedIDFromUUIDBytes[policyDecisionKind](value)
+}
+func AgentRunIDFromUUIDBytes(value [16]byte) (AgentRunID, error) {
+	return typedIDFromUUIDBytes[agentRunKind](value)
+}
+func AgentStepIDFromUUIDBytes(value [16]byte) (AgentStepID, error) {
+	return typedIDFromUUIDBytes[agentStepKind](value)
 }
 func SourceConnectionIDFromUUIDBytes(value [16]byte) (SourceConnectionID, error) {
 	return typedIDFromUUIDBytes[sourceConnectionKind](value)

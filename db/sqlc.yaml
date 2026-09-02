@@ -7,6 +7,7 @@ sql:
       - ../migrations/000003_semantic_registry_foundation.up.sql
       - ../migrations/000004_usage_events.up.sql
       - ../migrations/000005_m2_authorization_foundation.up.sql
+      - ../migrations/000006_m2_governed_authoring.up.sql
     queries:
       - queries
     gen:

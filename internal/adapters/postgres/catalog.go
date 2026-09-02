@@ -2,7 +2,6 @@ package postgres
 
 import (
 	"context"
-	"encoding/json"
 	"time"
 
 	dbgen "github.com/iiwish/semlia/internal/adapters/postgres/sqlc"
@@ -536,48 +535,19 @@ type catalogEvent struct {
 }
 
 func createCatalogMutationEvents(ctx context.Context, queries *dbgen.Queries, event catalogEvent) error {
-	workspaceID, err := uuidValue(event.WorkspaceID)
-	if err != nil {
-		return err
-	}
-	auditID, err := uuidValue(event.AuditID)
-	if err != nil {
-		return err
-	}
-	outboxID, err := uuidValue(event.OutboxID)
-	if err != nil {
-		return err
-	}
 	payloadData := map[string]any{
-		"specVersion": "semlia.catalog/v1", "action": event.Action,
 		"assetId": event.AssetID.String(), "revisionId": event.RevisionID.String(), "sequence": event.Sequence,
 	}
 	if event.BaseRevisionID != nil {
 		payloadData["baseRevisionId"] = event.BaseRevisionID.String()
 	}
-	auditPayload, _ := json.Marshal(payloadData)
-	createdAt := event.CreatedAt.UTC()
-	if err := queries.CreateAuditEvent(ctx, dbgen.CreateAuditEventParams{
-		ID: auditID, WorkspaceID: workspaceID, EventType: "catalog.asset." + event.Action,
-		ActorID: textValue(event.Actor), Payload: auditPayload, TraceID: event.TraceID, CreatedAt: timestamp(createdAt),
+	if err := createMutationEvents(ctx, queries, mutationEvent{
+		WorkspaceID: event.WorkspaceID, AuditID: event.AuditID, OutboxID: event.OutboxID,
+		AuditType: "catalog.asset." + event.Action, OutboxType: "catalog.asset.changed",
+		SpecVersion: "semlia.catalog/v1", Action: event.Action, Actor: event.Actor,
+		TraceID: event.TraceID, CreatedAt: event.CreatedAt, Data: payloadData,
 	}); err != nil {
-		return repositoryError("create catalog audit event", err)
-	}
-	outboxPayload, _ := json.Marshal(map[string]any{
-		"specVersion": "semlia.events/v1",
-		"id":          event.OutboxID.String(),
-		"type":        "catalog.asset.changed",
-		"source":      "urn:semlia:control-plane",
-		"workspaceId": event.WorkspaceID.String(),
-		"time":        createdAt.Format(time.RFC3339Nano),
-		"traceId":     event.TraceID,
-		"data":        payloadData,
-	})
-	if err := queries.EnqueueOutboxEvent(ctx, dbgen.EnqueueOutboxEventParams{
-		ID: outboxID, WorkspaceID: workspaceID, EventType: "catalog.asset.changed", Payload: outboxPayload,
-		MaxAttempts: 8, AvailableAt: timestamp(createdAt), TraceID: event.TraceID,
-	}); err != nil {
-		return repositoryError("enqueue catalog outbox event", err)
+		return repositoryError("create catalog mutation events", err)
 	}
 	return nil
 }

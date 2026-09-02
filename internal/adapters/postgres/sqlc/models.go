@@ -14,6 +14,35 @@ type Action struct {
 	RequiresHuman bool   `json:"requires_human"`
 }
 
+type AgentRun struct {
+	ID             pgtype.UUID        `json:"id"`
+	WorkspaceID    pgtype.UUID        `json:"workspace_id"`
+	PrincipalID    pgtype.UUID        `json:"principal_id"`
+	Model          string             `json:"model"`
+	ConfigRevision string             `json:"config_revision"`
+	InputHash      string             `json:"input_hash"`
+	Status         string             `json:"status"`
+	OutputDigest   pgtype.Text        `json:"output_digest"`
+	CostMicros     int64              `json:"cost_micros"`
+	StartedAt      pgtype.Timestamptz `json:"started_at"`
+	FinishedAt     pgtype.Timestamptz `json:"finished_at"`
+	DurationMs     pgtype.Int8        `json:"duration_ms"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
+type AgentStep struct {
+	ID          pgtype.UUID        `json:"id"`
+	WorkspaceID pgtype.UUID        `json:"workspace_id"`
+	AgentRunID  pgtype.UUID        `json:"agent_run_id"`
+	Sequence    int32              `json:"sequence"`
+	Kind        string             `json:"kind"`
+	ToolName    pgtype.Text        `json:"tool_name"`
+	InputHash   string             `json:"input_hash"`
+	OutputHash  string             `json:"output_hash"`
+	ErrorCode   pgtype.Text        `json:"error_code"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
 type AssetRevision struct {
 	ID            pgtype.UUID        `json:"id"`
 	WorkspaceID   pgtype.UUID        `json:"workspace_id"`
@@ -218,6 +247,21 @@ type PhysicalFieldRevision struct {
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 }
 
+type PolicyDecision struct {
+	ID            pgtype.UUID        `json:"id"`
+	WorkspaceID   pgtype.UUID        `json:"workspace_id"`
+	ProposalID    pgtype.UUID        `json:"proposal_id"`
+	RuleVersion   string             `json:"rule_version"`
+	Inputs        []byte             `json:"inputs"`
+	InputsDigest  string             `json:"inputs_digest"`
+	MatchedPolicy string             `json:"matched_policy"`
+	RiskLevel     string             `json:"risk_level"`
+	Routing       string             `json:"routing"`
+	ReasonCode    string             `json:"reason_code"`
+	DecidedAt     pgtype.Timestamptz `json:"decided_at"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
 type Principal struct {
 	ID               pgtype.UUID        `json:"id"`
 	WorkspaceID      pgtype.UUID        `json:"workspace_id"`
@@ -226,6 +270,40 @@ type Principal struct {
 	OwnerPrincipalID pgtype.UUID        `json:"owner_principal_id"`
 	Status           string             `json:"status"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+}
+
+type Proposal struct {
+	ID               pgtype.UUID        `json:"id"`
+	WorkspaceID      pgtype.UUID        `json:"workspace_id"`
+	AssetID          pgtype.UUID        `json:"asset_id"`
+	BaseRevisionID   pgtype.UUID        `json:"base_revision_id"`
+	TargetObjectType string             `json:"target_object_type"`
+	TargetObjectID   pgtype.UUID        `json:"target_object_id"`
+	State            string             `json:"state"`
+	Title            string             `json:"title"`
+	Summary          string             `json:"summary"`
+	Reason           string             `json:"reason"`
+	RiskLevel        pgtype.Text        `json:"risk_level"`
+	PolicyDecisionID pgtype.UUID        `json:"policy_decision_id"`
+	AgentRunID       pgtype.UUID        `json:"agent_run_id"`
+	CreatedBy        string             `json:"created_by"`
+	SubmittedAt      pgtype.Timestamptz `json:"submitted_at"`
+	DecidedAt        pgtype.Timestamptz `json:"decided_at"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ProposalChange struct {
+	ID           pgtype.UUID        `json:"id"`
+	WorkspaceID  pgtype.UUID        `json:"workspace_id"`
+	ProposalID   pgtype.UUID        `json:"proposal_id"`
+	FieldPath    string             `json:"field_path"`
+	Op           string             `json:"op"`
+	BeforeDigest pgtype.Text        `json:"before_digest"`
+	AfterDigest  pgtype.Text        `json:"after_digest"`
+	BeforeValue  []byte             `json:"before_value"`
+	AfterValue   []byte             `json:"after_value"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 }
 
 type RelationTypePolicy struct {
@@ -239,6 +317,28 @@ type RelationTypePolicy struct {
 	SchemaVersion string   `json:"schema_version"`
 }
 
+type Release struct {
+	ID                    pgtype.UUID        `json:"id"`
+	WorkspaceID           pgtype.UUID        `json:"workspace_id"`
+	Sequence              int64              `json:"sequence"`
+	ManifestDigest        string             `json:"manifest_digest"`
+	State                 string             `json:"state"`
+	RolledBackToReleaseID pgtype.UUID        `json:"rolled_back_to_release_id"`
+	PublishedBy           string             `json:"published_by"`
+	PublishedAt           pgtype.Timestamptz `json:"published_at"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+}
+
+type ReleaseAsset struct {
+	WorkspaceID   pgtype.UUID        `json:"workspace_id"`
+	ReleaseID     pgtype.UUID        `json:"release_id"`
+	AssetID       pgtype.UUID        `json:"asset_id"`
+	RevisionID    pgtype.UUID        `json:"revision_id"`
+	Compatibility []byte             `json:"compatibility"`
+	Position      int32              `json:"position"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
 type ResourceAlias struct {
 	ID           int64              `json:"id"`
 	WorkspaceID  pgtype.UUID        `json:"workspace_id"`
@@ -248,6 +348,17 @@ type ResourceAlias struct {
 	ResourceID   pgtype.UUID        `json:"resource_id"`
 	RetiredAt    pgtype.Timestamptz `json:"retired_at"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
+type Review struct {
+	ID                  pgtype.UUID        `json:"id"`
+	WorkspaceID         pgtype.UUID        `json:"workspace_id"`
+	ProposalID          pgtype.UUID        `json:"proposal_id"`
+	ReviewerPrincipalID pgtype.UUID        `json:"reviewer_principal_id"`
+	Channel             string             `json:"channel"`
+	Decision            string             `json:"decision"`
+	Note                string             `json:"note"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 }
 
 type RevisionEvidenceLink struct {
@@ -356,6 +467,29 @@ type UsageEvent struct {
 	OccurredAt        pgtype.Timestamptz `json:"occurred_at"`
 	ReceivedAt        pgtype.Timestamptz `json:"received_at"`
 	ExpiresAt         pgtype.Timestamptz `json:"expires_at"`
+}
+
+type ValidationResult struct {
+	ID              pgtype.UUID        `json:"id"`
+	WorkspaceID     pgtype.UUID        `json:"workspace_id"`
+	ValidationRunID pgtype.UUID        `json:"validation_run_id"`
+	Severity        string             `json:"severity"`
+	Code            string             `json:"code"`
+	Message         string             `json:"message"`
+	InputDigest     string             `json:"input_digest"`
+	Details         []byte             `json:"details"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
+type ValidationRun struct {
+	ID               pgtype.UUID        `json:"id"`
+	WorkspaceID      pgtype.UUID        `json:"workspace_id"`
+	ProposalID       pgtype.UUID        `json:"proposal_id"`
+	ValidatorID      string             `json:"validator_id"`
+	ValidatorVersion string             `json:"validator_version"`
+	Status           string             `json:"status"`
+	StartedAt        pgtype.Timestamptz `json:"started_at"`
+	FinishedAt       pgtype.Timestamptz `json:"finished_at"`
 }
 
 type Workspace struct {
