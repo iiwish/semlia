@@ -5,10 +5,12 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	contract "github.com/iiwish/semlia/api/gen/go"
 	"github.com/iiwish/semlia/internal/application"
+	catalogapp "github.com/iiwish/semlia/internal/application/catalog"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -20,11 +22,18 @@ const (
 
 type Handler struct {
 	service *application.SystemService
+	catalog *catalogapp.Service
 	logger  *slog.Logger
 	tracer  trace.Tracer
 }
 
-func NewHandler(service *application.SystemService, logger *slog.Logger, tracer trace.Tracer) http.Handler {
+type Option func(*Handler)
+
+func WithCatalog(service *catalogapp.Service) Option {
+	return func(handler *Handler) { handler.catalog = service }
+}
+
+func NewHandler(service *application.SystemService, logger *slog.Logger, tracer trace.Tracer, options ...Option) http.Handler {
 	if service == nil {
 		panic("system service is required")
 	}
@@ -34,7 +43,13 @@ func NewHandler(service *application.SystemService, logger *slog.Logger, tracer 
 	if tracer == nil {
 		panic("tracer is required")
 	}
-	return &Handler{service: service, logger: logger, tracer: tracer}
+	handler := &Handler{service: service, logger: logger, tracer: tracer}
+	for _, option := range options {
+		if option != nil {
+			option(handler)
+		}
+	}
+	return handler
 }
 
 func (handler *Handler) ServeHTTP(response http.ResponseWriter, request *http.Request) {
@@ -77,12 +92,13 @@ func (handler *Handler) ServeHTTP(response http.ResponseWriter, request *http.Re
 }
 
 func (handler *Handler) route(response http.ResponseWriter, request *http.Request, traceID string) string {
-	if !knownRoute(request.URL.Path) {
+	route := matchRoute(request.URL.Path)
+	if route.kind == routeUnknown {
 		writeError(response, http.StatusNotFound, "NOT_FOUND", "the requested resource was not found", traceID, false)
 		return "NOT_FOUND"
 	}
-	if request.Method != http.MethodGet {
-		response.Header().Set("Allow", http.MethodGet)
+	if !route.allows(request.Method) {
+		response.Header().Set("Allow", strings.Join(route.methods(), ", "))
 		writeError(response, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "the request method is not allowed", traceID, false)
 		return "METHOD_NOT_ALLOWED"
 	}
@@ -110,7 +126,12 @@ func (handler *Handler) route(response http.ResponseWriter, request *http.Reques
 		})
 		return ""
 	default:
-		panic("known route is not handled")
+		if handler.catalog == nil {
+			response.Header().Set("Retry-After", retryAfter)
+			writeError(response, http.StatusServiceUnavailable, "DEPENDENCY_UNAVAILABLE", "the catalog dependency is unavailable", traceID, true)
+			return "DEPENDENCY_UNAVAILABLE"
+		}
+		return handler.routeCatalog(response, request, traceID, route)
 	}
 }
 
@@ -136,17 +157,12 @@ func writeJSON(response http.ResponseWriter, status int, payload any) {
 }
 
 func knownRoute(path string) bool {
-	switch path {
-	case "/health/live", "/health/ready", "/api/v1/system/info":
-		return true
-	default:
-		return false
-	}
+	return matchRoute(path).kind != routeUnknown
 }
 
 func routeLabel(path string) string {
-	if knownRoute(path) {
-		return path
+	if route := matchRoute(path); route.kind != routeUnknown {
+		return route.label
 	}
 	return "unmatched"
 }

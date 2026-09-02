@@ -9,6 +9,96 @@ import (
 	identity "github.com/iiwish/semlia/pkg/identity"
 )
 
+// Defines values for AssetLifecycleState.
+const (
+	AssetLifecycleStateActive     AssetLifecycleState = "active"
+	AssetLifecycleStateArchived   AssetLifecycleState = "archived"
+	AssetLifecycleStateDeprecated AssetLifecycleState = "deprecated"
+	AssetLifecycleStateDraft      AssetLifecycleState = "draft"
+)
+
+// Valid indicates whether the value is a known member of the AssetLifecycleState enum.
+func (e AssetLifecycleState) Valid() bool {
+	switch e {
+	case AssetLifecycleStateActive:
+		return true
+	case AssetLifecycleStateArchived:
+		return true
+	case AssetLifecycleStateDeprecated:
+		return true
+	case AssetLifecycleStateDraft:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AssetRelationDirection.
+const (
+	AssetRelationDirectionIncoming AssetRelationDirection = "incoming"
+	AssetRelationDirectionOutgoing AssetRelationDirection = "outgoing"
+)
+
+// Valid indicates whether the value is a known member of the AssetRelationDirection enum.
+func (e AssetRelationDirection) Valid() bool {
+	switch e {
+	case AssetRelationDirectionIncoming:
+		return true
+	case AssetRelationDirectionOutgoing:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DiscoveryFindingSeverity.
+const (
+	DiscoveryFindingSeverityError   DiscoveryFindingSeverity = "error"
+	DiscoveryFindingSeverityInfo    DiscoveryFindingSeverity = "info"
+	DiscoveryFindingSeverityWarning DiscoveryFindingSeverity = "warning"
+)
+
+// Valid indicates whether the value is a known member of the DiscoveryFindingSeverity enum.
+func (e DiscoveryFindingSeverity) Valid() bool {
+	switch e {
+	case DiscoveryFindingSeverityError:
+		return true
+	case DiscoveryFindingSeverityInfo:
+		return true
+	case DiscoveryFindingSeverityWarning:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DiscoveryRunStatus.
+const (
+	Cancelled DiscoveryRunStatus = "cancelled"
+	Failed    DiscoveryRunStatus = "failed"
+	Queued    DiscoveryRunStatus = "queued"
+	Running   DiscoveryRunStatus = "running"
+	Succeeded DiscoveryRunStatus = "succeeded"
+)
+
+// Valid indicates whether the value is a known member of the DiscoveryRunStatus enum.
+func (e DiscoveryRunStatus) Valid() bool {
+	switch e {
+	case Cancelled:
+		return true
+	case Failed:
+		return true
+	case Queued:
+		return true
+	case Running:
+		return true
+	case Succeeded:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for EventEnvelopeSpecVersion.
 const (
 	SemliaEventsv1 EventEnvelopeSpecVersion = "semlia.events/v1"
@@ -18,6 +108,57 @@ const (
 func (e EventEnvelopeSpecVersion) Valid() bool {
 	switch e {
 	case SemliaEventsv1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EvidenceArtifactEvidenceType.
+const (
+	EvidenceArtifactEvidenceTypeConstrained EvidenceArtifactEvidenceType = "constrained"
+	EvidenceArtifactEvidenceTypeDeclared    EvidenceArtifactEvidenceType = "declared"
+	EvidenceArtifactEvidenceTypeDerived     EvidenceArtifactEvidenceType = "derived"
+	EvidenceArtifactEvidenceTypeInferred    EvidenceArtifactEvidenceType = "inferred"
+	EvidenceArtifactEvidenceTypeObserved    EvidenceArtifactEvidenceType = "observed"
+)
+
+// Valid indicates whether the value is a known member of the EvidenceArtifactEvidenceType enum.
+func (e EvidenceArtifactEvidenceType) Valid() bool {
+	switch e {
+	case EvidenceArtifactEvidenceTypeConstrained:
+		return true
+	case EvidenceArtifactEvidenceTypeDeclared:
+		return true
+	case EvidenceArtifactEvidenceTypeDerived:
+		return true
+	case EvidenceArtifactEvidenceTypeInferred:
+		return true
+	case EvidenceArtifactEvidenceTypeObserved:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EvidenceArtifactRole.
+const (
+	Conflicts  EvidenceArtifactRole = "conflicts"
+	Constrains EvidenceArtifactRole = "constrains"
+	Observes   EvidenceArtifactRole = "observes"
+	Supports   EvidenceArtifactRole = "supports"
+)
+
+// Valid indicates whether the value is a known member of the EvidenceArtifactRole enum.
+func (e EvidenceArtifactRole) Valid() bool {
+	switch e {
+	case Conflicts:
+		return true
+	case Constrains:
+		return true
+	case Observes:
+		return true
+	case Supports:
 		return true
 	default:
 		return false
@@ -44,22 +185,43 @@ func (e HealthResponseStatus) Valid() bool {
 
 // Defines values for RelationAssertionState.
 const (
-	Asserted   RelationAssertionState = "asserted"
-	Candidate  RelationAssertionState = "candidate"
-	Deprecated RelationAssertionState = "deprecated"
-	Inferred   RelationAssertionState = "inferred"
+	RelationAssertionStateAsserted   RelationAssertionState = "asserted"
+	RelationAssertionStateCandidate  RelationAssertionState = "candidate"
+	RelationAssertionStateDeprecated RelationAssertionState = "deprecated"
+	RelationAssertionStateInferred   RelationAssertionState = "inferred"
 )
 
 // Valid indicates whether the value is a known member of the RelationAssertionState enum.
 func (e RelationAssertionState) Valid() bool {
 	switch e {
-	case Asserted:
+	case RelationAssertionStateAsserted:
 		return true
-	case Candidate:
+	case RelationAssertionStateCandidate:
 		return true
-	case Deprecated:
+	case RelationAssertionStateDeprecated:
 		return true
-	case Inferred:
+	case RelationAssertionStateInferred:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RelationPlane.
+const (
+	Dependency RelationPlane = "dependency"
+	Semantic   RelationPlane = "semantic"
+	Taxonomy   RelationPlane = "taxonomy"
+)
+
+// Valid indicates whether the value is a known member of the RelationPlane enum.
+func (e RelationPlane) Valid() bool {
+	switch e {
+	case Dependency:
+		return true
+	case Semantic:
+		return true
+	case Taxonomy:
 		return true
 	default:
 		return false
@@ -159,19 +321,255 @@ func (e SystemInfoService) Valid() bool {
 	}
 }
 
+// Defines values for ListAssetRelationsParamsDirection.
+const (
+	ListAssetRelationsParamsDirectionBoth     ListAssetRelationsParamsDirection = "both"
+	ListAssetRelationsParamsDirectionIncoming ListAssetRelationsParamsDirection = "incoming"
+	ListAssetRelationsParamsDirectionOutgoing ListAssetRelationsParamsDirection = "outgoing"
+)
+
+// Valid indicates whether the value is a known member of the ListAssetRelationsParamsDirection enum.
+func (e ListAssetRelationsParamsDirection) Valid() bool {
+	switch e {
+	case ListAssetRelationsParamsDirectionBoth:
+		return true
+	case ListAssetRelationsParamsDirectionIncoming:
+		return true
+	case ListAssetRelationsParamsDirectionOutgoing:
+		return true
+	default:
+		return false
+	}
+}
+
 // ApiVersion Major version used in public API paths and payloads.
 //
 // Example: v1
 type ApiVersion = string
 
+// AssetLifecycleState defines model for AssetLifecycleState.
+type AssetLifecycleState string
+
+// AssetRelation defines model for AssetRelation.
+type AssetRelation struct {
+	AssertionState RelationAssertionState `json:"assertionState"`
+	Counterpart    CatalogAssetSummary    `json:"counterpart"`
+
+	// CreatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	CreatedAt Timestamp              `json:"createdAt"`
+	Depth     int                    `json:"depth"`
+	Direction AssetRelationDirection `json:"direction"`
+
+	// EvidenceArtifactId Example: evd_01arz3ndektsv4rrffq69g5fav
+	EvidenceArtifactId *EvidenceArtifactId `json:"evidenceArtifactId,omitempty"`
+
+	// Id Example: rel_01arz3ndektsv4rrffq69g5fav
+	Id SemanticRelationId `json:"id"`
+
+	// ObjectAssetId Example: ast_01arz3ndektsv4rrffq69g5fav
+	ObjectAssetId    SemanticAssetId   `json:"objectAssetId"`
+	Plane            RelationPlane     `json:"plane"`
+	Predicate        RelationPredicate `json:"predicate"`
+	SourceRevisionId *SourceRevisionId `json:"sourceRevisionId,omitempty"`
+
+	// SubjectAssetId Example: ast_01arz3ndektsv4rrffq69g5fav
+	SubjectAssetId SemanticAssetId `json:"subjectAssetId"`
+}
+
+// AssetRelationDirection defines model for AssetRelation.Direction.
+type AssetRelationDirection string
+
+// AssetRelationPage defines model for AssetRelationPage.
+type AssetRelationPage struct {
+	Items    []AssetRelation `json:"items"`
+	MaxDepth int             `json:"maxDepth"`
+}
+
+// AssetRevision defines model for AssetRevision.
+type AssetRevision struct {
+	// AssetId Example: ast_01arz3ndektsv4rrffq69g5fav
+	AssetId       SemanticAssetId        `json:"assetId"`
+	Content       map[string]interface{} `json:"content"`
+	ContentDigest string                 `json:"contentDigest"`
+
+	// CreatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	CreatedAt Timestamp          `json:"createdAt"`
+	CreatedBy string             `json:"createdBy"`
+	Evidence  []EvidenceArtifact `json:"evidence"`
+
+	// Id Example: rev_01arz3ndektsv4rrffq69g5fav
+	Id AssetRevisionId `json:"id"`
+
+	// SchemaVersion Semantic version of the public contract bundle.
+	//
+	// Example: 0.1.0
+	SchemaVersion SchemaVersion `json:"schemaVersion"`
+	Sequence      int64         `json:"sequence"`
+}
+
 // AssetRevisionId Example: rev_01arz3ndektsv4rrffq69g5fav
 type AssetRevisionId = identity.RevisionID
+
+// AssetRevisionPage defines model for AssetRevisionPage.
+type AssetRevisionPage struct {
+	Items []AssetRevision `json:"items"`
+	Page  PageInfo        `json:"page"`
+}
+
+// CatalogAssetDetail defines model for CatalogAssetDetail.
+type CatalogAssetDetail struct {
+	// Address Workspace-scoped human-readable namespace and stable key.
+	//
+	// Example: commerce.net_revenue
+	Address   SemanticAddress   `json:"address"`
+	AssetType SemanticAssetType `json:"assetType"`
+
+	// CreatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	CreatedAt       Timestamp      `json:"createdAt"`
+	CurrentRevision *AssetRevision `json:"currentRevision,omitempty"`
+
+	// CurrentRevisionId Example: rev_01arz3ndektsv4rrffq69g5fav
+	CurrentRevisionId *AssetRevisionId `json:"currentRevisionId,omitempty"`
+
+	// Id Example: ast_01arz3ndektsv4rrffq69g5fav
+	Id             SemanticAssetId     `json:"id"`
+	LifecycleState AssetLifecycleState `json:"lifecycleState"`
+	RelationCount  int                 `json:"relationCount"`
+	Summary        string              `json:"summary"`
+	Title          string              `json:"title"`
+
+	// UpdatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	UpdatedAt Timestamp `json:"updatedAt"`
+}
+
+// CatalogAssetSummary defines model for CatalogAssetSummary.
+type CatalogAssetSummary struct {
+	// Address Workspace-scoped human-readable namespace and stable key.
+	//
+	// Example: commerce.net_revenue
+	Address   SemanticAddress   `json:"address"`
+	AssetType SemanticAssetType `json:"assetType"`
+
+	// CurrentRevisionId Example: rev_01arz3ndektsv4rrffq69g5fav
+	CurrentRevisionId *AssetRevisionId `json:"currentRevisionId,omitempty"`
+
+	// Id Example: ast_01arz3ndektsv4rrffq69g5fav
+	Id             SemanticAssetId     `json:"id"`
+	LifecycleState AssetLifecycleState `json:"lifecycleState"`
+	Summary        string              `json:"summary"`
+	Title          string              `json:"title"`
+
+	// UpdatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	UpdatedAt Timestamp `json:"updatedAt"`
+}
+
+// CatalogPage defines model for CatalogPage.
+type CatalogPage struct {
+	Items []CatalogAssetSummary `json:"items"`
+	Page  PageInfo              `json:"page"`
+}
 
 // CodeArtifactId defines model for CodeArtifactId.
 type CodeArtifactId = identity.CodeArtifactID
 
+// CreateAssetRevisionRequest defines model for CreateAssetRevisionRequest.
+type CreateAssetRevisionRequest struct {
+	Content     map[string]interface{} `json:"content"`
+	CreatedBy   string                 `json:"createdBy"`
+	EvidenceIds *[]EvidenceArtifactId  `json:"evidenceIds,omitempty"`
+
+	// SchemaVersion Semantic version of the public contract bundle.
+	//
+	// Example: 0.1.0
+	SchemaVersion SchemaVersion `json:"schemaVersion"`
+}
+
+// CreateCatalogAssetRequest defines model for CreateCatalogAssetRequest.
+type CreateCatalogAssetRequest struct {
+	// Address Workspace-scoped human-readable namespace and stable key.
+	//
+	// Example: commerce.net_revenue
+	Address        SemanticAddress        `json:"address"`
+	AssetType      SemanticAssetType      `json:"assetType"`
+	Content        map[string]interface{} `json:"content"`
+	CreatedBy      string                 `json:"createdBy"`
+	EvidenceIds    *[]EvidenceArtifactId  `json:"evidenceIds,omitempty"`
+	LifecycleState *AssetLifecycleState   `json:"lifecycleState,omitempty"`
+
+	// SchemaVersion Semantic version of the public contract bundle.
+	//
+	// Example: 0.1.0
+	SchemaVersion SchemaVersion `json:"schemaVersion"`
+}
+
 // Cursor Opaque pagination cursor that clients must not interpret.
 type Cursor = string
+
+// DiscoveryFinding defines model for DiscoveryFinding.
+type DiscoveryFinding struct {
+	// Code Stable machine-readable error identifier.
+	//
+	// Example: DEPENDENCY_UNAVAILABLE
+	Code     ErrorCode                `json:"code"`
+	Details  map[string]interface{}   `json:"details"`
+	Locator  *string                  `json:"locator,omitempty"`
+	Sequence int                      `json:"sequence"`
+	Severity DiscoveryFindingSeverity `json:"severity"`
+}
+
+// DiscoveryFindingSeverity defines model for DiscoveryFinding.Severity.
+type DiscoveryFindingSeverity string
+
+// DiscoveryRun defines model for DiscoveryRun.
+type DiscoveryRun struct {
+	AdapterVersion string `json:"adapterVersion"`
+
+	// CompletedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	CompletedAt *Timestamp `json:"completedAt,omitempty"`
+
+	// CreatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	CreatedAt Timestamp `json:"createdAt"`
+
+	// ErrorCode Stable machine-readable error identifier.
+	//
+	// Example: DEPENDENCY_UNAVAILABLE
+	ErrorCode *ErrorCode         `json:"errorCode,omitempty"`
+	Findings  []DiscoveryFinding `json:"findings"`
+
+	// Id Example: run_01arz3ndektsv4rrffq69g5fav
+	Id                 RunId              `json:"id"`
+	SourceConnectionId SourceConnectionId `json:"sourceConnectionId"`
+	SourceRevisionId   *SourceRevisionId  `json:"sourceRevisionId,omitempty"`
+
+	// StartedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	StartedAt *Timestamp             `json:"startedAt,omitempty"`
+	Stats     map[string]interface{} `json:"stats"`
+	Status    DiscoveryRunStatus     `json:"status"`
+
+	// UpdatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	UpdatedAt Timestamp `json:"updatedAt"`
+}
+
+// DiscoveryRunStatus defines model for DiscoveryRun.Status.
+type DiscoveryRunStatus string
 
 // ErrorCode Stable machine-readable error identifier.
 //
@@ -240,6 +638,32 @@ type EventId = identity.EventID
 // Example: system.readiness.changed
 type EventType = string
 
+// EvidenceArtifact defines model for EvidenceArtifact.
+type EvidenceArtifact struct {
+	ContentDigest string `json:"contentDigest"`
+
+	// CreatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	CreatedAt    Timestamp                    `json:"createdAt"`
+	EvidenceType EvidenceArtifactEvidenceType `json:"evidenceType"`
+	FieldPath    *string                      `json:"fieldPath,omitempty"`
+
+	// Id Example: evd_01arz3ndektsv4rrffq69g5fav
+	Id               EvidenceArtifactId     `json:"id"`
+	Locator          string                 `json:"locator"`
+	Metadata         map[string]interface{} `json:"metadata"`
+	Note             *string                `json:"note,omitempty"`
+	Role             EvidenceArtifactRole   `json:"role"`
+	SourceRevisionId *SourceRevisionId      `json:"sourceRevisionId,omitempty"`
+}
+
+// EvidenceArtifactEvidenceType defines model for EvidenceArtifact.EvidenceType.
+type EvidenceArtifactEvidenceType string
+
+// EvidenceArtifactRole defines model for EvidenceArtifact.Role.
+type EvidenceArtifactRole string
+
 // EvidenceArtifactId Example: evd_01arz3ndektsv4rrffq69g5fav
 type EvidenceArtifactId = identity.EvidenceID
 
@@ -284,6 +708,9 @@ type PhysicalFieldRevisionId = identity.PhysicalFieldRevisionID
 
 // RelationAssertionState defines model for RelationAssertionState.
 type RelationAssertionState string
+
+// RelationPlane defines model for RelationPlane.
+type RelationPlane string
 
 // RelationPredicate defines model for RelationPredicate.
 type RelationPredicate string
@@ -357,8 +784,59 @@ type TraceId = string
 // WorkspaceId Example: wsp_01arz3ndektsv4rrffq69g5fav
 type WorkspaceId = identity.WorkspaceID
 
+// AssetId Example: ast_01arz3ndektsv4rrffq69g5fav
+type AssetId = SemanticAssetId
+
+// Limit defines model for Limit.
+type Limit = int
+
+// RevisionId Example: rev_01arz3ndektsv4rrffq69g5fav
+type RevisionId = AssetRevisionId
+
+// BadRequest defines model for BadRequest.
+type BadRequest = ErrorResponse
+
+// Conflict defines model for Conflict.
+type Conflict = ErrorResponse
+
 // Error defines model for Error.
 type Error = ErrorResponse
 
+// NotFound defines model for NotFound.
+type NotFound = ErrorResponse
+
 // ServiceUnavailable defines model for ServiceUnavailable.
 type ServiceUnavailable = ErrorResponse
+
+// ListCatalogAssetsParams defines parameters for ListCatalogAssets.
+type ListCatalogAssetsParams struct {
+	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// Search Lexical query matched against semantic address and current revision content.
+	Search         *string              `form:"search,omitempty" json:"search,omitempty"`
+	AssetType      *SemanticAssetType   `form:"assetType,omitempty" json:"assetType,omitempty"`
+	LifecycleState *AssetLifecycleState `form:"lifecycleState,omitempty" json:"lifecycleState,omitempty"`
+}
+
+// ListAssetRelationsParams defines parameters for ListAssetRelations.
+type ListAssetRelationsParams struct {
+	Direction *ListAssetRelationsParamsDirection `form:"direction,omitempty" json:"direction,omitempty"`
+	Plane     *RelationPlane                     `form:"plane,omitempty" json:"plane,omitempty"`
+	Depth     *int                               `form:"depth,omitempty" json:"depth,omitempty"`
+}
+
+// ListAssetRelationsParamsDirection defines parameters for ListAssetRelations.
+type ListAssetRelationsParamsDirection string
+
+// ListAssetRevisionsParams defines parameters for ListAssetRevisions.
+type ListAssetRevisionsParams struct {
+	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// CreateCatalogAssetJSONRequestBody defines body for CreateCatalogAsset for application/json ContentType.
+type CreateCatalogAssetJSONRequestBody = CreateCatalogAssetRequest
+
+// CreateAssetRevisionJSONRequestBody defines body for CreateAssetRevision for application/json ContentType.
+type CreateAssetRevisionJSONRequestBody = CreateAssetRevisionRequest

@@ -1,18 +1,22 @@
 openapi: 3.0.3
 info:
   title: Semlia Control API
-  version: 0.2.0
+  version: 0.3.0
   description: Versioned control-plane contract shared by Semlia services and clients.
   license:
     name: Apache-2.0
     url: https://www.apache.org/licenses/LICENSE-2.0.html
-x-semlia-contract-version: 2
+x-semlia-contract-version: 3
 servers:
   - url: http://localhost:8080
     description: Local development
 tags:
   - name: System
     description: Process and dependency status.
+  - name: Catalog
+    description: Workspace-scoped semantic assets, immutable revisions and provenance.
+  - name: Discovery
+    description: Source discovery run state and findings.
 paths:
   /health/live:
     get:
@@ -66,7 +70,261 @@ paths:
                 $ref: "#/components/schemas/SystemInfo"
         default:
           $ref: "#/components/responses/Error"
+  /api/v1/workspaces/{workspaceId}/catalog/assets:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+    get:
+      operationId: listCatalogAssets
+      summary: Search and paginate semantic assets
+      tags:
+        - Catalog
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+        - name: search
+          in: query
+          description: Lexical query matched against semantic address and current revision content.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 256
+        - name: assetType
+          in: query
+          schema:
+            $ref: "#/components/schemas/SemanticAssetType"
+        - name: lifecycleState
+          in: query
+          schema:
+            $ref: "#/components/schemas/AssetLifecycleState"
+      responses:
+        "200":
+          description: A deterministic catalog page.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CatalogPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        default:
+          $ref: "#/components/responses/Error"
+    post:
+      operationId: createCatalogAsset
+      summary: Create an asset and its initial immutable revision
+      tags:
+        - Catalog
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCatalogAssetRequest"
+      responses:
+        "201":
+          description: The created asset detail.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CatalogAssetDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/workspaces/{workspaceId}/catalog/assets/{assetId}:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+      - $ref: "#/components/parameters/AssetId"
+    get:
+      operationId: getCatalogAsset
+      summary: Read an asset and its current revision
+      tags:
+        - Catalog
+      responses:
+        "200":
+          description: Current asset detail and provenance.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CatalogAssetDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/workspaces/{workspaceId}/catalog/assets/{assetId}/revisions:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+      - $ref: "#/components/parameters/AssetId"
+    get:
+      operationId: listAssetRevisions
+      summary: List immutable asset revisions newest first
+      tags:
+        - Catalog
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Immutable revision history.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssetRevisionPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        default:
+          $ref: "#/components/responses/Error"
+    post:
+      operationId: createAssetRevision
+      summary: Append and select a new immutable asset revision
+      tags:
+        - Catalog
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAssetRevisionRequest"
+      responses:
+        "201":
+          description: The appended immutable revision.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssetRevision"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/workspaces/{workspaceId}/catalog/assets/{assetId}/revisions/{revisionId}:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+      - $ref: "#/components/parameters/AssetId"
+      - $ref: "#/components/parameters/RevisionId"
+    get:
+      operationId: getAssetRevision
+      summary: Read one immutable asset revision
+      tags:
+        - Catalog
+      responses:
+        "200":
+          description: Immutable revision content and evidence.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssetRevision"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/workspaces/{workspaceId}/catalog/assets/{assetId}/relations:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+      - $ref: "#/components/parameters/AssetId"
+    get:
+      operationId: listAssetRelations
+      summary: Read bounded incoming and outgoing typed relations
+      tags:
+        - Catalog
+      parameters:
+        - name: direction
+          in: query
+          schema:
+            type: string
+            enum:
+              - incoming
+              - outgoing
+              - both
+            default: both
+        - name: plane
+          in: query
+          schema:
+            $ref: "#/components/schemas/RelationPlane"
+        - name: depth
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 3
+            default: 1
+      responses:
+        "200":
+          description: A bounded relation projection.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssetRelationPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/workspaces/{workspaceId}/discovery-runs/{runId}:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+      - $ref: "#/components/parameters/RunId"
+    get:
+      operationId: getDiscoveryRun
+      summary: Read discovery run status and ordered findings
+      tags:
+        - Discovery
+      responses:
+        "200":
+          description: Discovery run state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiscoveryRun"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        default:
+          $ref: "#/components/responses/Error"
 components:
+  parameters:
+    WorkspaceId:
+      name: workspaceId
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/WorkspaceId"
+    AssetId:
+      name: assetId
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/SemanticAssetId"
+    RevisionId:
+      name: revisionId
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/AssetRevisionId"
+    RunId:
+      name: runId
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/RunId"
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    Cursor:
+      name: cursor
+      in: query
+      schema:
+        $ref: "#/components/schemas/Cursor"
   headers:
     TraceId:
       description: W3C-compatible trace identifier for support and correlation.
@@ -93,6 +351,33 @@ components:
           schema:
             type: integer
             minimum: 1
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    BadRequest:
+      description: The request is invalid.
+      headers:
+        X-Trace-ID:
+          $ref: "#/components/headers/TraceId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: The workspace-scoped resource was not found.
+      headers:
+        X-Trace-ID:
+          $ref: "#/components/headers/TraceId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Conflict:
+      description: The request conflicts with current registry state.
+      headers:
+        X-Trace-ID:
+          $ref: "#/components/headers/TraceId"
       content:
         application/json:
           schema:
@@ -290,6 +575,19 @@ components:
         - inferred
         - candidate
         - deprecated
+    RelationPlane:
+      type: string
+      enum:
+        - taxonomy
+        - semantic
+        - dependency
+    AssetLifecycleState:
+      type: string
+      enum:
+        - draft
+        - active
+        - deprecated
+        - archived
     Timestamp:
       type: string
       format: date-time
@@ -423,3 +721,369 @@ components:
           maxLength: 128
         traceId:
           $ref: "#/components/schemas/TraceId"
+    EvidenceArtifact:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - evidenceType
+        - locator
+        - contentDigest
+        - metadata
+        - role
+        - createdAt
+      properties:
+        id:
+          $ref: "#/components/schemas/EvidenceArtifactId"
+        evidenceType:
+          type: string
+          enum:
+            - declared
+            - constrained
+            - derived
+            - observed
+            - inferred
+        sourceRevisionId:
+          $ref: "#/components/schemas/SourceRevisionId"
+        locator:
+          type: string
+          minLength: 1
+          maxLength: 2048
+        contentDigest:
+          type: string
+          pattern: "^sha256:[0-9a-f]{64}$"
+        metadata:
+          type: object
+          additionalProperties: true
+        role:
+          type: string
+          enum:
+            - supports
+            - constrains
+            - observes
+            - conflicts
+        fieldPath:
+          type: string
+        note:
+          type: string
+        createdAt:
+          $ref: "#/components/schemas/Timestamp"
+    AssetRevision:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - assetId
+        - sequence
+        - schemaVersion
+        - contentDigest
+        - content
+        - createdBy
+        - createdAt
+        - evidence
+      properties:
+        id:
+          $ref: "#/components/schemas/AssetRevisionId"
+        assetId:
+          $ref: "#/components/schemas/SemanticAssetId"
+        sequence:
+          type: integer
+          format: int64
+          minimum: 1
+        schemaVersion:
+          $ref: "#/components/schemas/SchemaVersion"
+        contentDigest:
+          type: string
+          pattern: "^sha256:[0-9a-f]{64}$"
+        content:
+          type: object
+          additionalProperties: true
+        createdBy:
+          type: string
+          minLength: 1
+          maxLength: 256
+        createdAt:
+          $ref: "#/components/schemas/Timestamp"
+        evidence:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvidenceArtifact"
+    CatalogAssetSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - address
+        - assetType
+        - lifecycleState
+        - title
+        - summary
+        - updatedAt
+      properties:
+        id:
+          $ref: "#/components/schemas/SemanticAssetId"
+        address:
+          $ref: "#/components/schemas/SemanticAddress"
+        assetType:
+          $ref: "#/components/schemas/SemanticAssetType"
+        lifecycleState:
+          $ref: "#/components/schemas/AssetLifecycleState"
+        currentRevisionId:
+          $ref: "#/components/schemas/AssetRevisionId"
+        title:
+          type: string
+          maxLength: 256
+        summary:
+          type: string
+          maxLength: 2048
+        updatedAt:
+          $ref: "#/components/schemas/Timestamp"
+    CatalogAssetDetail:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - address
+        - assetType
+        - lifecycleState
+        - title
+        - summary
+        - updatedAt
+        - createdAt
+        - relationCount
+      properties:
+        id:
+          $ref: "#/components/schemas/SemanticAssetId"
+        address:
+          $ref: "#/components/schemas/SemanticAddress"
+        assetType:
+          $ref: "#/components/schemas/SemanticAssetType"
+        lifecycleState:
+          $ref: "#/components/schemas/AssetLifecycleState"
+        currentRevisionId:
+          $ref: "#/components/schemas/AssetRevisionId"
+        title:
+          type: string
+          maxLength: 256
+        summary:
+          type: string
+          maxLength: 2048
+        updatedAt:
+          $ref: "#/components/schemas/Timestamp"
+        createdAt:
+          $ref: "#/components/schemas/Timestamp"
+        currentRevision:
+          $ref: "#/components/schemas/AssetRevision"
+        relationCount:
+          type: integer
+          minimum: 0
+    CatalogPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CatalogAssetSummary"
+        page:
+          $ref: "#/components/schemas/PageInfo"
+    AssetRevisionPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AssetRevision"
+        page:
+          $ref: "#/components/schemas/PageInfo"
+    AssetRelation:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - depth
+        - direction
+        - predicate
+        - plane
+        - assertionState
+        - subjectAssetId
+        - objectAssetId
+        - counterpart
+        - createdAt
+      properties:
+        id:
+          $ref: "#/components/schemas/SemanticRelationId"
+        depth:
+          type: integer
+          minimum: 1
+          maximum: 3
+        direction:
+          type: string
+          enum:
+            - incoming
+            - outgoing
+        predicate:
+          $ref: "#/components/schemas/RelationPredicate"
+        plane:
+          $ref: "#/components/schemas/RelationPlane"
+        assertionState:
+          $ref: "#/components/schemas/RelationAssertionState"
+        subjectAssetId:
+          $ref: "#/components/schemas/SemanticAssetId"
+        objectAssetId:
+          $ref: "#/components/schemas/SemanticAssetId"
+        counterpart:
+          $ref: "#/components/schemas/CatalogAssetSummary"
+        evidenceArtifactId:
+          $ref: "#/components/schemas/EvidenceArtifactId"
+        sourceRevisionId:
+          $ref: "#/components/schemas/SourceRevisionId"
+        createdAt:
+          $ref: "#/components/schemas/Timestamp"
+    AssetRelationPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - maxDepth
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AssetRelation"
+        maxDepth:
+          type: integer
+          minimum: 1
+          maximum: 3
+    DiscoveryFinding:
+      type: object
+      additionalProperties: false
+      required:
+        - sequence
+        - code
+        - severity
+        - details
+      properties:
+        sequence:
+          type: integer
+          minimum: 1
+        code:
+          $ref: "#/components/schemas/ErrorCode"
+        severity:
+          type: string
+          enum:
+            - info
+            - warning
+            - error
+        locator:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+    DiscoveryRun:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - sourceConnectionId
+        - adapterVersion
+        - status
+        - stats
+        - findings
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          $ref: "#/components/schemas/RunId"
+        sourceConnectionId:
+          $ref: "#/components/schemas/SourceConnectionId"
+        sourceRevisionId:
+          $ref: "#/components/schemas/SourceRevisionId"
+        adapterVersion:
+          type: string
+        status:
+          type: string
+          enum:
+            - queued
+            - running
+            - succeeded
+            - failed
+            - cancelled
+        errorCode:
+          $ref: "#/components/schemas/ErrorCode"
+        stats:
+          type: object
+          additionalProperties: true
+        findings:
+          type: array
+          items:
+            $ref: "#/components/schemas/DiscoveryFinding"
+        startedAt:
+          $ref: "#/components/schemas/Timestamp"
+        completedAt:
+          $ref: "#/components/schemas/Timestamp"
+        createdAt:
+          $ref: "#/components/schemas/Timestamp"
+        updatedAt:
+          $ref: "#/components/schemas/Timestamp"
+    CreateCatalogAssetRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - address
+        - assetType
+        - schemaVersion
+        - content
+        - createdBy
+      properties:
+        address:
+          $ref: "#/components/schemas/SemanticAddress"
+        assetType:
+          $ref: "#/components/schemas/SemanticAssetType"
+        lifecycleState:
+          $ref: "#/components/schemas/AssetLifecycleState"
+        schemaVersion:
+          $ref: "#/components/schemas/SchemaVersion"
+        content:
+          type: object
+          additionalProperties: true
+        createdBy:
+          type: string
+          minLength: 1
+          maxLength: 256
+        evidenceIds:
+          type: array
+          uniqueItems: true
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/EvidenceArtifactId"
+    CreateAssetRevisionRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - schemaVersion
+        - content
+        - createdBy
+      properties:
+        schemaVersion:
+          $ref: "#/components/schemas/SchemaVersion"
+        content:
+          type: object
+          additionalProperties: true
+        createdBy:
+          type: string
+          minLength: 1
+          maxLength: 256
+        evidenceIds:
+          type: array
+          uniqueItems: true
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/EvidenceArtifactId"
