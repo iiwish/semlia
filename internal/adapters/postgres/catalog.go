@@ -210,10 +210,19 @@ func (store *Store) AppendCatalogRevision(ctx context.Context, command domain.Ap
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	queries := dbgen.New(tx)
-	if _, err := queries.GetCatalogAssetForUpdate(ctx, dbgen.GetCatalogAssetForUpdateParams{
+	lockedAsset, err := queries.GetCatalogAssetForUpdate(ctx, dbgen.GetCatalogAssetForUpdateParams{
 		WorkspaceID: workspaceID, AssetID: assetID,
-	}); err != nil {
+	})
+	if err != nil {
 		return domain.Revision{}, repositoryError("lock catalog asset", err)
+	}
+	var baseRevisionID *identity.RevisionID
+	if lockedAsset.CurrentRevisionID.Valid {
+		value, decodeErr := identity.RevisionIDFromUUIDBytes(lockedAsset.CurrentRevisionID.Bytes)
+		if decodeErr != nil {
+			return domain.Revision{}, decodeErr
+		}
+		baseRevisionID = &value
 	}
 	sequence, err := queries.NextAssetRevisionSequence(ctx, dbgen.NextAssetRevisionSequenceParams{
 		WorkspaceID: workspaceID, AssetID: assetID,
@@ -242,7 +251,8 @@ func (store *Store) AppendCatalogRevision(ctx context.Context, command domain.Ap
 	}
 	if err := createCatalogMutationEvents(ctx, queries, catalogEvent{
 		WorkspaceID: command.WorkspaceID, AssetID: command.AssetID, RevisionID: command.RevisionID,
-		AuditID: command.AuditEventID, OutboxID: command.OutboxEventID, Sequence: sequence,
+		BaseRevisionID: baseRevisionID,
+		AuditID:        command.AuditEventID, OutboxID: command.OutboxEventID, Sequence: sequence,
 		Action: "revision.created", Actor: command.CreatedBy, TraceID: command.TraceID, CreatedAt: command.CreatedAt,
 	}); err != nil {
 		return domain.Revision{}, err
@@ -512,16 +522,17 @@ func linkEvidence(
 }
 
 type catalogEvent struct {
-	WorkspaceID identity.WorkspaceID
-	AssetID     identity.AssetID
-	RevisionID  identity.RevisionID
-	AuditID     identity.EventID
-	OutboxID    identity.EventID
-	Sequence    int64
-	Action      string
-	Actor       string
-	TraceID     string
-	CreatedAt   time.Time
+	WorkspaceID    identity.WorkspaceID
+	AssetID        identity.AssetID
+	RevisionID     identity.RevisionID
+	BaseRevisionID *identity.RevisionID
+	AuditID        identity.EventID
+	OutboxID       identity.EventID
+	Sequence       int64
+	Action         string
+	Actor          string
+	TraceID        string
+	CreatedAt      time.Time
 }
 
 func createCatalogMutationEvents(ctx context.Context, queries *dbgen.Queries, event catalogEvent) error {
@@ -537,10 +548,14 @@ func createCatalogMutationEvents(ctx context.Context, queries *dbgen.Queries, ev
 	if err != nil {
 		return err
 	}
-	payload, _ := json.Marshal(map[string]any{
+	payloadData := map[string]any{
 		"specVersion": "semlia.catalog/v1", "action": event.Action,
 		"assetId": event.AssetID.String(), "revisionId": event.RevisionID.String(), "sequence": event.Sequence,
-	})
+	}
+	if event.BaseRevisionID != nil {
+		payloadData["baseRevisionId"] = event.BaseRevisionID.String()
+	}
+	payload, _ := json.Marshal(payloadData)
 	createdAt := event.CreatedAt.UTC()
 	if err := queries.CreateAuditEvent(ctx, dbgen.CreateAuditEventParams{
 		ID: auditID, WorkspaceID: workspaceID, EventType: "catalog.asset." + event.Action,

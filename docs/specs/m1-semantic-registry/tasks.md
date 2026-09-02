@@ -76,15 +76,21 @@ Acceptance: included in the founder's continuous M1 execution authorization on 2
 
 ### T005 Git content projection
 
-Status: Running
+Status: Accepted
 Depends on: T004
 Blocks: T007
 
 Implement the repository-neutral Git port and local Git adapter. Project deterministic canonical content from committed revisions, use optimistic base revisions and make outbox replay idempotent.
 
+Design: `docs/specs/m1-semantic-registry/t005-git-projection-design.md`. Execution uses
+`go-git/v5`, deterministic JSON, exact immutable revision loading and the existing leased outbox
+dispatcher. Evidence: `docs/evidence/M1-T005/summary.md`.
+
+Acceptance: included in the founder's continuous M1 execution authorization on 2026-09-02.
+
 ### T006 Audit, outbox and usage
 
-Status: Draft
+Status: Running
 Depends on: T004
 Blocks: T007
 
