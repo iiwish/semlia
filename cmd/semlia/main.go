@@ -16,6 +16,7 @@ import (
 	"github.com/iiwish/semlia/internal/adapters/gitcontent"
 	pgstore "github.com/iiwish/semlia/internal/adapters/postgres"
 	"github.com/iiwish/semlia/internal/application"
+	authorizationapp "github.com/iiwish/semlia/internal/application/authorization"
 	catalogapp "github.com/iiwish/semlia/internal/application/catalog"
 	"github.com/iiwish/semlia/internal/application/jobs"
 	projectionapp "github.com/iiwish/semlia/internal/application/projection"
@@ -252,7 +253,7 @@ func serve(ctx context.Context, cfg config.Config, output io.Writer) error {
 		}
 		defer catalogPool.Close()
 		catalogStore := pgstore.NewStore(catalogPool)
-		catalogOptions := make([]catalogapp.Option, 0, 1)
+		catalogOptions := make([]catalogapp.Option, 0, 2)
 		if len(cfg.SecretKey) >= 32 {
 			usageService, usageErr := usageapp.NewService(catalogStore, usageapp.ClockFunc(time.Now), []byte(cfg.SecretKey))
 			if usageErr != nil {
@@ -260,6 +261,11 @@ func serve(ctx context.Context, cfg config.Config, output io.Writer) error {
 			}
 			catalogOptions = append(catalogOptions, catalogapp.WithUsage(usageService))
 		}
+		// Protected commands always evaluate capabilities server-side against
+		// the M2 authorization foundation (deny-by-default).
+		catalogOptions = append(catalogOptions, catalogapp.WithAuthorizer(
+			authorizationapp.NewService(catalogStore, authorizationapp.ClockFunc(time.Now)),
+		))
 		catalogService := catalogapp.NewService(catalogStore, catalogapp.ClockFunc(time.Now), catalogOptions...)
 		options = append(options, httpapi.WithCatalog(catalogService))
 	}

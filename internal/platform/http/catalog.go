@@ -10,6 +10,7 @@ import (
 
 	contract "github.com/iiwish/semlia/api/gen/go"
 	catalogapp "github.com/iiwish/semlia/internal/application/catalog"
+	authz "github.com/iiwish/semlia/internal/domain/authorization"
 	domain "github.com/iiwish/semlia/internal/domain/catalog"
 	"github.com/iiwish/semlia/internal/domain/semantic"
 	"github.com/iiwish/semlia/pkg/identity"
@@ -237,7 +238,8 @@ func (handler *Handler) createCatalogAsset(
 	value, err := handler.catalog.CreateAsset(request.Context(), catalogapp.CreateAssetRequest{
 		WorkspaceID: workspaceID, Address: body.Address, AssetType: semantic.AssetType(body.AssetType),
 		Lifecycle: lifecycle, SchemaVersion: body.SchemaVersion, Content: content,
-		CreatedBy: body.CreatedBy, EvidenceIDs: evidenceIDs(body.EvidenceIds), TraceID: traceID,
+		CreatedBy: body.CreatedBy, EvidenceIDs: evidenceIDs(body.EvidenceIds),
+		PrincipalRef: strings.TrimSpace(request.Header.Get(headerPrincipal)), TraceID: traceID,
 	})
 	if err != nil {
 		return writeCatalogError(response, err, traceID)
@@ -289,7 +291,8 @@ func (handler *Handler) appendCatalogRevision(
 	content, _ := json.Marshal(body.Content)
 	value, err := handler.catalog.AppendRevision(request.Context(), catalogapp.AppendRevisionRequest{
 		WorkspaceID: workspaceID, AssetID: assetID, SchemaVersion: body.SchemaVersion,
-		Content: content, CreatedBy: body.CreatedBy, EvidenceIDs: evidenceIDs(body.EvidenceIds), TraceID: traceID,
+		Content: content, CreatedBy: body.CreatedBy, EvidenceIDs: evidenceIDs(body.EvidenceIds),
+		PrincipalRef: strings.TrimSpace(request.Header.Get(headerPrincipal)), TraceID: traceID,
 	})
 	if err != nil {
 		return writeCatalogError(response, err, traceID)
@@ -361,7 +364,15 @@ func evidenceIDs(value *[]identity.EvidenceID) []identity.EvidenceID {
 }
 
 func writeCatalogError(response http.ResponseWriter, err error, traceID string) string {
+	var denial *authz.DenialError
 	switch {
+	case errors.As(err, &denial):
+		writeError(response, http.StatusForbidden, string(denial.Decision.ReasonCode),
+			"the acting principal lacks the required capability", traceID, false)
+		return string(denial.Decision.ReasonCode)
+	case errors.Is(err, authz.ErrNotFound):
+		writeError(response, http.StatusNotFound, "NOT_FOUND", "the requested resource was not found", traceID, false)
+		return "NOT_FOUND"
 	case errors.Is(err, domain.ErrInvalidArgument):
 		writeError(response, http.StatusBadRequest, "INVALID_ARGUMENT", "the request is invalid", traceID, false)
 		return "INVALID_ARGUMENT"

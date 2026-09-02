@@ -8,6 +8,12 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type Action struct {
+	Action        string `json:"action"`
+	Domain        string `json:"domain"`
+	RequiresHuman bool   `json:"requires_human"`
+}
+
 type AssetRevision struct {
 	ID            pgtype.UUID        `json:"id"`
 	WorkspaceID   pgtype.UUID        `json:"workspace_id"`
@@ -30,6 +36,21 @@ type AuditEvent struct {
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 	ID                pgtype.UUID        `json:"id"`
 	WorkspaceID       pgtype.UUID        `json:"workspace_id"`
+}
+
+type AuthorizationEvent struct {
+	ID                   pgtype.UUID        `json:"id"`
+	WorkspaceID          pgtype.UUID        `json:"workspace_id"`
+	PrincipalID          pgtype.UUID        `json:"principal_id"`
+	Actor                string             `json:"actor"`
+	Action               string             `json:"action"`
+	ResourceType         string             `json:"resource_type"`
+	ResourceID           string             `json:"resource_id"`
+	Decision             string             `json:"decision"`
+	ReasonCode           string             `json:"reason_code"`
+	AuthorizationVersion int64              `json:"authorization_version"`
+	TraceID              string             `json:"trace_id"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 }
 
 type CodeArtifact struct {
@@ -197,6 +218,16 @@ type PhysicalFieldRevision struct {
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 }
 
+type Principal struct {
+	ID               pgtype.UUID        `json:"id"`
+	WorkspaceID      pgtype.UUID        `json:"workspace_id"`
+	Kind             string             `json:"kind"`
+	DisplayName      string             `json:"display_name"`
+	OwnerPrincipalID pgtype.UUID        `json:"owner_principal_id"`
+	Status           string             `json:"status"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+}
+
 type RelationTypePolicy struct {
 	Predicate     string   `json:"predicate"`
 	Plane         string   `json:"plane"`
@@ -227,6 +258,28 @@ type RevisionEvidenceLink struct {
 	FieldPath          pgtype.Text        `json:"field_path"`
 	Note               pgtype.Text        `json:"note"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
+type Role struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Category    string `json:"category"`
+}
+
+type RoleAction struct {
+	RoleID string `json:"role_id"`
+	Action string `json:"action"`
+}
+
+type RoleBinding struct {
+	ID          pgtype.UUID        `json:"id"`
+	PrincipalID pgtype.UUID        `json:"principal_id"`
+	RoleID      string             `json:"role_id"`
+	ScopeType   string             `json:"scope_type"`
+	ScopeID     string             `json:"scope_id"`
+	GrantedBy   pgtype.UUID        `json:"granted_by"`
+	GrantedAt   pgtype.Timestamptz `json:"granted_at"`
 }
 
 type SemanticAsset struct {
@@ -306,10 +359,11 @@ type UsageEvent struct {
 }
 
 type Workspace struct {
-	LegacyID    pgtype.Text        `json:"legacy_id"`
-	Slug        string             `json:"slug"`
-	DisplayName string             `json:"display_name"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
-	ID          pgtype.UUID        `json:"id"`
+	LegacyID             pgtype.Text        `json:"legacy_id"`
+	Slug                 string             `json:"slug"`
+	DisplayName          string             `json:"display_name"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	ID                   pgtype.UUID        `json:"id"`
+	AuthorizationVersion int64              `json:"authorization_version"`
 }

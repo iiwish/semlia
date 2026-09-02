@@ -5662,27 +5662,6 @@ func filteredEnvironment(environment []string, remove ...string) []string {
 	return filtered
 }
 
-func environmentValue(environment []string, name string) string {
-	prefix := name + "="
-	for _, entry := range environment {
-		if strings.HasPrefix(entry, prefix) {
-			return strings.TrimPrefix(entry, prefix)
-		}
-	}
-	return ""
-}
-
-func environmentValues(environment []string, name string) []string {
-	prefix := name + "="
-	var values []string
-	for _, entry := range environment {
-		if strings.HasPrefix(entry, prefix) {
-			values = append(values, strings.TrimPrefix(entry, prefix))
-		}
-	}
-	return values
-}
-
 func reserveLocalPorts(t *testing.T) (int, int) {
 	t.Helper()
 	first, err := net.Listen("tcp", "127.0.0.1:0")
