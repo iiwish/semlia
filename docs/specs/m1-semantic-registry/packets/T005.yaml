@@ -1,0 +1,73 @@
+schema_version: 1
+packet_id: M1-T005-A001
+task_id: T005
+feature_id: m1-semantic-registry
+mode: execute_one_task
+status: Accepted
+
+goal: >-
+  Project committed semantic revisions into deterministic local Git content with optimistic base
+  checks and idempotent outbox replay.
+
+dependencies:
+  - T004 Accepted under founder continuous execution authorization on 2026-09-02
+  - docs/specs/m1-semantic-registry/spec.md
+  - docs/specs/m1-semantic-registry/t005-git-projection-design.md
+
+allowed_files:
+  - go.mod
+  - go.sum
+  - db/queries/projection.sql
+  - internal/domain/projection/**
+  - internal/application/projection/**
+  - internal/adapters/gitcontent/**
+  - internal/adapters/postgres/projection.go
+  - internal/adapters/postgres/catalog.go
+  - internal/adapters/postgres/sqlc/**
+  - internal/application/jobs/**
+  - tests/integration/projection/**
+  - docs/specs/m1-semantic-registry/**
+  - docs/evidence/M1-T005/**
+
+forbidden_changes:
+  - Do not make Git the transactional or query authority.
+  - Do not add remote credentials, pushes, pull-request automation or browser Git access.
+  - Do not expose database UUIDs, credentials, raw evidence bodies or customer fact rows.
+  - Do not acknowledge unsupported outbox event types.
+
+tdd:
+  red:
+    - Add golden canonical document and deterministic commit fixtures.
+    - Add replay, expected-base, dirty-worktree and malformed-event tests.
+    - Add real PostgreSQL delivery failure/recovery tests.
+  green:
+    - Add typed projection port and PostgreSQL immutable-revision loader.
+    - Add go-git local adapter with path and worktree controls.
+    - Add catalog outbox publisher and replay-safe dispatcher proof.
+  refactor:
+    - Keep event decoding, canonical document rendering and Git mechanics at separate boundaries.
+
+validation:
+  - go test -race ./internal/domain/projection/... ./internal/application/projection/... ./internal/adapters/gitcontent/...
+  - go test -count=1 ./tests/integration/projection/...
+  - make db-generate-check
+  - make check-source
+  - git diff --check
+
+acceptance:
+  - Canonical content and commit metadata are deterministic.
+  - Same-event replay creates no file or commit change.
+  - Stale base and dirty worktree fail without partial tracked content.
+  - PostgreSQL projection loading is workspace-safe and revision-exact.
+  - Failed delivery retries and later succeeds through the existing outbox lease runtime.
+
+execution:
+  implementation_commit: pending
+  evidence: docs/evidence/M1-T005/summary.md
+  result: >-
+    Golden, replay, race, real PostgreSQL recovery, sqlc drift and complete source gates pass.
+
+acceptance_record:
+  accepted_by: founder
+  accepted_on: 2026-09-02
+  authorization: continuous M1 execution through the first user-visible milestone
