@@ -177,6 +177,32 @@ func TestPopulatedM0UpgradeAndRollbackPreserveFoundationRows(t *testing.T) {
 	if relationshipCount != 1 {
 		t.Fatalf("preserved foundation relationships = %d", relationshipCount)
 	}
+	uuidEraWorkspaceID := newWorkspaceID(t)
+	newAuditID := newEventID(t)
+	newJobID := newRunID(t)
+	newOutboxID := newEventID(t)
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO workspaces (id, slug, display_name) VALUES ($1, 'uuid-era', 'UUID Era')`, uuidEraWorkspaceID.UUID()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO audit_events (id, workspace_id, event_type, payload, trace_id)
+		VALUES ($1, $2, 'uuid.created', '{}'::jsonb, $3)`,
+		newAuditID.UUID(), uuidEraWorkspaceID.UUID(), "4bf92f3577b34da6a3ce929d0e0e4736"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO jobs (id, workspace_id, job_type, payload, max_attempts, idempotency_key, trace_id)
+		VALUES ($1, $2, 'uuid.job', '{}'::jsonb, 3, 'uuid-era-job', $3)`,
+		newJobID.UUID(), uuidEraWorkspaceID.UUID(), "4bf92f3577b34da6a3ce929d0e0e4736"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO outbox_events (id, workspace_id, event_type, payload, max_attempts, trace_id)
+		VALUES ($1, $2, 'uuid.event', '{}'::jsonb, 3, $3)`,
+		newOutboxID.UUID(), uuidEraWorkspaceID.UUID(), "4bf92f3577b34da6a3ce929d0e0e4736"); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := migrator.Steps(-1); err != nil {
 		t.Fatalf("remove M1 schema: %v", err)
@@ -195,6 +221,29 @@ func TestPopulatedM0UpgradeAndRollbackPreserveFoundationRows(t *testing.T) {
 		}
 		if count != 1 {
 			t.Fatalf("%s legacy row count after rollback = %d", table, count)
+		}
+	}
+	for table, uuidID := range map[string]string{
+		"workspaces": uuidEraWorkspaceID.UUID(), "audit_events": newAuditID.UUID(),
+		"jobs": newJobID.UUID(), "outbox_events": newOutboxID.UUID(),
+	} {
+		var count int
+		query := fmt.Sprintf("SELECT count(*) FROM %s WHERE id = $1", table)
+		if err := pool.QueryRow(ctx, query, uuidID).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		if count != 1 {
+			t.Fatalf("%s UUID-era row count after rollback = %d", table, count)
+		}
+	}
+	for _, table := range []string{"audit_events", "jobs", "outbox_events"} {
+		var count int
+		query := fmt.Sprintf("SELECT count(*) FROM %s WHERE workspace_id = $1", table)
+		if err := pool.QueryRow(ctx, query, uuidEraWorkspaceID.UUID()).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		if count != 1 {
+			t.Fatalf("%s UUID-era workspace relationship after rollback = %d", table, count)
 		}
 	}
 }
