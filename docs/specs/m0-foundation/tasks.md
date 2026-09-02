@@ -736,7 +736,7 @@ Evidence required:
 Execution notes:
 
 - M0-T007-A001 已完成 CI contract RED/GREEN、source gate 和 integrated smoke gate；首轮真实扫描识别并修复 `google.golang.org/grpc` High finding。
-- Founder 于 2026-08-10 批准 Go 1.26.5 与 transitive `js-yaml` 4.3.1 安全修复；`.tool-versions`、`deploy/local/Dockerfile`、`tests/repository/repository_contract_test.go`、`pnpm-lock.yaml` 和 pnpm 11 的 canonical override 配置 `pnpm-workspace.yaml` 纳入 T007。
+- Founder 于 2026-08-10 批准 Go 1.26.6 与 transitive `js-yaml` 4.3.1 安全修复；`.tool-versions`、`deploy/local/Dockerfile`、`tests/repository/repository_contract_test.go`、`pnpm-lock.yaml` 和 pnpm 11 的 canonical override 配置 `pnpm-workspace.yaml` 纳入 T007。
 - 托管验证执行时 `https://github.com/iiwish/semlia` 为 Public；当前仓库处于 Private incubation，最终托管验证提交为 `source-revision-redacted`。
 - GitHub Actions CI 完整绿色：`https://github.com/iiwish/semlia/actions/runs/31453327615`；source 与 smoke job 分别约 2m28s 和 2m09s。
 - GitHub Actions Security 完整绿色：`https://github.com/iiwish/semlia/actions/runs/31453335446`；dependency、secret 与 container scan job 约 58s，High/Critical 为 0。

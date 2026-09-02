@@ -35,7 +35,7 @@ var requiredFiles = []string{
 }
 
 var expectedTools = map[string]string{
-	"golang": "1.26.5",
+	"golang": "1.26.6",
 	"nodejs": "24.15.0",
 	"pnpm":   "11.1.3",
 }
@@ -97,7 +97,7 @@ func TestToolVersionsArePinnedAndConsistent(t *testing.T) {
 	for label, pattern := range map[string]string{
 		"module":    `(?m)^module github\.com/iiwish/semlia$`,
 		"language":  `(?m)^go 1\.26\.0$`,
-		"toolchain": `(?m)^toolchain go1\.26\.5$`,
+		"toolchain": `(?m)^toolchain go1\.26\.6$`,
 	} {
 		if !regexp.MustCompile(pattern).MatchString(goMod) {
 			t.Errorf("go.mod %s declaration does not match %s", label, pattern)

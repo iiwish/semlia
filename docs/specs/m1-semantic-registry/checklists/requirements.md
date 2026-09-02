@@ -20,5 +20,5 @@
 - [x] API cursors are opaque and ordering is deterministic.
 - [x] Git projections are deterministic and replay-safe.
 - [x] Usage signals contain no raw search text or customer fact rows.
-- [ ] 10,000-table benchmark and golden retrieval set are recorded.
-- [ ] Exact-ref acceptance, security and release gates pass.
+- [x] 10,000-table benchmark and golden retrieval set are recorded.
+- [x] Exact-ref acceptance, security and release gates pass.

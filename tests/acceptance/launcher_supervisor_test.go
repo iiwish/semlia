@@ -476,7 +476,7 @@ func installImmediateSuccessfulPreflight(t *testing.T, fixture launcherSuperviso
 	}
 	goPath := filepath.Join(toolRoot, "go")
 	goScript := "#!/bin/bash\n" +
-		"if [ \"${1:-}\" = version ]; then printf ready >'" + goRecord + "'; printf '%s\\n' 'go version go1.26.5 " + runtime.GOOS + "/" + runtime.GOARCH + "'; exit 0; fi\n" +
+		"if [ \"${1:-}\" = version ]; then printf ready >'" + goRecord + "'; printf '%s\\n' 'go version go1.26.6 " + runtime.GOOS + "/" + runtime.GOARCH + "'; exit 0; fi\n" +
 		"exec '" + launcherPhysicalGoTool(t) + "' \"$@\"\n"
 	if err := os.WriteFile(goPath, []byte(goScript), 0o700); err != nil {
 		t.Fatal(err)
@@ -721,7 +721,7 @@ func newLauncherSupervisorFixture(t *testing.T, signalProbe bool, mutate func(*t
 	if err := os.WriteFile(probePath, probe, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(moduleRoot, "go.mod"), []byte("module launcherprobe\n\ngo 1.26.0\n\ntoolchain go1.26.5\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(moduleRoot, "go.mod"), []byte("module launcherprobe\n\ngo 1.26.0\n\ntoolchain go1.26.6\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	poisonMarker := filepath.Join(fixtureRoot, "ambient-bash-startup-sourced")
@@ -744,7 +744,7 @@ func launcherPhysicalGoTool(t *testing.T) string {
 	t.Helper()
 	tool := filepath.Join(runtime.GOROOT(), "bin", "go")
 	if info, err := os.Stat(tool); err != nil || info.Mode()&0o111 == 0 {
-		t.Fatalf("resolve physical Go 1.26.5 tool %s: %v", tool, err)
+		t.Fatalf("resolve physical Go 1.26.6 tool %s: %v", tool, err)
 	}
 	return tool
 }

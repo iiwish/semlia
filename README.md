@@ -68,7 +68,7 @@ The prototype communicates product intent; it does not prove production behavior
 
 ### Inspect the product prototype
 
-Install the versions pinned in `.tool-versions`: Go 1.26.5, Node.js 24.15.0, pnpm 11.1.3, plus Git and GNU Make.
+Install the versions pinned in `.tool-versions`: Go 1.26.6, Node.js 24.15.0, pnpm 11.1.3, plus Git and GNU Make.
 
 ```bash
 make doctor

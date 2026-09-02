@@ -104,8 +104,14 @@ Acceptance: included in the founder's continuous M1 execution authorization on 2
 
 ### T007 Production acceptance
 
-Status: Running
+Status: Accepted
 Depends on: T005, T006
 Blocks: M1 milestone acceptance
 
 Run the exact-ref source-to-detail journey, 10,000-table benchmark, migration/recovery tests, contract drift checks, security/release gates and independent spec, code-quality and QA reviews.
+
+Execution: the exact-reference PostgreSQL journey, 10,000-asset benchmark, migration/recovery suites,
+full Compose smoke, zero-finding dependency/image security scan, release bundle and three review
+lenses pass. Evidence: `docs/evidence/M1-T007/summary.md`.
+
+Acceptance: included in the founder's continuous M1 execution authorization on 2026-09-02.

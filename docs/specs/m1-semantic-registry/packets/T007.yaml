@@ -1,0 +1,59 @@
+schema_version: 1
+packet_id: M1-T007-A001
+task_id: T007
+feature_id: m1-semantic-registry
+mode: execute_one_task
+status: Accepted
+
+goal: >-
+  Prove the complete M1 backend release candidate through an exact-reference vertical journey,
+  10,000-asset performance gate, recovery, security, release and three review lenses.
+
+dependencies:
+  - T005 and T006 Accepted under founder continuous execution authorization
+  - docs/specs/m1-semantic-registry/t007-production-acceptance-design.md
+
+allowed_files:
+  - internal/**
+  - cmd/**
+  - api/**
+  - sdk/**
+  - web/**
+  - db/**
+  - migrations/**
+  - tests/integration/m1/**
+  - tests/performance/catalog/**
+  - tests/acceptance/**
+  - tests/smoke/**
+  - docs/specs/m1-semantic-registry/**
+  - docs/evidence/M1-T007/**
+
+forbidden_changes:
+  - Do not weaken a threshold, constraint or test to turn a red release gate green.
+  - Do not claim universal latency from a local benchmark.
+  - Do not add deferred M2/M3 inference, review automation or semantic execution features.
+  - Do not accept unresolved P0/P1/P2 review findings.
+
+tdd:
+  red:
+    - Add the integrated exact-reference journey and 10,000-asset benchmark before release claims.
+  green:
+    - Fix only release-blocking integration, performance, recovery or packaging defects discovered.
+  refactor:
+    - Keep acceptance fixtures deterministic and evidence commands independently rerunnable.
+
+validation:
+  - go test -count=1 ./tests/integration/m1/...
+  - SEMLIA_RUN_M1_BENCHMARK=1 go test -count=1 -v ./tests/performance/catalog/...
+  - go test -count=1 ./tests/integration/db/... ./tests/integration/projection/... ./tests/integration/usage/...
+  - make check-source
+  - make check-smoke
+  - make security-check
+  - make release
+  - git diff --check
+
+acceptance:
+  - The exact immutable source reference reaches user-facing API detail, evidence, Git and usage.
+  - The 10,000-asset fixture passes recorded deterministic search/page budgets.
+  - Migration, retry, privacy, ontology, contract, security and release proofs pass.
+  - Spec, code-quality and QA reviews have no unresolved high-impact finding.

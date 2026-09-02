@@ -99,6 +99,9 @@ paths:
       responses:
         "200":
           description: A deterministic catalog page.
+          headers:
+            X-Trace-ID:
+              $ref: "#/components/headers/TraceId"
           content:
             application/json:
               schema:
@@ -121,6 +124,9 @@ paths:
       responses:
         "201":
           description: The created asset detail.
+          headers:
+            X-Trace-ID:
+              $ref: "#/components/headers/TraceId"
           content:
             application/json:
               schema:
@@ -143,6 +149,9 @@ paths:
       responses:
         "200":
           description: Current asset detail and provenance.
+          headers:
+            X-Trace-ID:
+              $ref: "#/components/headers/TraceId"
           content:
             application/json:
               schema:
@@ -166,6 +175,9 @@ paths:
       responses:
         "200":
           description: Immutable revision history.
+          headers:
+            X-Trace-ID:
+              $ref: "#/components/headers/TraceId"
           content:
             application/json:
               schema:
@@ -190,6 +202,9 @@ paths:
       responses:
         "201":
           description: The appended immutable revision.
+          headers:
+            X-Trace-ID:
+              $ref: "#/components/headers/TraceId"
           content:
             application/json:
               schema:
@@ -215,6 +230,9 @@ paths:
       responses:
         "200":
           description: Immutable revision content and evidence.
+          headers:
+            X-Trace-ID:
+              $ref: "#/components/headers/TraceId"
           content:
             application/json:
               schema:
@@ -256,6 +274,9 @@ paths:
       responses:
         "200":
           description: A bounded relation projection.
+          headers:
+            X-Trace-ID:
+              $ref: "#/components/headers/TraceId"
           content:
             application/json:
               schema:
@@ -278,6 +299,9 @@ paths:
       responses:
         "200":
           description: Discovery run state.
+          headers:
+            X-Trace-ID:
+              $ref: "#/components/headers/TraceId"
           content:
             application/json:
               schema:

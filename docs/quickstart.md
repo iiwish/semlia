@@ -6,7 +6,7 @@ Semlia is in Private incubation and pre-alpha. This quickstart exercises the imp
 
 Install the exact tool versions from `.tool-versions`:
 
-- Go 1.26.5
+- Go 1.26.6
 - Node.js 24.15.0
 - pnpm 11.1.3
 - Git, GNU Make, and a running Docker engine with Compose

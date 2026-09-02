@@ -27,8 +27,9 @@ written.
 - If the file already contains the target revision, replay is a no-op and creates no commit.
 - If the file does not contain the expected base revision, projection fails with a conflict and leaves
   the repository unchanged.
-- The adapter refuses a dirty worktree and serializes writes in-process. The outbox lease remains the
-  cross-process single-delivery boundary for M1.
+- The adapter refuses a dirty worktree and serializes writes in-process. M1 therefore runs exactly
+  one worker for each configured local repository. Cross-process repository locking and multi-writer
+  remote Git delivery are deferred with the remote repository scope.
 - A successful write stages only the canonical asset path and commits with a fixed Semlia author,
   revision time and deterministic message.
 

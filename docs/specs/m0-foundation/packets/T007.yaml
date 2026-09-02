@@ -118,7 +118,7 @@ execution_constraints:
     - pnpm-workspace.yaml
   forbidden_changes:
     - Do not edit application, domain, database, migration, Web, SDK, prototype or Compose behavior.
-    - Dockerfile changes are limited to aligning the Go builder patch version with the approved 1.26.5 repository baseline.
+    - Dockerfile changes are limited to aligning the Go builder patch version with the approved 1.26.6 repository baseline.
     - Do not add a hosted security, registry, signing or release service dependency.
     - Do not use mutable action references, floating scanner tags, repository write permissions or pull_request_target.
     - Do not suppress, ignore or auto-accept High/Critical findings.

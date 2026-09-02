@@ -133,9 +133,9 @@ Gaps: None blocking M0 execution.
 ### Medium: Doctor Go version drift blocks fresh-clone onboarding
 
 - Location: `scripts/doctor.sh`, `.tool-versions`, `go.mod`, `deploy/local/Dockerfile`.
-- Impact: `make doctor` rejects the canonical Go 1.26.5 toolchain because the script still requires 1.26.3.
-- Resolution: T008 first adds a failing cross-file version contract, then aligns doctor to 1.26.5 and reruns repository checks.
-- Status: Resolved at the validated implementation; doctor reports Go 1.26.5 with zero warnings or errors.
+- Impact: `make doctor` rejects the canonical Go 1.26.6 toolchain because the script still requires 1.26.3.
+- Resolution: T008 first adds a failing cross-file version contract, then aligns doctor to 1.26.6 and reruns repository checks.
+- Status: Resolved at the validated implementation; doctor reports Go 1.26.6 with zero warnings or errors.
 
 ### Medium: Public-project wording conflicts with Private incubation
 
