@@ -6,6 +6,8 @@ PostgreSQL owns transactional state, uniqueness, current indexes, audit and deli
 
 All public domain IDs use UUIDv7 in `uuid` columns and TypeID at boundaries. Local sequences use `bigint GENERATED ALWAYS AS IDENTITY` only where they never leave the database.
 
+Foundation jobs use `run_` identities; audit and outbox rows use `evt_` identities. They share neither a prefix nor a typed API wrapper even when an outbox event was produced by a run.
+
 ## Aggregate Map
 
 | Aggregate | Core tables | Invariant |
@@ -30,13 +32,15 @@ All public domain IDs use UUIDv7 in `uuid` columns and TypeID at boundaries. Loc
 
 ### Physical graph
 
-- `physical_datasets(id, workspace_id, source_revision_id, qualified_name, dataset_kind, locator, content_digest, metadata)`
-- `physical_fields(id, physical_dataset_id, ordinal, name, data_type, nullable, metadata)`
+- `physical_datasets(id, workspace_id, source_connection_id, external_key, qualified_name, current_revision_id)`
+- `physical_dataset_revisions(id, physical_dataset_id, source_revision_id, dataset_kind, locator, content_digest, metadata)`
+- `physical_fields(id, physical_dataset_id, external_key, name, current_revision_id)`
+- `physical_field_revisions(id, physical_field_id, dataset_revision_id, ordinal, data_type, nullable, metadata)`
 - `code_artifacts(id, workspace_id, source_revision_id, path, blob_oid, language, content_digest)`
 - `lineage_edges(id, workspace_id, source_revision_id, upstream_dataset_id, downstream_dataset_id, edge_kind, code_artifact_id, confidence)`
 - `join_observations(id, workspace_id, source_revision_id, left_field_id, right_field_id, observation_kind, confidence, evidence_artifact_id)`
 
-Qualified names are source-specific lookup keys. Stable cross-revision matching uses adapter fingerprints plus explicit reconciliation; it never assumes a renamed object is unchanged.
+Stable cross-revision matching uses adapter-owned external keys plus explicit reconciliation. Qualified-name fallback creates a new identity and an unresolved rename finding; it never silently assumes a renamed object is unchanged.
 
 ### Semantic assets and revisions
 

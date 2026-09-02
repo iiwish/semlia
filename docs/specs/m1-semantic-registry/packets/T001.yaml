@@ -6,8 +6,8 @@ mode: execute_one_task
 status: Needs_Review
 
 execution_result:
-  implementation: ffb2eb7
-  validation: Complete make check-source gate passed with no contract, migration, embed or release-build drift.
+  implementation: ffb2eb7 with review correction 7ba8289
+  validation: Complete make check-source gate passed after the event/run identity correction, with no contract, migration, embed or release-build drift.
   review: Local spec, code-quality and contract review found no blocking issue; founder acceptance remains.
 
 goal: >-
