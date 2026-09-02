@@ -14,7 +14,7 @@ COPY sdk/typescript sdk/typescript
 COPY web web
 RUN pnpm --filter @semlia/web build
 
-FROM golang:1.26.6-alpine AS go-builder
+FROM golang:1.27.0-alpine AS go-builder
 
 WORKDIR /src
 COPY go.mod go.sum ./
