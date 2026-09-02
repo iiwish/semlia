@@ -3,7 +3,7 @@ packet_id: M1-T003-A001
 task_id: T003
 feature_id: m1-semantic-registry
 mode: execute_one_task
-status: Ready
+status: Needs_Review
 
 goal: >-
   Implement Catalog, PostgreSQL DDL/View SQL and dbt artifact adapters behind one discovery port,
@@ -64,3 +64,10 @@ acceptance:
   - Findings make unsupported versions, statements, lineage and possible renames explicit.
   - PostgreSQL persistence is atomic, workspace-safe and uses immutable source/physical revisions.
   - pg_query_go is a direct adapter-only dependency and build evidence is recorded.
+
+execution:
+  implementation_commit: 7ac5197
+  evidence: docs/evidence/M1-T003/summary.md
+  result: >-
+    Implementation and all required review gates pass. Founder acceptance is required before T003
+    becomes Accepted and T004 execution may begin.
