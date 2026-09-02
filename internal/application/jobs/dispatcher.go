@@ -8,8 +8,9 @@ import (
 )
 
 const (
-	PublishFailed = "PUBLISH_FAILED"
-	PublishPanic  = "PUBLISH_PANIC"
+	PublishFailed        = "PUBLISH_FAILED"
+	PublishPanic         = "PUBLISH_PANIC"
+	PublishNotRegistered = "PUBLISH_NOT_REGISTERED"
 )
 
 type Dispatcher struct {
@@ -36,6 +37,16 @@ func NewDispatcher(
 	}
 }
 
+// RunOne claims one outbox event and drives it to a terminal state.
+//
+// Unregistered event types complete in a single attempt: the router answers
+// ErrPublisherNotRegistered (fail-closed for registered types), and because an
+// event with no registered subscriber needs no delivery, the dispatcher marks
+// the event published instead of scheduling retries. This is the M2-T002
+// dispatcher policy for proposal.changed / release.published, which are
+// enqueued by the governance commits before T003 wires their first
+// publishers — unregistered types must neither retry forever nor poison the
+// dispatch loop with dead letters.
 func (dispatcher *Dispatcher) RunOne(ctx context.Context, owner string) (bool, error) {
 	if owner == "" {
 		return false, errors.New("dispatcher owner is required")
@@ -61,6 +72,12 @@ func (dispatcher *Dispatcher) RunOne(ctx context.Context, owner string) (bool, e
 	if errorCode == "" {
 		if err := dispatcher.repository.MarkOutboxEventPublished(ctx, event.ID, owner, finishedAt); err != nil {
 			return true, fmt.Errorf("mark outbox event published: %w", err)
+		}
+		return true, nil
+	}
+	if errorCode == PublishNotRegistered {
+		if err := dispatcher.repository.MarkOutboxEventPublished(ctx, event.ID, owner, finishedAt); err != nil {
+			return true, fmt.Errorf("mark unregistered outbox event completed: %w", err)
 		}
 		return true, nil
 	}
@@ -108,6 +125,9 @@ func (dispatcher *Dispatcher) publish(ctx context.Context, event OutboxEvent) (c
 		}
 	}()
 	if err := dispatcher.publisher.Publish(ctx, event); err != nil {
+		if errors.Is(err, ErrPublisherNotRegistered) {
+			return PublishNotRegistered
+		}
 		return PublishFailed
 	}
 	return ""

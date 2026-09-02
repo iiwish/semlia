@@ -64,7 +64,7 @@ func TestMigrationLifecycleAndTenantSchema(t *testing.T) {
 	if err := migrator.Up(); err != nil {
 		t.Fatalf("upgrade empty database: %v", err)
 	}
-	assertVersion(t, migrator, 5, true)
+	assertVersion(t, migrator, 6, true)
 	if err := migrator.Up(); err != nil {
 		t.Fatalf("repeat upgrade: %v", err)
 	}
@@ -72,18 +72,20 @@ func TestMigrationLifecycleAndTenantSchema(t *testing.T) {
 	pool := openPool(t)
 	firstInventory := tableInventory(t, pool)
 	wantTables := []string{
-		"actions", "asset_revisions", "audit_events", "authorization_events", "code_artifacts",
-		"discovery_findings", "discovery_runs", "evidence_artifacts", "jobs", "lineage_edges",
-		"ontology_revision_relations", "ontology_revisions", "outbox_events", "physical_dataset_revisions",
-		"physical_datasets", "physical_field_revisions", "physical_fields", "principals",
-		"relation_type_policies", "resource_aliases", "revision_evidence_links", "role_actions",
+		"actions", "agent_runs", "agent_steps", "asset_revisions", "audit_events", "authorization_events",
+		"code_artifacts", "discovery_findings", "discovery_runs", "evidence_artifacts", "jobs",
+		"lineage_edges", "ontology_revision_relations", "ontology_revisions", "outbox_events",
+		"physical_dataset_revisions", "physical_datasets", "physical_field_revisions", "physical_fields",
+		"policy_decisions", "principals", "proposal_changes", "proposals", "relation_type_policies",
+		"release_assets", "releases", "resource_aliases", "reviews", "revision_evidence_links", "role_actions",
 		"role_bindings", "roles", "schema_migrations", "semantic_assets", "semantic_relations",
-		"source_connections", "source_revisions", "usage_events", "workspaces",
+		"source_connections", "source_revisions", "usage_events", "validation_results", "validation_runs",
+		"workspaces",
 	}
 	if strings.Join(firstInventory, ",") != strings.Join(wantTables, ",") {
 		t.Fatalf("table inventory = %v, want %v", firstInventory, wantTables)
 	}
-	t.Logf("%s migration version 5 inventory: %v", postgresImage, firstInventory)
+	t.Logf("%s migration version 6 inventory: %v", postgresImage, firstInventory)
 	assertTenantForeignKeys(t, pool)
 
 	if err := migrator.Down(); err != nil {
@@ -147,10 +149,10 @@ func TestPopulatedM0UpgradeAndRollbackPreserveFoundationRows(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := migrator.Steps(4); err != nil {
+	if err := migrator.Steps(5); err != nil {
 		t.Fatalf("upgrade populated M0: %v", err)
 	}
-	assertVersion(t, migrator, 5, true)
+	assertVersion(t, migrator, 6, true)
 
 	for _, table := range []string{"workspaces", "audit_events", "jobs", "outbox_events"} {
 		var count int
@@ -207,6 +209,9 @@ func TestPopulatedM0UpgradeAndRollbackPreserveFoundationRows(t *testing.T) {
 
 	if err := migrator.Steps(-1); err != nil {
 		t.Fatalf("remove usage schema: %v", err)
+	}
+	if err := migrator.Steps(-1); err != nil {
+		t.Fatalf("remove governed authoring schema: %v", err)
 	}
 	if err := migrator.Steps(-1); err != nil {
 		t.Fatalf("remove authorization schema: %v", err)
@@ -286,7 +291,7 @@ func TestPostgres17MigrationLifecycle(t *testing.T) {
 	if err := migrator.Up(); err != nil {
 		t.Fatalf("PostgreSQL 17 upgrade: %v", err)
 	}
-	assertVersion(t, migrator, 5, true)
+	assertVersion(t, migrator, 6, true)
 	pool, err := pgstore.Open(ctx, url)
 	if err != nil {
 		t.Fatal(err)
@@ -309,6 +314,121 @@ func TestPostgres17MigrationLifecycle(t *testing.T) {
 	}
 	if err := migrator.Up(); err != nil {
 		t.Fatalf("PostgreSQL 17 re-upgrade: %v", err)
+	}
+}
+
+// Packet red scenario: a populated M1 registry survives the governed-authoring
+// upgrade, the downgrade back to the M1 level, and the re-upgrade — with the M2
+// proposal FKs composing against the preserved M1 rows in both directions.
+func TestPopulatedM1UpgradeAndRollbackPreserveRegistryRows(t *testing.T) {
+	migrator := newMigrator(t)
+	if err := migrator.Down(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := migrator.Up(); err != nil {
+			t.Errorf("restore latest schema: %v", err)
+		}
+	})
+	if err := migrator.Steps(3); err != nil {
+		t.Fatalf("install M1 registry schema: %v", err)
+	}
+	assertVersion(t, migrator, 3, true)
+
+	pool := openPool(t)
+	ctx := context.Background()
+	workspaceID := newWorkspaceID(t)
+	assetID, err := identity.NewAssetID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	revisionID, err := identity.NewRevisionID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO workspaces (id, slug, display_name)
+		VALUES ($1, 'registry-era', 'Registry Era')`, workspaceID.UUID()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO semantic_assets (id, workspace_id, namespace, key, asset_type, lifecycle_state)
+		VALUES ($1, $2, 'finance', 'churn_rate', 'metric', 'draft')`,
+		assetID.UUID(), workspaceID.UUID()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO asset_revisions (id, workspace_id, asset_id, sequence, schema_version, content_digest, content, created_by)
+		VALUES ($1, $2, $3, 1, '1.0.0', $4, '{"definition":{}}'::jsonb, 'steward')`,
+		revisionID.UUID(), workspaceID.UUID(), assetID.UUID(), "sha256:"+strings.Repeat("ab", 32)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
+		UPDATE semantic_assets SET current_revision_id = $1 WHERE id = $2`,
+		revisionID.UUID(), assetID.UUID()); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := migrator.Steps(3); err != nil {
+		t.Fatalf("upgrade populated M1 through M2: %v", err)
+	}
+	assertVersion(t, migrator, 6, true)
+
+	proposalID, err := identity.NewProposalID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO proposals (
+			id, workspace_id, asset_id, base_revision_id, target_object_type, target_object_id,
+			state, title, created_by
+		) VALUES ($1, $2, $3, $4, 'semantic_asset', $3, 'draft', 'Retune churn metric', 'steward')`,
+		proposalID.UUID(), workspaceID.UUID(), assetID.UUID(), revisionID.UUID()); err != nil {
+		t.Fatalf("M2 proposal must compose with preserved M1 rows: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		DELETE FROM proposals WHERE id = $1`, proposalID.UUID()); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := migrator.Steps(-1); err != nil {
+		t.Fatalf("remove governed authoring schema: %v", err)
+	}
+	if err := migrator.Steps(-1); err != nil {
+		t.Fatalf("remove authorization schema: %v", err)
+	}
+	if err := migrator.Steps(-1); err != nil {
+		t.Fatalf("remove usage schema: %v", err)
+	}
+	assertVersion(t, migrator, 3, true)
+	for name, check := range map[string]struct {
+		query string
+		id    string
+	}{
+		"workspaces":      {`SELECT count(*) FROM workspaces WHERE id = $1`, workspaceID.UUID()},
+		"semantic_assets": {`SELECT count(*) FROM semantic_assets WHERE id = $1`, assetID.UUID()},
+		"asset_revisions": {`SELECT count(*) FROM asset_revisions WHERE id = $1`, revisionID.UUID()},
+	} {
+		var count int
+		if err := pool.QueryRow(ctx, check.query, check.id).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		if count != 1 {
+			t.Fatalf("%s row count after rollback = %d", name, count)
+		}
+	}
+
+	if err := migrator.Up(); err != nil {
+		t.Fatalf("re-upgrade populated M1: %v", err)
+	}
+	assertVersion(t, migrator, 6, true)
+	store := pgstore.NewStore(pool)
+	detail, err := store.GetCatalogAsset(ctx, workspaceID, assetID)
+	if err != nil {
+		t.Fatalf("M1 catalog read after re-upgrade: %v", err)
+	}
+	if detail.ID != assetID || detail.CurrentRevision == nil || detail.CurrentRevision.ID != revisionID {
+		t.Fatalf("M1 catalog read = %+v, want preserved asset with current revision", detail)
 	}
 }
 
@@ -540,9 +660,9 @@ func assertTenantForeignKeys(t *testing.T, pool *pgstore.Pool) {
 		tables = append(tables, table)
 	}
 	want := []string{
-		"audit_events", "authorization_events", "evidence_artifacts", "jobs", "ontology_revisions",
-		"outbox_events", "principals", "semantic_assets", "semantic_relations", "source_connections",
-		"usage_events",
+		"agent_runs", "audit_events", "authorization_events", "evidence_artifacts", "jobs",
+		"ontology_revisions", "outbox_events", "principals", "proposals", "releases", "reviews",
+		"semantic_assets", "semantic_relations", "source_connections", "usage_events",
 	}
 	if strings.Join(tables, ",") != strings.Join(want, ",") {
 		t.Fatalf("workspace foreign keys = %v, want %v", tables, want)
