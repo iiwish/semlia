@@ -1,0 +1,58 @@
+schema_version: 1
+packet_id: M1-T001-A001
+task_id: T001
+feature_id: m1-semantic-registry
+mode: execute_one_task
+status: Ready
+
+goal: >-
+  Establish the shared UUIDv7/TypeID identity boundary and M1 semantic-registry domain/public contracts
+  without adding persistence or endpoint behavior.
+
+dependencies:
+  - M0 Accepted on 2026-09-02
+  - docs/adr/0002-m1-product-and-semantic-execution.md
+  - docs/adr/0003-resource-identifiers.md
+  - docs/specs/m1-semantic-registry/spec.md
+
+allowed_files:
+  - go.mod
+  - go.sum
+  - api/openapi/semlia.v1.yaml
+  - api/gen/go/**
+  - sdk/typescript/src/**
+  - pkg/identity/**
+  - internal/domain/semantic/**
+  - tests/contracts/**
+  - docs/specs/m1-semantic-registry/**
+
+forbidden_changes:
+  - Do not add migrations, SQL queries, repositories, handlers or routes.
+  - Do not expose raw UUIDs in OpenAPI examples or domain JSON.
+  - Do not implement UUID, Base32 or TypeID encoding locally.
+  - Do not add Cube, Temporal, graph, vector or search infrastructure.
+
+tdd:
+  red:
+    - Add tests for prefix-safe generation, parsing, UUIDv7 validation, UUID round-trip and JSON/text encoding.
+    - Add contract assertions rejecting the obsolete ULID pattern and requiring M1 resource prefixes.
+    - Add domain invariant tests for semantic address, immutable revision sequence and relation endpoint rules.
+  green:
+    - Pin the stable upstream TypeID implementation behind Semlia's public identity wrapper package.
+    - Update OpenAPI schemas and regenerate Go and TypeScript artifacts.
+    - Add dependency-free semantic domain values and validation.
+  refactor:
+    - Keep resource prefix registration centralized and error values usable by future HTTP adapters.
+
+validation:
+  - go test ./pkg/identity/... ./internal/domain/semantic/... ./tests/contracts/...
+  - make contracts-check
+  - go test ./...
+  - go vet ./...
+  - git diff --check
+
+acceptance:
+  - Tests prove every registered prefix generates UUIDv7 and round-trips without a second identity.
+  - Wrong prefix, malformed suffix, non-v7 UUID and zero ID fail.
+  - OpenAPI ResourceId is lowercase TypeID and generated artifacts have no drift.
+  - Domain validation covers allowed M1 predicates, endpoint types and assertion states.
