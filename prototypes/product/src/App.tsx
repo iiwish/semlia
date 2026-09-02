@@ -51,7 +51,7 @@ import { IntegrationSettingsView } from "./IntegrationSettingsView";
 import { AskView } from "./KnowledgeViews";
 import { KnowledgeRevisionWorkbench } from "./KnowledgeRevisionWorkbench";
 import { ModelConfigurationView, type EmbeddingRebuildRun } from "./ModelConfigurationView";
-import { SemanticGraph } from "./SemanticGraph";
+import { SemanticGraph, type OntologyPerspective } from "./SemanticGraph";
 import type { Asset, AssetType, AssetVersionRelease, KnowledgeRevisionRequest, KnowledgeRevisionSubmission, NavigateToView, Proposal, ValidationState, ViewId } from "./types";
 
 interface NavigationItem {
@@ -142,7 +142,19 @@ function AssetEmptyState({ config, icon: Icon, assetName, onAction }: { config: 
 }
 
 function relationLabel(type: Asset["relations"][number]["type"]) {
-  return ({ measures: "衡量", describes: "描述", depends_on: "依赖", derived_from: "来源于", filters_by: "按其筛选", synonym_of: "同义于", contains: "包含" } as Record<Asset["relations"][number]["type"], string>)[type];
+  return ({ measures: "衡量", describes: "描述", depends_on: "依赖", derived_from: "来源于", filters_by: "按其筛选", synonym_of: "同义于", contains: "包含", broader_than: "上位于", narrower_than: "下位于", equivalent_to: "等价于", disjoint_with: "互斥于" } as Record<Asset["relations"][number]["type"], string>)[type];
+}
+
+function relationPlaneLabel(plane: Asset["relations"][number]["plane"]) {
+  return ({ taxonomy: "概念层级", semantic: "语义关系", dependency: "依赖与影响" } as const)[plane];
+}
+
+function relationAssertionLabel(state: Asset["relations"][number]["assertionState"]) {
+  return ({ asserted: "人工声明", inferred: "证据推导", candidate: "候选关系", deprecated: "已废弃" } as const)[state];
+}
+
+function cardinalityLabel(value: Asset["ontologyContext"]["relationConstraints"][number]["cardinality"]) {
+  return ({ one_to_one: "一对一", one_to_many: "一对多", many_to_one: "多对一", many_to_many: "多对多" } as const)[value];
 }
 
 function assetContractFields(asset: Asset) {
@@ -729,23 +741,36 @@ function AssetDefinition({ asset, onNotify, onStartRevision }: { asset: Asset; o
   );
 }
 
-function AssetRelations({ asset, focusedObjectId, onNotify }: { asset: Asset; focusedObjectId?: string; onNotify: (message: string) => void }) {
+function AssetRelations({ asset, focusedObjectId, onNotify, onStartRevision }: { asset: Asset; focusedObjectId?: string; onNotify: (message: string) => void; onStartRevision: (request: KnowledgeRevisionRequest) => void }) {
   const profile = assetTypeProfileFor(asset);
+  const [perspective, setPerspective] = useState<OntologyPerspective>("semantic");
+  const perspectiveOptions: Array<{ id: OntologyPerspective; label: string }> = [
+    { id: "taxonomy", label: "概念层级" },
+    { id: "semantic", label: "语义关系" },
+    { id: "dependency", label: "依赖与影响" },
+  ];
   return (
     <div className="asset-relations-layout">
       <section className="asset-ontology-context" aria-labelledby="asset-ontology-title">
-        <header className="asset-ontology-heading"><div><span className="content-label">本体上下文</span><h3 id="asset-ontology-title">{asset.domain}本体</h3></div><span className={`asset-ontology-consistency asset-ontology-${asset.ontologyContext.consistencyState}`}><CheckCircle2 size={13} />{asset.ontologyContext.consistencyState === "consistent" ? "一致性通过" : "存在待确认关系"}</span></header>
+        <header className="asset-ontology-heading"><div><span className="content-label">本体上下文</span><h3 id="asset-ontology-title">{asset.domain}本体</h3></div><div className="asset-ontology-actions"><span className={`asset-ontology-consistency asset-ontology-${asset.ontologyContext.consistencyState}`}><CheckCircle2 size={13} />{asset.ontologyContext.consistencyState === "consistent" ? "一致性通过" : "存在待确认关系"}</span><button type="button" className="secondary-button" onClick={() => onStartRevision({ assetId: asset.id, fieldPath: "ontology.relations", origin: "definition", context: `为 ${asset.name} 提出类型化本体关系修订。` })}><GitPullRequestArrow size={14} />提出关系修订</button></div></header>
         <p className="asset-view-focus">{profile.ontologyFocus}</p>
         <div className="asset-ontology-path"><span>领域路径</span>{asset.ontologyContext.domainPath.map((item, index) => <span key={item}><strong>{item}</strong>{index < asset.ontologyContext.domainPath.length - 1 && <ChevronRight size={12} />}</span>)}<span><strong>{asset.name}</strong></span></div>
-        {asset.relations.length > 0 ? <SemanticGraph mode="lineage" assetName={asset.name} assetType={asset.type} assetRevision={asset.revision} ontologyRevision={asset.ontologyContext.revisionId} relations={asset.relations} upstream={asset.upstream} downstream={asset.downstream} consumerName={asset.consumers[0]?.name ?? "尚未绑定"} /> : <AssetEmptyState config={profile.emptyStates.relations} icon={Network} assetName={asset.name} onAction={onNotify} />}
+        <div className="asset-ontology-viewbar"><div className="asset-ontology-segmented" role="group" aria-label="选择本体关系视角">{perspectiveOptions.map((option) => <button key={option.id} type="button" aria-pressed={perspective === option.id} onClick={() => setPerspective(option.id)}>{option.label}</button>)}</div><span>局部一跳 · 列表为权威事实</span></div>
+        {asset.relations.length > 0 ? <SemanticGraph mode="lineage" perspective={perspective} assetName={asset.name} assetType={asset.type} assetRevision={asset.revision} ontologyRevision={asset.ontologyContext.revisionId} relations={asset.relations} parentConcepts={asset.ontologyContext.parentConcepts} upstream={asset.upstream} downstream={asset.downstream} consumerName={asset.consumers[0]?.name ?? "尚未绑定"} /> : <AssetEmptyState config={profile.emptyStates.relations} icon={Network} assetName={asset.name} onAction={onNotify} />}
+        <div className="asset-ontology-revision"><span><ArrowUpDown size={14} /><strong>本体 revision</strong><code>{asset.ontologyContext.previousRevisionId ?? "初始版本"}</code><ChevronRight size={12} /><code>{asset.ontologyContext.revisionId}</code></span><span><strong>+{asset.ontologyContext.revisionDelta.addedRelations}</strong> 关系 · <strong>{asset.ontologyContext.revisionDelta.removedRelations}</strong> 移除 · <strong>{asset.ontologyContext.revisionDelta.changedConstraints}</strong> 约束调整</span><button type="button" onClick={() => onNotify(`正在比较 ${asset.ontologyContext.previousRevisionId ?? "初始版本"} → ${asset.ontologyContext.revisionId} 的本体差异。`)}>比较 revision<ChevronRight size={12} /></button></div>
+        {asset.ontologyContext.consistencyIssues.length > 0 && <div className="asset-ontology-issues" role="status"><AlertTriangle size={14} /><span><strong>一致性检查需要处理</strong>{asset.ontologyContext.consistencyIssues.join("；")}</span></div>}
         <dl className="asset-ontology-summary"><div><dt>上位概念</dt><dd>{asset.ontologyContext.parentConcepts.join(" · ")}</dd></div><div><dt>直接关系</dt><dd>{asset.relations.length} 条</dd></div><div><dt>关系类型约束</dt><dd>{asset.ontologyContext.relationConstraints.length} 项</dd></div><div><dt>发布范围</dt><dd>{asset.ontologyContext.publishedIn ?? "候选本体"}</dd></div></dl>
       </section>
       {asset.relations.length > 0 && <section className="asset-relation-list" aria-labelledby="asset-relations-title">
         <header><div><span className="content-label">可审计明细</span><h3 id="asset-relations-title">类型化关系</h3></div><span>{asset.relations.length} 条当前 revision 关系</span></header>
-        <div className="asset-relation-table-head" aria-hidden="true"><span>方向</span><span>关系</span><span>目标资产</span><span>证据与版本</span></div>
+        <div className="asset-relation-table-head" aria-hidden="true"><span>关系层与方向</span><span>谓词与状态</span><span>目标资产</span><span>证据与版本</span></div>
         <div className="asset-relation-cards">
-          {asset.relations.map((relation) => <article key={relation.id} className={focusedObjectId === relation.id ? "asset-object-focused" : undefined} aria-current={focusedObjectId === relation.id ? "true" : undefined}><div className="relation-source"><span className="relation-type-mark"><ArrowRight size={15} /></span><span><strong>{relation.direction === "outgoing" ? "出向" : "入向"}</strong><small>当前资产为{relation.direction === "outgoing" ? "来源" : "目标"}</small></span></div><div className="relation-predicate"><strong>{relationLabel(relation.type)}</strong><code>{relation.type} · {relation.id}</code></div><div className="relation-target"><strong>{relation.targetName}</strong><small><code>{relation.targetId}</code></small></div><div className="relation-evidence"><span><strong>{relation.evidence}</strong><small>{relation.release}</small></span><StatusBadge tone={relation.release === "draft" ? "warning" : "info"}>{relation.release === "draft" ? "草稿" : "已发布"}</StatusBadge></div></article>)}
+          {asset.relations.map((relation) => { const targetAsset = assets.find((candidate) => candidate.id === relation.targetId); return <article key={relation.id} className={focusedObjectId === relation.id ? "asset-object-focused" : undefined} aria-current={focusedObjectId === relation.id ? "true" : undefined}><div className="relation-source"><span className={`relation-type-mark relation-plane-${relation.plane}`}><ArrowRight size={15} /></span><span><strong>{relationPlaneLabel(relation.plane)}</strong><small>{relation.direction === "outgoing" ? "出向 · 当前资产为来源" : "入向 · 当前资产为目标"}</small></span></div><div className="relation-predicate"><strong>{relationLabel(relation.type)}</strong><code>{relation.type}</code><small>{relationAssertionLabel(relation.assertionState)} · {relation.id}</small></div><div className="relation-target"><strong>{relation.targetName}</strong><small><code title={relation.targetId}>{targetAsset?.identity.key ?? relation.targetId}</code></small></div><div className="relation-evidence"><span><strong>{relation.evidence}</strong><small>{relation.release}</small></span><StatusBadge tone={relation.assertionState === "candidate" ? "warning" : relation.assertionState === "deprecated" ? "neutral" : "info"}>{relationAssertionLabel(relation.assertionState)}</StatusBadge></div></article>; })}
         </div>
+      </section>}
+      {asset.ontologyContext.relationConstraints.length > 0 && <section className="asset-ontology-constraints" aria-labelledby="asset-ontology-constraints-title">
+        <header><div><span className="content-label">RelationType contract</span><h3 id="asset-ontology-constraints-title">关系类型约束</h3></div><span>由 {asset.ontologyContext.revisionId} 固定</span></header>
+        <div className="asset-ontology-constraint-table" role="table" aria-label="本体关系类型约束"><div className="asset-ontology-constraint-head" role="row"><span role="columnheader">谓词与逆关系</span><span role="columnheader">允许端点</span><span role="columnheader">基数与推理</span><span role="columnheader">校验结果</span></div>{asset.ontologyContext.relationConstraints.map((constraint) => <article role="row" key={constraint.relationType}><div role="cell"><strong>{constraint.label}</strong><code>{constraint.relationType} ↔ {constraint.inverseLabel}</code></div><div role="cell"><strong>{constraint.sourceTypes.join(" / ")}</strong><small>→ {constraint.targetTypes.join(" / ")}</small></div><div role="cell"><strong>{cardinalityLabel(constraint.cardinality)}</strong><small>{constraint.reasoning === "symmetric" ? "对称推理" : "有向推理"}</small></div><div role="cell"><StatusBadge tone={constraint.validationState === "valid" ? "success" : "warning"}>{constraint.validationState === "valid" ? "约束通过" : "需要确认"}</StatusBadge><small>{constraint.validationDetail}</small></div></article>)}</div>
       </section>}
     </div>
   );
@@ -767,8 +792,8 @@ function AssetMapping({ asset, focusedObjectId, onNotify }: { asset: Asset; focu
   );
 }
 
-function AssetOntology({ asset, focusedObject, onNotify }: { asset: Asset; focusedObject?: KnowledgeCatalogItem; onNotify: (message: string) => void }) {
-  return <div className="asset-ontology-view"><AssetRelations asset={asset} focusedObjectId={focusedObject?.key} onNotify={onNotify} /></div>;
+function AssetOntology({ asset, focusedObject, onNotify, onStartRevision }: { asset: Asset; focusedObject?: KnowledgeCatalogItem; onNotify: (message: string) => void; onStartRevision: (request: KnowledgeRevisionRequest) => void }) {
+  return <div className="asset-ontology-view"><AssetRelations asset={asset} focusedObjectId={focusedObject?.key} onNotify={onNotify} onStartRevision={onStartRevision} /></div>;
 }
 
 function AssetExecution({ asset, focusedObject, onNotify }: { asset: Asset; focusedObject?: KnowledgeCatalogItem; onNotify: (message: string) => void }) {
@@ -1010,7 +1035,7 @@ function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, r
             <div className="asset-tab-content" role="tabpanel">
               {activeTab === "概览" && <AssetOverview asset={selected} onOpenTab={openAssetTab} />}
               {activeTab === "定义" && <AssetDefinition asset={selected} onNotify={onNotify} onStartRevision={setRevisionRequest} />}
-              {activeTab === "本体关系" && <AssetOntology asset={selected} focusedObject={focusedObject} onNotify={onNotify} />}
+              {activeTab === "本体关系" && <AssetOntology asset={selected} focusedObject={focusedObject} onNotify={onNotify} onStartRevision={setRevisionRequest} />}
               {activeTab === "实现" && <AssetExecution asset={selected} focusedObject={focusedObject} onNotify={onNotify} />}
               {activeTab === "可信度" && <AssetEvidence asset={selected} onNotify={onNotify} onStartRevision={setRevisionRequest} />}
               {activeTab === "交付与影响" && <AssetUsage asset={selected} onNotify={onNotify} />}

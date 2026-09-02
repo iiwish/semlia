@@ -25,6 +25,7 @@
 | [访问控制设计](specs/access-control/product-design.md) | 身份、角色、权限、策略与职责分离体验 | Current |
 | [M0 TDR](adr/0001-m0-technical-foundation.md) | 工程基础的技术选择、取舍与质量门禁 | Confirmed |
 | [M1 TDR](adr/0002-m1-product-and-semantic-execution.md) | 生产 Web、来源发现、物理图谱和可选执行适配器边界 | Confirmed |
+| [资源标识 TDR](adr/0003-resource-identifiers.md) | UUIDv7、TypeID、语义地址与自增 ID 的使用边界 | Confirmed |
 
 ## 开发与运维
 

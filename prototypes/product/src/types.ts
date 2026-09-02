@@ -11,6 +11,8 @@ export type AssetWorkflowState = "draft" | "proposed" | "in_review" | "released"
 export type DeploymentState = "unreleased" | "staging" | "production";
 export type AssetHealthState = "healthy" | "warning" | "blocked";
 export type CompatibilityState = "compatible" | "conditional" | "breaking" | "not_evaluated";
+export type OntologyRelationPlane = "taxonomy" | "semantic" | "dependency";
+export type OntologyAssertionState = "asserted" | "inferred" | "candidate" | "deprecated";
 
 export interface SemanticAssetIdentity {
   workspaceId: string;
@@ -193,17 +195,26 @@ export interface OntologyRelationConstraint {
   targetTypes: AssetType[];
   cardinality: "one_to_one" | "one_to_many" | "many_to_one" | "many_to_many";
   reasoning: "directed" | "symmetric";
+  validationState: "valid" | "warning";
+  validationDetail: string;
 }
 
 export interface OntologyContext {
   ontologyId: string;
   revisionId: string;
+  previousRevisionId?: string;
   domainPath: string[];
   assetId: string;
   parentConcepts: string[];
   relatedConcepts: string[];
   relationConstraints: OntologyRelationConstraint[];
   consistencyState: "consistent" | "warning";
+  consistencyIssues: string[];
+  revisionDelta: {
+    addedRelations: number;
+    removedRelations: number;
+    changedConstraints: number;
+  };
   publishedIn?: string;
 }
 
@@ -234,7 +245,9 @@ export interface AssetReadinessGate {
 
 export interface AssetRelation {
   id: string;
-  type: "measures" | "describes" | "depends_on" | "derived_from" | "filters_by" | "synonym_of" | "contains";
+  type: "measures" | "describes" | "depends_on" | "derived_from" | "filters_by" | "synonym_of" | "contains" | "broader_than" | "narrower_than" | "equivalent_to" | "disjoint_with";
+  plane: OntologyRelationPlane;
+  assertionState: OntologyAssertionState;
   targetId: string;
   targetName: string;
   direction: "outgoing" | "incoming";

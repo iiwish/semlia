@@ -19761,3 +19761,233 @@ body.context-panel-resizing {
   .audit-settings-group:nth-child(3) .audit-setting-rows { grid-template-columns: minmax(145px, .55fr) minmax(0, 1.45fr); }
   .audit-setting-endpoint { grid-template-columns: minmax(135px, 1fr) auto !important; }
 }
+
+/* Ontology is inspected as three explicit relationship planes, never as generic lineage. */
+.asset-ontology-actions,
+.asset-ontology-viewbar,
+.asset-ontology-revision,
+.asset-ontology-constraints > header {
+  display: flex;
+  align-items: center;
+}
+
+.asset-ontology-actions {
+  gap: 10px;
+}
+
+.asset-ontology-actions .secondary-button {
+  min-height: 28px;
+  padding: 0 9px;
+  font-size: 8px;
+}
+
+.asset-ontology-viewbar {
+  min-height: 42px;
+  justify-content: space-between;
+  gap: 14px;
+  border-top: 1px solid #e8ecf2;
+}
+
+.asset-ontology-viewbar > span {
+  color: var(--muted-2);
+  font-size: 8px;
+}
+
+.asset-ontology-segmented {
+  height: 28px;
+  padding: 2px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: #eef1f5;
+  border-radius: 6px;
+}
+
+.asset-ontology-segmented button {
+  height: 24px;
+  padding: 0 10px;
+  color: #66738a;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  font-size: 8px;
+  font-weight: 650;
+}
+
+.asset-ontology-segmented button[aria-pressed="true"] {
+  color: #244ba8;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgb(27 42 68 / 12%);
+}
+
+.ontology-empty-label {
+  fill: #9aa5b6;
+  font-size: 9px;
+}
+
+.asset-ontology-revision {
+  min-height: 42px;
+  padding: 0 12px;
+  justify-content: space-between;
+  gap: 14px;
+  color: var(--muted-2);
+  background: #fbfcfe;
+  border: 1px solid #e0e6ee;
+  border-top: 0;
+  font-size: 8px;
+}
+
+.asset-ontology-revision > span,
+.asset-ontology-revision button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.asset-ontology-revision strong {
+  color: var(--ink);
+  font-weight: 680;
+}
+
+.asset-ontology-revision code {
+  color: #31527f;
+  font-size: 8px;
+}
+
+.asset-ontology-revision button {
+  padding: 0;
+  color: var(--accent);
+  background: transparent;
+  border: 0;
+  font-size: 8px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.asset-ontology-issues {
+  min-height: 38px;
+  padding: 8px 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: #975312;
+  background: #fff8ed;
+  border-bottom: 1px solid #f0d4ad;
+  font-size: 8px;
+}
+
+.asset-ontology-issues span {
+  display: grid;
+  gap: 3px;
+}
+
+.asset-ontology-issues strong {
+  color: #78410d;
+  font-size: 8.5px;
+}
+
+.asset-detail-page .asset-relation-table-head,
+.asset-detail-page .asset-relation-list .asset-relation-cards article {
+  grid-template-columns: 128px minmax(132px, .75fr) minmax(170px, 1fr) minmax(185px, .9fr);
+}
+
+.asset-detail-page .relation-predicate {
+  display: grid;
+  align-content: center;
+  gap: 3px;
+}
+
+.asset-detail-page .relation-predicate small {
+  overflow: hidden;
+  color: var(--muted-2);
+  font-size: 7px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.relation-plane-taxonomy { color: #7b4a9f !important; background: #f5eff9 !important; }
+.relation-plane-semantic { color: #19705b !important; background: #eef8f5 !important; }
+.relation-plane-dependency { color: #315fd5 !important; background: #edf3ff !important; }
+
+.asset-ontology-constraints {
+  margin-top: 28px;
+  min-width: 0;
+}
+
+.asset-ontology-constraints > header {
+  min-height: 38px;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.asset-ontology-constraints h3 {
+  margin: 4px 0 0;
+  font-size: 12px;
+}
+
+.asset-ontology-constraints > header > span {
+  color: var(--muted-2);
+  font-size: 8px;
+}
+
+.asset-ontology-constraint-table {
+  border-top: 1px solid #dfe5ed;
+  border-bottom: 1px solid #dfe5ed;
+}
+
+.asset-ontology-constraint-head,
+.asset-ontology-constraint-table article {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) minmax(190px, 1.2fr) minmax(110px, .7fr) minmax(210px, 1.35fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.asset-ontology-constraint-head {
+  min-height: 30px;
+  color: var(--muted-2);
+  background: #f7f9fb;
+  font-size: 8px;
+  font-weight: 650;
+}
+
+.asset-ontology-constraint-head > span,
+.asset-ontology-constraint-table article > div {
+  min-width: 0;
+  padding: 0 10px;
+}
+
+.asset-ontology-constraint-table article {
+  min-height: 58px;
+  border-top: 1px solid #e8ecf2;
+}
+
+.asset-ontology-constraint-table article > div {
+  display: grid;
+  align-content: center;
+  gap: 4px;
+}
+
+.asset-ontology-constraint-table article strong {
+  color: var(--ink);
+  font-size: 9px;
+}
+
+.asset-ontology-constraint-table article small,
+.asset-ontology-constraint-table article code {
+  overflow: hidden;
+  color: var(--muted-2);
+  font-size: 7.5px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 1180px) {
+  .asset-ontology-heading { align-items: flex-start; }
+  .asset-ontology-actions { align-items: flex-end; flex-direction: column-reverse; }
+  .asset-ontology-revision > span:nth-child(2) { display: none; }
+  .asset-detail-page .asset-relation-table-head,
+  .asset-detail-page .asset-relation-list .asset-relation-cards article { grid-template-columns: 110px 112px minmax(145px, 1fr) minmax(155px, .9fr); }
+  .asset-ontology-constraint-head,
+  .asset-ontology-constraint-table article { grid-template-columns: minmax(125px, .9fr) minmax(160px, 1.15fr) 92px minmax(180px, 1.3fr); gap: 6px; }
+}

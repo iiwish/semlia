@@ -15,7 +15,7 @@ import {
 
 import type { Asset, KnowledgeRevisionRequest, KnowledgeRevisionSubmission } from "./types";
 
-type EditableKnowledgeField = "definition" | "expression" | "includes" | "excludes" | "disambiguation";
+type EditableKnowledgeField = "definition" | "expression" | "includes" | "excludes" | "disambiguation" | "relations";
 
 interface KnowledgeFieldDescriptor {
   key: EditableKnowledgeField;
@@ -32,6 +32,7 @@ const knowledgeFields: KnowledgeFieldDescriptor[] = [
   { key: "includes", label: "口径包含", fieldPath: "definition.includes", help: "每行一项，声明明确纳入当前口径的情况。", multiline: true },
   { key: "excludes", label: "明确排除", fieldPath: "definition.excludes", help: "每行一项，声明不应被解释为当前知识的情况。", multiline: true },
   { key: "disambiguation", label: "消歧规则", fieldPath: "wiki.disambiguation", help: "约束 AI 和消费者在同名、跨域或上下文不足时如何解释。", multiline: true },
+  { key: "relations", label: "本体关系", fieldPath: "ontology.relations", help: "每行声明一条候选关系，保留关系层、方向、predicate、目标语义地址和断言状态。", multiline: true, code: true },
 ];
 
 function initialFieldFor(fieldPath: string): EditableKnowledgeField {
@@ -39,6 +40,7 @@ function initialFieldFor(fieldPath: string): EditableKnowledgeField {
   if (fieldPath.includes("includes")) return "includes";
   if (fieldPath.includes("excludes")) return "excludes";
   if (fieldPath.includes("disambiguation")) return "disambiguation";
+  if (fieldPath.includes("ontology") || fieldPath.includes("relation")) return "relations";
   return "definition";
 }
 
@@ -49,6 +51,7 @@ function fieldValues(asset: Asset): Record<EditableKnowledgeField, string> {
     includes: asset.revisionRecord.includes.join("\n"),
     excludes: asset.revisionRecord.excludes.join("\n"),
     disambiguation: asset.wikiContext.disambiguationRules.join("\n"),
+    relations: asset.relations.map((relation) => `${relation.plane} ${relation.direction} ${relation.type} ${relation.targetName} [${relation.assertionState}]`).join("\n"),
   };
 }
 

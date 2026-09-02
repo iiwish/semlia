@@ -190,8 +190,20 @@ describe("Semlia product prototype", () => {
     await user.click(within(detail).getByRole("tab", { name: "本体关系" }));
     expect(within(detail).getByRole("tab", { name: "本体关系" })).toHaveAttribute("aria-selected", "true");
     expect(within(detail).getByRole("heading", { name: "电商经营本体" })).toBeVisible();
-    expect(within(detail).getByRole("img", { name: "净收入 的本体关系血缘图" })).toBeVisible();
+    expect(within(detail).getByRole("button", { name: "语义关系" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(detail).getByRole("img", { name: "净收入 的语义关系图" })).toBeVisible();
     expect(within(detail).getByText("一致性通过")).toBeVisible();
+    expect(within(detail).getByRole("table", { name: "本体关系类型约束" })).toHaveTextContent("端点类型、方向与基数");
+    expect(within(detail).getByText("commerce.orders_model")).toBeVisible();
+    expect(within(detail).getAllByText("证据推导", { exact: false }).length).toBeGreaterThan(0);
+    await user.click(within(detail).getByRole("button", { name: "概念层级" }));
+    expect(within(detail).getByRole("img", { name: "净收入 的本体层级图" })).toBeVisible();
+    await user.click(within(detail).getByRole("button", { name: "依赖与影响" }));
+    expect(within(detail).getByRole("img", { name: "净收入 的依赖与影响图" })).toBeVisible();
+    await user.click(within(detail).getByRole("button", { name: "提出关系修订" }));
+    expect(within(detail).getByRole("region", { name: "净收入 知识修订工作台" })).toBeVisible();
+    expect(within(detail).getByRole("textbox", { name: "本体关系候选值" })).toBeVisible();
+    await user.click(within(detail).getByRole("button", { name: "取消修订" }));
 
     await user.click(within(detail).getByRole("tab", { name: "实现" }));
     expect(within(detail).getByRole("heading", { name: "PhysicalBinding" })).toBeVisible();

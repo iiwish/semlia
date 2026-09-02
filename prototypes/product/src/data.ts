@@ -255,7 +255,10 @@ function readiness(overrides: Partial<Record<AssetReadinessGate["id"], Pick<Asse
   }));
 }
 
-type AssetSeed = Omit<Asset, "identity" | "revisionRecord" | "deployment" | "qualitySnapshot" | "claims" | "evidenceArtifacts" | "evidenceLinks" | "validationRuns" | "consumerBindings" | "wikiContext" | "ontologyContext">;
+type AssetRelationSeed = Omit<AssetRelation, "plane" | "assertionState"> & Partial<Pick<AssetRelation, "plane" | "assertionState">>;
+type AssetSeed = Omit<Asset, "identity" | "revisionRecord" | "deployment" | "qualitySnapshot" | "claims" | "evidenceArtifacts" | "evidenceLinks" | "validationRuns" | "consumerBindings" | "wikiContext" | "ontologyContext" | "relations"> & {
+  relations: AssetRelationSeed[];
+};
 
 const relationNames: Record<AssetRelation["type"], [string, string]> = {
   measures: ["衡量", "被衡量"],
@@ -265,6 +268,10 @@ const relationNames: Record<AssetRelation["type"], [string, string]> = {
   filters_by: ["按其筛选", "筛选"],
   synonym_of: ["同义于", "同义于"],
   contains: ["包含", "属于"],
+  broader_than: ["上位于", "下位于"],
+  narrower_than: ["下位于", "上位于"],
+  equivalent_to: ["等价于", "等价于"],
+  disjoint_with: ["互斥于", "互斥于"],
 };
 
 const ontologyRevisions: Record<string, string> = {
@@ -273,7 +280,13 @@ const ontologyRevisions: Record<string, string> = {
   shared: "4",
 };
 
-function ontologyRelationConstraint(type: AssetRelation["type"], sourceType: AssetType): OntologyRelationConstraint {
+const ontologyRevisionDeltas: Record<string, { addedRelations: number; removedRelations: number; changedConstraints: number }> = {
+  commerce: { addedRelations: 2, removedRelations: 0, changedConstraints: 1 },
+  customer: { addedRelations: 1, removedRelations: 1, changedConstraints: 0 },
+  shared: { addedRelations: 1, removedRelations: 0, changedConstraints: 1 },
+};
+
+function ontologyRelationConstraint(type: AssetRelation["type"], sourceType: AssetType, hasWarning: boolean): OntologyRelationConstraint {
   const [label, inverseLabel] = relationNames[type];
   const targetTypes: Record<AssetRelation["type"], AssetType[]> = {
     measures: ["业务实体", "语义模型"],
@@ -283,15 +296,36 @@ function ontologyRelationConstraint(type: AssetRelation["type"], sourceType: Ass
     filters_by: ["维度", "业务实体"],
     synonym_of: [sourceType],
     contains: ["指标", "度量", "维度", "业务概念"],
+    broader_than: [sourceType],
+    narrower_than: [sourceType],
+    equivalent_to: [sourceType],
+    disjoint_with: [sourceType],
   };
+  const symmetric = type === "synonym_of" || type === "equivalent_to" || type === "disjoint_with";
   return {
     relationType: type,
     label,
     inverseLabel,
     sourceTypes: [sourceType],
     targetTypes: targetTypes[type],
-    cardinality: type === "synonym_of" ? "one_to_one" : type === "contains" ? "one_to_many" : "many_to_many",
-    reasoning: type === "synonym_of" ? "symmetric" : "directed",
+    cardinality: type === "synonym_of" || type === "equivalent_to" ? "one_to_one" : type === "contains" || type === "broader_than" ? "one_to_many" : "many_to_many",
+    reasoning: symmetric ? "symmetric" : "directed",
+    validationState: hasWarning ? "warning" : "valid",
+    validationDetail: hasWarning ? "存在候选关系或端点约束等待治理者确认" : "端点类型、方向与基数均通过当前本体 revision 校验",
+  };
+}
+
+function relationPlane(type: AssetRelation["type"]): AssetRelation["plane"] {
+  if (["broader_than", "narrower_than", "equivalent_to", "disjoint_with", "synonym_of"].includes(type)) return "taxonomy";
+  if (type === "depends_on" || type === "derived_from") return "dependency";
+  return "semantic";
+}
+
+function projectRelation(relation: AssetRelationSeed): AssetRelation {
+  return {
+    ...relation,
+    plane: relation.plane ?? relationPlane(relation.type),
+    assertionState: relation.assertionState ?? (relation.release === "draft" ? "candidate" : relation.type === "depends_on" || relation.type === "derived_from" ? "inferred" : "asserted"),
   };
 }
 
@@ -346,9 +380,13 @@ function projectAsset(seed: AssetSeed): Asset {
     label: evidence.supports,
     value: evidence.label,
   }));
+  const relations = seed.relations.map(projectRelation);
+  const relationWarning = seed.readiness.find((gate) => gate.id === "relations")?.state === "warning";
+  const ontologyRevision = Number(ontologyRevisions[seed.namespace] ?? "1");
 
   return {
     ...seed,
+    relations,
     identity: {
       workspaceId: "workspace_semlia_analytics",
       assetId: seed.id,
@@ -432,13 +470,16 @@ function projectAsset(seed: AssetSeed): Asset {
     },
     ontologyContext: {
       ontologyId: `ontology:${seed.namespace}`,
-      revisionId: `ontology:${seed.namespace}@${ontologyRevisions[seed.namespace] ?? "1"}`,
+      revisionId: `ontology:${seed.namespace}@${ontologyRevision}`,
+      previousRevisionId: ontologyRevision > 1 ? `ontology:${seed.namespace}@${ontologyRevision - 1}` : undefined,
       domainPath: ["企业语义", "经营分析", seed.domain],
       assetId: seed.id,
       parentConcepts: ontologyParentConcepts(seed.type),
-      relatedConcepts: Array.from(new Set(seed.relations.map((relation) => relation.targetName))),
-      relationConstraints: Array.from(new Set(seed.relations.map((relation) => relation.type))).map((type) => ontologyRelationConstraint(type, seed.type)),
-      consistencyState: seed.readiness.find((gate) => gate.id === "relations")?.state === "warning" ? "warning" : "consistent",
+      relatedConcepts: Array.from(new Set(relations.filter((relation) => relation.plane !== "dependency").map((relation) => relation.targetName))),
+      relationConstraints: Array.from(new Set(relations.map((relation) => relation.type))).map((type) => ontologyRelationConstraint(type, seed.type, relationWarning)),
+      consistencyState: relationWarning ? "warning" : "consistent",
+      consistencyIssues: relationWarning ? [seed.readiness.find((gate) => gate.id === "relations")?.detail ?? "存在待确认关系"] : [],
+      revisionDelta: ontologyRevisionDeltas[seed.namespace] ?? { addedRelations: 0, removedRelations: 0, changedConstraints: 0 },
       publishedIn: seed.release === "尚未发布" ? undefined : seed.release,
     },
   };
@@ -787,6 +828,8 @@ const assetSeeds: AssetSeed[] = [
     examples: ["净收入只统计有效支付订单", "有效订单与已创建订单不是同一概念"],
     readiness: readiness({ mapping: { state: "not_applicable", detail: "纯业务概念不要求物理实现" }, compatibility: { state: "not_applicable", detail: "当前通过 LLM Wiki 和本体关系消费" } }),
     relations: [
+      { id: "REL-189", type: "narrower_than", targetId: "concept_01J4PAIDORDER7M2K8Q5N9V", targetName: "支付订单", direction: "outgoing", evidence: "EVD-1788", release: "release-2026.08.3" },
+      { id: "REL-190", type: "disjoint_with", targetId: "concept_01J4VOIDORDER6X8K2M9P3Q", targetName: "已撤销订单", direction: "outgoing", evidence: "EVD-1788", release: "release-2026.08.3" },
       { id: "REL-191", type: "describes", targetId: "model_01J4ORDERS7K8M2Q5N9P", targetName: "订单经营模型", direction: "outgoing", evidence: "EVD-1788", release: "release-2026.08.3" },
       { id: "REL-192", type: "depends_on", targetId: "measure_01J4PAIDORDERS5X8D2N6R", targetName: "支付订单数", direction: "incoming", evidence: "EVD-1788", release: "release-2026.08.3" },
     ],
