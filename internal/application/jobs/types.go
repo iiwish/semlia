@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"time"
+
+	"github.com/iiwish/semlia/pkg/identity"
 )
 
 type Job struct {
-	ID             string
-	WorkspaceID    string
+	ID             identity.RunID
+	WorkspaceID    identity.WorkspaceID
 	Type           string
 	Payload        json.RawMessage
 	Status         string
@@ -26,8 +28,8 @@ type Job struct {
 }
 
 type EnqueueJobParams struct {
-	ID             string
-	WorkspaceID    string
+	ID             identity.RunID
+	WorkspaceID    identity.WorkspaceID
 	Type           string
 	Payload        json.RawMessage
 	MaxAttempts    int32
@@ -37,8 +39,8 @@ type EnqueueJobParams struct {
 }
 
 type AuditEvent struct {
-	ID          string
-	WorkspaceID string
+	ID          identity.EventID
+	WorkspaceID identity.WorkspaceID
 	Type        string
 	ActorID     string
 	Payload     json.RawMessage
@@ -47,8 +49,8 @@ type AuditEvent struct {
 }
 
 type OutboxEvent struct {
-	ID            string
-	WorkspaceID   string
+	ID            identity.EventID
+	WorkspaceID   identity.WorkspaceID
 	Type          string
 	Payload       json.RawMessage
 	Status        string
@@ -89,13 +91,13 @@ type Publisher interface {
 type Repository interface {
 	ReapExpiredJobs(context.Context, time.Time) error
 	ClaimJob(context.Context, string, time.Time, time.Duration) (*Job, error)
-	MarkJobSucceeded(context.Context, string, string, time.Time) error
-	MarkJobFailed(context.Context, string, string, string, time.Time, time.Time) error
+	MarkJobSucceeded(context.Context, identity.RunID, string, time.Time) error
+	MarkJobFailed(context.Context, identity.RunID, string, string, time.Time, time.Time) error
 }
 
 type OutboxRepository interface {
 	ReapExpiredOutboxEvents(context.Context, time.Time) error
 	ClaimOutboxEvent(context.Context, string, time.Time, time.Duration) (*OutboxEvent, error)
-	MarkOutboxEventPublished(context.Context, string, string, time.Time) error
-	MarkOutboxEventFailed(context.Context, string, string, string, time.Time, time.Time) error
+	MarkOutboxEventPublished(context.Context, identity.EventID, string, time.Time) error
+	MarkOutboxEventFailed(context.Context, identity.EventID, string, string, time.Time, time.Time) error
 }

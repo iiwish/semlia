@@ -1,0 +1,30 @@
+BEGIN;
+
+DROP TABLE IF EXISTS ontology_revision_relations;
+DROP TABLE IF EXISTS ontology_revisions;
+DROP TABLE IF EXISTS semantic_relations;
+DROP FUNCTION IF EXISTS validate_ontology_publication();
+DROP FUNCTION IF EXISTS validate_ontology_relation_membership();
+DROP FUNCTION IF EXISTS validate_semantic_relation();
+DROP TABLE IF EXISTS relation_type_policies;
+DROP TABLE IF EXISTS revision_evidence_links;
+DROP TABLE IF EXISTS evidence_artifacts;
+DROP TABLE IF EXISTS resource_aliases;
+ALTER TABLE IF EXISTS semantic_assets DROP CONSTRAINT IF EXISTS semantic_assets_current_revision_fkey;
+DROP TABLE IF EXISTS asset_revisions;
+DROP TABLE IF EXISTS semantic_assets;
+DROP TABLE IF EXISTS lineage_edges;
+DROP TABLE IF EXISTS code_artifacts;
+ALTER TABLE IF EXISTS physical_fields DROP CONSTRAINT IF EXISTS physical_fields_current_revision_fkey;
+DROP TABLE IF EXISTS physical_field_revisions;
+DROP TABLE IF EXISTS physical_fields;
+ALTER TABLE IF EXISTS physical_datasets DROP CONSTRAINT IF EXISTS physical_datasets_current_revision_fkey;
+DROP TABLE IF EXISTS physical_dataset_revisions;
+DROP TABLE IF EXISTS physical_datasets;
+DROP TABLE IF EXISTS discovery_findings;
+DROP TABLE IF EXISTS discovery_runs;
+DROP TABLE IF EXISTS source_revisions;
+DROP TABLE IF EXISTS source_connections;
+DROP FUNCTION IF EXISTS reject_immutable_registry_row();
+
+COMMIT;

@@ -190,6 +190,70 @@ components:
       x-go-type-import:
         path: github.com/iiwish/semlia/pkg/identity
         name: identity
+    SourceConnectionId:
+      type: string
+      format: typeid
+      pattern: "^src_[0-7][0-9a-hjkmnp-tv-z]{25}$"
+      x-go-type: identity.SourceConnectionID
+      x-go-type-import:
+        path: github.com/iiwish/semlia/pkg/identity
+        name: identity
+    SourceRevisionId:
+      type: string
+      format: typeid
+      pattern: "^srv_[0-7][0-9a-hjkmnp-tv-z]{25}$"
+      x-go-type: identity.SourceRevisionID
+      x-go-type-import:
+        path: github.com/iiwish/semlia/pkg/identity
+        name: identity
+    PhysicalDatasetId:
+      type: string
+      format: typeid
+      pattern: "^pds_[0-7][0-9a-hjkmnp-tv-z]{25}$"
+      x-go-type: identity.PhysicalDatasetID
+      x-go-type-import:
+        path: github.com/iiwish/semlia/pkg/identity
+        name: identity
+    PhysicalDatasetRevisionId:
+      type: string
+      format: typeid
+      pattern: "^pdr_[0-7][0-9a-hjkmnp-tv-z]{25}$"
+      x-go-type: identity.PhysicalDatasetRevisionID
+      x-go-type-import:
+        path: github.com/iiwish/semlia/pkg/identity
+        name: identity
+    PhysicalFieldId:
+      type: string
+      format: typeid
+      pattern: "^pfd_[0-7][0-9a-hjkmnp-tv-z]{25}$"
+      x-go-type: identity.PhysicalFieldID
+      x-go-type-import:
+        path: github.com/iiwish/semlia/pkg/identity
+        name: identity
+    PhysicalFieldRevisionId:
+      type: string
+      format: typeid
+      pattern: "^pfr_[0-7][0-9a-hjkmnp-tv-z]{25}$"
+      x-go-type: identity.PhysicalFieldRevisionID
+      x-go-type-import:
+        path: github.com/iiwish/semlia/pkg/identity
+        name: identity
+    CodeArtifactId:
+      type: string
+      format: typeid
+      pattern: "^cod_[0-7][0-9a-hjkmnp-tv-z]{25}$"
+      x-go-type: identity.CodeArtifactID
+      x-go-type-import:
+        path: github.com/iiwish/semlia/pkg/identity
+        name: identity
+    LineageEdgeId:
+      type: string
+      format: typeid
+      pattern: "^lin_[0-7][0-9a-hjkmnp-tv-z]{25}$"
+      x-go-type: identity.LineageEdgeID
+      x-go-type-import:
+        path: github.com/iiwish/semlia/pkg/identity
+        name: identity
     SemanticAddress:
       type: string
       description: Workspace-scoped human-readable namespace and stable key.

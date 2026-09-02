@@ -30,7 +30,7 @@ SET status = 'running',
     updated_at = $3
 FROM candidate
 WHERE jobs.id = candidate.id
-RETURNING jobs.id, jobs.workspace_id, jobs.job_type, jobs.payload, jobs.status, jobs.attempt, jobs.max_attempts, jobs.available_at, jobs.leased_until, jobs.lease_owner, jobs.idempotency_key, jobs.last_error_code, jobs.trace_id, jobs.created_at, jobs.updated_at, jobs.completed_at
+RETURNING jobs.legacy_id, jobs.legacy_workspace_id, jobs.job_type, jobs.payload, jobs.status, jobs.attempt, jobs.max_attempts, jobs.available_at, jobs.leased_until, jobs.lease_owner, jobs.idempotency_key, jobs.last_error_code, jobs.trace_id, jobs.created_at, jobs.updated_at, jobs.completed_at, jobs.id, jobs.workspace_id
 `
 
 type ClaimJobParams struct {
@@ -43,8 +43,8 @@ func (q *Queries) ClaimJob(ctx context.Context, arg ClaimJobParams) (Job, error)
 	row := q.db.QueryRow(ctx, claimJob, arg.LeasedUntil, arg.LeaseOwner, arg.ClaimedAt)
 	var i Job
 	err := row.Scan(
-		&i.ID,
-		&i.WorkspaceID,
+		&i.LegacyID,
+		&i.LegacyWorkspaceID,
 		&i.JobType,
 		&i.Payload,
 		&i.Status,
@@ -59,6 +59,8 @@ func (q *Queries) ClaimJob(ctx context.Context, arg ClaimJobParams) (Job, error)
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CompletedAt,
+		&i.ID,
+		&i.WorkspaceID,
 	)
 	return i, err
 }
@@ -73,12 +75,12 @@ INSERT INTO jobs (
 )
 ON CONFLICT (workspace_id, idempotency_key) DO UPDATE
 SET idempotency_key = EXCLUDED.idempotency_key
-RETURNING id, workspace_id, job_type, payload, status, attempt, max_attempts, available_at, leased_until, lease_owner, idempotency_key, last_error_code, trace_id, created_at, updated_at, completed_at
+RETURNING legacy_id, legacy_workspace_id, job_type, payload, status, attempt, max_attempts, available_at, leased_until, lease_owner, idempotency_key, last_error_code, trace_id, created_at, updated_at, completed_at, id, workspace_id
 `
 
 type EnqueueJobParams struct {
-	ID             string             `json:"id"`
-	WorkspaceID    string             `json:"workspace_id"`
+	ID             pgtype.UUID        `json:"id"`
+	WorkspaceID    pgtype.UUID        `json:"workspace_id"`
 	JobType        string             `json:"job_type"`
 	Payload        []byte             `json:"payload"`
 	MaxAttempts    int32              `json:"max_attempts"`
@@ -100,8 +102,8 @@ func (q *Queries) EnqueueJob(ctx context.Context, arg EnqueueJobParams) (Job, er
 	)
 	var i Job
 	err := row.Scan(
-		&i.ID,
-		&i.WorkspaceID,
+		&i.LegacyID,
+		&i.LegacyWorkspaceID,
 		&i.JobType,
 		&i.Payload,
 		&i.Status,
@@ -116,6 +118,8 @@ func (q *Queries) EnqueueJob(ctx context.Context, arg EnqueueJobParams) (Job, er
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CompletedAt,
+		&i.ID,
+		&i.WorkspaceID,
 	)
 	return i, err
 }
@@ -141,7 +145,7 @@ type MarkJobFailedParams struct {
 	AvailableAt pgtype.Timestamptz `json:"available_at"`
 	ErrorCode   pgtype.Text        `json:"error_code"`
 	FailedAt    pgtype.Timestamptz `json:"failed_at"`
-	ID          string             `json:"id"`
+	ID          pgtype.UUID        `json:"id"`
 	LeaseOwner  pgtype.Text        `json:"lease_owner"`
 }
 
@@ -174,7 +178,7 @@ WHERE id = $2
 
 type MarkJobSucceededParams struct {
 	CompletedAt pgtype.Timestamptz `json:"completed_at"`
-	ID          string             `json:"id"`
+	ID          pgtype.UUID        `json:"id"`
 	LeaseOwner  pgtype.Text        `json:"lease_owner"`
 }
 

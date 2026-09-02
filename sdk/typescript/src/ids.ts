@@ -1,6 +1,23 @@
 const typeIdBrand: unique symbol = Symbol("SemliaTypeId");
 
-export type ResourcePrefix = "wsp" | "ast" | "rev" | "rel" | "ont" | "evd" | "rls" | "run" | "evt";
+export type ResourcePrefix =
+  | "wsp"
+  | "ast"
+  | "rev"
+  | "rel"
+  | "ont"
+  | "evd"
+  | "rls"
+  | "run"
+  | "evt"
+  | "src"
+  | "srv"
+  | "pds"
+  | "pdr"
+  | "pfd"
+  | "pfr"
+  | "cod"
+  | "lin";
 export type TypeId<Prefix extends ResourcePrefix> = string & { readonly [typeIdBrand]: Prefix };
 
 export type WorkspaceId = TypeId<"wsp">;
@@ -12,6 +29,14 @@ export type EvidenceArtifactId = TypeId<"evd">;
 export type ReleaseId = TypeId<"rls">;
 export type RunId = TypeId<"run">;
 export type EventId = TypeId<"evt">;
+export type SourceConnectionId = TypeId<"src">;
+export type SourceRevisionId = TypeId<"srv">;
+export type PhysicalDatasetId = TypeId<"pds">;
+export type PhysicalDatasetRevisionId = TypeId<"pdr">;
+export type PhysicalFieldId = TypeId<"pfd">;
+export type PhysicalFieldRevisionId = TypeId<"pfr">;
+export type CodeArtifactId = TypeId<"cod">;
+export type LineageEdgeId = TypeId<"lin">;
 
 const suffixPattern = "[0-7][0-9a-hjkmnp-tv-z]{25}";
 

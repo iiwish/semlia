@@ -9,6 +9,7 @@ import (
 
 	dbgen "github.com/iiwish/semlia/internal/adapters/postgres/sqlc"
 	"github.com/iiwish/semlia/internal/application/jobs"
+	"github.com/iiwish/semlia/pkg/identity"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -29,9 +30,17 @@ func NewStore(pool *Pool) *Store {
 }
 
 func (store *Store) EnqueueJob(ctx context.Context, input jobs.EnqueueJobParams) (jobs.Job, error) {
+	id, err := uuidValue(input.ID)
+	if err != nil {
+		return jobs.Job{}, fmt.Errorf("encode job ID: %w", err)
+	}
+	workspaceID, err := uuidValue(input.WorkspaceID)
+	if err != nil {
+		return jobs.Job{}, fmt.Errorf("encode workspace ID: %w", err)
+	}
 	row, err := store.queries.EnqueueJob(ctx, dbgen.EnqueueJobParams{
-		ID:             input.ID,
-		WorkspaceID:    input.WorkspaceID,
+		ID:             id,
+		WorkspaceID:    workspaceID,
 		JobType:        input.Type,
 		Payload:        input.Payload,
 		MaxAttempts:    input.MaxAttempts,
@@ -42,7 +51,11 @@ func (store *Store) EnqueueJob(ctx context.Context, input jobs.EnqueueJobParams)
 	if err != nil {
 		return jobs.Job{}, fmt.Errorf("enqueue job: %w", err)
 	}
-	return jobFromRow(row), nil
+	job, err := jobFromRow(row)
+	if err != nil {
+		return jobs.Job{}, fmt.Errorf("decode enqueued job: %w", err)
+	}
+	return job, nil
 }
 
 func (store *Store) ReapExpiredJobs(ctx context.Context, now time.Time) error {
@@ -64,14 +77,21 @@ func (store *Store) ClaimJob(ctx context.Context, owner string, now time.Time, l
 	if err != nil {
 		return nil, fmt.Errorf("claim job lease: %w", err)
 	}
-	job := jobFromRow(row)
+	job, err := jobFromRow(row)
+	if err != nil {
+		return nil, fmt.Errorf("decode claimed job: %w", err)
+	}
 	return &job, nil
 }
 
-func (store *Store) MarkJobSucceeded(ctx context.Context, id, owner string, completedAt time.Time) error {
+func (store *Store) MarkJobSucceeded(ctx context.Context, id identity.RunID, owner string, completedAt time.Time) error {
+	databaseID, err := uuidValue(id)
+	if err != nil {
+		return fmt.Errorf("encode job ID: %w", err)
+	}
 	rows, err := store.queries.MarkJobSucceeded(ctx, dbgen.MarkJobSucceededParams{
 		CompletedAt: timestamp(completedAt),
-		ID:          id,
+		ID:          databaseID,
 		LeaseOwner:  textValue(owner),
 	})
 	if err != nil {
@@ -82,14 +102,18 @@ func (store *Store) MarkJobSucceeded(ctx context.Context, id, owner string, comp
 
 func (store *Store) MarkJobFailed(
 	ctx context.Context,
-	id, owner, errorCode string,
+	id identity.RunID, owner, errorCode string,
 	availableAt, failedAt time.Time,
 ) error {
+	databaseID, err := uuidValue(id)
+	if err != nil {
+		return fmt.Errorf("encode job ID: %w", err)
+	}
 	rows, err := store.queries.MarkJobFailed(ctx, dbgen.MarkJobFailedParams{
 		AvailableAt: timestamp(availableAt),
 		ErrorCode:   textValue(errorCode),
 		FailedAt:    timestamp(failedAt),
-		ID:          id,
+		ID:          databaseID,
 		LeaseOwner:  textValue(owner),
 	})
 	if err != nil {
@@ -122,14 +146,21 @@ func (store *Store) ClaimOutboxEvent(
 	if err != nil {
 		return nil, fmt.Errorf("claim outbox lease: %w", err)
 	}
-	event := outboxFromRow(row)
+	event, err := outboxFromRow(row)
+	if err != nil {
+		return nil, fmt.Errorf("decode claimed outbox event: %w", err)
+	}
 	return &event, nil
 }
 
-func (store *Store) MarkOutboxEventPublished(ctx context.Context, id, owner string, publishedAt time.Time) error {
+func (store *Store) MarkOutboxEventPublished(ctx context.Context, id identity.EventID, owner string, publishedAt time.Time) error {
+	databaseID, err := uuidValue(id)
+	if err != nil {
+		return fmt.Errorf("encode outbox event ID: %w", err)
+	}
 	rows, err := store.queries.MarkOutboxEventPublished(ctx, dbgen.MarkOutboxEventPublishedParams{
 		PublishedAt: timestamp(publishedAt),
-		ID:          id,
+		ID:          databaseID,
 		LeaseOwner:  textValue(owner),
 	})
 	if err != nil {
@@ -140,14 +171,18 @@ func (store *Store) MarkOutboxEventPublished(ctx context.Context, id, owner stri
 
 func (store *Store) MarkOutboxEventFailed(
 	ctx context.Context,
-	id, owner, errorCode string,
+	id identity.EventID, owner, errorCode string,
 	availableAt, failedAt time.Time,
 ) error {
+	databaseID, err := uuidValue(id)
+	if err != nil {
+		return fmt.Errorf("encode outbox event ID: %w", err)
+	}
 	rows, err := store.queries.MarkOutboxEventFailed(ctx, dbgen.MarkOutboxEventFailedParams{
 		AvailableAt: timestamp(availableAt),
 		ErrorCode:   textValue(errorCode),
 		FailedAt:    timestamp(failedAt),
-		ID:          id,
+		ID:          databaseID,
 		LeaseOwner:  textValue(owner),
 	})
 	if err != nil {
@@ -177,13 +212,21 @@ func (store *Store) WithTx(ctx context.Context, operation func(*TxStore) error) 
 }
 
 func (store *TxStore) CreateAuditEvent(ctx context.Context, event jobs.AuditEvent) error {
+	id, err := uuidValue(event.ID)
+	if err != nil {
+		return fmt.Errorf("encode audit event ID: %w", err)
+	}
+	workspaceID, err := uuidValue(event.WorkspaceID)
+	if err != nil {
+		return fmt.Errorf("encode workspace ID: %w", err)
+	}
 	actorID := pgtype.Text{}
 	if event.ActorID != "" {
 		actorID = textValue(event.ActorID)
 	}
 	if err := store.queries.CreateAuditEvent(ctx, dbgen.CreateAuditEventParams{
-		ID:          event.ID,
-		WorkspaceID: event.WorkspaceID,
+		ID:          id,
+		WorkspaceID: workspaceID,
 		EventType:   event.Type,
 		ActorID:     actorID,
 		Payload:     event.Payload,
@@ -196,9 +239,17 @@ func (store *TxStore) CreateAuditEvent(ctx context.Context, event jobs.AuditEven
 }
 
 func (store *TxStore) EnqueueOutbox(ctx context.Context, event jobs.OutboxEvent) error {
+	id, err := uuidValue(event.ID)
+	if err != nil {
+		return fmt.Errorf("encode outbox event ID: %w", err)
+	}
+	workspaceID, err := uuidValue(event.WorkspaceID)
+	if err != nil {
+		return fmt.Errorf("encode workspace ID: %w", err)
+	}
 	if err := store.queries.EnqueueOutboxEvent(ctx, dbgen.EnqueueOutboxEventParams{
-		ID:          event.ID,
-		WorkspaceID: event.WorkspaceID,
+		ID:          id,
+		WorkspaceID: workspaceID,
 		EventType:   event.Type,
 		Payload:     event.Payload,
 		MaxAttempts: event.MaxAttempts,
@@ -225,10 +276,18 @@ func textValue(value string) pgtype.Text {
 	return pgtype.Text{String: value, Valid: true}
 }
 
-func jobFromRow(row dbgen.Job) jobs.Job {
+func jobFromRow(row dbgen.Job) (jobs.Job, error) {
+	id, err := identity.RunIDFromUUIDBytes(row.ID.Bytes)
+	if err != nil {
+		return jobs.Job{}, err
+	}
+	workspaceID, err := identity.WorkspaceIDFromUUIDBytes(row.WorkspaceID.Bytes)
+	if err != nil {
+		return jobs.Job{}, err
+	}
 	return jobs.Job{
-		ID:             row.ID,
-		WorkspaceID:    row.WorkspaceID,
+		ID:             id,
+		WorkspaceID:    workspaceID,
 		Type:           row.JobType,
 		Payload:        cloneJSON(row.Payload),
 		Status:         row.Status,
@@ -243,13 +302,21 @@ func jobFromRow(row dbgen.Job) jobs.Job {
 		CreatedAt:      row.CreatedAt.Time,
 		UpdatedAt:      row.UpdatedAt.Time,
 		CompletedAt:    optionalTime(row.CompletedAt),
-	}
+	}, nil
 }
 
-func outboxFromRow(row dbgen.OutboxEvent) jobs.OutboxEvent {
+func outboxFromRow(row dbgen.OutboxEvent) (jobs.OutboxEvent, error) {
+	id, err := identity.EventIDFromUUIDBytes(row.ID.Bytes)
+	if err != nil {
+		return jobs.OutboxEvent{}, err
+	}
+	workspaceID, err := identity.WorkspaceIDFromUUIDBytes(row.WorkspaceID.Bytes)
+	if err != nil {
+		return jobs.OutboxEvent{}, err
+	}
 	return jobs.OutboxEvent{
-		ID:            row.ID,
-		WorkspaceID:   row.WorkspaceID,
+		ID:            id,
+		WorkspaceID:   workspaceID,
 		Type:          row.EventType,
 		Payload:       cloneJSON(row.Payload),
 		Status:        row.Status,
@@ -263,7 +330,19 @@ func outboxFromRow(row dbgen.OutboxEvent) jobs.OutboxEvent {
 		CreatedAt:     row.CreatedAt.Time,
 		UpdatedAt:     row.UpdatedAt.Time,
 		PublishedAt:   optionalTime(row.PublishedAt),
+	}, nil
+}
+
+type uuidIdentity interface {
+	UUID() string
+}
+
+func uuidValue(value uuidIdentity) (pgtype.UUID, error) {
+	var result pgtype.UUID
+	if err := result.Scan(value.UUID()); err != nil {
+		return pgtype.UUID{}, err
 	}
+	return result, nil
 }
 
 func optionalTime(value pgtype.Timestamptz) *time.Time {
