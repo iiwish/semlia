@@ -5,7 +5,7 @@
 | Field | Value |
 | --- | --- |
 | Task | T002 PostgreSQL registry foundation |
-| Status | `Needs_Review` |
+| Status | `Accepted` |
 | Implementation | `a6987af` |
 | Date | 2026-09-02 |
 | Packet | `docs/specs/m1-semantic-registry/packets/T002.yaml` |
@@ -46,4 +46,4 @@ The migration keeps `000001_m0_foundation` unchanged, drops the audit immutabili
 
 Repository methods exchange only Semlia identity and domain types. Stable conflict, not-found and invariant errors replace raw PostgreSQL failures. Asset revision insertion and current-pointer movement share one real PostgreSQL transaction. Replayed source snapshots and evidence identities return the existing immutable row rather than issuing a prohibited no-op update.
 
-T002 is ready for founder review. T003 and T004 remain gated until explicit acceptance.
+Founder accepted T002 on 2026-09-02 and authorized T003 source discovery adapter execution.

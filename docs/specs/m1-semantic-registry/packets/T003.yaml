@@ -1,0 +1,66 @@
+schema_version: 1
+packet_id: M1-T003-A001
+task_id: T003
+feature_id: m1-semantic-registry
+mode: execute_one_task
+status: Ready
+
+goal: >-
+  Implement Catalog, PostgreSQL DDL/View SQL and dbt artifact adapters behind one discovery port,
+  then persist deterministic incremental snapshots atomically into the T002 schema.
+
+dependencies:
+  - T002 Accepted by founder on 2026-09-02
+  - docs/specs/m1-semantic-registry/spec.md
+  - docs/specs/m1-semantic-registry/plan.md
+  - docs/specs/m1-semantic-registry/t003-discovery-design.md
+
+allowed_files:
+  - go.mod
+  - go.sum
+  - internal/domain/discovery/**
+  - internal/adapters/discovery/**
+  - internal/application/discovery/**
+  - internal/adapters/postgres/**
+  - db/queries/discovery.sql
+  - tests/fixtures/discovery/**
+  - tests/integration/discovery/**
+  - tests/integration/db/**
+  - docs/specs/m1-semantic-registry/**
+  - docs/evidence/M1-T003/**
+
+forbidden_changes:
+  - Do not add or alter migrations unless the T002 schema proves insufficient and execution stops for review.
+  - Do not add HTTP routes, Git writes, semantic asset inference, Cube, Temporal, graph or vector infrastructure.
+  - Do not parse SQL with regular expressions or leak pg_query AST types outside the SQL adapter.
+  - Do not accept credentials, raw database rows or query results in discovery payloads.
+  - Do not silently resolve renames or unresolved lineage.
+
+tdd:
+  red:
+    - Add shared adapter contract fixtures for canonical order and typed errors.
+    - Add PostgreSQL SQL table/view/lineage and unsupported-statement fixtures.
+    - Add dbt supported/unsupported version fixtures.
+    - Add real PostgreSQL replay, changed-shape, rollback and finding tests.
+  green:
+    - Implement adapter-neutral snapshots and deterministic fingerprinting.
+    - Implement three adapters and direct pg_query_go integration.
+    - Implement atomic discovery persistence with sqlc and typed repository errors.
+  refactor:
+    - Keep versioned DTOs and parser traversal private to adapters.
+    - Centralize canonical names, digests and ordered findings.
+
+validation:
+  - go test ./internal/adapters/discovery/... ./internal/application/discovery/...
+  - go test -race ./internal/domain/discovery/... ./internal/adapters/discovery/...
+  - go test -count=1 ./tests/integration/discovery/... ./tests/integration/db/...
+  - make db-generate-check
+  - make check-source
+  - git diff --check
+
+acceptance:
+  - All three adapters produce one deterministic domain snapshot contract.
+  - Identical replay is idempotent and changed shape preserves prior revisions.
+  - Findings make unsupported versions, statements, lineage and possible renames explicit.
+  - PostgreSQL persistence is atomic, workspace-safe and uses immutable source/physical revisions.
+  - pg_query_go is a direct adapter-only dependency and build evidence is recorded.

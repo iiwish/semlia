@@ -3,7 +3,7 @@ packet_id: M1-T002-A001
 task_id: T002
 feature_id: m1-semantic-registry
 mode: execute_one_task
-status: Needs_Review
+status: Accepted
 
 goal: >-
   Convert M0 foundation identities to reversible UUIDv7 storage and add the normalized PostgreSQL source,
@@ -76,3 +76,8 @@ execution:
   result: >-
     Implementation and review gates pass. Founder acceptance is required before T002 becomes Accepted
     and T003 or T004 execution may begin.
+
+acceptance_record:
+  accepted_by: founder
+  accepted_on: 2026-09-02
+  authorization: Complete T003 source discovery adapters.
