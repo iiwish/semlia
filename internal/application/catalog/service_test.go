@@ -118,6 +118,14 @@ type fakeRepository struct {
 	listErr        error
 }
 
+func (repository *fakeRepository) ListCatalogWorkspaces(context.Context) ([]domain.Workspace, error) {
+	return nil, nil
+}
+
+func (repository *fakeRepository) CreateCatalogWorkspace(_ context.Context, command domain.CreateWorkspaceCommand) (domain.Workspace, error) {
+	return domain.Workspace{ID: command.ID, Slug: command.Slug, DisplayName: command.DisplayName, CreatedAt: command.CreatedAt, UpdatedAt: command.CreatedAt}, nil
+}
+
 func (repository *fakeRepository) ListCatalogAssets(_ context.Context, query domain.ListAssetsQuery) ([]domain.AssetSummary, error) {
 	repository.lastAssetQuery = query
 	if repository.listErr != nil {

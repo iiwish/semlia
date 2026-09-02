@@ -26,6 +26,8 @@ const (
 )
 
 type Repository interface {
+	ListCatalogWorkspaces(context.Context) ([]domain.Workspace, error)
+	CreateCatalogWorkspace(context.Context, domain.CreateWorkspaceCommand) (domain.Workspace, error)
 	ListCatalogAssets(context.Context, domain.ListAssetsQuery) ([]domain.AssetSummary, error)
 	GetCatalogAsset(context.Context, identity.WorkspaceID, identity.AssetID) (domain.AssetDetail, error)
 	CreateCatalogAsset(context.Context, domain.CreateAssetCommand) (domain.AssetDetail, error)
@@ -117,6 +119,42 @@ type RevisionPage struct {
 	Items      []domain.Revision
 	Limit      int
 	NextCursor string
+}
+
+func (service *Service) ListWorkspaces(ctx context.Context) ([]domain.Workspace, error) {
+	return service.repository.ListCatalogWorkspaces(ctx)
+}
+
+func (service *Service) CreateWorkspace(ctx context.Context, slug, displayName, traceID string) (domain.Workspace, error) {
+	slug = strings.TrimSpace(strings.ToLower(slug))
+	displayName = strings.TrimSpace(displayName)
+	if !validWorkspaceSlug(slug) || displayName == "" || len(displayName) > 120 || !validTraceID(traceID) {
+		return domain.Workspace{}, domain.ErrInvalidArgument
+	}
+	workspaceID, err := identity.NewWorkspaceID()
+	if err != nil {
+		return domain.Workspace{}, fmt.Errorf("create workspace ID: %w", err)
+	}
+	auditID, err := identity.NewEventID()
+	if err != nil {
+		return domain.Workspace{}, fmt.Errorf("create workspace audit ID: %w", err)
+	}
+	return service.repository.CreateCatalogWorkspace(ctx, domain.CreateWorkspaceCommand{
+		ID: workspaceID, AuditEventID: auditID, Slug: slug, DisplayName: displayName,
+		TraceID: traceID, CreatedAt: service.clock.Now().UTC(),
+	})
+}
+
+func validWorkspaceSlug(value string) bool {
+	if len(value) < 1 || len(value) > 63 || value[0] == '-' || value[len(value)-1] == '-' {
+		return false
+	}
+	for _, character := range value {
+		if (character < 'a' || character > 'z') && (character < '0' || character > '9') && character != '-' {
+			return false
+		}
+	}
+	return true
 }
 
 func (service *Service) ListAssets(ctx context.Context, request ListAssetsRequest) (AssetPage, error) {

@@ -16,6 +16,23 @@ var (
 	ErrInvariant       = semantic.ErrInvariant
 )
 
+type Workspace struct {
+	ID          identity.WorkspaceID
+	Slug        string
+	DisplayName string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+type CreateWorkspaceCommand struct {
+	ID           identity.WorkspaceID
+	AuditEventID identity.EventID
+	Slug         string
+	DisplayName  string
+	TraceID      string
+	CreatedAt    time.Time
+}
+
 type AssetSummary struct {
 	ID                identity.AssetID
 	Address           semantic.Address

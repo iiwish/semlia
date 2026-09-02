@@ -13,7 +13,7 @@ func TestHandlerServesEmbeddedApplicationAndAssets(t *testing.T) {
 
 	index := httptest.NewRecorder()
 	handler.ServeHTTP(index, httptest.NewRequest(http.MethodGet, "/", nil))
-	if index.Code != http.StatusOK || !strings.Contains(index.Body.String(), "Semlia System Status") {
+	if index.Code != http.StatusOK || !strings.Contains(index.Body.String(), "Semlia Catalog") {
 		t.Fatalf("index response = %d %q", index.Code, index.Body.String())
 	}
 	if got := index.Header().Get("Cache-Control"); got != "no-store" {
@@ -59,7 +59,7 @@ func TestHandlerRoutesAPIPrefixesAndFallsBackForClientRoutes(t *testing.T) {
 
 	clientRoute := httptest.NewRecorder()
 	handler.ServeHTTP(clientRoute, httptest.NewRequest(http.MethodGet, "/future/route", nil))
-	if clientRoute.Code != http.StatusOK || !strings.Contains(clientRoute.Body.String(), "Semlia System Status") {
+	if clientRoute.Code != http.StatusOK || !strings.Contains(clientRoute.Body.String(), "Semlia Catalog") {
 		t.Fatalf("client route response = %d %q", clientRoute.Code, clientRoute.Body.String())
 	}
 }

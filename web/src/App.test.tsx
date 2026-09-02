@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 
-import { App } from "./App";
+import { StatusView as App } from "./StatusView";
 import type { SystemStatus } from "./status";
 
 const traceId = "4bf92f3577b34da6a3ce929d0e0e4736";

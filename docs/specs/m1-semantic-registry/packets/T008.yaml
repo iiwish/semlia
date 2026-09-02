@@ -1,0 +1,49 @@
+schema_version: 1
+packet_id: M1-T008-A001
+task_id: T008
+feature_id: m1-production-catalog
+mode: execute_one_task
+status: Needs_Review
+
+goal: >-
+  Deliver the first production user-visible Catalog workflow on the accepted M1 backend.
+
+dependencies:
+  - T007 Accepted
+  - docs/specs/m1-semantic-registry/t008-production-catalog-design.md
+
+allowed_files:
+  - api/**
+  - db/**
+  - internal/application/catalog/**
+  - internal/adapters/postgres/**
+  - internal/domain/catalog/**
+  - internal/platform/http/**
+  - internal/platform/web/**
+  - sdk/typescript/**
+  - web/**
+  - tests/integration/catalog/**
+  - tests/smoke/**
+  - docs/specs/m1-semantic-registry/**
+  - docs/evidence/M1-T008/**
+
+forbidden_changes:
+  - Do not copy prototype mock data into the production Web application.
+  - Do not add mobile product scope.
+  - Do not imply inactive navigation destinations are implemented.
+  - Do not expose storage UUIDs or unaudited workspace mutations.
+
+validation:
+  - go test -count=1 ./internal/application/catalog/... ./internal/platform/http/... ./internal/platform/web/...
+  - go test -count=1 ./tests/integration/catalog/...
+  - pnpm --filter @semlia/web lint
+  - pnpm --filter @semlia/web test
+  - pnpm --filter @semlia/web build
+  - make check-source
+  - make check-smoke
+  - git diff --check
+
+acceptance:
+  - A user can bootstrap a workspace and create, find and inspect a semantic asset.
+  - The embedded live application passes 1440x900 and 1024x768 visual QA.
+  - Generated contracts, database behavior and release embedding remain drift-free.

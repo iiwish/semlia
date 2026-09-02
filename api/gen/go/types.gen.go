@@ -512,6 +512,12 @@ type CreateCatalogAssetRequest struct {
 	SchemaVersion SchemaVersion `json:"schemaVersion"`
 }
 
+// CreateWorkspaceRequest defines model for CreateWorkspaceRequest.
+type CreateWorkspaceRequest struct {
+	DisplayName string `json:"displayName"`
+	Slug        string `json:"slug"`
+}
+
 // Cursor Opaque pagination cursor that clients must not interpret.
 type Cursor = string
 
@@ -781,6 +787,17 @@ type Timestamp = time.Time
 // Example: 4bf92f3577b34da6a3ce929d0e0e4736
 type TraceId = string
 
+// Workspace defines model for Workspace.
+type Workspace struct {
+	CreatedAt   time.Time `json:"createdAt"`
+	DisplayName string    `json:"displayName"`
+
+	// Id Example: wsp_01arz3ndektsv4rrffq69g5fav
+	Id        WorkspaceId `json:"id"`
+	Slug      string      `json:"slug"`
+	UpdatedAt time.Time   `json:"updatedAt"`
+}
+
 // WorkspaceId Example: wsp_01arz3ndektsv4rrffq69g5fav
 type WorkspaceId = identity.WorkspaceID
 
@@ -834,6 +851,9 @@ type ListAssetRevisionsParams struct {
 	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
+
+// CreateWorkspaceJSONRequestBody defines body for CreateWorkspace for application/json ContentType.
+type CreateWorkspaceJSONRequestBody = CreateWorkspaceRequest
 
 // CreateCatalogAssetJSONRequestBody defines body for CreateCatalogAsset for application/json ContentType.
 type CreateCatalogAssetJSONRequestBody = CreateCatalogAssetRequest
