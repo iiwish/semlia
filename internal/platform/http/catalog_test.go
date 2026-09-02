@@ -61,6 +61,24 @@ func TestCatalogCreateUsesTraceAndReturnsCreatedDetail(t *testing.T) {
 	assertJSONField(t, response.Body.Bytes(), "address", "commerce.net_revenue")
 }
 
+func TestWorkspaceBootstrapUsesPublicTypeID(t *testing.T) {
+	repository := newCatalogRepository(t)
+	handler, _ := newCatalogHandler(t, repository)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/v1/workspaces", strings.NewReader(`{"slug":"semantic-core","displayName":"Semantic Core"}`)))
+	if response.Code != http.StatusCreated {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	assertJSONField(t, response.Body.Bytes(), "slug", "semantic-core")
+	var payload map[string]any
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if id, _ := payload["id"].(string); !strings.HasPrefix(id, "wsp_") {
+		t.Fatalf("workspace id = %q", id)
+	}
+}
+
 func TestCatalogValidationAndErrorsUseStableEnvelopes(t *testing.T) {
 	repository := newCatalogRepository(t)
 	handler, _ := newCatalogHandler(t, repository)
@@ -113,6 +131,14 @@ type catalogRepository struct {
 	revision  identity.RevisionID
 	created   catalogdomain.CreateAssetCommand
 	getErr    error
+}
+
+func (repository *catalogRepository) ListCatalogWorkspaces(context.Context) ([]catalogdomain.Workspace, error) {
+	return nil, nil
+}
+
+func (repository *catalogRepository) CreateCatalogWorkspace(_ context.Context, command catalogdomain.CreateWorkspaceCommand) (catalogdomain.Workspace, error) {
+	return catalogdomain.Workspace{ID: command.ID, Slug: command.Slug, DisplayName: command.DisplayName, CreatedAt: command.CreatedAt, UpdatedAt: command.CreatedAt}, nil
 }
 
 func newCatalogRepository(t *testing.T) *catalogRepository {

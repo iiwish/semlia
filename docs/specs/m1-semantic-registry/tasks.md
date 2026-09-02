@@ -115,3 +115,24 @@ full Compose smoke, zero-finding dependency/image security scan, release bundle 
 lenses pass. Evidence: `docs/evidence/M1-T007/summary.md`.
 
 Acceptance: included in the founder's continuous M1 execution authorization on 2026-09-02.
+
+### T008 Production Catalog workspace
+
+Status: Needs_Review
+Depends on: T007
+Blocks: first user-visible M1 milestone acceptance
+
+Replace the production root status-only surface with a real semantic Catalog workspace. Add the
+minimum audited workspace bootstrap API, then deliver search, filter, create and detail workflows
+using generated contracts and real PostgreSQL data. Keep system status at `/status` and validate the
+embedded application at 1440x900 and 1024x768.
+
+Design: `docs/specs/m1-semantic-registry/t008-production-catalog-design.md`. Packet:
+`docs/specs/m1-semantic-registry/packets/T008.yaml`.
+
+Execution: the production root is a live Catalog backed by generated contracts and PostgreSQL,
+with audited workspace bootstrap, asset search/filter/create/detail, and system status preserved at
+`/status`. Source, Compose smoke and supported desktop visual gates pass. Evidence:
+`docs/evidence/M1-T008/summary.md`.
+
+Acceptance: awaiting founder review of the first user-visible M1 milestone.

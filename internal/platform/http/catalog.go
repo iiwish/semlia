@@ -20,6 +20,7 @@ type routeKind int
 const (
 	routeUnknown routeKind = iota
 	routeSystem
+	routeWorkspaces
 	routeCatalogAssets
 	routeCatalogAsset
 	routeCatalogRevisions
@@ -41,6 +42,8 @@ func matchRoute(path string) matchedRoute {
 	switch path {
 	case "/health/live", "/health/ready", "/api/v1/system/info":
 		return matchedRoute{kind: routeSystem, label: path}
+	case "/api/v1/workspaces":
+		return matchedRoute{kind: routeWorkspaces, label: path}
 	}
 	parts := strings.Split(strings.Trim(path, "/"), "/")
 	if len(parts) < 6 || parts[0] != "api" || parts[1] != "v1" || parts[2] != "workspaces" {
@@ -74,7 +77,7 @@ func matchRoute(path string) matchedRoute {
 
 func (route matchedRoute) methods() []string {
 	switch route.kind {
-	case routeCatalogAssets, routeCatalogRevisions:
+	case routeWorkspaces, routeCatalogAssets, routeCatalogRevisions:
 		return []string{http.MethodGet, http.MethodPost}
 	default:
 		return []string{http.MethodGet}
@@ -96,6 +99,9 @@ func (handler *Handler) routeCatalog(
 	traceID string,
 	route matchedRoute,
 ) string {
+	if route.kind == routeWorkspaces {
+		return handler.routeWorkspaces(response, request, traceID)
+	}
 	workspaceID, err := identity.ParseWorkspaceID(route.workspace)
 	if err != nil {
 		return writeCatalogError(response, domain.ErrInvalidArgument, traceID)
@@ -153,6 +159,33 @@ func (handler *Handler) routeCatalog(
 	default:
 		panic("catalog route is not handled")
 	}
+}
+
+func (handler *Handler) routeWorkspaces(response http.ResponseWriter, request *http.Request, traceID string) string {
+	if request.Method == http.MethodGet {
+		items, err := handler.catalog.ListWorkspaces(request.Context())
+		if err != nil {
+			return writeCatalogError(response, err, traceID)
+		}
+		result := struct {
+			Items []contract.Workspace `json:"items"`
+		}{Items: make([]contract.Workspace, 0, len(items))}
+		for _, item := range items {
+			result.Items = append(result.Items, workspaceResponse(item))
+		}
+		writeJSON(response, http.StatusOK, result)
+		return ""
+	}
+	var body contract.CreateWorkspaceRequest
+	if err := decodeRequest(request, &body); err != nil {
+		return writeCatalogError(response, domain.ErrInvalidArgument, traceID)
+	}
+	item, err := handler.catalog.CreateWorkspace(request.Context(), body.Slug, body.DisplayName, traceID)
+	if err != nil {
+		return writeCatalogError(response, err, traceID)
+	}
+	writeJSON(response, http.StatusCreated, workspaceResponse(item))
+	return ""
 }
 
 func (handler *Handler) listCatalogAssets(
@@ -352,6 +385,13 @@ func assetSummaryResponse(value domain.AssetSummary) contract.CatalogAssetSummar
 		Id: value.ID, Address: value.Address.String(), AssetType: contract.SemanticAssetType(value.Type),
 		LifecycleState: contract.AssetLifecycleState(value.LifecycleState), CurrentRevisionId: value.CurrentRevisionID,
 		Title: value.Title, Summary: value.Summary, UpdatedAt: value.UpdatedAt.UTC(),
+	}
+}
+
+func workspaceResponse(value domain.Workspace) contract.Workspace {
+	return contract.Workspace{
+		Id: value.ID, Slug: value.Slug, DisplayName: value.DisplayName,
+		CreatedAt: value.CreatedAt.UTC(), UpdatedAt: value.UpdatedAt.UTC(),
 	}
 }
 

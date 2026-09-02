@@ -55,6 +55,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List available workspaces */
+        get: operations["listWorkspaces"];
+        put?: never;
+        /** Create a workspace */
+        post: operations["createWorkspace"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspaceId}/catalog/assets": {
         parameters: {
             query?: never;
@@ -197,6 +215,19 @@ export interface components {
          * @example ast_01arz3ndektsv4rrffq69g5fav
          */
         ResourceId: string;
+        Workspace: {
+            id: components["schemas"]["WorkspaceId"];
+            slug: string;
+            displayName: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        CreateWorkspaceRequest: {
+            slug: string;
+            displayName: string;
+        };
         /**
          * Format: typeid
          * @example wsp_01arz3ndektsv4rrffq69g5fav
@@ -595,6 +626,58 @@ export interface operations {
                     "application/json": components["schemas"]["SystemInfo"];
                 };
             };
+            default: components["responses"]["Error"];
+        };
+    };
+    listWorkspaces: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Workspaces ordered for catalog selection, with populated workspaces first. */
+            200: {
+                headers: {
+                    "X-Trace-ID": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["Workspace"][];
+                    };
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    createWorkspace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateWorkspaceRequest"];
+            };
+        };
+        responses: {
+            /** @description The created workspace. */
+            201: {
+                headers: {
+                    "X-Trace-ID": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Workspace"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            409: components["responses"]["Conflict"];
             default: components["responses"]["Error"];
         };
     };

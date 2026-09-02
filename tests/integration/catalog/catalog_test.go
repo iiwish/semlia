@@ -3,6 +3,7 @@ package catalog_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -130,6 +131,30 @@ func TestAssetRevisionJourneyIsAtomicAndImmutable(t *testing.T) {
 	assertCounts(t, pool, map[string]int{
 		"semantic_assets": 1, "asset_revisions": 2, "audit_events": 2, "outbox_events": 2,
 	})
+}
+
+func TestWorkspaceBootstrapIsAuditedAndListable(t *testing.T) {
+	pool, _, service := fixture(t)
+	created, err := service.CreateWorkspace(context.Background(), "semantic-core", "Semantic Core", traceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	items, err := service.ListWorkspaces(context.Background())
+	if err != nil || len(items) != 1 || items[0].ID != created.ID {
+		t.Fatalf("workspaces = %+v, err = %v", items, err)
+	}
+	var auditCount int
+	if err := pool.QueryRow(context.Background(), `
+		SELECT count(*) FROM audit_events
+		WHERE workspace_id = $1 AND event_type = 'workspace.created'`, created.ID.UUID()).Scan(&auditCount); err != nil {
+		t.Fatal(err)
+	}
+	if auditCount != 1 {
+		t.Fatalf("workspace audit count = %d", auditCount)
+	}
+	if _, err := service.CreateWorkspace(context.Background(), "semantic-core", "Duplicate", traceID); !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("duplicate error = %v", err)
+	}
 }
 
 func assertCatalogEventEnvelope(t *testing.T, pool *pgstore.Pool, workspace identity.WorkspaceID) {

@@ -49,8 +49,8 @@ func TestCanonicalSpecificationIsValidAndMinimal(t *testing.T) {
 	if doc.OpenAPI != "3.0.3" {
 		t.Errorf("OpenAPI version = %q, want 3.0.3", doc.OpenAPI)
 	}
-	if doc.Info.Version != "0.3.0" {
-		t.Errorf("contract bundle version = %q, want 0.3.0", doc.Info.Version)
+	if doc.Info.Version != "0.4.0" {
+		t.Errorf("contract bundle version = %q, want 0.4.0", doc.Info.Version)
 	}
 	if version := doc.Extensions["x-semlia-contract-version"]; version == nil {
 		t.Error("missing x-semlia-contract-version")
@@ -60,6 +60,8 @@ func TestCanonicalSpecificationIsValidAndMinimal(t *testing.T) {
 		"ApiVersion",
 		"ResourceId",
 		"WorkspaceId",
+		"Workspace",
+		"CreateWorkspaceRequest",
 		"SemanticAssetId",
 		"AssetRevisionId",
 		"SemanticRelationId",

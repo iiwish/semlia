@@ -1,12 +1,12 @@
 openapi: 3.0.3
 info:
   title: Semlia Control API
-  version: 0.3.0
+  version: 0.4.0
   description: Versioned control-plane contract shared by Semlia services and clients.
   license:
     name: Apache-2.0
     url: https://www.apache.org/licenses/LICENSE-2.0.html
-x-semlia-contract-version: 3
+x-semlia-contract-version: 4
 servers:
   - url: http://localhost:8080
     description: Local development
@@ -68,6 +68,58 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SystemInfo"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/workspaces:
+    get:
+      operationId: listWorkspaces
+      summary: List available workspaces
+      tags:
+        - Catalog
+      responses:
+        "200":
+          description: Workspaces ordered for catalog selection, with populated workspaces first.
+          headers:
+            X-Trace-ID:
+              $ref: "#/components/headers/TraceId"
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - items
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Workspace"
+        default:
+          $ref: "#/components/responses/Error"
+    post:
+      operationId: createWorkspace
+      summary: Create a workspace
+      tags:
+        - Catalog
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWorkspaceRequest"
+      responses:
+        "201":
+          description: The created workspace.
+          headers:
+            X-Trace-ID:
+              $ref: "#/components/headers/TraceId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workspace"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
         default:
           $ref: "#/components/responses/Error"
   /api/v1/workspaces/{workspaceId}/catalog/assets:
@@ -427,6 +479,44 @@ components:
       x-go-type-import:
         path: github.com/iiwish/semlia/pkg/identity
         name: identity
+    Workspace:
+      type: object
+      required:
+        - id
+        - slug
+        - displayName
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          $ref: "#/components/schemas/WorkspaceId"
+        slug:
+          type: string
+          pattern: "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$"
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 120
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    CreateWorkspaceRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - slug
+        - displayName
+      properties:
+        slug:
+          type: string
+          pattern: "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$"
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 120
     WorkspaceId:
       type: string
       format: typeid

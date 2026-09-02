@@ -36,3 +36,40 @@ func (q *Queries) CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams
 	)
 	return i, err
 }
+
+const listWorkspaces = `-- name: ListWorkspaces :many
+SELECT workspace.legacy_id, workspace.slug, workspace.display_name, workspace.created_at, workspace.updated_at, workspace.id
+FROM workspaces AS workspace
+ORDER BY EXISTS (
+    SELECT 1
+    FROM semantic_assets AS asset
+    WHERE asset.workspace_id = workspace.id
+) DESC, workspace.created_at DESC, workspace.id DESC
+`
+
+func (q *Queries) ListWorkspaces(ctx context.Context) ([]Workspace, error) {
+	rows, err := q.db.Query(ctx, listWorkspaces)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Workspace{}
+	for rows.Next() {
+		var i Workspace
+		if err := rows.Scan(
+			&i.LegacyID,
+			&i.Slug,
+			&i.DisplayName,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.ID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

@@ -196,8 +196,8 @@ func TestHTTPPollCancellationDoesNotDrainSynchronousTimer(t *testing.T) {
 
 func testEmbeddedWebAndAPI(t *testing.T) {
 	index := get(t, "/", http.StatusOK)
-	if !bytes.Contains(index, []byte("Semlia System Status")) {
-		t.Fatal("embedded Web root does not contain the Semlia status application")
+	if !bytes.Contains(index, []byte("Semlia Catalog")) {
+		t.Fatal("embedded Web root does not contain the Semlia catalog application")
 	}
 	asset := assetPattern.FindSubmatch(index)
 	if len(asset) != 2 {
