@@ -5,7 +5,7 @@
 | Field | Value |
 | --- | --- |
 | Task | T003 Source discovery adapters |
-| Status | `Needs_Review` |
+| Status | `Accepted` |
 | Implementation | `7ac5197` |
 | Date | 2026-09-02 |
 | Packet | `docs/specs/m1-semantic-registry/packets/T003.yaml` |
@@ -67,4 +67,5 @@ results. Stable external keys and canonical fingerprints stay in the shared doma
 all versioned artifact DTOs, parser traversal and published schemas remain private to their adapter.
 Persistence uses the T002 normalized model instead of JSONB projections or a second graph store.
 
-T003 is ready for founder acceptance. T004 remains blocked until that explicit acceptance.
+Founder accepted T003 on 2026-09-02 and authorized continuous M1 execution through the first
+user-visible milestone without per-task approval pauses.

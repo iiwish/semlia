@@ -42,7 +42,7 @@ Acceptance: founder explicitly accepted T002 on 2026-09-02 and authorized T003 e
 
 ### T003 Source discovery adapters
 
-Status: Needs_Review
+Status: Accepted
 Depends on: T002
 Blocks: T004
 
@@ -54,15 +54,19 @@ Execution: implementation `7ac5197`; adapter contract, race, real PostgreSQL inc
 sqlc drift, parser benchmark and complete `make check-source` gates pass. Evidence:
 `docs/evidence/M1-T003/summary.md`.
 
-Acceptance: founder review is required before T004 execution.
+Acceptance: founder explicitly accepted T003 on 2026-09-02 and authorized continuous M1 execution
+through the first user-visible milestone without per-task approval pauses.
 
 ### T004 Catalog and revision API
 
-Status: Draft
+Status: Running
 Depends on: T002, T003
 Blocks: T005, T006
 
 Implement application services and generated OpenAPI handlers for discovery run state, catalog search, asset detail, revisions, evidence and bounded relations. Mutations commit domain rows, audit and outbox atomically.
+
+Design: `docs/specs/m1-semantic-registry/t004-api-design.md`. Packet:
+`docs/specs/m1-semantic-registry/packets/T004.yaml`.
 
 ### T005 Git content projection
 
