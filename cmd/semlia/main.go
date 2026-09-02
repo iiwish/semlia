@@ -15,6 +15,7 @@ import (
 
 	pgstore "github.com/iiwish/semlia/internal/adapters/postgres"
 	"github.com/iiwish/semlia/internal/application"
+	catalogapp "github.com/iiwish/semlia/internal/application/catalog"
 	"github.com/iiwish/semlia/internal/application/jobs"
 	"github.com/iiwish/semlia/internal/domain"
 	"github.com/iiwish/semlia/internal/platform/config"
@@ -25,7 +26,7 @@ import (
 
 const (
 	apiVersion    = "v1"
-	schemaVersion = "0.1.0"
+	schemaVersion = "0.3.0"
 )
 
 var (
@@ -216,7 +217,17 @@ func serve(ctx context.Context, cfg config.Config, output io.Writer) error {
 		SchemaVersion: schemaVersion,
 		BuildVersion:  cfg.BuildVersion,
 	})
-	apiHandler := httpapi.NewHandler(service, logger, provider.Tracer("github.com/iiwish/semlia"))
+	options := make([]httpapi.Option, 0, 1)
+	if strings.TrimSpace(cfg.DatabaseURL) != "" {
+		catalogPool, openErr := pgstore.Open(ctx, cfg.DatabaseURL)
+		if openErr != nil {
+			return errors.New("catalog database configuration is invalid")
+		}
+		defer catalogPool.Close()
+		catalogService := catalogapp.NewService(pgstore.NewStore(catalogPool), catalogapp.ClockFunc(time.Now))
+		options = append(options, httpapi.WithCatalog(catalogService))
+	}
+	apiHandler := httpapi.NewHandler(service, logger, provider.Tracer("github.com/iiwish/semlia"), options...)
 	server := &http.Server{
 		Addr:              cfg.HTTPAddress,
 		Handler:           webui.NewHandler(apiHandler),

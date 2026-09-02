@@ -49,8 +49,8 @@ func TestCanonicalSpecificationIsValidAndMinimal(t *testing.T) {
 	if doc.OpenAPI != "3.0.3" {
 		t.Errorf("OpenAPI version = %q, want 3.0.3", doc.OpenAPI)
 	}
-	if doc.Info.Version != "0.2.0" {
-		t.Errorf("contract bundle version = %q, want 0.2.0", doc.Info.Version)
+	if doc.Info.Version != "0.3.0" {
+		t.Errorf("contract bundle version = %q, want 0.3.0", doc.Info.Version)
 	}
 	if version := doc.Extensions["x-semlia-contract-version"]; version == nil {
 		t.Error("missing x-semlia-contract-version")
@@ -86,6 +86,15 @@ func TestCanonicalSpecificationIsValidAndMinimal(t *testing.T) {
 		"EventEnvelope",
 		"HealthResponse",
 		"SystemInfo",
+		"CatalogAssetSummary",
+		"CatalogAssetDetail",
+		"CatalogPage",
+		"AssetRevision",
+		"AssetRevisionPage",
+		"AssetRelationPage",
+		"DiscoveryRun",
+		"CreateCatalogAssetRequest",
+		"CreateAssetRevisionRequest",
 	}
 	for _, name := range requiredSchemas {
 		if doc.Components.Schemas[name] == nil {
@@ -97,6 +106,12 @@ func TestCanonicalSpecificationIsValidAndMinimal(t *testing.T) {
 		"/health/live":        "getLiveness",
 		"/health/ready":       "getReadiness",
 		"/api/v1/system/info": "getSystemInfo",
+		"/api/v1/workspaces/{workspaceId}/catalog/assets":                                  "listCatalogAssets",
+		"/api/v1/workspaces/{workspaceId}/catalog/assets/{assetId}":                        "getCatalogAsset",
+		"/api/v1/workspaces/{workspaceId}/catalog/assets/{assetId}/revisions":              "listAssetRevisions",
+		"/api/v1/workspaces/{workspaceId}/catalog/assets/{assetId}/revisions/{revisionId}": "getAssetRevision",
+		"/api/v1/workspaces/{workspaceId}/catalog/assets/{assetId}/relations":              "listAssetRelations",
+		"/api/v1/workspaces/{workspaceId}/discovery-runs/{runId}":                          "getDiscoveryRun",
 	}
 	for path, operationID := range requiredOperations {
 		item := doc.Paths.Find(path)
@@ -107,6 +122,14 @@ func TestCanonicalSpecificationIsValidAndMinimal(t *testing.T) {
 		if item.Get.OperationID != operationID {
 			t.Errorf("operation ID for %s = %q, want %q", path, item.Get.OperationID, operationID)
 		}
+	}
+	assets := doc.Paths.Find("/api/v1/workspaces/{workspaceId}/catalog/assets")
+	if assets == nil || assets.Post == nil || assets.Post.OperationID != "createCatalogAsset" {
+		t.Error("missing POST createCatalogAsset operation")
+	}
+	revisions := doc.Paths.Find("/api/v1/workspaces/{workspaceId}/catalog/assets/{assetId}/revisions")
+	if revisions == nil || revisions.Post == nil || revisions.Post.OperationID != "createAssetRevision" {
+		t.Error("missing POST createAssetRevision operation")
 	}
 
 }
@@ -144,6 +167,10 @@ func TestSharedSchemaValidationMatrix(t *testing.T) {
 		{"health response invalid status", "HealthResponse", `{"status":"down","traceId":"4bf92f3577b34da6a3ce929d0e0e4736"}`, false},
 		{"system info", "SystemInfo", `{"service":"semlia","apiVersion":"v1","schemaVersion":"0.2.0","buildVersion":"dev","traceId":"4bf92f3577b34da6a3ce929d0e0e4736"}`, true},
 		{"system info invalid API version", "SystemInfo", `{"service":"semlia","apiVersion":"1","schemaVersion":"0.2.0","buildVersion":"dev","traceId":"4bf92f3577b34da6a3ce929d0e0e4736"}`, false},
+		{"catalog asset detail", "CatalogAssetDetail", `{"id":"ast_01arz3ndektsv4rrffq69g5fav","address":"commerce.net_revenue","assetType":"metric","lifecycleState":"active","title":"Net revenue","summary":"Revenue after refunds","updatedAt":"2026-09-02T08:00:00Z","createdAt":"2026-09-01T08:00:00Z","relationCount":2}`, true},
+		{"catalog asset detail extra field", "CatalogAssetDetail", `{"id":"ast_01arz3ndektsv4rrffq69g5fav","address":"commerce.net_revenue","assetType":"metric","lifecycleState":"active","title":"Net revenue","summary":"Revenue after refunds","updatedAt":"2026-09-02T08:00:00Z","createdAt":"2026-09-01T08:00:00Z","relationCount":2,"databaseUuid":"hidden"}`, false},
+		{"create catalog asset", "CreateCatalogAssetRequest", `{"address":"commerce.net_revenue","assetType":"metric","schemaVersion":"1.0.0","content":{"name":"Net revenue"},"createdBy":"founder"}`, true},
+		{"create catalog asset unknown field", "CreateCatalogAssetRequest", `{"address":"commerce.net_revenue","assetType":"metric","schemaVersion":"1.0.0","content":{},"createdBy":"founder","credential":"secret"}`, false},
 	}
 
 	for _, test := range tests {

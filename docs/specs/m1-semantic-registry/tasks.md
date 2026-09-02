@@ -59,7 +59,7 @@ through the first user-visible milestone without per-task approval pauses.
 
 ### T004 Catalog and revision API
 
-Status: Running
+Status: Accepted
 Depends on: T002, T003
 Blocks: T005, T006
 
@@ -68,9 +68,15 @@ Implement application services and generated OpenAPI handlers for discovery run 
 Design: `docs/specs/m1-semantic-registry/t004-api-design.md`. Packet:
 `docs/specs/m1-semantic-registry/packets/T004.yaml`.
 
+Execution: generated OpenAPI and TypeScript contracts, PostgreSQL catalog repository, application
+service, HTTP adapter and real PostgreSQL integration suite pass the complete source gate. Evidence:
+`docs/evidence/M1-T004/summary.md`.
+
+Acceptance: included in the founder's continuous M1 execution authorization on 2026-09-02.
+
 ### T005 Git content projection
 
-Status: Draft
+Status: Running
 Depends on: T004
 Blocks: T007
 

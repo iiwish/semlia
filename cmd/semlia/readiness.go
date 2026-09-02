@@ -8,7 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const requiredMigrationVersion = 1
+const requiredMigrationVersion = 3
 
 type postgresReadinessProbe struct {
 	pool *pgxpool.Pool

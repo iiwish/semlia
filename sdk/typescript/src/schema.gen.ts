@@ -55,6 +55,128 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspaceId}/catalog/assets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        /** Search and paginate semantic assets */
+        get: operations["listCatalogAssets"];
+        put?: never;
+        /** Create an asset and its initial immutable revision */
+        post: operations["createCatalogAsset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/catalog/assets/{assetId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                assetId: components["parameters"]["AssetId"];
+            };
+            cookie?: never;
+        };
+        /** Read an asset and its current revision */
+        get: operations["getCatalogAsset"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/catalog/assets/{assetId}/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                assetId: components["parameters"]["AssetId"];
+            };
+            cookie?: never;
+        };
+        /** List immutable asset revisions newest first */
+        get: operations["listAssetRevisions"];
+        put?: never;
+        /** Append and select a new immutable asset revision */
+        post: operations["createAssetRevision"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/catalog/assets/{assetId}/revisions/{revisionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                assetId: components["parameters"]["AssetId"];
+                revisionId: components["parameters"]["RevisionId"];
+            };
+            cookie?: never;
+        };
+        /** Read one immutable asset revision */
+        get: operations["getAssetRevision"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/catalog/assets/{assetId}/relations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                assetId: components["parameters"]["AssetId"];
+            };
+            cookie?: never;
+        };
+        /** Read bounded incoming and outgoing typed relations */
+        get: operations["listAssetRelations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/discovery-runs/{runId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                runId: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        /** Read discovery run status and ordered findings */
+        get: operations["getDiscoveryRun"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -142,6 +264,10 @@ export interface components {
         RelationPredicate: "measures" | "describes" | "depends_on" | "derived_from" | "filters_by" | "synonym_of" | "contains" | "broader_than" | "narrower_than" | "equivalent_to" | "disjoint_with";
         /** @enum {string} */
         RelationAssertionState: "asserted" | "inferred" | "candidate" | "deprecated";
+        /** @enum {string} */
+        RelationPlane: "taxonomy" | "semantic" | "dependency";
+        /** @enum {string} */
+        AssetLifecycleState: "draft" | "active" | "deprecated" | "archived";
         /**
          * Format: date-time
          * @description RFC 3339 timestamp normalized to UTC at public boundaries.
@@ -209,6 +335,132 @@ export interface components {
             buildVersion: string;
             traceId: components["schemas"]["TraceId"];
         };
+        EvidenceArtifact: {
+            id: components["schemas"]["EvidenceArtifactId"];
+            /** @enum {string} */
+            evidenceType: "declared" | "constrained" | "derived" | "observed" | "inferred";
+            sourceRevisionId?: components["schemas"]["SourceRevisionId"];
+            locator: string;
+            contentDigest: string;
+            metadata: {
+                [key: string]: unknown;
+            };
+            /** @enum {string} */
+            role: "supports" | "constrains" | "observes" | "conflicts";
+            fieldPath?: string;
+            note?: string;
+            createdAt: components["schemas"]["Timestamp"];
+        };
+        AssetRevision: {
+            id: components["schemas"]["AssetRevisionId"];
+            assetId: components["schemas"]["SemanticAssetId"];
+            /** Format: int64 */
+            sequence: number;
+            schemaVersion: components["schemas"]["SchemaVersion"];
+            contentDigest: string;
+            content: {
+                [key: string]: unknown;
+            };
+            createdBy: string;
+            createdAt: components["schemas"]["Timestamp"];
+            evidence: components["schemas"]["EvidenceArtifact"][];
+        };
+        CatalogAssetSummary: {
+            id: components["schemas"]["SemanticAssetId"];
+            address: components["schemas"]["SemanticAddress"];
+            assetType: components["schemas"]["SemanticAssetType"];
+            lifecycleState: components["schemas"]["AssetLifecycleState"];
+            currentRevisionId?: components["schemas"]["AssetRevisionId"];
+            title: string;
+            summary: string;
+            updatedAt: components["schemas"]["Timestamp"];
+        };
+        CatalogAssetDetail: {
+            id: components["schemas"]["SemanticAssetId"];
+            address: components["schemas"]["SemanticAddress"];
+            assetType: components["schemas"]["SemanticAssetType"];
+            lifecycleState: components["schemas"]["AssetLifecycleState"];
+            currentRevisionId?: components["schemas"]["AssetRevisionId"];
+            title: string;
+            summary: string;
+            updatedAt: components["schemas"]["Timestamp"];
+            createdAt: components["schemas"]["Timestamp"];
+            currentRevision?: components["schemas"]["AssetRevision"];
+            relationCount: number;
+        };
+        CatalogPage: {
+            items: components["schemas"]["CatalogAssetSummary"][];
+            page: components["schemas"]["PageInfo"];
+        };
+        AssetRevisionPage: {
+            items: components["schemas"]["AssetRevision"][];
+            page: components["schemas"]["PageInfo"];
+        };
+        AssetRelation: {
+            id: components["schemas"]["SemanticRelationId"];
+            depth: number;
+            /** @enum {string} */
+            direction: "incoming" | "outgoing";
+            predicate: components["schemas"]["RelationPredicate"];
+            plane: components["schemas"]["RelationPlane"];
+            assertionState: components["schemas"]["RelationAssertionState"];
+            subjectAssetId: components["schemas"]["SemanticAssetId"];
+            objectAssetId: components["schemas"]["SemanticAssetId"];
+            counterpart: components["schemas"]["CatalogAssetSummary"];
+            evidenceArtifactId?: components["schemas"]["EvidenceArtifactId"];
+            sourceRevisionId?: components["schemas"]["SourceRevisionId"];
+            createdAt: components["schemas"]["Timestamp"];
+        };
+        AssetRelationPage: {
+            items: components["schemas"]["AssetRelation"][];
+            maxDepth: number;
+        };
+        DiscoveryFinding: {
+            sequence: number;
+            code: components["schemas"]["ErrorCode"];
+            /** @enum {string} */
+            severity: "info" | "warning" | "error";
+            locator?: string;
+            details: {
+                [key: string]: unknown;
+            };
+        };
+        DiscoveryRun: {
+            id: components["schemas"]["RunId"];
+            sourceConnectionId: components["schemas"]["SourceConnectionId"];
+            sourceRevisionId?: components["schemas"]["SourceRevisionId"];
+            adapterVersion: string;
+            /** @enum {string} */
+            status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+            errorCode?: components["schemas"]["ErrorCode"];
+            stats: {
+                [key: string]: unknown;
+            };
+            findings: components["schemas"]["DiscoveryFinding"][];
+            startedAt?: components["schemas"]["Timestamp"];
+            completedAt?: components["schemas"]["Timestamp"];
+            createdAt: components["schemas"]["Timestamp"];
+            updatedAt: components["schemas"]["Timestamp"];
+        };
+        CreateCatalogAssetRequest: {
+            address: components["schemas"]["SemanticAddress"];
+            assetType: components["schemas"]["SemanticAssetType"];
+            lifecycleState?: components["schemas"]["AssetLifecycleState"];
+            schemaVersion: components["schemas"]["SchemaVersion"];
+            content: {
+                [key: string]: unknown;
+            };
+            createdBy: string;
+            evidenceIds?: components["schemas"]["EvidenceArtifactId"][];
+        };
+        CreateAssetRevisionRequest: {
+            schemaVersion: components["schemas"]["SchemaVersion"];
+            content: {
+                [key: string]: unknown;
+            };
+            createdBy: string;
+            evidenceIds?: components["schemas"]["EvidenceArtifactId"][];
+        };
     };
     responses: {
         /** @description The request failed. */
@@ -233,8 +485,45 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
+        /** @description The request is invalid. */
+        BadRequest: {
+            headers: {
+                "X-Trace-ID": components["headers"]["TraceId"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description The workspace-scoped resource was not found. */
+        NotFound: {
+            headers: {
+                "X-Trace-ID": components["headers"]["TraceId"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description The request conflicts with current registry state. */
+        Conflict: {
+            headers: {
+                "X-Trace-ID": components["headers"]["TraceId"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
     };
-    parameters: never;
+    parameters: {
+        WorkspaceId: components["schemas"]["WorkspaceId"];
+        AssetId: components["schemas"]["SemanticAssetId"];
+        RevisionId: components["schemas"]["AssetRevisionId"];
+        RunId: components["schemas"]["RunId"];
+        Limit: number;
+        Cursor: components["schemas"]["Cursor"];
+    };
     requestBodies: never;
     headers: {
         /** @description W3C-compatible trace identifier for support and correlation. */
@@ -306,6 +595,232 @@ export interface operations {
                     "application/json": components["schemas"]["SystemInfo"];
                 };
             };
+            default: components["responses"]["Error"];
+        };
+    };
+    listCatalogAssets: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                cursor?: components["parameters"]["Cursor"];
+                /** @description Lexical query matched against semantic address and current revision content. */
+                search?: string;
+                assetType?: components["schemas"]["SemanticAssetType"];
+                lifecycleState?: components["schemas"]["AssetLifecycleState"];
+            };
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A deterministic catalog page. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            default: components["responses"]["Error"];
+        };
+    };
+    createCatalogAsset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCatalogAssetRequest"];
+            };
+        };
+        responses: {
+            /** @description The created asset detail. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogAssetDetail"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getCatalogAsset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                assetId: components["parameters"]["AssetId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current asset detail and provenance. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogAssetDetail"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    listAssetRevisions: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                assetId: components["parameters"]["AssetId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Immutable revision history. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetRevisionPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    createAssetRevision: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                assetId: components["parameters"]["AssetId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAssetRevisionRequest"];
+            };
+        };
+        responses: {
+            /** @description The appended immutable revision. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetRevision"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getAssetRevision: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                assetId: components["parameters"]["AssetId"];
+                revisionId: components["parameters"]["RevisionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Immutable revision content and evidence. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetRevision"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    listAssetRelations: {
+        parameters: {
+            query?: {
+                direction?: "incoming" | "outgoing" | "both";
+                plane?: components["schemas"]["RelationPlane"];
+                depth?: number;
+            };
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                assetId: components["parameters"]["AssetId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A bounded relation projection. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetRelationPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getDiscoveryRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                runId: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Discovery run state. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiscoveryRun"];
+                };
+            };
+            404: components["responses"]["NotFound"];
             default: components["responses"]["Error"];
         };
     };
