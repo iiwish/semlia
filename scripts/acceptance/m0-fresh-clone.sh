@@ -12,14 +12,14 @@ case "$0" in
     ;;
 esac
 
-PINNED_GO_VERSION=1.26.5
+PINNED_GO_VERSION=1.26.6
 PINNED_GO_BOOTSTRAP_VERSION=1.26.3
 umask 077
 TRUSTED_PATH=/home/runner/setup-pnpm/node_modules/.bin:/Users/runner/setup-pnpm/node_modules/.bin
 TRUSTED_PATH=${TRUSTED_PATH}:/opt/hostedtoolcache/node/24.15.0/x64/bin:/opt/hostedtoolcache/node/24.15.0/arm64/bin
 TRUSTED_PATH=${TRUSTED_PATH}:/Users/runner/hostedtoolcache/node/24.15.0/x64/bin:/Users/runner/hostedtoolcache/node/24.15.0/arm64/bin
-TRUSTED_PATH=${TRUSTED_PATH}:/opt/hostedtoolcache/go/1.26.5/x64/bin:/opt/hostedtoolcache/go/1.26.5/arm64/bin
-TRUSTED_PATH=${TRUSTED_PATH}:/Users/runner/hostedtoolcache/go/1.26.5/x64/bin:/Users/runner/hostedtoolcache/go/1.26.5/arm64/bin
+TRUSTED_PATH=${TRUSTED_PATH}:/opt/hostedtoolcache/go/1.26.6/x64/bin:/opt/hostedtoolcache/go/1.26.6/arm64/bin
+TRUSTED_PATH=${TRUSTED_PATH}:/Users/runner/hostedtoolcache/go/1.26.6/x64/bin:/Users/runner/hostedtoolcache/go/1.26.6/arm64/bin
 TRUSTED_PATH=${TRUSTED_PATH}:/usr/local/go/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:/opt/local/bin:/opt/local/sbin:/usr/local/bin:/usr/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin:/run/current-system/sw/bin:/nix/var/nix/profiles/default/bin:/snap/bin:/var/lib/snapd/snap/bin
 
 ACCEPTANCE_SOURCE=${SEMLIA_ACCEPTANCE_SOURCE:-}
@@ -331,16 +331,16 @@ MACHINE_NAME=$(/usr/bin/uname -m 2>/dev/null || printf unknown)
 EXPECTED_GO_CANDIDATES=
 case "${KERNEL_NAME}:${MACHINE_NAME}" in
   Linux:x86_64)
-    EXPECTED_GO_CANDIDATES=/opt/hostedtoolcache/go/1.26.5/x64/bin/go:/usr/local/go/bin/go
+    EXPECTED_GO_CANDIDATES=/opt/hostedtoolcache/go/1.26.6/x64/bin/go:/usr/local/go/bin/go
     ;;
   Linux:aarch64|Linux:arm64)
-    EXPECTED_GO_CANDIDATES=/opt/hostedtoolcache/go/1.26.5/arm64/bin/go:/usr/local/go/bin/go
+    EXPECTED_GO_CANDIDATES=/opt/hostedtoolcache/go/1.26.6/arm64/bin/go:/usr/local/go/bin/go
     ;;
   Darwin:arm64)
-    EXPECTED_GO_CANDIDATES=/Users/runner/hostedtoolcache/go/1.26.5/arm64/bin/go:/opt/homebrew/bin/go
+    EXPECTED_GO_CANDIDATES=/Users/runner/hostedtoolcache/go/1.26.6/arm64/bin/go:/opt/homebrew/bin/go
     ;;
   Darwin:x86_64)
-    EXPECTED_GO_CANDIDATES=/Users/runner/hostedtoolcache/go/1.26.5/x64/bin/go:/usr/local/go/bin/go
+    EXPECTED_GO_CANDIDATES=/Users/runner/hostedtoolcache/go/1.26.6/x64/bin/go:/usr/local/go/bin/go
     ;;
 esac
 OLD_IFS=${IFS}

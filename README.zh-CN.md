@@ -68,7 +68,7 @@ dbt / 业务文档        血缘 + Provenance       绑定 + 契约             
 
 ### 查看产品原型
 
-安装 `.tool-versions` 固定的 Go 1.26.5、Node.js 24.15.0、pnpm 11.1.3，以及 Git 和 GNU Make。
+安装 `.tool-versions` 固定的 Go 1.26.6、Node.js 24.15.0、pnpm 11.1.3，以及 Git 和 GNU Make。
 
 ```bash
 make doctor

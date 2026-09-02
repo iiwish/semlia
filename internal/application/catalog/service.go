@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
@@ -305,7 +306,12 @@ func normalizeLimit(value int) (int, error) {
 
 func canonicalContent(content json.RawMessage, schemaVersion string) (json.RawMessage, string, error) {
 	var object map[string]any
-	if !semanticVersion(schemaVersion) || len(content) == 0 || len(content) > 1<<20 || json.Unmarshal(content, &object) != nil || object == nil {
+	decoder := json.NewDecoder(bytes.NewReader(content))
+	decoder.UseNumber()
+	if !semanticVersion(schemaVersion) || len(content) == 0 || len(content) > 1<<20 || decoder.Decode(&object) != nil || object == nil {
+		return nil, "", domain.ErrInvalidArgument
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		return nil, "", domain.ErrInvalidArgument
 	}
 	encoded, err := json.Marshal(object)

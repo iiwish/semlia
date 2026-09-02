@@ -59,7 +59,7 @@ func TestCreateAssetCanonicalizesContentAndDefaultsLifecycle(t *testing.T) {
 	workspace := mustID(t, identity.NewWorkspaceID)
 	_, err := service.CreateAsset(context.Background(), application.CreateAssetRequest{
 		WorkspaceID: workspace, Address: "commerce.net_revenue", AssetType: semantic.Metric,
-		SchemaVersion: "1.0.0", Content: json.RawMessage(`{"z":1,"name":"Net revenue"}`),
+		SchemaVersion: "1.0.0", Content: json.RawMessage(`{"z":1,"threshold":9007199254740993,"name":"Net revenue"}`),
 		CreatedBy: "founder", TraceID: "4bf92f3577b34da6a3ce929d0e0e4736",
 	})
 	if err != nil {
@@ -67,7 +67,7 @@ func TestCreateAssetCanonicalizesContentAndDefaultsLifecycle(t *testing.T) {
 	}
 	command := repository.created
 	if command.Lifecycle != "draft" || command.ContentDigest == "" ||
-		string(command.Content) != `{"name":"Net revenue","z":1}` || command.CreatedAt != createdAt {
+		string(command.Content) != `{"name":"Net revenue","threshold":9007199254740993,"z":1}` || command.CreatedAt != createdAt {
 		t.Fatalf("create command = %+v, content = %s", command, command.Content)
 	}
 	if command.AssetID.String() == "" || command.RevisionID.String() == "" ||

@@ -90,7 +90,7 @@ codebase_context:
       SBOM and cross-platform release builds exist and have prior local and hosted green evidence. T008 begins with no quickstart,
       operations documents, acceptance package or release report.
   verified_preflight_findings:
-    - scripts/doctor.sh requires Go 1.26.3 while every canonical toolchain source requires Go 1.26.5, so make doctor fails.
+    - scripts/doctor.sh requires Go 1.26.3 while every canonical toolchain source requires Go 1.26.6, so make doctor fails.
     - go.mod declares github.com/semlia/semlia while the controlled repository is github.com/iiwish/semlia.
     - The repository is currently private; hosted T007 evidence was produced while it was public and must be described historically.
     - Private-repository security features and tagged provenance remain public-release gates, not claims of current availability.

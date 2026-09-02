@@ -38,6 +38,7 @@ func TestProjectAssetGoldenReplayAndOptimisticAppend(t *testing.T) {
 		`"apiVersion": "semlia.io/v1"`, `"kind": "SemanticAsset"`,
 		`"address": "commerce.revenue.net_revenue"`, `"assetId": "` + first.AssetID.String() + `"`,
 		`"revisionId": "` + first.RevisionID.String() + `"`, `"name": "Net revenue"`,
+		`"threshold": 9007199254740993`,
 	} {
 		if !strings.Contains(string(bytes), fragment) {
 			t.Fatalf("golden document missing %s:\n%s", fragment, bytes)
@@ -106,7 +107,7 @@ func assetFixture(t *testing.T, sequence int64) domain.Asset {
 	return domain.Asset{
 		WorkspaceID: workspace, AssetID: asset, RevisionID: revision, Address: address,
 		AssetType: semantic.Metric, LifecycleState: "active", Sequence: sequence,
-		SchemaVersion: "1.0.0", ContentDigest: "sha256:0123456789", Content: json.RawMessage(`{"summary":"Gross less refunds","name":"Net revenue"}`),
+		SchemaVersion: "1.0.0", ContentDigest: "sha256:0123456789", Content: json.RawMessage(`{"summary":"Gross less refunds","name":"Net revenue","threshold":9007199254740993}`),
 		CreatedBy: "founder", CreatedAt: time.Date(2026, 9, 2, 3, 4, 5, 999, time.UTC),
 	}
 }

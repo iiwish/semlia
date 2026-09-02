@@ -298,6 +298,7 @@ func decodeRequest(request *http.Request, target any) error {
 	reader := io.LimitReader(request.Body, (1<<20)+1)
 	decoder := json.NewDecoder(reader)
 	decoder.DisallowUnknownFields()
+	decoder.UseNumber()
 	if err := decoder.Decode(target); err != nil {
 		return err
 	}

@@ -29,6 +29,8 @@ CREATE TABLE usage_events (
         REFERENCES semantic_assets (workspace_id, id) ON DELETE RESTRICT,
     FOREIGN KEY (workspace_id, revision_id)
         REFERENCES asset_revisions (workspace_id, id) ON DELETE RESTRICT,
+    FOREIGN KEY (asset_id, revision_id)
+        REFERENCES asset_revisions (asset_id, id) ON DELETE RESTRICT,
     CONSTRAINT usage_events_expiry CHECK (expires_at > received_at),
     CONSTRAINT usage_events_shape CHECK (
         (

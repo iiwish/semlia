@@ -1,6 +1,7 @@
 package gitcontent
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -154,7 +155,9 @@ type metadata struct {
 
 func render(asset domain.Asset) ([]byte, error) {
 	var spec any
-	if err := json.Unmarshal(asset.Content, &spec); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(asset.Content))
+	decoder.UseNumber()
+	if err := decoder.Decode(&spec); err != nil {
 		return nil, fmt.Errorf("%w: canonical content", domain.ErrInvalid)
 	}
 	value := document{

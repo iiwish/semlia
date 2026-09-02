@@ -14,7 +14,7 @@ COPY sdk/typescript sdk/typescript
 COPY web web
 RUN pnpm --filter @semlia/web build
 
-FROM golang:1.26.5-alpine AS go-builder
+FROM golang:1.26.6-alpine AS go-builder
 
 WORKDIR /src
 COPY go.mod go.sum ./
@@ -25,12 +25,14 @@ COPY --from=web-builder /src/web/dist internal/platform/web/static
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/semlia ./cmd/semlia
+RUN mkdir -p /out/git-content
 
 FROM gcr.io/distroless/base-debian12:nonroot
 
 WORKDIR /app
 COPY --from=go-builder /out/semlia /app/semlia
 COPY --from=go-builder /src/migrations /app/migrations
+COPY --from=go-builder --chown=nonroot:nonroot /out/git-content /var/lib/semlia/content
 USER nonroot:nonroot
 EXPOSE 8080
 ENTRYPOINT ["/app/semlia"]

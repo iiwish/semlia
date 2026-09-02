@@ -53,7 +53,7 @@ const (
 	testcontainersContainerLimit  = 3 // Two integration PostgreSQL containers plus one shared Ryuk container.
 	testcontainersNetworkLimit    = 1 // No current journey network; one failure-probe network is bounded and owned.
 	testcontainersVolumeLimit     = 1 // No current journey volume; one failure-probe volume is bounded and owned.
-	pinnedGoVersion               = "1.26.5"
+	pinnedGoVersion               = "1.26.6"
 )
 
 var errCommandDurationLimit = errors.New("command duration limit exceeded")
@@ -411,10 +411,10 @@ func trustedHostedToolDirectories() []string {
 		"/opt/hostedtoolcache/node/24.15.0/arm64/bin",
 		"/Users/runner/hostedtoolcache/node/24.15.0/x64/bin",
 		"/Users/runner/hostedtoolcache/node/24.15.0/arm64/bin",
-		"/opt/hostedtoolcache/go/1.26.5/x64/bin",
-		"/opt/hostedtoolcache/go/1.26.5/arm64/bin",
-		"/Users/runner/hostedtoolcache/go/1.26.5/x64/bin",
-		"/Users/runner/hostedtoolcache/go/1.26.5/arm64/bin",
+		"/opt/hostedtoolcache/go/1.26.6/x64/bin",
+		"/opt/hostedtoolcache/go/1.26.6/arm64/bin",
+		"/Users/runner/hostedtoolcache/go/1.26.6/x64/bin",
+		"/Users/runner/hostedtoolcache/go/1.26.6/arm64/bin",
 	}
 }
 
@@ -484,8 +484,8 @@ import (
 func TestEffectivePath(t *testing.T) {
 	fmt.Printf("PROBE_RUNTIME=%s\n", runtime.Version())
 	fmt.Printf("PROBE_PATH=%s\n", os.Getenv("PATH"))
-	if runtime.Version() != "go1.26.5" {
-		t.Fatalf("runtime = %q, want go1.26.5", runtime.Version())
+	if runtime.Version() != "go1.26.6" {
+		t.Fatalf("runtime = %q, want go1.26.6", runtime.Version())
 	}
 	if got, want := os.Getenv("PATH"), os.Getenv("SEMLIA_EXPECTED_PATH"); got != want {
 		t.Fatalf("PATH = %q, want %q", got, want)
@@ -516,7 +516,7 @@ func TestEffectivePath(t *testing.T) {
 		"GOENV=off",
 		"GOFLAGS=",
 		"GOWORK=off",
-		"GOTOOLCHAIN=go1.26.5",
+		"GOTOOLCHAIN=go1.26.6",
 		"GOCACHE="+filepath.Join(scratch, "go-build"),
 		"GOPATH="+filepath.Join(scratch, "go-path"),
 		"GOMODCACHE="+activeGoModCache(t),
@@ -524,9 +524,9 @@ func TestEffectivePath(t *testing.T) {
 	)
 	output, err := command.CombinedOutput()
 	if err != nil {
-		t.Fatalf("run Go 1.26.3 to 1.26.5 PATH regression: %v\n%s", err, output)
+		t.Fatalf("run Go 1.26.3 to 1.26.6 PATH regression: %v\n%s", err, output)
 	}
-	for _, want := range []string{"PROBE_RUNTIME=go1.26.5", "PROBE_PATH=" + canonicalPath} {
+	for _, want := range []string{"PROBE_RUNTIME=go1.26.6", "PROBE_PATH=" + canonicalPath} {
 		if !strings.Contains(string(output), want) {
 			t.Errorf("nested Go test probe missing %q:\n%s", want, output)
 		}
@@ -1983,10 +1983,10 @@ func TestAcceptanceEnvironmentRejectsHostedToolLookalikes(t *testing.T) {
 	poisoned := t.TempDir()
 	basePath := strings.Join([]string{
 		poisoned,
-		filepath.Join(poisoned, "opt", "hostedtoolcache", "go", "1.26.5", "x64", "bin"),
+		filepath.Join(poisoned, "opt", "hostedtoolcache", "go", "1.26.6", "x64", "bin"),
 		"/opt/hostedtoolcache/go/latest/x64/bin",
-		"/opt/hostedtoolcache/go/1.26.5/x64/bin/..",
-		"/opt/hostedtoolcache/arbitrary/1.26.5/x64/bin",
+		"/opt/hostedtoolcache/go/1.26.6/x64/bin/..",
+		"/opt/hostedtoolcache/arbitrary/1.26.6/x64/bin",
 	}, string(os.PathListSeparator))
 	environment := isolatedEnvironmentFrom(
 		[]string{"PATH=" + basePath},
@@ -2001,7 +2001,7 @@ func TestAcceptanceEnvironmentRejectsHostedToolLookalikes(t *testing.T) {
 }
 
 func TestAcceptanceEnvironmentAllowsExactHostedToolPaths(t *testing.T) {
-	hostedGo := "/opt/hostedtoolcache/go/1.26.5/x64/bin"
+	hostedGo := "/opt/hostedtoolcache/go/1.26.6/x64/bin"
 	hostedNode := "/opt/hostedtoolcache/node/24.15.0/x64/bin"
 	hostedPnpm := "/home/runner/setup-pnpm/node_modules/.bin"
 	basePath := strings.Join([]string{hostedGo, hostedNode, hostedPnpm, hostedGo}, string(os.PathListSeparator))
@@ -2020,7 +2020,7 @@ func TestAcceptanceEnvironmentAllowsExactHostedToolPaths(t *testing.T) {
 
 func TestAcceptanceEnvironmentAllowsLinuxGitHubHostedToolPaths(t *testing.T) {
 	basePath := strings.Join([]string{
-		"/opt/hostedtoolcache/go/1.26.5/x64/bin",
+		"/opt/hostedtoolcache/go/1.26.6/x64/bin",
 		"/opt/hostedtoolcache/node/24.15.0/x64/bin",
 		"/home/runner/setup-pnpm/node_modules/.bin",
 	}, string(os.PathListSeparator))
@@ -2775,12 +2775,12 @@ func TestFreshCloneLauncherReservesCleanupEnvelope(t *testing.T) {
 	}
 	for _, fragment := range []string{
 		`/bin/bash --noprofile --norc -p`,
-		"PINNED_GO_VERSION=1.26.5",
+		"PINNED_GO_VERSION=1.26.6",
 		"PINNED_GO_BOOTSTRAP_VERSION=1.26.3",
 		`Linux:x86_64)`,
-		`EXPECTED_GO_CANDIDATES=/opt/hostedtoolcache/go/1.26.5/x64/bin/go:/usr/local/go/bin/go`,
+		`EXPECTED_GO_CANDIDATES=/opt/hostedtoolcache/go/1.26.6/x64/bin/go:/usr/local/go/bin/go`,
 		`Darwin:arm64)`,
-		`EXPECTED_GO_CANDIDATES=/Users/runner/hostedtoolcache/go/1.26.5/arm64/bin/go:/opt/homebrew/bin/go`,
+		`EXPECTED_GO_CANDIDATES=/Users/runner/hostedtoolcache/go/1.26.6/arm64/bin/go:/opt/homebrew/bin/go`,
 		`for CANDIDATE in ${EXPECTED_GO_CANDIDATES}; do`,
 		`GOTOOLCHAIN=local`,
 		`"${CANDIDATE}" version`,
@@ -2792,8 +2792,8 @@ func TestFreshCloneLauncherReservesCleanupEnvelope(t *testing.T) {
 		`if ! /bin/kill -0 -- "-${CHILD_PID}"`,
 		`wait_for_child`,
 		`"GOTOOLCHAIN=go${PINNED_GO_VERSION}"`,
-		"/opt/hostedtoolcache/go/1.26.5/x64/bin",
-		"/Users/runner/hostedtoolcache/go/1.26.5/arm64/bin",
+		"/opt/hostedtoolcache/go/1.26.6/x64/bin",
+		"/Users/runner/hostedtoolcache/go/1.26.6/arm64/bin",
 		`"HOME=${LAUNCHER_ROOT}/home"`,
 		`"TMPDIR=${LAUNCHER_ROOT}/tmp"`,
 		`"DOCKER_CONFIG=${LAUNCHER_ROOT}/docker-config"`,

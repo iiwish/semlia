@@ -17,6 +17,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/iiwish/semlia/pkg/identity"
 )
 
 const (
@@ -75,6 +77,7 @@ func Test00LocalStackContract(t *testing.T) {
 		`command: ["server"]`,
 		`command: ["worker"]`,
 		"postgres-data:/var/lib/postgresql",
+		"git-content:/var/lib/semlia/content",
 	} {
 		if !strings.Contains(composeFile, fragment) {
 			t.Errorf("compose.yaml does not contain %q", fragment)
@@ -231,11 +234,12 @@ func testRequiredProcessesAreRunning(t *testing.T) {
 
 func testWorkerRestartPreservesDatabaseJob(t *testing.T) {
 	stamp := time.Now().UTC().UnixNano()
-	workspaceID := fmt.Sprintf("smoke_workspace_%d", stamp)
-	jobID := fmt.Sprintf("smoke_job_%d", stamp)
+	workspaceID := newUUIDv7(t, identity.Workspace)
+	jobID := newUUIDv7(t, identity.Run)
+	workspaceSlug := fmt.Sprintf("smoke-workspace-%d", stamp)
 	sql := fmt.Sprintf(`
 		INSERT INTO workspaces (id, slug, display_name)
-		VALUES ('%[1]s', '%[1]s', 'Smoke Workspace');
+		VALUES ('%[1]s', '%[3]s', 'Smoke Workspace');
 		INSERT INTO jobs (
 			id, workspace_id, job_type, payload, max_attempts,
 			available_at, idempotency_key, trace_id
@@ -243,7 +247,7 @@ func testWorkerRestartPreservesDatabaseJob(t *testing.T) {
 			'%[2]s', '%[1]s', 'smoke.persistence', '{}'::jsonb, 3,
 			CURRENT_TIMESTAMP + INTERVAL '1 hour', '%[2]s',
 			'4bf92f3577b34da6a3ce929d0e0e4736'
-		);`, workspaceID, jobID)
+		);`, workspaceID, jobID, workspaceSlug)
 	psql(t, sql)
 
 	before := strings.TrimSpace(compose(t, "ps", "-q", "worker"))
@@ -259,11 +263,12 @@ func testWorkerRestartPreservesDatabaseJob(t *testing.T) {
 
 func testShutdownPreservesDataVolume(t *testing.T) {
 	stamp := time.Now().UTC().UnixNano()
-	workspaceID := fmt.Sprintf("shutdown_workspace_%d", stamp)
-	jobID := fmt.Sprintf("shutdown_job_%d", stamp)
+	workspaceID := newUUIDv7(t, identity.Workspace)
+	jobID := newUUIDv7(t, identity.Run)
+	workspaceSlug := fmt.Sprintf("shutdown-workspace-%d", stamp)
 	psql(t, fmt.Sprintf(`
 		INSERT INTO workspaces (id, slug, display_name)
-		VALUES ('%[1]s', '%[1]s', 'Shutdown Workspace');
+		VALUES ('%[1]s', '%[3]s', 'Shutdown Workspace');
 		INSERT INTO jobs (
 			id, workspace_id, job_type, payload, max_attempts,
 			available_at, idempotency_key, trace_id
@@ -271,7 +276,7 @@ func testShutdownPreservesDataVolume(t *testing.T) {
 			'%[2]s', '%[1]s', 'smoke.shutdown', '{}'::jsonb, 3,
 			CURRENT_TIMESTAMP + INTERVAL '1 hour', '%[2]s',
 			'4bf92f3577b34da6a3ce929d0e0e4736'
-		);`, workspaceID, jobID))
+		);`, workspaceID, jobID, workspaceSlug))
 
 	project := composeProject(t)
 	volume := docker(t, "volume", "ls", "--filter", "label=com.docker.compose.project="+project, "--filter", "label=com.docker.compose.volume=postgres-data", "--quiet")
@@ -295,6 +300,15 @@ func testShutdownPreservesDataVolume(t *testing.T) {
 	if got := strings.TrimSpace(psql(t, "SELECT count(*) FROM jobs WHERE id = '"+jobID+"';")); got != "1" {
 		t.Fatalf("job count after shutdown/start = %q, want 1", got)
 	}
+}
+
+func newUUIDv7(t *testing.T, prefix identity.Prefix) string {
+	t.Helper()
+	value, err := identity.New(prefix)
+	if err != nil {
+		t.Fatalf("create %s smoke identity: %v", prefix, err)
+	}
+	return value.UUID()
 }
 
 func requireRuntimeSmoke(t *testing.T) {

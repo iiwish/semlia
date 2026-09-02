@@ -619,6 +619,7 @@ export interface operations {
             /** @description A deterministic catalog page. */
             200: {
                 headers: {
+                    "X-Trace-ID": components["headers"]["TraceId"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -647,6 +648,7 @@ export interface operations {
             /** @description The created asset detail. */
             201: {
                 headers: {
+                    "X-Trace-ID": components["headers"]["TraceId"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -673,6 +675,7 @@ export interface operations {
             /** @description Current asset detail and provenance. */
             200: {
                 headers: {
+                    "X-Trace-ID": components["headers"]["TraceId"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -701,6 +704,7 @@ export interface operations {
             /** @description Immutable revision history. */
             200: {
                 headers: {
+                    "X-Trace-ID": components["headers"]["TraceId"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -731,6 +735,7 @@ export interface operations {
             /** @description The appended immutable revision. */
             201: {
                 headers: {
+                    "X-Trace-ID": components["headers"]["TraceId"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -759,6 +764,7 @@ export interface operations {
             /** @description Immutable revision content and evidence. */
             200: {
                 headers: {
+                    "X-Trace-ID": components["headers"]["TraceId"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -788,6 +794,7 @@ export interface operations {
             /** @description A bounded relation projection. */
             200: {
                 headers: {
+                    "X-Trace-ID": components["headers"]["TraceId"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -814,6 +821,7 @@ export interface operations {
             /** @description Discovery run state. */
             200: {
                 headers: {
+                    "X-Trace-ID": components["headers"]["TraceId"];
                     [name: string]: unknown;
                 };
                 content: {
