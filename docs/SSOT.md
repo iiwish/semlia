@@ -1111,5 +1111,5 @@ Semlia 当前使用 Apache License 2.0 进行私有孵化，不把当前 private
 
 - 本文档是 Semlia 产品与架构的有效项目合同。
 - D-001 至 D-015 是已接受的项目级决策。
-- M0 技术计划和任务图已确认；T007 已接受，T008 exact-ref fresh-clone、完整门禁、交付证据和三轮独立 review 已通过，T008 状态为 `Needs_Review`，M0 release report 状态为 `Ready_For_User_Review`。
-- M1 技术方向已确认；只有创始人明确接受 T008 与 M0 后，才生成可执行 M1 work graph 与 Ready packet。在此之前，M0 acceptance 与所有 M1 planning/implementation 保持阻断。
+- M0 技术计划和任务图已确认；T007 已接受，T008 exact-ref fresh-clone、完整门禁、交付证据和三轮独立 review 已通过。创始人于 2026-09-02 明确接受 T008 与 M0，M0 release report 状态为 `Accepted`。
+- M1 技术方向已确认，规划闸门已打开；M1 实现必须基于用户确认的 plan、work graph、checklist、analysis 和 Ready execution packet。

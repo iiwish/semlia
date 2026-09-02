@@ -84,7 +84,7 @@ Stories:
 Tasks:
 
 - [x] T007 [M0-US-005] 建立 CI、安全与供应链门禁
-- [ ] T008 [M0-US-001, M0-US-005] 完成 fresh-clone 验收与 M0 交付证据
+- [x] T008 [M0-US-001, M0-US-005] 完成 fresh-clone 验收与 M0 交付证据
 
 ## 4. Task Details
 
@@ -749,13 +749,13 @@ Execution notes:
 
 ### T008 完成 fresh-clone 验收与 M0 交付证据
 
-Status: Needs_Review
+Status: Accepted
 Priority: P0
 Depends on: T001, T002, T003, T004, T005, T006, T007
-Blocks: M1 planning and implementation
+Blocks: None; the M1 planning gate opened after acceptance
 Story / Requirement: M0-US-001, M0-US-005, M0-FR-001, M0-FR-008, M0-NFR-001 至 M0-NFR-007, AC-M0-001 至 AC-M0-006
 Parallel: No
-Conflicts with: 创始人明确接受 T008 与 M0 前，所有 M1 planning 和 implementation 均保持阻断；其他当前实现任务不得与 T008 并行
+Conflicts with: None after founder acceptance on 2026-09-02
 
 Goal:
 
@@ -873,12 +873,12 @@ Execution notes:
 - Review: spec-compliance、bug/code-quality and QA-acceptance all passed with no blocking finding。
 - Cleanup: exact final-run resources/processes/recorded root are absent；the persistent acceptance lock path is unheld and reacquirable。
 - Restrictive-image proof: source migration modes 0700/0600 became packaged 0755/0644 under `nonroot:nonroot`; the unique probe container, image tag and temporary context were removed. Shared canonical release/security image tags are outside this task-owned zero-resource assertion。
-- Current gate: T008 is `Needs_Review`; only explicit founder acceptance can move T008 and M0 to `Accepted`。
+- Acceptance: founder explicitly accepted T008 and M0 on 2026-09-02; the M1 planning gate is open。
 
 ## 5. 用户审核闸门
 
 - Approval: Confirmed by founder on 2026-08-08
 - Accepted graph: E001、E002 和 T001 至 T008 的范围、依赖、并行边界、验证命令与 Definition of Done。
-- Current execution: T008 exact-ref isolation、full gate、release evidence 和三轮 review 已通过，状态为 `Needs_Review`；其余里程碑不得与 T008 并行实现。
-- Next gate: founder 明确接受 T008 与 M0 后，才生成 M1 work graph 与 Ready packet。
+- Current execution: T008 exact-ref isolation、full gate、release evidence 和三轮 review 已通过；founder 于 2026-09-02 明确接受 T008 与 M0。
+- Next gate: 生成并审核 M1 plan、work graph、checklist 与 analysis；只有获得用户确认的任务才生成 Ready execution packet 并进入实现。
 - Execution rule: 没有已审核 packet、干净 worktree 和明确执行授权时，不开始任何 task。
