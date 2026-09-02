@@ -5,9 +5,10 @@
 | Field | Value |
 | --- | --- |
 | Task | T001 Identity and public contracts |
-| Status | `Needs_Review` |
+| Status | `Accepted` |
 | Implementation | `ffb2eb7`; review correction `7ba8289` |
 | Date | 2026-09-02 |
+| Accepted | 2026-09-02 by founder |
 | Packet | `docs/specs/m1-semantic-registry/packets/T001.yaml` |
 
 ## Delivered
@@ -36,4 +37,4 @@ The complete Go run includes the real PostgreSQL integration, worker, repository
 
 The implementation matches TDR-0003: PostgreSQL-facing UUID values and public TypeIDs remain one identity, prefixes are centrally registered, and auto-increment behavior is not introduced. Generated Go contracts import the public identity package rather than an `internal` package, so downstream Go consumers are not blocked by visibility rules. Review also proved event and run identifiers are not interchangeable.
 
-Residual work belongs to T002: add the forward M0 identity migration, M1 tables, sqlc queries and real PostgreSQL invariant tests. T001 is ready for founder acceptance.
+Residual work belongs to T002: add the forward M0 identity migration, M1 tables, sqlc queries and real PostgreSQL invariant tests. Founder acceptance on 2026-09-02 closes T001.

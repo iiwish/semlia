@@ -2,7 +2,7 @@
 
 ## Status
 
-Design complete; implementation remains blocked until T001 is explicitly accepted.
+Confirmed by founder on 2026-09-02; implementation is authorized through the Ready T002 packet.
 
 ## Scope
 

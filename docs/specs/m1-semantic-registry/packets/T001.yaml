@@ -3,12 +3,13 @@ packet_id: M1-T001-A001
 task_id: T001
 feature_id: m1-semantic-registry
 mode: execute_one_task
-status: Needs_Review
+status: Accepted
 
 execution_result:
   implementation: ffb2eb7 with review correction 7ba8289
   validation: Complete make check-source gate passed after the event/run identity correction, with no contract, migration, embed or release-build drift.
-  review: Local spec, code-quality and contract review found no blocking issue; founder acceptance remains.
+  review: Local spec, code-quality and contract review found no blocking issue.
+  acceptance: Founder explicitly accepted T001 on 2026-09-02.
 
 goal: >-
   Establish the shared UUIDv7/TypeID identity boundary and M1 semantic-registry domain/public contracts

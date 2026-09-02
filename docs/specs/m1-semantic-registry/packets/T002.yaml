@@ -1,0 +1,71 @@
+schema_version: 1
+packet_id: M1-T002-A001
+task_id: T002
+feature_id: m1-semantic-registry
+mode: execute_one_task
+status: Ready
+
+goal: >-
+  Convert M0 foundation identities to reversible UUIDv7 storage and add the normalized PostgreSQL source,
+  physical observation, semantic revision, evidence and finite ontology foundation with typed repositories.
+
+dependencies:
+  - T001 Accepted by founder on 2026-09-02
+  - T002 migration design confirmed by founder on 2026-09-02
+  - docs/adr/0003-resource-identifiers.md
+  - docs/specs/m1-semantic-registry/data-model.md
+  - docs/specs/m1-semantic-registry/t002-migration-design.md
+
+allowed_files:
+  - migrations/000002_foundation_uuidv7.*.sql
+  - migrations/000003_semantic_registry_foundation.*.sql
+  - db/sqlc.yaml
+  - db/queries/**
+  - db/README.md
+  - pkg/identity/**
+  - internal/domain/semantic/**
+  - internal/application/jobs/**
+  - internal/adapters/postgres/**
+  - tests/integration/db/**
+  - tests/integration/worker/**
+  - tests/repository/**
+  - api/openapi/semlia.v1.yaml
+  - api/gen/go/**
+  - sdk/typescript/src/**
+  - go.mod
+  - go.sum
+  - docs/specs/m1-semantic-registry/**
+  - docs/evidence/M1-T002/**
+
+forbidden_changes:
+  - Do not edit 000001_m0_foundation or weaken M0 lease, audit or outbox behavior.
+  - Do not add HTTP routes, source parsers, Git writes, Cube, Temporal, graph or vector infrastructure.
+  - Do not expose pgtype.UUID outside the PostgreSQL adapter.
+  - Do not store credentials, raw search text or customer fact rows.
+  - Do not make JSONB replace normalized relationships.
+
+tdd:
+  red:
+    - Add populated-M0 UUIDv7 conversion, down preservation and PostgreSQL 17/18 migration tests.
+    - Add schema invariant, workspace isolation, immutability, idempotency, relation policy and ontology publication tests.
+    - Add typed repository round-trip and error mapping tests.
+  green:
+    - Implement migration 000002 and update typed foundation repository boundaries.
+    - Implement migration 000003, sqlc queries and semantic registry repository.
+  refactor:
+    - Centralize UUID conversion and repository errors without leaking adapter types.
+
+validation:
+  - make contracts-check
+  - make db-generate-check
+  - go test ./tests/integration/db/... ./tests/integration/worker/...
+  - go test -race ./internal/domain/semantic/... ./pkg/identity/...
+  - make check-source
+  - git diff --check
+
+acceptance:
+  - Empty and populated M0 upgrades preserve counts, relationships and UUIDv7 invariants.
+  - Down/up is lossless for identity and M0 job/outbox behavior.
+  - Source, physical, semantic, evidence and ontology schemas enforce their documented invariants.
+  - Repositories use Semlia identity/domain types and real PostgreSQL transactions.
+  - PostgreSQL 17 and canonical PostgreSQL 18 both pass the migration contract.
