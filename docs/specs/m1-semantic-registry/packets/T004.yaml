@@ -1,0 +1,66 @@
+schema_version: 1
+packet_id: M1-T004-A001
+task_id: T004
+feature_id: m1-semantic-registry
+mode: execute_one_task
+status: Running
+
+goal: >-
+  Deliver generated Catalog and Revision APIs with deterministic PostgreSQL search/pagination,
+  complete provenance reads and atomic asset/revision mutations.
+
+dependencies:
+  - T003 Accepted by founder on 2026-09-02
+  - docs/specs/m1-semantic-registry/spec.md
+  - docs/specs/m1-semantic-registry/plan.md
+  - docs/specs/m1-semantic-registry/t004-api-design.md
+
+allowed_files:
+  - api/openapi/semlia.v1.yaml
+  - api/gen/go/**
+  - sdk/typescript/src/**
+  - db/queries/catalog.sql
+  - internal/domain/catalog/**
+  - internal/application/catalog/**
+  - internal/adapters/postgres/catalog.go
+  - internal/adapters/postgres/sqlc/**
+  - internal/platform/http/**
+  - cmd/semlia/**
+  - tests/contracts/**
+  - tests/integration/catalog/**
+  - tests/integration/http/**
+  - docs/specs/m1-semantic-registry/**
+  - docs/evidence/M1-T004/**
+
+forbidden_changes:
+  - Do not add a migration, search service, graph database, vector store or workflow engine.
+  - Do not implement the Git writer, outbox delivery policy or usage retention owned by T005/T006.
+  - Do not expose PostgreSQL UUIDs, sqlc rows, parser types, credentials or raw database rows.
+  - Do not allow unbounded relation traversal or cursors reused with different filters.
+
+tdd:
+  red:
+    - Add contract fixtures for catalog paths, schemas and stable errors.
+    - Add handler tests for path parsing, input validation and response mapping.
+    - Add real PostgreSQL tests for mutation atomicity, immutable revisions, search and cursor replay.
+  green:
+    - Generate contract types and implement the catalog application port/service.
+    - Add sqlc read/write queries and one transaction per mutation.
+    - Wire the service into the HTTP runtime with safe error mapping.
+  refactor:
+    - Keep cursor encoding, mapping and repository errors centralized and adapter-neutral.
+
+validation:
+  - make contracts-check
+  - make db-generate-check
+  - go test -race ./internal/domain/catalog/... ./internal/application/catalog/... ./internal/platform/http/...
+  - go test -count=1 ./tests/integration/catalog/... ./tests/integration/http/...
+  - make check-source
+  - git diff --check
+
+acceptance:
+  - Public contracts and runtime expose every confirmed Catalog and Revision route.
+  - Search and cursor pagination are deterministic, bounded and workspace-isolated.
+  - Detail/revision responses preserve immutable content and evidence provenance.
+  - Asset/revision mutations atomically include audit and outbox records.
+  - Stable safe errors cover invalid, not-found, conflict and invariant states.
