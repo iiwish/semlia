@@ -11,7 +11,7 @@
 | 产品合同 | `docs/specs/product-prototype/product-design.md` v0.4.2 Confirmed |
 | 前端基线 | `docs/specs/m1-semantic-registry/frontend-baseline-audit.md` |
 | 审核 | 2026-08-24 经创始人确认仓库优先接入、物理图谱与可选执行适配器边界 |
-| 实现闸门 | M0 通过 fresh-clone 验收并由创始人接受后，才创建 M1 Ready task |
+| 实现闸门 | M0 已于 2026-09-02 获创始人接受；M1 task 仍须通过 plan、work graph、checklist、analysis 与 Ready packet 闸门 |
 
 ## 1. 决策摘要
 
@@ -215,7 +215,7 @@ Rationale:
 
 ## 7. 任务与验收影响
 
-M1 计划必须至少包含以下工作流，但在 M0 验收完成前保持规划态：
+M1 计划至少包含以下工作流：
 
 1. M1 领域 schema、OpenAPI、错误模型和资产 revision 契约。
 2. Catalog、DDL/View SQL 和 Transformation adapter spike，真实数据库 fixture、增量 discovery 与 unresolved 设计。
@@ -247,4 +247,4 @@ M1 task 不得直接复制 `prototypes/product/**` 到 `web/**`。原型只提�
 
 ## 9. 实现闸门
 
-本 TDR 确认技术方向，不代表 M1 实现已经获准启动。T007 已由 founder 接受；T008 正在执行 fresh-clone、module identity、运维文档和 M0 release report 验收。M0 达到退出标准并由 founder 明确接受后，才编写并审核 M1 plan、work graph、checklist、analysis 和 Ready execution packets。
+本 TDR 确认技术方向。Founder 于 2026-09-02 明确接受 T008 与 M0，M1 规划闸门已经打开。实现仍须先编写并由用户确认 M1 plan、work graph、checklist 与 analysis，再为满足依赖的单一任务生成 Ready execution packet。

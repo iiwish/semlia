@@ -6,8 +6,9 @@
 | --- | --- |
 | Task | T008 fresh-clone acceptance and M0 delivery evidence |
 | Attempt | `M0-T008-A001` |
-| Status | `Needs_Review` |
+| Status | `Accepted` |
 | Date | 2026-08-13 |
+| Accepted | 2026-09-02 by founder |
 | Branch | `codex/core-product-loop` |
 | Baseline | `9d3608ed769cab01038d3708d657cf4b8eb79af3` |
 | Validated implementation | `49f4784a27c2f10e9840455f2f711acebe2c1878` |
@@ -108,4 +109,4 @@ Earlier passing candidates were not promoted because later independent review fo
 
 ## Review And Handoff
 
-Spec-compliance, bug/code-quality and QA-acceptance reviews passed against exact implementation `49f4784a27c2f10e9840455f2f711acebe2c1878` with no blocking finding. T008 is `Needs_Review`, never `Accepted` by this evidence integration. M0 acceptance and all M1 planning or implementation remain blocked until the founder explicitly accepts this post-execution evidence.
+Spec-compliance, bug/code-quality and QA-acceptance reviews passed against exact implementation `49f4784a27c2f10e9840455f2f711acebe2c1878` with no blocking finding. Founder acceptance on 2026-09-02 sets T008 and M0 to `Accepted` and opens M1 planning. M1 execution remains subject to its confirmed work graph and Ready task packet.

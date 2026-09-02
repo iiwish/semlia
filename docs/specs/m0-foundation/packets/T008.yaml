@@ -6,7 +6,9 @@ mode: execute_one_task
 adapter: agent-neutral
 
 execution_result:
-  status: Needs_Review
+  status: Accepted
+  accepted_on: 2026-09-02
+  accepted_by: founder
   validated_implementation: 49f4784a27c2f10e9840455f2f711acebe2c1878
   canonical_log: /tmp/semlia-t008-acceptance-49f4784-1786623621.log
   canonical_log_sha256: 13db9ae12000c2fe4e4e1420e5ea30c71ee1a311d7b77cad4b8e91298c773f87
@@ -20,7 +22,7 @@ execution_result:
     Exact final-run project resources, matching processes and recorded root are absent. The persistent
     acceptance lock path is unheld and independently reacquirable; historical launcher roots are outside this assertion.
   review: Spec-compliance, bug/code-quality and QA-acceptance passed with no blocking finding.
-  acceptance_gate: Explicit founder acceptance is still required; do not mark T008 or M0 Accepted or begin M1 planning or implementation.
+  acceptance_gate: Founder accepted T008 and M0 on 2026-09-02; M1 planning is open and implementation requires an approved M1 graph and Ready packet.
 
 governance_inputs:
   product_contract: docs/SSOT.md
@@ -143,7 +145,7 @@ execution_constraints:
     - Do not claim public vulnerability reporting, branch protection, code scanning, secret scanning or private tag attestation is enabled.
     - Do not weaken existing source, smoke, security, SBOM, release or repository checks.
     - Do not use global Docker prune, shared project names or destructive cleanup outside the acceptance run.
-    - Do not mark T008 or M0 Accepted; only founder acceptance after review can do that.
+    - The implementation worker must not mark T008 or M0 Accepted; founder acceptance was recorded later by the delivery orchestrator on 2026-09-02.
   ownership_notes:
     - Governance status, packet metadata and final evidence are maintained by the delivery orchestrator.
     - Preserve all accepted T001 through T007 behavior and user work.

@@ -5,8 +5,9 @@
 | Field | Value |
 | --- | --- |
 | Milestone | M0 Foundation |
-| Status | `Ready_For_User_Review` |
+| Status | `Accepted` |
 | Date | 2026-08-13 |
+| Accepted | 2026-09-02 by founder |
 | Baseline | M0 accepted predecessor work plus T008 baseline `9d3608ed769cab01038d3708d657cf4b8eb79af3` |
 | Validated implementation | `49f4784a27c2f10e9840455f2f711acebe2c1878` |
 | Repository visibility | Private incubation |
@@ -14,9 +15,9 @@
 
 ## Decision Summary
 
-M0 is ready for founder review as Semlia's engineering foundation. It provides a reproducible repository, versioned contracts, a release-shaped Go/Web/PostgreSQL/worker stack, deterministic migrations, local and hosted quality gates, security scanning, SBOM and release-bundle generation, and a measured exact-ref fresh-clone journey.
+M0 is the accepted engineering foundation for Semlia. It provides a reproducible repository, versioned contracts, a release-shaped Go/Web/PostgreSQL/worker stack, deterministic migrations, local and hosted quality gates, security scanning, SBOM and release-bundle generation, and a measured exact-ref fresh-clone journey.
 
-M0 is not a product release. The semantic registry, Cube-backed execution and trusted learning loop are M1 work. Public contribution and security operations retain explicit gates. M0 acceptance and all M1 planning or implementation remain blocked until the founder explicitly accepts T008 and this report.
+M0 is not a product release. The semantic registry, optional Cube-backed execution and trusted learning loop remain later milestone work. Public contribution and security operations retain explicit gates. Founder acceptance on 2026-09-02 opens M1 planning; M1 implementation remains governed by a confirmed work graph and Ready execution packet.
 
 ## Requirement Disposition
 
@@ -92,11 +93,10 @@ Semlia remains pre-alpha with no supported production version, external security
 
 ## Review
 
-Spec-compliance, bug/code-quality and QA-acceptance reviews passed against `49f4784a27c2f10e9840455f2f711acebe2c1878` with no blocking finding. This report is `Ready_For_User_Review`, T008 is `Needs_Review`, and neither T008 nor M0 is `Accepted`.
+Spec-compliance, bug/code-quality and QA-acceptance reviews passed against `49f4784a27c2f10e9840455f2f711acebe2c1878` with no blocking finding. Founder acceptance on 2026-09-02 sets this report, T008 and M0 to `Accepted`.
 
 ## Residual Release Gates
 
-- Obtain explicit founder acceptance of T008 and M0 before generating an executable M1 work graph or packet.
 - Implement and independently validate the M1 Cube import, semantic registry, evidence and trusted-quality loop.
 - Enable and prove public repository protections, required checks, vulnerability reporting and security scanners.
 - Validate signed or attested tags, embedded-Web dependency inventory, upgrade compatibility and backup/restore.
@@ -105,4 +105,4 @@ Spec-compliance, bug/code-quality and QA-acceptance reviews passed against `49f4
 
 ## Recommendation
 
-Review and explicitly accept or reject T008 and M0 based on this report and `docs/evidence/T008`. Do not publish a release, plan M1 execution or start M1 implementation from review-state evidence alone.
+Use this report and `docs/evidence/T008` as the accepted M0 baseline. Proceed with M1 through a confirmed work graph, task checklist, consistency analysis and Ready execution packet; do not treat M0 acceptance as a public-release claim.
