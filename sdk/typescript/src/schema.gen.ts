@@ -70,10 +70,57 @@ export interface components {
          */
         SchemaVersion: string;
         /**
-         * @description Stable typed identifier composed of a lowercase prefix and ULID.
-         * @example workspace_01ARZ3NDEKTSV4RRFFQ69G5FAV
+         * Format: typeid
+         * @description Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+         * @example ast_01arz3ndektsv4rrffq69g5fav
          */
         ResourceId: string;
+        /**
+         * Format: typeid
+         * @example wsp_01arz3ndektsv4rrffq69g5fav
+         */
+        WorkspaceId: string;
+        /**
+         * Format: typeid
+         * @example ast_01arz3ndektsv4rrffq69g5fav
+         */
+        SemanticAssetId: string;
+        /**
+         * Format: typeid
+         * @example rev_01arz3ndektsv4rrffq69g5fav
+         */
+        AssetRevisionId: string;
+        /**
+         * Format: typeid
+         * @example rel_01arz3ndektsv4rrffq69g5fav
+         */
+        SemanticRelationId: string;
+        /**
+         * Format: typeid
+         * @example ont_01arz3ndektsv4rrffq69g5fav
+         */
+        OntologyRevisionId: string;
+        /**
+         * Format: typeid
+         * @example evd_01arz3ndektsv4rrffq69g5fav
+         */
+        EvidenceArtifactId: string;
+        /**
+         * Format: typeid
+         * @example run_01arz3ndektsv4rrffq69g5fav
+         */
+        RunId: string;
+        /**
+         * @description Workspace-scoped human-readable namespace and stable key.
+         * @example commerce.net_revenue
+         */
+        SemanticAddress: string;
+        /** @enum {string} */
+        SemanticAssetType: "concept" | "entity" | "semantic_model" | "dimension" | "measure" | "metric" | "segment";
+        /** @enum {string} */
+        RelationPredicate: "measures" | "describes" | "depends_on" | "derived_from" | "filters_by" | "synonym_of" | "contains" | "broader_than" | "narrower_than" | "equivalent_to" | "disjoint_with";
+        /** @enum {string} */
+        RelationAssertionState: "asserted" | "inferred" | "candidate" | "deprecated";
         /**
          * Format: date-time
          * @description RFC 3339 timestamp normalized to UTC at public boundaries.

@@ -5,6 +5,8 @@ package contract
 
 import (
 	"time"
+
+	identity "github.com/iiwish/semlia/pkg/identity"
 )
 
 // Defines values for EventEnvelopeSpecVersion.
@@ -40,6 +42,108 @@ func (e HealthResponseStatus) Valid() bool {
 	}
 }
 
+// Defines values for RelationAssertionState.
+const (
+	Asserted   RelationAssertionState = "asserted"
+	Candidate  RelationAssertionState = "candidate"
+	Deprecated RelationAssertionState = "deprecated"
+	Inferred   RelationAssertionState = "inferred"
+)
+
+// Valid indicates whether the value is a known member of the RelationAssertionState enum.
+func (e RelationAssertionState) Valid() bool {
+	switch e {
+	case Asserted:
+		return true
+	case Candidate:
+		return true
+	case Deprecated:
+		return true
+	case Inferred:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RelationPredicate.
+const (
+	BroaderThan  RelationPredicate = "broader_than"
+	Contains     RelationPredicate = "contains"
+	DependsOn    RelationPredicate = "depends_on"
+	DerivedFrom  RelationPredicate = "derived_from"
+	Describes    RelationPredicate = "describes"
+	DisjointWith RelationPredicate = "disjoint_with"
+	EquivalentTo RelationPredicate = "equivalent_to"
+	FiltersBy    RelationPredicate = "filters_by"
+	Measures     RelationPredicate = "measures"
+	NarrowerThan RelationPredicate = "narrower_than"
+	SynonymOf    RelationPredicate = "synonym_of"
+)
+
+// Valid indicates whether the value is a known member of the RelationPredicate enum.
+func (e RelationPredicate) Valid() bool {
+	switch e {
+	case BroaderThan:
+		return true
+	case Contains:
+		return true
+	case DependsOn:
+		return true
+	case DerivedFrom:
+		return true
+	case Describes:
+		return true
+	case DisjointWith:
+		return true
+	case EquivalentTo:
+		return true
+	case FiltersBy:
+		return true
+	case Measures:
+		return true
+	case NarrowerThan:
+		return true
+	case SynonymOf:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SemanticAssetType.
+const (
+	Concept       SemanticAssetType = "concept"
+	Dimension     SemanticAssetType = "dimension"
+	Entity        SemanticAssetType = "entity"
+	Measure       SemanticAssetType = "measure"
+	Metric        SemanticAssetType = "metric"
+	Segment       SemanticAssetType = "segment"
+	SemanticModel SemanticAssetType = "semantic_model"
+)
+
+// Valid indicates whether the value is a known member of the SemanticAssetType enum.
+func (e SemanticAssetType) Valid() bool {
+	switch e {
+	case Concept:
+		return true
+	case Dimension:
+		return true
+	case Entity:
+		return true
+	case Measure:
+		return true
+	case Metric:
+		return true
+	case Segment:
+		return true
+	case SemanticModel:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SystemInfoService.
 const (
 	Semlia SystemInfoService = "semlia"
@@ -59,6 +163,9 @@ func (e SystemInfoService) Valid() bool {
 //
 // Example: v1
 type ApiVersion = string
+
+// AssetRevisionId Example: rev_01arz3ndektsv4rrffq69g5fav
+type AssetRevisionId = identity.RevisionID
 
 // Cursor Opaque pagination cursor that clients must not interpret.
 type Cursor = string
@@ -88,18 +195,18 @@ type ErrorResponse struct {
 type EventEnvelope struct {
 	Data map[string]interface{} `json:"data"`
 
-	// Id Stable typed identifier composed of a lowercase prefix and ULID.
+	// Id Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
 	//
-	// Example: workspace_01ARZ3NDEKTSV4RRFFQ69G5FAV
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
 	Id ResourceId `json:"id"`
 
 	// Source Example: urn:semlia:control-plane
 	Source      string                   `json:"source"`
 	SpecVersion EventEnvelopeSpecVersion `json:"specVersion"`
 
-	// Subject Stable typed identifier composed of a lowercase prefix and ULID.
+	// Subject Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
 	//
-	// Example: workspace_01ARZ3NDEKTSV4RRFFQ69G5FAV
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
 	Subject *ResourceId `json:"subject,omitempty"`
 
 	// Time RFC 3339 timestamp normalized to UTC at public boundaries.
@@ -117,9 +224,9 @@ type EventEnvelope struct {
 	// Example: system.readiness.changed
 	Type EventType `json:"type"`
 
-	// WorkspaceId Stable typed identifier composed of a lowercase prefix and ULID.
+	// WorkspaceId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
 	//
-	// Example: workspace_01ARZ3NDEKTSV4RRFFQ69G5FAV
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
 	WorkspaceId *ResourceId `json:"workspaceId,omitempty"`
 }
 
@@ -130,6 +237,9 @@ type EventEnvelopeSpecVersion string
 //
 // Example: system.readiness.changed
 type EventType = string
+
+// EvidenceArtifactId Example: evd_01arz3ndektsv4rrffq69g5fav
+type EvidenceArtifactId = identity.EvidenceID
 
 // HealthResponse defines model for HealthResponse.
 type HealthResponse struct {
@@ -144,6 +254,9 @@ type HealthResponse struct {
 // HealthResponseStatus defines model for HealthResponse.Status.
 type HealthResponseStatus string
 
+// OntologyRevisionId Example: ont_01arz3ndektsv4rrffq69g5fav
+type OntologyRevisionId = identity.OntologyID
+
 // PageInfo defines model for PageInfo.
 type PageInfo struct {
 	Limit int `json:"limit"`
@@ -152,15 +265,38 @@ type PageInfo struct {
 	NextCursor *Cursor `json:"nextCursor,omitempty"`
 }
 
-// ResourceId Stable typed identifier composed of a lowercase prefix and ULID.
+// RelationAssertionState defines model for RelationAssertionState.
+type RelationAssertionState string
+
+// RelationPredicate defines model for RelationPredicate.
+type RelationPredicate string
+
+// ResourceId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
 //
-// Example: workspace_01ARZ3NDEKTSV4RRFFQ69G5FAV
-type ResourceId = string
+// Example: ast_01arz3ndektsv4rrffq69g5fav
+type ResourceId = identity.ID
+
+// RunId Example: run_01arz3ndektsv4rrffq69g5fav
+type RunId = identity.RunID
 
 // SchemaVersion Semantic version of the public contract bundle.
 //
 // Example: 0.1.0
 type SchemaVersion = string
+
+// SemanticAddress Workspace-scoped human-readable namespace and stable key.
+//
+// Example: commerce.net_revenue
+type SemanticAddress = string
+
+// SemanticAssetId Example: ast_01arz3ndektsv4rrffq69g5fav
+type SemanticAssetId = identity.AssetID
+
+// SemanticAssetType defines model for SemanticAssetType.
+type SemanticAssetType string
+
+// SemanticRelationId Example: rel_01arz3ndektsv4rrffq69g5fav
+type SemanticRelationId = identity.RelationID
 
 // SystemInfo defines model for SystemInfo.
 type SystemInfo struct {
@@ -194,6 +330,9 @@ type Timestamp = time.Time
 //
 // Example: 4bf92f3577b34da6a3ce929d0e0e4736
 type TraceId = string
+
+// WorkspaceId Example: wsp_01arz3ndektsv4rrffq69g5fav
+type WorkspaceId = identity.WorkspaceID
 
 // Error defines model for Error.
 type Error = ErrorResponse

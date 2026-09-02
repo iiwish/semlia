@@ -1,12 +1,12 @@
 openapi: 3.0.3
 info:
   title: Semlia Control API
-  version: 0.1.0
+  version: 0.2.0
   description: Versioned control-plane contract shared by Semlia services and clients.
   license:
     name: Apache-2.0
     url: https://www.apache.org/licenses/LICENSE-2.0.html
-x-semlia-contract-version: 1
+x-semlia-contract-version: 2
 servers:
   - url: http://localhost:8080
     description: Local development
@@ -110,9 +110,113 @@ components:
       example: 0.1.0
     ResourceId:
       type: string
-      description: Stable typed identifier composed of a lowercase prefix and ULID.
-      pattern: "^[a-z][a-z0-9_]{1,31}_[0-9A-HJKMNP-TV-Z]{26}$"
-      example: workspace_01ARZ3NDEKTSV4RRFFQ69G5FAV
+      format: typeid
+      description: Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+      pattern: "^[a-z](?:[a-z_]{0,61}[a-z])?_[0-7][0-9a-hjkmnp-tv-z]{25}$"
+      example: ast_01arz3ndektsv4rrffq69g5fav
+      x-go-type: identity.ID
+      x-go-type-import:
+        path: github.com/iiwish/semlia/pkg/identity
+        name: identity
+    WorkspaceId:
+      type: string
+      format: typeid
+      pattern: "^wsp_[0-7][0-9a-hjkmnp-tv-z]{25}$"
+      example: wsp_01arz3ndektsv4rrffq69g5fav
+      x-go-type: identity.WorkspaceID
+      x-go-type-import:
+        path: github.com/iiwish/semlia/pkg/identity
+        name: identity
+    SemanticAssetId:
+      type: string
+      format: typeid
+      pattern: "^ast_[0-7][0-9a-hjkmnp-tv-z]{25}$"
+      example: ast_01arz3ndektsv4rrffq69g5fav
+      x-go-type: identity.AssetID
+      x-go-type-import:
+        path: github.com/iiwish/semlia/pkg/identity
+        name: identity
+    AssetRevisionId:
+      type: string
+      format: typeid
+      pattern: "^rev_[0-7][0-9a-hjkmnp-tv-z]{25}$"
+      example: rev_01arz3ndektsv4rrffq69g5fav
+      x-go-type: identity.RevisionID
+      x-go-type-import:
+        path: github.com/iiwish/semlia/pkg/identity
+        name: identity
+    SemanticRelationId:
+      type: string
+      format: typeid
+      pattern: "^rel_[0-7][0-9a-hjkmnp-tv-z]{25}$"
+      example: rel_01arz3ndektsv4rrffq69g5fav
+      x-go-type: identity.RelationID
+      x-go-type-import:
+        path: github.com/iiwish/semlia/pkg/identity
+        name: identity
+    OntologyRevisionId:
+      type: string
+      format: typeid
+      pattern: "^ont_[0-7][0-9a-hjkmnp-tv-z]{25}$"
+      example: ont_01arz3ndektsv4rrffq69g5fav
+      x-go-type: identity.OntologyID
+      x-go-type-import:
+        path: github.com/iiwish/semlia/pkg/identity
+        name: identity
+    EvidenceArtifactId:
+      type: string
+      format: typeid
+      pattern: "^evd_[0-7][0-9a-hjkmnp-tv-z]{25}$"
+      example: evd_01arz3ndektsv4rrffq69g5fav
+      x-go-type: identity.EvidenceID
+      x-go-type-import:
+        path: github.com/iiwish/semlia/pkg/identity
+        name: identity
+    RunId:
+      type: string
+      format: typeid
+      pattern: "^run_[0-7][0-9a-hjkmnp-tv-z]{25}$"
+      example: run_01arz3ndektsv4rrffq69g5fav
+      x-go-type: identity.RunID
+      x-go-type-import:
+        path: github.com/iiwish/semlia/pkg/identity
+        name: identity
+    SemanticAddress:
+      type: string
+      description: Workspace-scoped human-readable namespace and stable key.
+      pattern: '^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$'
+      example: commerce.net_revenue
+    SemanticAssetType:
+      type: string
+      enum:
+        - concept
+        - entity
+        - semantic_model
+        - dimension
+        - measure
+        - metric
+        - segment
+    RelationPredicate:
+      type: string
+      enum:
+        - measures
+        - describes
+        - depends_on
+        - derived_from
+        - filters_by
+        - synonym_of
+        - contains
+        - broader_than
+        - narrower_than
+        - equivalent_to
+        - disjoint_with
+    RelationAssertionState:
+      type: string
+      enum:
+        - asserted
+        - inferred
+        - candidate
+        - deprecated
     Timestamp:
       type: string
       format: date-time
