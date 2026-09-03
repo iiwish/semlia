@@ -715,6 +715,154 @@ paths:
           $ref: "#/components/responses/UnprocessableEntity"
         default:
           $ref: "#/components/responses/Error"
+  /api/v1/workspaces/{workspaceId}/governance/releases:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+    get:
+      operationId: listGovernanceReleases
+      summary: List workspace releases newest first
+      description: >-
+        The immutable release history of the workspace, newest first with an
+        opaque keyset cursor. Requires the asset.read capability.
+      tags:
+        - Governance
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: A deterministic page of workspace releases.
+          headers:
+            X-Trace-ID:
+              $ref: "#/components/headers/TraceId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GovernanceReleasePage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        default:
+          $ref: "#/components/responses/Error"
+    post:
+      operationId: publishGovernanceRelease
+      summary: Publish an approved proposal as an immutable release
+      description: >-
+        Cuts an immutable release from an in_review proposal. Gates, in order:
+        the proposal must be in_review, carry no blocker findings, and hold at
+        least one approving review; the publisher needs the human-only
+        release.publish capability (agents are refused with
+        SEPARATION_OF_DUTY); the publisher cannot be the proposal author and
+        cannot be the sole approving reviewer (two-person release control,
+        D-006). Inside one transaction the change-set is applied — a new
+        semantic-asset revision with a current-revision switch, or a governed
+        object version bump — the manifest pins the resulting revision or
+        version, the proposal walks to released, and the audit facts plus the
+        release.published outbox event commit atomically. Every refusal is
+        returned with a stable code and audited.
+      tags:
+        - Governance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PublishGovernanceReleaseRequest"
+      responses:
+        "201":
+          description: The cut release with its manifest.
+          headers:
+            X-Trace-ID:
+              $ref: "#/components/headers/TraceId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GovernanceReleaseDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/workspaces/{workspaceId}/governance/releases/{releaseId}:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+      - $ref: "#/components/parameters/ReleaseId"
+    get:
+      operationId: getGovernanceRelease
+      summary: Read one immutable release with its manifest
+      description: >-
+        The release aggregate: sequence, manifest digest, rollback reference
+        and originating proposal when present, plus the manifest entries
+        pinning the exact asset revisions and governed-object versions the
+        release produced.
+      tags:
+        - Governance
+      responses:
+        "200":
+          description: The release detail with its manifest.
+          headers:
+            X-Trace-ID:
+              $ref: "#/components/headers/TraceId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GovernanceReleaseDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/workspaces/{workspaceId}/governance/releases/{releaseId}/rollback:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+      - $ref: "#/components/parameters/ReleaseId"
+    post:
+      operationId: rollbackGovernanceRelease
+      summary: Roll a release back as a new immutable release
+      description: >-
+        Never mutates the target release (P-003): the rollback cuts a NEW
+        release referencing the target whose manifest restores the prior
+        state — asset targets switch the current-revision pointer back to the
+        prior pinned revision, governed-object targets apply the inverse
+        change-set as a new version bump — inside one transaction with audit
+        and outbox events. Requires the human-only release.rollback
+        capability; a release can be rolled back at most once and only while
+        it is the latest release. The command takes no request body.
+      tags:
+        - Governance
+      responses:
+        "201":
+          description: The new rollback release with its manifest.
+          headers:
+            X-Trace-ID:
+              $ref: "#/components/headers/TraceId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GovernanceReleaseDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        default:
+          $ref: "#/components/responses/Error"
   /api/v1/workspaces/{workspaceId}/discovery-runs/{runId}:
     parameters:
       - $ref: "#/components/parameters/WorkspaceId"
@@ -776,6 +924,12 @@ components:
       required: true
       schema:
         $ref: "#/components/schemas/GovernanceReviewBatchId"
+    ReleaseId:
+      name: releaseId
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/GovernanceReleaseId"
     Limit:
       name: limit
       in: query
@@ -2097,6 +2251,180 @@ components:
       x-go-type-import:
         path: github.com/iiwish/semlia/pkg/identity
         name: identity
+    GovernanceReleaseId:
+      type: string
+      format: typeid
+      pattern: "^rls_[0-7][0-9a-hjkmnp-tv-z]{25}$"
+      example: rls_01arz3ndektsv4rrffq69g5fav
+      x-go-type: identity.ReleaseID
+      x-go-type-import:
+        path: github.com/iiwish/semlia/pkg/identity
+        name: identity
+    GovernanceReleaseState:
+      type: string
+      description: >-
+        Release lifecycle vocabulary. Rows are immutable: cuts and rollbacks
+        insert new rows, so served releases are always published.
+      enum:
+        - published
+        - rolled_back
+    GovernanceReleaseManifestAsset:
+      type: object
+      additionalProperties: false
+      description: One asset pin of the immutable release manifest.
+      required:
+        - assetId
+        - revisionId
+        - compatibility
+        - position
+      properties:
+        assetId:
+          $ref: "#/components/schemas/SemanticAssetId"
+        revisionId:
+          $ref: "#/components/schemas/AssetRevisionId"
+        compatibility:
+          description: The compatibility conclusion pinned with the asset revision.
+          x-go-type: json.RawMessage
+        position:
+          type: integer
+          minimum: 1
+    GovernanceReleaseManifestObject:
+      type: object
+      additionalProperties: false
+      description: One governance-object pin of the immutable release manifest.
+      required:
+        - objectType
+        - objectId
+        - version
+        - position
+      properties:
+        objectType:
+          $ref: "#/components/schemas/GovernanceTargetObjectType"
+        objectId:
+          type: string
+          format: typeid
+          description: The pinned governed object as its TypeID (never a storage UUID).
+        version:
+          type: integer
+          minimum: 1
+        position:
+          type: integer
+          minimum: 1
+    GovernanceReleaseManifest:
+      type: object
+      additionalProperties: false
+      description: >-
+        The immutable manifest content whose canonical digest the release
+        carries: asset_id + revision_id pins (semantic-asset-design §4.6) and
+        governed-object version pins.
+      required:
+        - assets
+        - objects
+      properties:
+        assets:
+          type: array
+          items:
+            $ref: "#/components/schemas/GovernanceReleaseManifestAsset"
+        objects:
+          type: array
+          items:
+            $ref: "#/components/schemas/GovernanceReleaseManifestObject"
+    GovernanceRelease:
+      type: object
+      additionalProperties: false
+      description: One immutable release snapshot (P-003); rollback creates a new one.
+      required:
+        - id
+        - sequence
+        - state
+        - manifestDigest
+        - publishedBy
+        - publishedAt
+        - createdAt
+      properties:
+        id:
+          $ref: "#/components/schemas/GovernanceReleaseId"
+        sequence:
+          type: integer
+          format: int64
+          minimum: 1
+        state:
+          $ref: "#/components/schemas/GovernanceReleaseState"
+        manifestDigest:
+          type: string
+          pattern: "^sha256:[0-9a-f]{64}$"
+        rolledBackToReleaseId:
+          $ref: "#/components/schemas/GovernanceReleaseId"
+        originProposalId:
+          $ref: "#/components/schemas/GovernanceProposalId"
+        publishedBy:
+          type: string
+          minLength: 1
+          maxLength: 256
+        publishedAt:
+          $ref: "#/components/schemas/Timestamp"
+        createdAt:
+          $ref: "#/components/schemas/Timestamp"
+    GovernanceReleaseDetail:
+      type: object
+      additionalProperties: false
+      description: The release with its manifest entries and rollback reference.
+      required:
+        - id
+        - sequence
+        - state
+        - manifestDigest
+        - publishedBy
+        - publishedAt
+        - createdAt
+        - manifest
+      properties:
+        id:
+          $ref: "#/components/schemas/GovernanceReleaseId"
+        sequence:
+          type: integer
+          format: int64
+          minimum: 1
+        state:
+          $ref: "#/components/schemas/GovernanceReleaseState"
+        manifestDigest:
+          type: string
+          pattern: "^sha256:[0-9a-f]{64}$"
+        rolledBackToReleaseId:
+          $ref: "#/components/schemas/GovernanceReleaseId"
+        originProposalId:
+          $ref: "#/components/schemas/GovernanceProposalId"
+        publishedBy:
+          type: string
+          minLength: 1
+          maxLength: 256
+        publishedAt:
+          $ref: "#/components/schemas/Timestamp"
+        createdAt:
+          $ref: "#/components/schemas/Timestamp"
+        manifest:
+          $ref: "#/components/schemas/GovernanceReleaseManifest"
+    GovernanceReleasePage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/GovernanceRelease"
+        page:
+          $ref: "#/components/schemas/PageInfo"
+    PublishGovernanceReleaseRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - proposalId
+      properties:
+        proposalId:
+          $ref: "#/components/schemas/GovernanceProposalId"
     GovernanceReviewDecision:
       type: string
       description: Human review command of the expert and batch confirmation commands.

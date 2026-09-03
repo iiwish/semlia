@@ -129,6 +129,7 @@ type AuthoringService struct {
 	clock           Clock
 	validation      *ValidationOrchestrator
 	decisions       DecisionRefresher
+	publishing      *PublishingService
 }
 
 type AuthoringOption func(*AuthoringService)
@@ -158,12 +159,19 @@ func NewAuthoringService(
 	if batches, ok := repository.(ReviewBatchRepository); ok {
 		service.batchRepository = batches
 	}
+	service.publishing = NewPublishingService(repository, authorizer, clock)
 	for _, option := range options {
 		if option != nil {
 			option(service)
 		}
 	}
 	return service
+}
+
+// Publishing exposes the T007 governed release surface composed over the same
+// store and evaluator as the authoring service.
+func (service *AuthoringService) Publishing() *PublishingService {
+	return service.publishing
 }
 
 // CreateProposal opens a governed draft: target resolution, §8.6 agent-run

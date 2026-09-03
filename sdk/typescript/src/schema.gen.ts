@@ -382,6 +382,78 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspaceId}/governance/releases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * List workspace releases newest first
+         * @description The immutable release history of the workspace, newest first with an opaque keyset cursor. Requires the asset.read capability.
+         */
+        get: operations["listGovernanceReleases"];
+        put?: never;
+        /**
+         * Publish an approved proposal as an immutable release
+         * @description Cuts an immutable release from an in_review proposal. Gates, in order: the proposal must be in_review, carry no blocker findings, and hold at least one approving review; the publisher needs the human-only release.publish capability (agents are refused with SEPARATION_OF_DUTY); the publisher cannot be the proposal author and cannot be the sole approving reviewer (two-person release control, D-006). Inside one transaction the change-set is applied — a new semantic-asset revision with a current-revision switch, or a governed object version bump — the manifest pins the resulting revision or version, the proposal walks to released, and the audit facts plus the release.published outbox event commit atomically. Every refusal is returned with a stable code and audited.
+         */
+        post: operations["publishGovernanceRelease"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/governance/releases/{releaseId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                releaseId: components["parameters"]["ReleaseId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read one immutable release with its manifest
+         * @description The release aggregate: sequence, manifest digest, rollback reference and originating proposal when present, plus the manifest entries pinning the exact asset revisions and governed-object versions the release produced.
+         */
+        get: operations["getGovernanceRelease"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/governance/releases/{releaseId}/rollback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                releaseId: components["parameters"]["ReleaseId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Roll a release back as a new immutable release
+         * @description Never mutates the target release (P-003): the rollback cuts a NEW release referencing the target whose manifest restores the prior state — asset targets switch the current-revision pointer back to the prior pinned revision, governed-object targets apply the inverse change-set as a new version bump — inside one transaction with audit and outbox events. Requires the human-only release.rollback capability; a release can be rolled back at most once and only while it is the latest release. The command takes no request body.
+         */
+        post: operations["rollbackGovernanceRelease"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspaceId}/discovery-runs/{runId}": {
         parameters: {
             query?: never;
@@ -898,6 +970,74 @@ export interface components {
          */
         GovernanceReviewBatchId: string;
         /**
+         * Format: typeid
+         * @example rls_01arz3ndektsv4rrffq69g5fav
+         */
+        GovernanceReleaseId: string;
+        /**
+         * @description Release lifecycle vocabulary. Rows are immutable: cuts and rollbacks insert new rows, so served releases are always published.
+         * @enum {string}
+         */
+        GovernanceReleaseState: "published" | "rolled_back";
+        /** @description One asset pin of the immutable release manifest. */
+        GovernanceReleaseManifestAsset: {
+            assetId: components["schemas"]["SemanticAssetId"];
+            revisionId: components["schemas"]["AssetRevisionId"];
+            /** @description The compatibility conclusion pinned with the asset revision. */
+            compatibility: unknown;
+            position: number;
+        };
+        /** @description One governance-object pin of the immutable release manifest. */
+        GovernanceReleaseManifestObject: {
+            objectType: components["schemas"]["GovernanceTargetObjectType"];
+            /**
+             * Format: typeid
+             * @description The pinned governed object as its TypeID (never a storage UUID).
+             */
+            objectId: string;
+            version: number;
+            position: number;
+        };
+        /** @description The immutable manifest content whose canonical digest the release carries: asset_id + revision_id pins (semantic-asset-design §4.6) and governed-object version pins. */
+        GovernanceReleaseManifest: {
+            assets: components["schemas"]["GovernanceReleaseManifestAsset"][];
+            objects: components["schemas"]["GovernanceReleaseManifestObject"][];
+        };
+        /** @description One immutable release snapshot (P-003); rollback creates a new one. */
+        GovernanceRelease: {
+            id: components["schemas"]["GovernanceReleaseId"];
+            /** Format: int64 */
+            sequence: number;
+            state: components["schemas"]["GovernanceReleaseState"];
+            manifestDigest: string;
+            rolledBackToReleaseId?: components["schemas"]["GovernanceReleaseId"];
+            originProposalId?: components["schemas"]["GovernanceProposalId"];
+            publishedBy: string;
+            publishedAt: components["schemas"]["Timestamp"];
+            createdAt: components["schemas"]["Timestamp"];
+        };
+        /** @description The release with its manifest entries and rollback reference. */
+        GovernanceReleaseDetail: {
+            id: components["schemas"]["GovernanceReleaseId"];
+            /** Format: int64 */
+            sequence: number;
+            state: components["schemas"]["GovernanceReleaseState"];
+            manifestDigest: string;
+            rolledBackToReleaseId?: components["schemas"]["GovernanceReleaseId"];
+            originProposalId?: components["schemas"]["GovernanceProposalId"];
+            publishedBy: string;
+            publishedAt: components["schemas"]["Timestamp"];
+            createdAt: components["schemas"]["Timestamp"];
+            manifest: components["schemas"]["GovernanceReleaseManifest"];
+        };
+        GovernanceReleasePage: {
+            items: components["schemas"]["GovernanceRelease"][];
+            page: components["schemas"]["PageInfo"];
+        };
+        PublishGovernanceReleaseRequest: {
+            proposalId: components["schemas"]["GovernanceProposalId"];
+        };
+        /**
          * @description Human review command of the expert and batch confirmation commands.
          * @enum {string}
          */
@@ -1085,6 +1225,7 @@ export interface components {
         RunId: components["schemas"]["RunId"];
         ProposalId: components["schemas"]["GovernanceProposalId"];
         ReviewBatchId: components["schemas"]["GovernanceReviewBatchId"];
+        ReleaseId: components["schemas"]["GovernanceReleaseId"];
         Limit: number;
         Cursor: components["schemas"]["Cursor"];
     };
@@ -1737,6 +1878,126 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GovernanceReviewBatchDetail"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
+            default: components["responses"]["Error"];
+        };
+    };
+    listGovernanceReleases: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A deterministic page of workspace releases. */
+            200: {
+                headers: {
+                    "X-Trace-ID": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GovernanceReleasePage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            default: components["responses"]["Error"];
+        };
+    };
+    publishGovernanceRelease: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublishGovernanceReleaseRequest"];
+            };
+        };
+        responses: {
+            /** @description The cut release with its manifest. */
+            201: {
+                headers: {
+                    "X-Trace-ID": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GovernanceReleaseDetail"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getGovernanceRelease: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                releaseId: components["parameters"]["ReleaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The release detail with its manifest. */
+            200: {
+                headers: {
+                    "X-Trace-ID": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GovernanceReleaseDetail"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    rollbackGovernanceRelease: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                releaseId: components["parameters"]["ReleaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The new rollback release with its manifest. */
+            201: {
+                headers: {
+                    "X-Trace-ID": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GovernanceReleaseDetail"];
                 };
             };
             400: components["responses"]["BadRequest"];

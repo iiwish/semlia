@@ -25,6 +25,9 @@ const (
 	routeGovernanceReviewBatches
 	routeGovernanceReviewBatch
 	routeGovernanceReviewBatchConfirm
+	routeGovernanceReleases
+	routeGovernanceRelease
+	routeGovernanceReleaseRollback
 )
 
 func isGovernanceRoute(kind routeKind) bool {
@@ -32,7 +35,8 @@ func isGovernanceRoute(kind routeKind) bool {
 	case routeGovernanceProposals, routeGovernanceProposal, routeGovernanceProposalSubmit,
 		routeGovernanceProposalValidationRuns, routeGovernanceProposalPolicyDecision,
 		routeGovernanceProposalReviews, routeGovernanceReviewBatches,
-		routeGovernanceReviewBatch, routeGovernanceReviewBatchConfirm:
+		routeGovernanceReviewBatch, routeGovernanceReviewBatchConfirm,
+		routeGovernanceReleases, routeGovernanceRelease, routeGovernanceReleaseRollback:
 		return true
 	}
 	return false
@@ -55,6 +59,24 @@ func matchGovernanceRoute(parts []string, base matchedRoute) (matchedRoute, bool
 			base.batch = parts[6]
 			base.kind, base.label = routeGovernanceReviewBatchConfirm,
 				"/api/v1/workspaces/{workspaceId}/governance/review-batches/{batchId}/confirm"
+		default:
+			return matchedRoute{}, false
+		}
+		return base, true
+	}
+	if parts[5] == "releases" {
+		switch {
+		case len(parts) == 6:
+			base.kind, base.label = routeGovernanceReleases,
+				"/api/v1/workspaces/{workspaceId}/governance/releases"
+		case len(parts) == 7:
+			base.release = parts[6]
+			base.kind, base.label = routeGovernanceRelease,
+				"/api/v1/workspaces/{workspaceId}/governance/releases/{releaseId}"
+		case len(parts) == 8 && parts[7] == "rollback":
+			base.release = parts[6]
+			base.kind, base.label = routeGovernanceReleaseRollback,
+				"/api/v1/workspaces/{workspaceId}/governance/releases/{releaseId}/rollback"
 		default:
 			return matchedRoute{}, false
 		}
@@ -87,9 +109,10 @@ func matchGovernanceRoute(parts []string, base matchedRoute) (matchedRoute, bool
 
 func governanceRouteMethods(kind routeKind) []string {
 	switch kind {
-	case routeGovernanceProposals, routeGovernanceReviewBatches:
+	case routeGovernanceProposals, routeGovernanceReviewBatches, routeGovernanceReleases:
 		return []string{http.MethodGet, http.MethodPost}
-	case routeGovernanceProposalSubmit, routeGovernanceProposalReviews, routeGovernanceReviewBatchConfirm:
+	case routeGovernanceProposalSubmit, routeGovernanceProposalReviews,
+		routeGovernanceReviewBatchConfirm, routeGovernanceReleaseRollback:
 		return []string{http.MethodPost}
 	default:
 		return []string{http.MethodGet}
@@ -107,6 +130,43 @@ func (handler *Handler) routeGovernance(
 		return writeGovernanceError(response, domain.ErrInvalidArgument, traceID)
 	}
 	switch route.kind {
+	case routeGovernanceReleases:
+		if request.Method == http.MethodPost {
+			return handler.publishGovernanceRelease(response, request, traceID, workspaceID)
+		}
+		return handler.listGovernanceReleases(response, request, traceID, workspaceID)
+	case routeGovernanceRelease:
+		releaseID, parseErr := identity.ParseReleaseID(route.release)
+		if parseErr != nil {
+			return writeGovernanceError(response, domain.ErrInvalidArgument, traceID)
+		}
+		release, getErr := handler.governance.Publishing().GetRelease(request.Context(), governanceapp.GetReleaseRequest{
+			WorkspaceID: workspaceID, ReleaseID: releaseID,
+			PrincipalRef: strings.TrimSpace(request.Header.Get(headerPrincipal)), TraceID: traceID,
+		})
+		if getErr != nil {
+			return writeGovernanceError(response, getErr, traceID)
+		}
+		writeJSON(response, http.StatusOK, governanceReleaseDetailResponse(release))
+		return ""
+	case routeGovernanceReleaseRollback:
+		releaseID, parseErr := identity.ParseReleaseID(route.release)
+		if parseErr != nil {
+			return writeGovernanceError(response, domain.ErrInvalidArgument, traceID)
+		}
+		raw, readErr := readBody(request)
+		if readErr != nil || len(strings.TrimSpace(string(raw))) != 0 {
+			return writeGovernanceError(response, domain.ErrInvalidArgument, traceID)
+		}
+		release, rollbackErr := handler.governance.Publishing().RollbackRelease(request.Context(), governanceapp.RollbackReleaseRequest{
+			WorkspaceID: workspaceID, ReleaseID: releaseID,
+			PrincipalRef: strings.TrimSpace(request.Header.Get(headerPrincipal)), TraceID: traceID,
+		})
+		if rollbackErr != nil {
+			return writeGovernanceError(response, rollbackErr, traceID)
+		}
+		writeJSON(response, http.StatusCreated, governanceReleaseDetailResponse(release))
+		return ""
 	case routeGovernanceProposals:
 		if request.Method == http.MethodPost {
 			return handler.createGovernanceProposal(response, request, traceID, workspaceID)
@@ -303,6 +363,118 @@ func (handler *Handler) confirmReviewBatch(
 		Decision: governanceapp.ReviewCommandDecision(body.Decision), Reason: body.Reason,
 		PrincipalRef: strings.TrimSpace(request.Header.Get(headerPrincipal)), TraceID: traceID,
 	})
+}
+
+func (handler *Handler) publishGovernanceRelease(
+	response http.ResponseWriter,
+	request *http.Request,
+	traceID string,
+	workspaceID identity.WorkspaceID,
+) string {
+	raw, err := readBody(request)
+	if err != nil {
+		return writeGovernanceError(response, domain.ErrInvalidArgument, traceID)
+	}
+	var body contract.PublishGovernanceReleaseRequest
+	if err := decodeStrict(raw, &body); err != nil {
+		return writeGovernanceError(response, domain.ErrInvalidArgument, traceID)
+	}
+	release, err := handler.governance.Publishing().PublishProposal(request.Context(), governanceapp.PublishProposalRequest{
+		WorkspaceID: workspaceID, ProposalID: body.ProposalId,
+		PrincipalRef: strings.TrimSpace(request.Header.Get(headerPrincipal)), TraceID: traceID,
+	})
+	if err != nil {
+		return writeGovernanceError(response, err, traceID)
+	}
+	writeJSON(response, http.StatusCreated, governanceReleaseDetailResponse(release))
+	return ""
+}
+
+func (handler *Handler) listGovernanceReleases(
+	response http.ResponseWriter,
+	request *http.Request,
+	traceID string,
+	workspaceID identity.WorkspaceID,
+) string {
+	limit, err := queryInteger(request, "limit")
+	if err != nil {
+		return writeGovernanceError(response, domain.ErrInvalidArgument, traceID)
+	}
+	page, err := handler.governance.Publishing().ListReleases(request.Context(), governanceapp.ListReleasesRequest{
+		WorkspaceID: workspaceID, Limit: limit, Cursor: request.URL.Query().Get("cursor"),
+		PrincipalRef: strings.TrimSpace(request.Header.Get(headerPrincipal)), TraceID: traceID,
+	})
+	if err != nil {
+		return writeGovernanceError(response, err, traceID)
+	}
+	items := make([]contract.GovernanceRelease, 0, len(page.Items))
+	for _, item := range page.Items {
+		items = append(items, governanceReleaseSummaryResponse(item))
+	}
+	result := contract.GovernanceReleasePage{Items: items, Page: contract.PageInfo{Limit: page.Limit}}
+	if page.NextCursor != "" {
+		result.Page.NextCursor = &page.NextCursor
+	}
+	writeJSON(response, http.StatusOK, result)
+	return ""
+}
+
+func governanceReleaseSummaryResponse(release domain.Release) contract.GovernanceRelease {
+	result := contract.GovernanceRelease{
+		Id:             release.ID,
+		Sequence:       release.Sequence,
+		State:          contract.GovernanceReleaseState(release.State),
+		ManifestDigest: release.ManifestDigest,
+		PublishedBy:    release.PublishedBy,
+		PublishedAt:    release.PublishedAt.UTC(),
+		CreatedAt:      release.CreatedAt.UTC(),
+	}
+	if release.RolledBackToReleaseID != nil {
+		target := *release.RolledBackToReleaseID
+		result.RolledBackToReleaseId = &target
+	}
+	if release.OriginProposalID != nil {
+		origin := *release.OriginProposalID
+		result.OriginProposalId = &origin
+	}
+	return result
+}
+
+func governanceReleaseDetailResponse(release domain.Release) contract.GovernanceReleaseDetail {
+	summary := governanceReleaseSummaryResponse(release)
+	detail := contract.GovernanceReleaseDetail{
+		Id: summary.Id, Sequence: summary.Sequence, State: summary.State,
+		ManifestDigest:        summary.ManifestDigest,
+		RolledBackToReleaseId: summary.RolledBackToReleaseId,
+		OriginProposalId:      summary.OriginProposalId,
+		PublishedBy:           summary.PublishedBy, PublishedAt: summary.PublishedAt,
+		CreatedAt: summary.CreatedAt,
+		Manifest: contract.GovernanceReleaseManifest{
+			Assets:  make([]contract.GovernanceReleaseManifestAsset, 0, len(release.Entries)),
+			Objects: make([]contract.GovernanceReleaseManifestObject, 0, len(release.Objects)),
+		},
+	}
+	for _, entry := range release.Entries {
+		compatibility := entry.Compatibility
+		if len(compatibility) == 0 {
+			compatibility = json.RawMessage(`{}`)
+		}
+		detail.Manifest.Assets = append(detail.Manifest.Assets, contract.GovernanceReleaseManifestAsset{
+			AssetId: entry.AssetID, RevisionId: entry.RevisionID,
+			Compatibility: compatibility, Position: entry.Position,
+		})
+	}
+	for _, entry := range release.Objects {
+		typedID, err := entry.TypedID()
+		if err != nil {
+			continue
+		}
+		detail.Manifest.Objects = append(detail.Manifest.Objects, contract.GovernanceReleaseManifestObject{
+			ObjectType: contract.GovernanceTargetObjectType(entry.ObjectType), ObjectId: typedID,
+			Version: entry.Version, Position: entry.Position,
+		})
+	}
+	return detail
 }
 
 func governancePolicyDecisionResponse(detail governanceapp.PolicyDecisionDetail) contract.GovernancePolicyDecision {
@@ -712,6 +884,7 @@ func writeGovernanceError(response http.ResponseWriter, err error, traceID strin
 	var denial *authz.DenialError
 	var dutyConflict *governanceapp.SeparationOfDutyError
 	var aiOutputInvalid *governanceapp.AIOutputInvalidError
+	var releaseRefusal *governanceapp.ReleaseRefusalError
 	switch {
 	case errors.As(err, &dutyConflict):
 		details := map[string]any{
@@ -730,6 +903,10 @@ func writeGovernanceError(response http.ResponseWriter, err error, traceID strin
 		writeErrorWithDetails(response, http.StatusForbidden, "SEPARATION_OF_DUTY",
 			dutyConflict.Conflict, traceID, details)
 		return "SEPARATION_OF_DUTY"
+	case errors.As(err, &releaseRefusal):
+		writeErrorWithDetails(response, releaseRefusal.Status, releaseRefusal.Code,
+			releaseRefusal.Message, traceID, releaseRefusal.Details)
+		return releaseRefusal.Code
 	case errors.As(err, &denial):
 		writeError(response, http.StatusForbidden, string(denial.Decision.ReasonCode),
 			"the acting principal lacks the required capability", traceID, false)

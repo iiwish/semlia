@@ -140,6 +140,191 @@ type document struct {
 	Spec       any      `json:"spec"`
 }
 
+// ProjectRelease appends the immutable release document to the projected Git
+// repository: one new file per release at releases/<sequence>-<releaseId>.json,
+// committed append-only on top of the current head. No tags, remotes, reverts
+// or history rewrites are ever created; an already-projected release is a
+// no-op, so redelivery is idempotent.
+func (adapter *Adapter) ProjectRelease(ctx context.Context, release domain.Release) (domain.Result, error) {
+	if err := ctx.Err(); err != nil {
+		return domain.Result{}, err
+	}
+	if err := validateRelease(release); err != nil {
+		return domain.Result{}, err
+	}
+	adapter.mu.Lock()
+	defer adapter.mu.Unlock()
+
+	worktree, err := adapter.repository.Worktree()
+	if err != nil {
+		return domain.Result{}, fmt.Errorf("open Git worktree: %w", err)
+	}
+	status, err := worktree.Status()
+	if err != nil {
+		return domain.Result{}, fmt.Errorf("read Git worktree status: %w", err)
+	}
+	if !status.IsClean() {
+		return domain.Result{}, domain.ErrDirty
+	}
+	relativePath := releasePath(release)
+	absolutePath, err := securejoin.SecureJoin(adapter.root, filepath.FromSlash(relativePath))
+	if err != nil {
+		return domain.Result{}, fmt.Errorf("%w: projection path", domain.ErrInvalid)
+	}
+	if _, readErr := os.Stat(absolutePath); readErr == nil {
+		return currentResult(adapter.repository, relativePath), nil
+	} else if !errors.Is(readErr, os.ErrNotExist) {
+		return domain.Result{}, fmt.Errorf("read current projection: %w", readErr)
+	}
+	document, err := renderRelease(release)
+	if err != nil {
+		return domain.Result{}, err
+	}
+	if err := os.MkdirAll(filepath.Dir(absolutePath), 0o750); err != nil {
+		return domain.Result{}, fmt.Errorf("create projection directory: %w", err)
+	}
+	if err := writeAtomic(absolutePath, document); err != nil {
+		return domain.Result{}, err
+	}
+	if _, err := worktree.Add(relativePath); err != nil {
+		_ = os.Remove(absolutePath)
+		return domain.Result{}, fmt.Errorf("stage projection: %w", err)
+	}
+	when := release.PublishedAt.UTC().Truncate(time.Second)
+	hash, err := worktree.Commit(
+		fmt.Sprintf("project release %s %d", release.ReleaseID.String(), release.Sequence),
+		&git.CommitOptions{
+			Author:    &object.Signature{Name: "Semlia", Email: "projection@semlia.local", When: when},
+			Committer: &object.Signature{Name: "Semlia", Email: "projection@semlia.local", When: when},
+		},
+	)
+	if err != nil {
+		_ = os.Remove(absolutePath)
+		_, _ = worktree.Remove(relativePath)
+		return domain.Result{}, fmt.Errorf("commit projection: %w", err)
+	}
+	return domain.Result{Path: relativePath, CommitHash: hash.String(), Changed: true}, nil
+}
+
+type releaseDocument struct {
+	APIVersion string          `json:"apiVersion"`
+	Kind       string          `json:"kind"`
+	Metadata   releaseMetadata `json:"metadata"`
+	Spec       releaseSpec     `json:"spec"`
+}
+
+type releaseMetadata struct {
+	ReleaseID             string    `json:"releaseId"`
+	WorkspaceID           string    `json:"workspaceId"`
+	Sequence              int64     `json:"sequence"`
+	State                 string    `json:"state"`
+	ManifestDigest        string    `json:"manifestDigest"`
+	RolledBackToReleaseID string    `json:"rolledBackToReleaseId,omitempty"`
+	PublishedBy           string    `json:"publishedBy"`
+	PublishedAt           time.Time `json:"publishedAt"`
+}
+
+type releaseSpec struct {
+	Manifest releaseManifest `json:"manifest"`
+	Proposal *releaseSpecProposal
+}
+
+type releaseManifest struct {
+	Assets  []releaseManifestAsset  `json:"assets"`
+	Objects []releaseManifestObject `json:"objects"`
+}
+
+type releaseManifestAsset struct {
+	AssetID       string          `json:"assetId"`
+	RevisionID    string          `json:"revisionId"`
+	Address       string          `json:"address"`
+	Compatibility json.RawMessage `json:"compatibility"`
+	Position      int             `json:"position"`
+}
+
+type releaseManifestObject struct {
+	ObjectType string `json:"objectType"`
+	ObjectID   string `json:"objectId"`
+	Version    int    `json:"version"`
+	Position   int    `json:"position"`
+}
+
+type releaseSpecProposal struct {
+	ProposalID       string `json:"proposalId"`
+	Title            string `json:"title"`
+	TargetObjectType string `json:"targetObjectType"`
+	TargetObjectID   string `json:"targetObjectId"`
+	CreatedBy        string `json:"createdBy"`
+}
+
+func renderRelease(release domain.Release) ([]byte, error) {
+	metadata := releaseMetadata{
+		ReleaseID: release.ReleaseID.String(), WorkspaceID: release.WorkspaceID.String(),
+		Sequence: release.Sequence, State: release.State, ManifestDigest: release.ManifestDigest,
+		PublishedBy: release.PublishedBy, PublishedAt: release.PublishedAt.UTC().Truncate(time.Second),
+	}
+	if release.RolledBackToReleaseID != nil {
+		metadata.RolledBackToReleaseID = release.RolledBackToReleaseID.String()
+	}
+	assets := make([]releaseManifestAsset, 0, len(release.Assets))
+	for _, entry := range release.Assets {
+		compatibility := entry.Compatibility
+		if len(compatibility) == 0 {
+			compatibility = json.RawMessage(`{}`)
+		}
+		assets = append(assets, releaseManifestAsset{
+			AssetID: entry.AssetID.String(), RevisionID: entry.RevisionID.String(),
+			Address: entry.Address.String(), Compatibility: compatibility, Position: entry.Position,
+		})
+	}
+	objects := make([]releaseManifestObject, 0, len(release.Objects))
+	for _, entry := range release.Objects {
+		objects = append(objects, releaseManifestObject{
+			ObjectType: entry.ObjectType, ObjectID: entry.ObjectID,
+			Version: entry.Version, Position: entry.Position,
+		})
+	}
+	var proposal *releaseSpecProposal
+	if release.Proposal != nil {
+		proposal = &releaseSpecProposal{
+			ProposalID: release.Proposal.ProposalID.String(), Title: release.Proposal.Title,
+			TargetObjectType: release.Proposal.TargetObjectType,
+			TargetObjectID:   release.Proposal.TargetObjectID, CreatedBy: release.Proposal.CreatedBy,
+		}
+	}
+	encoded, err := json.MarshalIndent(releaseDocument{
+		APIVersion: "semlia.io/v1", Kind: "SemanticAssetRelease",
+		Metadata: metadata, Spec: releaseSpec{Manifest: releaseManifest{Assets: assets, Objects: objects}, Proposal: proposal},
+	}, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("render release projection: %w", err)
+	}
+	return append(encoded, '\n'), nil
+}
+
+func validateRelease(release domain.Release) error {
+	if release.WorkspaceID.IsZero() || release.ReleaseID.IsZero() || release.Sequence < 1 ||
+		release.State == "" || !strings.HasPrefix(release.ManifestDigest, "sha256:") ||
+		release.PublishedBy == "" || release.PublishedAt.IsZero() {
+		return domain.ErrInvalid
+	}
+	for _, entry := range release.Assets {
+		if entry.AssetID.IsZero() || entry.RevisionID.IsZero() || entry.Position < 1 {
+			return domain.ErrInvalid
+		}
+	}
+	for _, entry := range release.Objects {
+		if entry.ObjectType == "" || entry.ObjectID == "" || entry.Version < 1 || entry.Position < 1 {
+			return domain.ErrInvalid
+		}
+	}
+	return nil
+}
+
+func releasePath(release domain.Release) string {
+	return fmt.Sprintf("releases/%d-%s.json", release.Sequence, release.ReleaseID.String())
+}
+
 type metadata struct {
 	Address        string    `json:"address"`
 	AssetID        string    `json:"assetId"`

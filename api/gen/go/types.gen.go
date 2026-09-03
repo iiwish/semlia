@@ -244,6 +244,24 @@ func (e GovernanceProposalState) Valid() bool {
 	}
 }
 
+// Defines values for GovernanceReleaseState.
+const (
+	Published  GovernanceReleaseState = "published"
+	RolledBack GovernanceReleaseState = "rolled_back"
+)
+
+// Valid indicates whether the value is a known member of the GovernanceReleaseState enum.
+func (e GovernanceReleaseState) Valid() bool {
+	switch e {
+	case Published:
+		return true
+	case RolledBack:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for GovernanceReviewBatchStatus.
 const (
 	GovernanceReviewBatchStatusConfirmed GovernanceReviewBatchStatus = "confirmed"
@@ -1178,6 +1196,107 @@ type GovernanceProposalSummary struct {
 	UpdatedAt Timestamp `json:"updatedAt"`
 }
 
+// GovernanceRelease One immutable release snapshot (P-003); rollback creates a new one.
+type GovernanceRelease struct {
+	// CreatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	CreatedAt Timestamp `json:"createdAt"`
+
+	// Id Example: rls_01arz3ndektsv4rrffq69g5fav
+	Id             GovernanceReleaseId `json:"id"`
+	ManifestDigest string              `json:"manifestDigest"`
+
+	// OriginProposalId Example: prp_01arz3ndektsv4rrffq69g5fav
+	OriginProposalId *GovernanceProposalId `json:"originProposalId,omitempty"`
+
+	// PublishedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	PublishedAt Timestamp `json:"publishedAt"`
+	PublishedBy string    `json:"publishedBy"`
+
+	// RolledBackToReleaseId Example: rls_01arz3ndektsv4rrffq69g5fav
+	RolledBackToReleaseId *GovernanceReleaseId `json:"rolledBackToReleaseId,omitempty"`
+	Sequence              int64                `json:"sequence"`
+
+	// State Release lifecycle vocabulary. Rows are immutable: cuts and rollbacks insert new rows, so served releases are always published.
+	State GovernanceReleaseState `json:"state"`
+}
+
+// GovernanceReleaseDetail The release with its manifest entries and rollback reference.
+type GovernanceReleaseDetail struct {
+	// CreatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	CreatedAt Timestamp `json:"createdAt"`
+
+	// Id Example: rls_01arz3ndektsv4rrffq69g5fav
+	Id GovernanceReleaseId `json:"id"`
+
+	// Manifest The immutable manifest content whose canonical digest the release carries: asset_id + revision_id pins (semantic-asset-design §4.6) and governed-object version pins.
+	Manifest       GovernanceReleaseManifest `json:"manifest"`
+	ManifestDigest string                    `json:"manifestDigest"`
+
+	// OriginProposalId Example: prp_01arz3ndektsv4rrffq69g5fav
+	OriginProposalId *GovernanceProposalId `json:"originProposalId,omitempty"`
+
+	// PublishedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	PublishedAt Timestamp `json:"publishedAt"`
+	PublishedBy string    `json:"publishedBy"`
+
+	// RolledBackToReleaseId Example: rls_01arz3ndektsv4rrffq69g5fav
+	RolledBackToReleaseId *GovernanceReleaseId `json:"rolledBackToReleaseId,omitempty"`
+	Sequence              int64                `json:"sequence"`
+
+	// State Release lifecycle vocabulary. Rows are immutable: cuts and rollbacks insert new rows, so served releases are always published.
+	State GovernanceReleaseState `json:"state"`
+}
+
+// GovernanceReleaseId Example: rls_01arz3ndektsv4rrffq69g5fav
+type GovernanceReleaseId = identity.ReleaseID
+
+// GovernanceReleaseManifest The immutable manifest content whose canonical digest the release carries: asset_id + revision_id pins (semantic-asset-design §4.6) and governed-object version pins.
+type GovernanceReleaseManifest struct {
+	Assets  []GovernanceReleaseManifestAsset  `json:"assets"`
+	Objects []GovernanceReleaseManifestObject `json:"objects"`
+}
+
+// GovernanceReleaseManifestAsset One asset pin of the immutable release manifest.
+type GovernanceReleaseManifestAsset struct {
+	// AssetId Example: ast_01arz3ndektsv4rrffq69g5fav
+	AssetId SemanticAssetId `json:"assetId"`
+
+	// Compatibility The compatibility conclusion pinned with the asset revision.
+	Compatibility json.RawMessage `json:"compatibility"`
+	Position      int             `json:"position"`
+
+	// RevisionId Example: rev_01arz3ndektsv4rrffq69g5fav
+	RevisionId AssetRevisionId `json:"revisionId"`
+}
+
+// GovernanceReleaseManifestObject One governance-object pin of the immutable release manifest.
+type GovernanceReleaseManifestObject struct {
+	// ObjectId The pinned governed object as its TypeID (never a storage UUID).
+	ObjectId string `json:"objectId"`
+
+	// ObjectType Objects a governed proposal can target.
+	ObjectType GovernanceTargetObjectType `json:"objectType"`
+	Position   int                        `json:"position"`
+	Version    int                        `json:"version"`
+}
+
+// GovernanceReleasePage defines model for GovernanceReleasePage.
+type GovernanceReleasePage struct {
+	Items []GovernanceRelease `json:"items"`
+	Page  PageInfo            `json:"page"`
+}
+
+// GovernanceReleaseState Release lifecycle vocabulary. Rows are immutable: cuts and rollbacks insert new rows, so served releases are always published.
+type GovernanceReleaseState string
+
 // GovernanceReview One immutable §8.4 review fact; never updated or deleted.
 type GovernanceReview struct {
 	// Channel Review channel that produced the fact (SSOT §8.4).
@@ -1471,6 +1590,12 @@ type PhysicalFieldId = identity.PhysicalFieldID
 // PhysicalFieldRevisionId defines model for PhysicalFieldRevisionId.
 type PhysicalFieldRevisionId = identity.PhysicalFieldRevisionID
 
+// PublishGovernanceReleaseRequest defines model for PublishGovernanceReleaseRequest.
+type PublishGovernanceReleaseRequest struct {
+	// ProposalId Example: prp_01arz3ndektsv4rrffq69g5fav
+	ProposalId GovernanceProposalId `json:"proposalId"`
+}
+
 // RelationAssertionState defines model for RelationAssertionState.
 type RelationAssertionState string
 
@@ -1569,6 +1694,9 @@ type Limit = int
 // ProposalId Example: prp_01arz3ndektsv4rrffq69g5fav
 type ProposalId = GovernanceProposalId
 
+// ReleaseId Example: rls_01arz3ndektsv4rrffq69g5fav
+type ReleaseId = GovernanceReleaseId
+
 // ReviewBatchId Example: rvb_01arz3ndektsv4rrffq69g5fav
 type ReviewBatchId = GovernanceReviewBatchId
 
@@ -1629,6 +1757,12 @@ type ListGovernanceProposalsParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
+// ListGovernanceReleasesParams defines parameters for ListGovernanceReleases.
+type ListGovernanceReleasesParams struct {
+	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
 // ListGovernanceReviewBatchesParams defines parameters for ListGovernanceReviewBatches.
 type ListGovernanceReviewBatchesParams struct {
 	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
@@ -1649,6 +1783,9 @@ type CreateGovernanceProposalJSONRequestBody = CreateGovernanceProposalRequest
 
 // CreateGovernanceProposalReviewJSONRequestBody defines body for CreateGovernanceProposalReview for application/json ContentType.
 type CreateGovernanceProposalReviewJSONRequestBody = GovernanceReviewCommandRequest
+
+// PublishGovernanceReleaseJSONRequestBody defines body for PublishGovernanceRelease for application/json ContentType.
+type PublishGovernanceReleaseJSONRequestBody = PublishGovernanceReleaseRequest
 
 // ConfirmGovernanceReviewBatchJSONRequestBody defines body for ConfirmGovernanceReviewBatch for application/json ContentType.
 type ConfirmGovernanceReviewBatchJSONRequestBody = GovernanceReviewCommandRequest

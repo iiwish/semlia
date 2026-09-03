@@ -135,6 +135,15 @@ func TestCanonicalSpecificationIsValidAndMinimal(t *testing.T) {
 		"GovernanceReviewBatch",
 		"GovernanceReviewBatchDetail",
 		"GovernanceReviewBatchPage",
+		"GovernanceReleaseId",
+		"GovernanceReleaseState",
+		"GovernanceReleaseManifestAsset",
+		"GovernanceReleaseManifestObject",
+		"GovernanceReleaseManifest",
+		"GovernanceRelease",
+		"GovernanceReleaseDetail",
+		"GovernanceReleasePage",
+		"PublishGovernanceReleaseRequest",
 	}
 	for _, name := range requiredSchemas {
 		if doc.Components.Schemas[name] == nil {
@@ -158,6 +167,8 @@ func TestCanonicalSpecificationIsValidAndMinimal(t *testing.T) {
 		"/api/v1/workspaces/{workspaceId}/governance/proposals/{proposalId}/policy-decision": "getGovernancePolicyDecision",
 		"/api/v1/workspaces/{workspaceId}/governance/review-batches":                         "listGovernanceReviewBatches",
 		"/api/v1/workspaces/{workspaceId}/governance/review-batches/{batchId}":               "getGovernanceReviewBatch",
+		"/api/v1/workspaces/{workspaceId}/governance/releases":                               "listGovernanceReleases",
+		"/api/v1/workspaces/{workspaceId}/governance/releases/{releaseId}":                   "getGovernanceRelease",
 	}
 	for path, operationID := range requiredOperations {
 		item := doc.Paths.Find(path)
@@ -196,6 +207,14 @@ func TestCanonicalSpecificationIsValidAndMinimal(t *testing.T) {
 	confirm := doc.Paths.Find("/api/v1/workspaces/{workspaceId}/governance/review-batches/{batchId}/confirm")
 	if confirm == nil || confirm.Post == nil || confirm.Post.OperationID != "confirmGovernanceReviewBatch" {
 		t.Error("missing POST confirmGovernanceReviewBatch operation")
+	}
+	publish := doc.Paths.Find("/api/v1/workspaces/{workspaceId}/governance/releases")
+	if publish == nil || publish.Post == nil || publish.Post.OperationID != "publishGovernanceRelease" {
+		t.Error("missing POST publishGovernanceRelease operation")
+	}
+	rollback := doc.Paths.Find("/api/v1/workspaces/{workspaceId}/governance/releases/{releaseId}/rollback")
+	if rollback == nil || rollback.Post == nil || rollback.Post.OperationID != "rollbackGovernanceRelease" {
+		t.Error("missing POST rollbackGovernanceRelease operation")
 	}
 
 }

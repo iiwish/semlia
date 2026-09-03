@@ -208,6 +208,7 @@ func runWorker(ctx context.Context, cfg config.Config) error {
 	}
 	router := jobs.NewRouterPublisher()
 	router.Register(projectionapp.CatalogAssetChanged, projectionapp.NewPublisher(store, writer))
+	router.Register(projectionapp.ReleasePublished, projectionapp.NewReleasePublisher(store, writer))
 	dispatcher := jobs.NewDispatcher(
 		store, router, jobs.ClockFunc(time.Now), jobs.BackoffFunc(workerBackoff), 30*time.Second,
 	)
