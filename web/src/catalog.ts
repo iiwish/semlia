@@ -6,6 +6,8 @@ export type CatalogAsset = components["schemas"]["CatalogAssetSummary"];
 export type CatalogAssetDetail = components["schemas"]["CatalogAssetDetail"];
 export type CatalogRelation = components["schemas"]["AssetRelation"];
 export type CatalogRelationPage = components["schemas"]["AssetRelationPage"];
+export type CatalogRevision = components["schemas"]["AssetRevision"];
+export type CatalogRevisionPage = components["schemas"]["AssetRevisionPage"];
 export type SemanticAssetType = components["schemas"]["SemanticAssetType"];
 
 const client = createSemliaClient({ baseUrl: "" });
@@ -59,6 +61,18 @@ export async function listAssetRelations(workspaceId: string, assetId: string, s
     params: {
       path: { workspaceId, assetId },
       query: { direction: "both", depth: 1 },
+    },
+    signal,
+  });
+  if (!response.data) throw new Error(errorMessage(response.error));
+  return response.data;
+}
+
+export async function listAssetRevisions(workspaceId: string, assetId: string, signal?: AbortSignal): Promise<CatalogRevisionPage> {
+  const response = await client.GET("/api/v1/workspaces/{workspaceId}/catalog/assets/{assetId}/revisions", {
+    params: {
+      path: { workspaceId, assetId },
+      query: { limit: 100 },
     },
     signal,
   });
