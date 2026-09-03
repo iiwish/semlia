@@ -37,6 +37,7 @@ type matchedRoute struct {
 	asset     string
 	revision  string
 	discovery string
+	proposal  string
 }
 
 func matchRoute(path string) matchedRoute {
@@ -51,6 +52,9 @@ func matchRoute(path string) matchedRoute {
 		return matchedRoute{}
 	}
 	base := matchedRoute{workspace: parts[3]}
+	if matched, ok := matchGovernanceRoute(parts, base); ok {
+		return matched
+	}
 	if len(parts) == 6 && parts[4] == "catalog" && parts[5] == "assets" {
 		base.kind, base.label = routeCatalogAssets, "/api/v1/workspaces/{workspaceId}/catalog/assets"
 		return base
@@ -77,6 +81,9 @@ func matchRoute(path string) matchedRoute {
 }
 
 func (route matchedRoute) methods() []string {
+	if isGovernanceRoute(route.kind) {
+		return governanceRouteMethods(route.kind)
+	}
 	switch route.kind {
 	case routeWorkspaces, routeCatalogAssets, routeCatalogRevisions:
 		return []string{http.MethodGet, http.MethodPost}

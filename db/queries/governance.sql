@@ -1,17 +1,29 @@
 -- name: CreateProposal :one
 INSERT INTO proposals (
     id, workspace_id, asset_id, base_revision_id, target_object_type, target_object_id,
-    state, title, summary, reason, created_by, created_at, updated_at
+    state, title, summary, reason, agent_run_id, created_by, created_at, updated_at
 ) VALUES (
     sqlc.arg(id), sqlc.arg(workspace_id), sqlc.narg(asset_id), sqlc.narg(base_revision_id),
     sqlc.arg(target_object_type), sqlc.arg(target_object_id), sqlc.arg(state), sqlc.arg(title),
-    sqlc.arg(summary), sqlc.arg(reason), sqlc.arg(created_by), sqlc.arg(created_at), sqlc.arg(updated_at)
+    sqlc.arg(summary), sqlc.arg(reason), sqlc.narg(agent_run_id), sqlc.arg(created_by),
+    sqlc.arg(created_at), sqlc.arg(updated_at)
 )
 RETURNING *;
 
 -- name: GetProposal :one
 SELECT * FROM proposals
 WHERE workspace_id = sqlc.arg(workspace_id) AND id = sqlc.arg(proposal_id);
+
+-- name: ListProposals :many
+SELECT * FROM proposals
+WHERE workspace_id = sqlc.arg(workspace_id)
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR created_at < sqlc.arg(cursor_created_at)
+      OR (created_at = sqlc.arg(cursor_created_at) AND id < sqlc.arg(cursor_id)::uuid)
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT sqlc.arg(page_limit);
 
 -- name: GetProposalForUpdate :one
 SELECT * FROM proposals

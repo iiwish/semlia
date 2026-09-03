@@ -97,6 +97,19 @@ func TestCanonicalSpecificationIsValidAndMinimal(t *testing.T) {
 		"DiscoveryRun",
 		"CreateCatalogAssetRequest",
 		"CreateAssetRevisionRequest",
+		"GovernanceProposalId",
+		"GovernanceAgentRunId",
+		"GovernanceTargetObjectType",
+		"GovernanceTargetObjectId",
+		"GovernanceProposalState",
+		"GovernanceChangeOp",
+		"GovernanceChangeDigest",
+		"GovernanceChangeSetItem",
+		"GovernanceProposalAgentAttribution",
+		"CreateGovernanceProposalRequest",
+		"GovernanceProposalSummary",
+		"GovernanceProposalDetail",
+		"GovernanceProposalPage",
 	}
 	for _, name := range requiredSchemas {
 		if doc.Components.Schemas[name] == nil {
@@ -114,6 +127,8 @@ func TestCanonicalSpecificationIsValidAndMinimal(t *testing.T) {
 		"/api/v1/workspaces/{workspaceId}/catalog/assets/{assetId}/revisions/{revisionId}": "getAssetRevision",
 		"/api/v1/workspaces/{workspaceId}/catalog/assets/{assetId}/relations":              "listAssetRelations",
 		"/api/v1/workspaces/{workspaceId}/discovery-runs/{runId}":                          "getDiscoveryRun",
+		"/api/v1/workspaces/{workspaceId}/governance/proposals":                            "listGovernanceProposals",
+		"/api/v1/workspaces/{workspaceId}/governance/proposals/{proposalId}":               "getGovernanceProposal",
 	}
 	for path, operationID := range requiredOperations {
 		item := doc.Paths.Find(path)
@@ -132,6 +147,14 @@ func TestCanonicalSpecificationIsValidAndMinimal(t *testing.T) {
 	revisions := doc.Paths.Find("/api/v1/workspaces/{workspaceId}/catalog/assets/{assetId}/revisions")
 	if revisions == nil || revisions.Post == nil || revisions.Post.OperationID != "createAssetRevision" {
 		t.Error("missing POST createAssetRevision operation")
+	}
+	proposals := doc.Paths.Find("/api/v1/workspaces/{workspaceId}/governance/proposals")
+	if proposals == nil || proposals.Post == nil || proposals.Post.OperationID != "createGovernanceProposal" {
+		t.Error("missing POST createGovernanceProposal operation")
+	}
+	submit := doc.Paths.Find("/api/v1/workspaces/{workspaceId}/governance/proposals/{proposalId}/submit")
+	if submit == nil || submit.Post == nil || submit.Post.OperationID != "submitGovernanceProposal" {
+		t.Error("missing POST submitGovernanceProposal operation")
 	}
 
 }
@@ -173,6 +196,11 @@ func TestSharedSchemaValidationMatrix(t *testing.T) {
 		{"catalog asset detail extra field", "CatalogAssetDetail", `{"id":"ast_01arz3ndektsv4rrffq69g5fav","address":"commerce.net_revenue","assetType":"metric","lifecycleState":"active","title":"Net revenue","summary":"Revenue after refunds","updatedAt":"2026-09-02T08:00:00Z","createdAt":"2026-09-01T08:00:00Z","relationCount":2,"databaseUuid":"hidden"}`, false},
 		{"create catalog asset", "CreateCatalogAssetRequest", `{"address":"commerce.net_revenue","assetType":"metric","schemaVersion":"1.0.0","content":{"name":"Net revenue"},"createdBy":"founder"}`, true},
 		{"create catalog asset unknown field", "CreateCatalogAssetRequest", `{"address":"commerce.net_revenue","assetType":"metric","schemaVersion":"1.0.0","content":{},"createdBy":"founder","credential":"secret"}`, false},
+		{"create governance proposal", "CreateGovernanceProposalRequest", `{"targetObjectType":"semantic_asset","targetObjectId":"ast_01arz3ndektsv4rrffq69g5fav","baseRevisionId":"rev_01arz3ndektsv4rrffq69g5fav","title":"Tighten metric definition","summary":"Clarifies refunds","reason":"Audit finding","changeSet":[{"fieldPath":"definition","op":"update","beforeDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","afterDigest":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","beforeValue":"Revenue after refunds","afterValue":"Revenue after refunds and chargebacks"}],"createdBy":"founder"}`, true},
+		{"create governance proposal unknown field", "CreateGovernanceProposalRequest", `{"targetObjectType":"join_contract","targetObjectId":"jct_01arz3ndektsv4rrffq69g5fav","title":"Fix join","changeSet":[{"fieldPath":"joinExpression","op":"update","beforeDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","afterDigest":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}],"createdBy":"founder","prompt":"raw text"}`, false},
+		{"create governance proposal missing change set", "CreateGovernanceProposalRequest", `{"targetObjectType":"entity_key","targetObjectId":"eky_01arz3ndektsv4rrffq69g5fav","title":"Add key","createdBy":"founder"}`, false},
+		{"governance proposal summary", "GovernanceProposalSummary", `{"id":"prp_01arz3ndektsv4rrffq69g5fav","targetObjectType":"semantic_asset","targetObjectId":"ast_01arz3ndektsv4rrffq69g5fav","state":"proposed","title":"Tighten metric definition","summary":"Clarifies refunds","reason":"Audit finding","createdBy":"founder","createdAt":"2026-09-03T08:00:00Z","updatedAt":"2026-09-03T08:00:00Z"}`, true},
+		{"governance proposal summary storage uuid", "GovernanceProposalSummary", `{"id":"prp_01arz3ndektsv4rrffq69g5fav","targetObjectType":"semantic_asset","targetObjectId":"0192c0e2-1234-7abc-9def-0123456789ab","state":"draft","title":"x","createdBy":"founder","createdAt":"2026-09-03T08:00:00Z","updatedAt":"2026-09-03T08:00:00Z"}`, false},
 	}
 
 	for _, test := range tests {
