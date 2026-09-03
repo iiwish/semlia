@@ -187,6 +187,33 @@ func (e GovernanceChangeOp) Valid() bool {
 	}
 }
 
+// Defines values for GovernanceDiffCategory.
+const (
+	Access      GovernanceDiffCategory = "access"
+	Computation GovernanceDiffCategory = "computation"
+	Contract    GovernanceDiffCategory = "contract"
+	Definition  GovernanceDiffCategory = "definition"
+	Relations   GovernanceDiffCategory = "relations"
+)
+
+// Valid indicates whether the value is a known member of the GovernanceDiffCategory enum.
+func (e GovernanceDiffCategory) Valid() bool {
+	switch e {
+	case Access:
+		return true
+	case Computation:
+		return true
+	case Contract:
+		return true
+	case Definition:
+		return true
+	case Relations:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for GovernanceProposalState.
 const (
 	GovernanceProposalStateDraft      GovernanceProposalState = "draft"
@@ -217,6 +244,87 @@ func (e GovernanceProposalState) Valid() bool {
 	}
 }
 
+// Defines values for GovernanceReviewBatchStatus.
+const (
+	GovernanceReviewBatchStatusConfirmed GovernanceReviewBatchStatus = "confirmed"
+	GovernanceReviewBatchStatusOpen      GovernanceReviewBatchStatus = "open"
+	GovernanceReviewBatchStatusRejected  GovernanceReviewBatchStatus = "rejected"
+)
+
+// Valid indicates whether the value is a known member of the GovernanceReviewBatchStatus enum.
+func (e GovernanceReviewBatchStatus) Valid() bool {
+	switch e {
+	case GovernanceReviewBatchStatusConfirmed:
+		return true
+	case GovernanceReviewBatchStatusOpen:
+		return true
+	case GovernanceReviewBatchStatusRejected:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GovernanceReviewChannel.
+const (
+	GovernanceReviewChannelAutomatic GovernanceReviewChannel = "automatic"
+	GovernanceReviewChannelBatch     GovernanceReviewChannel = "batch"
+	GovernanceReviewChannelExpert    GovernanceReviewChannel = "expert"
+)
+
+// Valid indicates whether the value is a known member of the GovernanceReviewChannel enum.
+func (e GovernanceReviewChannel) Valid() bool {
+	switch e {
+	case GovernanceReviewChannelAutomatic:
+		return true
+	case GovernanceReviewChannelBatch:
+		return true
+	case GovernanceReviewChannelExpert:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GovernanceReviewDecision.
+const (
+	Approve GovernanceReviewDecision = "approve"
+	Reject  GovernanceReviewDecision = "reject"
+)
+
+// Valid indicates whether the value is a known member of the GovernanceReviewDecision enum.
+func (e GovernanceReviewDecision) Valid() bool {
+	switch e {
+	case Approve:
+		return true
+	case Reject:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GovernanceReviewRecordedDecision.
+const (
+	GovernanceReviewRecordedDecisionApproved         GovernanceReviewRecordedDecision = "approved"
+	GovernanceReviewRecordedDecisionChangesRequested GovernanceReviewRecordedDecision = "changes_requested"
+	GovernanceReviewRecordedDecisionRejected         GovernanceReviewRecordedDecision = "rejected"
+)
+
+// Valid indicates whether the value is a known member of the GovernanceReviewRecordedDecision enum.
+func (e GovernanceReviewRecordedDecision) Valid() bool {
+	switch e {
+	case GovernanceReviewRecordedDecisionApproved:
+		return true
+	case GovernanceReviewRecordedDecisionChangesRequested:
+		return true
+	case GovernanceReviewRecordedDecisionRejected:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for GovernanceRiskLevel.
 const (
 	High   GovernanceRiskLevel = "high"
@@ -240,16 +348,16 @@ func (e GovernanceRiskLevel) Valid() bool {
 
 // Defines values for GovernanceRoutingChannel.
 const (
-	Batch  GovernanceRoutingChannel = "batch"
-	Expert GovernanceRoutingChannel = "expert"
+	GovernanceRoutingChannelBatch  GovernanceRoutingChannel = "batch"
+	GovernanceRoutingChannelExpert GovernanceRoutingChannel = "expert"
 )
 
 // Valid indicates whether the value is a known member of the GovernanceRoutingChannel enum.
 func (e GovernanceRoutingChannel) Valid() bool {
 	switch e {
-	case Batch:
+	case GovernanceRoutingChannelBatch:
 		return true
-	case Expert:
+	case GovernanceRoutingChannelExpert:
 		return true
 	default:
 		return false
@@ -911,6 +1019,9 @@ type GovernanceChangeSetItemRecord struct {
 	Op GovernanceChangeOp        `json:"op"`
 }
 
+// GovernanceDiffCategory Closed §8.3 structured-diff category; the grouping-rule component.
+type GovernanceDiffCategory string
+
 // GovernancePolicyDecision defines model for GovernancePolicyDecision.
 type GovernancePolicyDecision struct {
 	// CreatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
@@ -1066,6 +1177,176 @@ type GovernanceProposalSummary struct {
 	// Example: 2026-08-08T08:00:00Z
 	UpdatedAt Timestamp `json:"updatedAt"`
 }
+
+// GovernanceReview One immutable §8.4 review fact; never updated or deleted.
+type GovernanceReview struct {
+	// Channel Review channel that produced the fact (SSOT §8.4).
+	Channel GovernanceReviewChannel `json:"channel"`
+
+	// CreatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	CreatedAt Timestamp `json:"createdAt"`
+
+	// Decision Outcome recorded on an immutable review fact (SSOT §8.4).
+	Decision GovernanceReviewRecordedDecision `json:"decision"`
+
+	// Id Example: rvw_01arz3ndektsv4rrffq69g5fav
+	Id   identity.ReviewID `json:"id"`
+	Note string            `json:"note"`
+
+	// ProposalId Example: prp_01arz3ndektsv4rrffq69g5fav
+	ProposalId GovernanceProposalId `json:"proposalId"`
+
+	// ReviewerPrincipalId Example: prn_01arz3ndektsv4rrffq69g5fav
+	ReviewerPrincipalId GovernanceReviewerPrincipalId `json:"reviewerPrincipalId"`
+}
+
+// GovernanceReviewAddedReason The frozen creation-time decision snapshot that made the proposal batch-eligible; the per-member half of the batch audit record.
+type GovernanceReviewAddedReason struct {
+	InputsDigest  string `json:"inputsDigest"`
+	MatchedRuleId string `json:"matchedRuleId"`
+	ReasonCode    string `json:"reasonCode"`
+
+	// RiskLevel Explainable risk level of a policy decision (SSOT §8.3); never a numeric score.
+	RiskLevel   GovernanceRiskLevel `json:"riskLevel"`
+	RuleVersion string              `json:"ruleVersion"`
+}
+
+// GovernanceReviewBatch defines model for GovernanceReviewBatch.
+type GovernanceReviewBatch struct {
+	// CreatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	CreatedAt Timestamp `json:"createdAt"`
+	CreatedBy string    `json:"createdBy"`
+
+	// DecidedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	DecidedAt *Timestamp `json:"decidedAt,omitempty"`
+
+	// DecidedBy Reviewer of record, set together with decidedAt at confirm time.
+	DecidedBy *string `json:"decidedBy,omitempty"`
+
+	// GroupingRule The persisted §8.4 grouping criteria: every member of the batch shares the target object type, the dominant structured-diff category and the matched policy rule of its creation-time decision.
+	GroupingRule GovernanceReviewGroupingRule `json:"groupingRule"`
+
+	// Id Example: rvb_01arz3ndektsv4rrffq69g5fav
+	Id          GovernanceReviewBatchId `json:"id"`
+	MemberCount int                     `json:"memberCount"`
+
+	// PolicyVersion Policy (rule table) version current at assembly time.
+	PolicyVersion string `json:"policyVersion"`
+
+	// Status One-way batch state; decided batches are frozen.
+	Status GovernanceReviewBatchStatus `json:"status"`
+}
+
+// GovernanceReviewBatchDetail The full §8.4 audit record of one batch. maxRiskProposalId is the member with the highest recorded creation-time risk rank, ties resolved to the earliest member by assembly sequence.
+type GovernanceReviewBatchDetail struct {
+	// CreatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	CreatedAt Timestamp `json:"createdAt"`
+	CreatedBy string    `json:"createdBy"`
+
+	// DecidedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	DecidedAt *Timestamp `json:"decidedAt,omitempty"`
+	DecidedBy *string    `json:"decidedBy,omitempty"`
+
+	// Exclusions Members split out at confirm time, each with a reason.
+	Exclusions []GovernanceReviewBatchMember `json:"exclusions"`
+
+	// GroupingRule The persisted §8.4 grouping criteria: every member of the batch shares the target object type, the dominant structured-diff category and the matched policy rule of its creation-time decision.
+	GroupingRule GovernanceReviewGroupingRule `json:"groupingRule"`
+
+	// Id Example: rvb_01arz3ndektsv4rrffq69g5fav
+	Id GovernanceReviewBatchId `json:"id"`
+
+	// MaxRiskProposalId Example: prp_01arz3ndektsv4rrffq69g5fav
+	MaxRiskProposalId *GovernanceProposalId         `json:"maxRiskProposalId,omitempty"`
+	MemberCount       int                           `json:"memberCount"`
+	Members           []GovernanceReviewBatchMember `json:"members"`
+	PolicyVersion     string                        `json:"policyVersion"`
+
+	// Samples The representative sample members, in assembly order.
+	Samples []GovernanceReviewBatchMember `json:"samples"`
+
+	// Status One-way batch state; decided batches are frozen.
+	Status GovernanceReviewBatchStatus `json:"status"`
+}
+
+// GovernanceReviewBatchId Example: rvb_01arz3ndektsv4rrffq69g5fav
+type GovernanceReviewBatchId = identity.ReviewBatchID
+
+// GovernanceReviewBatchMember One frozen member snapshot; the outcome columns fill at confirm time.
+type GovernanceReviewBatchMember struct {
+	// AddedReason The frozen creation-time decision snapshot that made the proposal batch-eligible; the per-member half of the batch audit record.
+	AddedReason GovernanceReviewAddedReason `json:"addedReason"`
+
+	// CreatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	CreatedAt Timestamp `json:"createdAt"`
+
+	// Decision Outcome recorded on an immutable review fact (SSOT §8.4).
+	Decision *GovernanceReviewRecordedDecision `json:"decision,omitempty"`
+
+	// ProposalId Example: prp_01arz3ndektsv4rrffq69g5fav
+	ProposalId GovernanceProposalId `json:"proposalId"`
+
+	// Sample Part of the deterministic representative sample of the confirmed membership.
+	Sample bool `json:"sample"`
+
+	// SplitOut Auto-split at confirm time (escalation, lost decision or left in_review); a split member never received the batch decision.
+	SplitOut bool `json:"splitOut"`
+
+	// SplitReason Stable machine-readable reason the member was excluded.
+	SplitReason *string `json:"splitReason,omitempty"`
+}
+
+// GovernanceReviewBatchPage defines model for GovernanceReviewBatchPage.
+type GovernanceReviewBatchPage struct {
+	Items []GovernanceReviewBatch `json:"items"`
+	Page  PageInfo                `json:"page"`
+}
+
+// GovernanceReviewBatchStatus One-way batch state; decided batches are frozen.
+type GovernanceReviewBatchStatus string
+
+// GovernanceReviewChannel Review channel that produced the fact (SSOT §8.4).
+type GovernanceReviewChannel string
+
+// GovernanceReviewCommandRequest defines model for GovernanceReviewCommandRequest.
+type GovernanceReviewCommandRequest struct {
+	// Decision Human review command of the expert and batch confirmation commands.
+	Decision GovernanceReviewDecision `json:"decision"`
+
+	// Reason Human-readable justification recorded verbatim on the review facts.
+	Reason string `json:"reason"`
+}
+
+// GovernanceReviewDecision Human review command of the expert and batch confirmation commands.
+type GovernanceReviewDecision string
+
+// GovernanceReviewGroupingRule The persisted §8.4 grouping criteria: every member of the batch shares the target object type, the dominant structured-diff category and the matched policy rule of its creation-time decision.
+type GovernanceReviewGroupingRule struct {
+	// DiffCategory Closed §8.3 structured-diff category; the grouping-rule component.
+	DiffCategory  GovernanceDiffCategory `json:"diffCategory"`
+	MatchedRuleId string                 `json:"matchedRuleId"`
+
+	// TargetObjectType Objects a governed proposal can target.
+	TargetObjectType GovernanceTargetObjectType `json:"targetObjectType"`
+}
+
+// GovernanceReviewRecordedDecision Outcome recorded on an immutable review fact (SSOT §8.4).
+type GovernanceReviewRecordedDecision string
+
+// GovernanceReviewerPrincipalId Example: prn_01arz3ndektsv4rrffq69g5fav
+type GovernanceReviewerPrincipalId = identity.PrincipalID
 
 // GovernanceRiskLevel Explainable risk level of a policy decision (SSOT §8.3); never a numeric score.
 type GovernanceRiskLevel string
@@ -1288,6 +1569,9 @@ type Limit = int
 // ProposalId Example: prp_01arz3ndektsv4rrffq69g5fav
 type ProposalId = GovernanceProposalId
 
+// ReviewBatchId Example: rvb_01arz3ndektsv4rrffq69g5fav
+type ReviewBatchId = GovernanceReviewBatchId
+
 // RevisionId Example: rev_01arz3ndektsv4rrffq69g5fav
 type RevisionId = AssetRevisionId
 
@@ -1345,6 +1629,12 @@ type ListGovernanceProposalsParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
+// ListGovernanceReviewBatchesParams defines parameters for ListGovernanceReviewBatches.
+type ListGovernanceReviewBatchesParams struct {
+	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
 // CreateWorkspaceJSONRequestBody defines body for CreateWorkspace for application/json ContentType.
 type CreateWorkspaceJSONRequestBody = CreateWorkspaceRequest
 
@@ -1356,3 +1646,9 @@ type CreateAssetRevisionJSONRequestBody = CreateAssetRevisionRequest
 
 // CreateGovernanceProposalJSONRequestBody defines body for CreateGovernanceProposal for application/json ContentType.
 type CreateGovernanceProposalJSONRequestBody = CreateGovernanceProposalRequest
+
+// CreateGovernanceProposalReviewJSONRequestBody defines body for CreateGovernanceProposalReview for application/json ContentType.
+type CreateGovernanceProposalReviewJSONRequestBody = GovernanceReviewCommandRequest
+
+// ConfirmGovernanceReviewBatchJSONRequestBody defines body for ConfirmGovernanceReviewBatch for application/json ContentType.
+type ConfirmGovernanceReviewBatchJSONRequestBody = GovernanceReviewCommandRequest

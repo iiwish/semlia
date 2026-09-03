@@ -21,19 +21,46 @@ const (
 	routeGovernanceProposalSubmit
 	routeGovernanceProposalValidationRuns
 	routeGovernanceProposalPolicyDecision
+	routeGovernanceProposalReviews
+	routeGovernanceReviewBatches
+	routeGovernanceReviewBatch
+	routeGovernanceReviewBatchConfirm
 )
 
 func isGovernanceRoute(kind routeKind) bool {
 	switch kind {
 	case routeGovernanceProposals, routeGovernanceProposal, routeGovernanceProposalSubmit,
-		routeGovernanceProposalValidationRuns, routeGovernanceProposalPolicyDecision:
+		routeGovernanceProposalValidationRuns, routeGovernanceProposalPolicyDecision,
+		routeGovernanceProposalReviews, routeGovernanceReviewBatches,
+		routeGovernanceReviewBatch, routeGovernanceReviewBatchConfirm:
 		return true
 	}
 	return false
 }
 
 func matchGovernanceRoute(parts []string, base matchedRoute) (matchedRoute, bool) {
-	if len(parts) < 6 || parts[4] != "governance" || parts[5] != "proposals" {
+	if len(parts) < 6 || parts[4] != "governance" {
+		return matchedRoute{}, false
+	}
+	if parts[5] == "review-batches" {
+		switch {
+		case len(parts) == 6:
+			base.kind, base.label = routeGovernanceReviewBatches,
+				"/api/v1/workspaces/{workspaceId}/governance/review-batches"
+		case len(parts) == 7:
+			base.batch = parts[6]
+			base.kind, base.label = routeGovernanceReviewBatch,
+				"/api/v1/workspaces/{workspaceId}/governance/review-batches/{batchId}"
+		case len(parts) == 8 && parts[7] == "confirm":
+			base.batch = parts[6]
+			base.kind, base.label = routeGovernanceReviewBatchConfirm,
+				"/api/v1/workspaces/{workspaceId}/governance/review-batches/{batchId}/confirm"
+		default:
+			return matchedRoute{}, false
+		}
+		return base, true
+	}
+	if parts[5] != "proposals" {
 		return matchedRoute{}, false
 	}
 	if len(parts) == 6 {
@@ -50,6 +77,8 @@ func matchGovernanceRoute(parts []string, base matchedRoute) (matchedRoute, bool
 		base.kind, base.label = routeGovernanceProposalValidationRuns, "/api/v1/workspaces/{workspaceId}/governance/proposals/{proposalId}/validation-runs"
 	case len(parts) == 8 && parts[7] == "policy-decision":
 		base.kind, base.label = routeGovernanceProposalPolicyDecision, "/api/v1/workspaces/{workspaceId}/governance/proposals/{proposalId}/policy-decision"
+	case len(parts) == 8 && parts[7] == "reviews":
+		base.kind, base.label = routeGovernanceProposalReviews, "/api/v1/workspaces/{workspaceId}/governance/proposals/{proposalId}/reviews"
 	default:
 		return matchedRoute{}, false
 	}
@@ -58,9 +87,9 @@ func matchGovernanceRoute(parts []string, base matchedRoute) (matchedRoute, bool
 
 func governanceRouteMethods(kind routeKind) []string {
 	switch kind {
-	case routeGovernanceProposals:
+	case routeGovernanceProposals, routeGovernanceReviewBatches:
 		return []string{http.MethodGet, http.MethodPost}
-	case routeGovernanceProposalSubmit:
+	case routeGovernanceProposalSubmit, routeGovernanceProposalReviews, routeGovernanceReviewBatchConfirm:
 		return []string{http.MethodPost}
 	default:
 		return []string{http.MethodGet}
@@ -143,9 +172,137 @@ func (handler *Handler) routeGovernance(
 		}
 		writeJSON(response, http.StatusOK, governancePolicyDecisionResponse(detail))
 		return ""
+	case routeGovernanceProposalReviews:
+		proposalID, parseErr := identity.ParseProposalID(route.proposal)
+		if parseErr != nil {
+			return writeGovernanceError(response, domain.ErrInvalidArgument, traceID)
+		}
+		outcome, reviewErr := handler.createProposalReview(request, traceID, workspaceID, proposalID)
+		if reviewErr != nil {
+			return writeGovernanceError(response, reviewErr, traceID)
+		}
+		writeJSON(response, http.StatusCreated, governanceReviewResponse(outcome.Review))
+		return ""
+	case routeGovernanceReviewBatches:
+		if request.Method == http.MethodPost {
+			return handler.createReviewBatches(response, request, traceID, workspaceID)
+		}
+		return handler.listReviewBatches(response, request, traceID, workspaceID)
+	case routeGovernanceReviewBatch:
+		batchID, parseErr := identity.ParseReviewBatchID(route.batch)
+		if parseErr != nil {
+			return writeGovernanceError(response, domain.ErrInvalidArgument, traceID)
+		}
+		detail, getErr := handler.governance.GetReviewBatch(request.Context(), governanceapp.GetReviewBatchRequest{
+			WorkspaceID: workspaceID, BatchID: batchID,
+			PrincipalRef: strings.TrimSpace(request.Header.Get(headerPrincipal)), TraceID: traceID,
+		})
+		if getErr != nil {
+			return writeGovernanceError(response, getErr, traceID)
+		}
+		writeJSON(response, http.StatusOK, governanceReviewBatchDetailResponse(detail))
+		return ""
+	case routeGovernanceReviewBatchConfirm:
+		batchID, parseErr := identity.ParseReviewBatchID(route.batch)
+		if parseErr != nil {
+			return writeGovernanceError(response, domain.ErrInvalidArgument, traceID)
+		}
+		result, confirmErr := handler.confirmReviewBatch(request, traceID, workspaceID, batchID)
+		if confirmErr != nil {
+			return writeGovernanceError(response, confirmErr, traceID)
+		}
+		writeJSON(response, http.StatusOK, governanceReviewBatchDetailResponse(result.Detail))
+		return ""
 	default:
 		panic("governance route is not handled")
 	}
+}
+
+func (handler *Handler) createProposalReview(
+	request *http.Request,
+	traceID string,
+	workspaceID identity.WorkspaceID,
+	proposalID identity.ProposalID,
+) (governanceapp.ReviewOutcome, error) {
+	raw, err := readBody(request)
+	if err != nil {
+		return governanceapp.ReviewOutcome{}, domain.ErrInvalidArgument
+	}
+	var body contract.GovernanceReviewCommandRequest
+	if err := decodeStrict(raw, &body); err != nil {
+		return governanceapp.ReviewOutcome{}, domain.ErrInvalidArgument
+	}
+	return handler.governance.ReviewProposal(request.Context(), governanceapp.ReviewProposalRequest{
+		WorkspaceID: workspaceID, ProposalID: proposalID,
+		Decision: governanceapp.ReviewCommandDecision(body.Decision), Reason: body.Reason,
+		PrincipalRef: strings.TrimSpace(request.Header.Get(headerPrincipal)), TraceID: traceID,
+	})
+}
+
+func (handler *Handler) createReviewBatches(
+	response http.ResponseWriter,
+	request *http.Request,
+	traceID string,
+	workspaceID identity.WorkspaceID,
+) string {
+	raw, err := readBody(request)
+	if err != nil {
+		return writeGovernanceError(response, domain.ErrInvalidArgument, traceID)
+	}
+	if len(strings.TrimSpace(string(raw))) != 0 {
+		return writeGovernanceError(response, domain.ErrInvalidArgument, traceID)
+	}
+	details, err := handler.governance.CreateReviewBatches(request.Context(), governanceapp.CreateReviewBatchesRequest{
+		WorkspaceID:  workspaceID,
+		PrincipalRef: strings.TrimSpace(request.Header.Get(headerPrincipal)), TraceID: traceID,
+	})
+	if err != nil {
+		return writeGovernanceError(response, err, traceID)
+	}
+	writeJSON(response, http.StatusOK, governanceReviewBatchPageResponse(details, 0, ""))
+	return ""
+}
+
+func (handler *Handler) listReviewBatches(
+	response http.ResponseWriter,
+	request *http.Request,
+	traceID string,
+	workspaceID identity.WorkspaceID,
+) string {
+	limit, err := queryInteger(request, "limit")
+	if err != nil {
+		return writeGovernanceError(response, domain.ErrInvalidArgument, traceID)
+	}
+	page, err := handler.governance.ListOpenReviewBatches(request.Context(), governanceapp.ListReviewBatchesRequest{
+		WorkspaceID: workspaceID, Limit: limit, Cursor: request.URL.Query().Get("cursor"),
+		PrincipalRef: strings.TrimSpace(request.Header.Get(headerPrincipal)), TraceID: traceID,
+	})
+	if err != nil {
+		return writeGovernanceError(response, err, traceID)
+	}
+	writeJSON(response, http.StatusOK, governanceReviewBatchPageResponse(page.Items, page.Limit, page.NextCursor))
+	return ""
+}
+
+func (handler *Handler) confirmReviewBatch(
+	request *http.Request,
+	traceID string,
+	workspaceID identity.WorkspaceID,
+	batchID identity.ReviewBatchID,
+) (governanceapp.ConfirmReviewBatchResult, error) {
+	raw, err := readBody(request)
+	if err != nil {
+		return governanceapp.ConfirmReviewBatchResult{}, domain.ErrInvalidArgument
+	}
+	var body contract.GovernanceReviewCommandRequest
+	if err := decodeStrict(raw, &body); err != nil {
+		return governanceapp.ConfirmReviewBatchResult{}, domain.ErrInvalidArgument
+	}
+	return handler.governance.ConfirmReviewBatch(request.Context(), governanceapp.ConfirmReviewBatchRequest{
+		WorkspaceID: workspaceID, BatchID: batchID,
+		Decision: governanceapp.ReviewCommandDecision(body.Decision), Reason: body.Reason,
+		PrincipalRef: strings.TrimSpace(request.Header.Get(headerPrincipal)), TraceID: traceID,
+	})
 }
 
 func governancePolicyDecisionResponse(detail governanceapp.PolicyDecisionDetail) contract.GovernancePolicyDecision {
@@ -417,10 +574,162 @@ func governanceValidationRunResponse(record governanceapp.ValidationRunRecord) c
 	return result
 }
 
+func governanceReviewResponse(review domain.Review) contract.GovernanceReview {
+	return contract.GovernanceReview{
+		Id:                  review.ID,
+		ProposalId:          review.ProposalID,
+		ReviewerPrincipalId: review.ReviewerPrincipalID,
+		Channel:             contract.GovernanceReviewChannel(review.Channel),
+		Decision:            contract.GovernanceReviewRecordedDecision(review.Decision),
+		Note:                review.Note,
+		CreatedAt:           review.CreatedAt.UTC(),
+	}
+}
+
+func governanceReviewBatchPageResponse(
+	items []domain.ReviewBatchDetail, limit int, nextCursor string,
+) contract.GovernanceReviewBatchPage {
+	page := contract.GovernanceReviewBatchPage{
+		Items: make([]contract.GovernanceReviewBatch, 0, len(items)),
+		Page:  contract.PageInfo{Limit: limit},
+	}
+	if page.Page.Limit == 0 {
+		page.Page.Limit = defaultGovernanceBatchPageLimit
+	}
+	for _, item := range items {
+		page.Items = append(page.Items, governanceReviewBatchSummaryResponse(item))
+	}
+	if nextCursor != "" {
+		cursor := nextCursor
+		page.Page.NextCursor = &cursor
+	}
+	return page
+}
+
+const defaultGovernanceBatchPageLimit = 50
+
+func governanceReviewBatchSummaryResponse(detail domain.ReviewBatchDetail) contract.GovernanceReviewBatch {
+	batch := detail.Batch
+	result := contract.GovernanceReviewBatch{
+		Id:            batch.ID,
+		Status:        contract.GovernanceReviewBatchStatus(batch.Status),
+		GroupingRule:  governanceGroupingRuleResponse(batch.GroupingRule),
+		PolicyVersion: batch.PolicyVersion,
+		MemberCount:   len(detail.Members),
+		CreatedBy:     batch.CreatedBy,
+		CreatedAt:     batch.CreatedAt.UTC(),
+	}
+	if batch.DecidedBy != nil {
+		decidedBy := *batch.DecidedBy
+		result.DecidedBy = &decidedBy
+	}
+	if batch.DecidedAt != nil {
+		decidedAt := *batch.DecidedAt
+		result.DecidedAt = &decidedAt
+	}
+	return result
+}
+
+func governanceGroupingRuleResponse(rule domain.ReviewGroupingRule) contract.GovernanceReviewGroupingRule {
+	return contract.GovernanceReviewGroupingRule{
+		TargetObjectType: contract.GovernanceTargetObjectType(rule.TargetObjectType),
+		DiffCategory:     contract.GovernanceDiffCategory(rule.DiffCategory),
+		MatchedRuleId:    rule.MatchedRuleID,
+	}
+}
+
+func governanceReviewBatchMemberResponse(member domain.ReviewBatchMember) contract.GovernanceReviewBatchMember {
+	result := contract.GovernanceReviewBatchMember{
+		ProposalId:  member.ProposalID,
+		AddedReason: governanceAddedReasonResponse(member.AddedReason),
+		Sample:      member.Sample,
+		SplitOut:    member.SplitOut,
+		CreatedAt:   member.CreatedAt.UTC(),
+	}
+	if member.Decision != nil {
+		decision := contract.GovernanceReviewRecordedDecision(*member.Decision)
+		result.Decision = &decision
+	}
+	if member.SplitReason != nil {
+		reason := *member.SplitReason
+		result.SplitReason = &reason
+	}
+	return result
+}
+
+func governanceAddedReasonResponse(raw json.RawMessage) contract.GovernanceReviewAddedReason {
+	reason, err := domain.ParseReviewAddedReason(raw)
+	if err != nil {
+		return contract.GovernanceReviewAddedReason{}
+	}
+	return contract.GovernanceReviewAddedReason{
+		MatchedRuleId: reason.MatchedRuleID,
+		RiskLevel:     contract.GovernanceRiskLevel(reason.RiskLevel),
+		ReasonCode:    reason.ReasonCode,
+		RuleVersion:   reason.RuleVersion,
+		InputsDigest:  reason.InputsDigest,
+	}
+}
+
+func governanceReviewBatchDetailResponse(detail domain.ReviewBatchDetail) contract.GovernanceReviewBatchDetail {
+	result := contract.GovernanceReviewBatchDetail{
+		Id:            detail.Batch.ID,
+		Status:        contract.GovernanceReviewBatchStatus(detail.Batch.Status),
+		GroupingRule:  governanceGroupingRuleResponse(detail.Batch.GroupingRule),
+		PolicyVersion: detail.Batch.PolicyVersion,
+		MemberCount:   len(detail.Members),
+		CreatedBy:     detail.Batch.CreatedBy,
+		CreatedAt:     detail.Batch.CreatedAt.UTC(),
+		Members:       make([]contract.GovernanceReviewBatchMember, 0, len(detail.Members)),
+		Samples:       make([]contract.GovernanceReviewBatchMember, 0, len(detail.Samples)),
+		Exclusions:    make([]contract.GovernanceReviewBatchMember, 0, len(detail.Exclusions)),
+	}
+	if detail.Batch.DecidedBy != nil {
+		decidedBy := *detail.Batch.DecidedBy
+		result.DecidedBy = &decidedBy
+	}
+	if detail.Batch.DecidedAt != nil {
+		decidedAt := *detail.Batch.DecidedAt
+		result.DecidedAt = &decidedAt
+	}
+	if detail.MaxRiskMember != nil {
+		maxRisk := detail.MaxRiskMember.ProposalID
+		result.MaxRiskProposalId = &maxRisk
+	}
+	for _, member := range detail.Members {
+		result.Members = append(result.Members, governanceReviewBatchMemberResponse(member))
+	}
+	for _, member := range detail.Samples {
+		result.Samples = append(result.Samples, governanceReviewBatchMemberResponse(member))
+	}
+	for _, member := range detail.Exclusions {
+		result.Exclusions = append(result.Exclusions, governanceReviewBatchMemberResponse(member))
+	}
+	return result
+}
+
 func writeGovernanceError(response http.ResponseWriter, err error, traceID string) string {
 	var denial *authz.DenialError
+	var dutyConflict *governanceapp.SeparationOfDutyError
 	var aiOutputInvalid *governanceapp.AIOutputInvalidError
 	switch {
+	case errors.As(err, &dutyConflict):
+		details := map[string]any{
+			"conflict":     dutyConflict.Conflict,
+			"scope":        dutyConflict.Scope,
+			"policySource": dutyConflict.Source,
+			"recovery":     dutyConflict.Recovery,
+		}
+		if len(dutyConflict.Conflicted) > 0 {
+			proposalIDs := make([]string, 0, len(dutyConflict.Conflicted))
+			for _, proposal := range dutyConflict.Conflicted {
+				proposalIDs = append(proposalIDs, proposal.String())
+			}
+			details["conflictingMembers"] = proposalIDs
+		}
+		writeErrorWithDetails(response, http.StatusForbidden, "SEPARATION_OF_DUTY",
+			dutyConflict.Conflict, traceID, details)
+		return "SEPARATION_OF_DUTY"
 	case errors.As(err, &denial):
 		writeError(response, http.StatusForbidden, string(denial.Decision.ReasonCode),
 			"the acting principal lacks the required capability", traceID, false)

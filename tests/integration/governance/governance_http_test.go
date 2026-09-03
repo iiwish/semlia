@@ -89,6 +89,8 @@ func newFixture(t *testing.T) *fixture {
 	authorizer := authorizationapp.NewService(store, authorizationapp.ClockFunc(time.Now))
 	catalog := catalogapp.NewService(store, catalogapp.ClockFunc(func() time.Time { return time.Now().UTC() }))
 	clock := governanceapp.ClockFunc(func() time.Time { return time.Now().UTC() })
+	governancePolicy := governanceapp.NewPolicyService(
+		store, clock, governanceapp.WithRuleSource(store))
 	authoring := governanceapp.NewAuthoringService(
 		store,
 		governanceapp.NewProposalService(store, clock),
@@ -98,6 +100,9 @@ func newFixture(t *testing.T) *fixture {
 			governanceapp.NewValidationOrchestrator(
 				governanceapp.NewProposalService(store, clock), store, clock,
 			),
+		),
+		governanceapp.WithDecisionRefresher(
+			governanceapp.NewPolicyDecisionTrigger(store, governancePolicy),
 		),
 	)
 	var logs bytes.Buffer

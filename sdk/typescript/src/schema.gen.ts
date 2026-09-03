@@ -287,6 +287,101 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspaceId}/governance/proposals/{proposalId}/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                proposalId: components["parameters"]["ProposalId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record an expert review decision for one proposal
+         * @description The expert channel of the §8.4 three-channel model. Requires the proposal.review capability server-side. Approve records an immutable review while the proposal stays in_review (approvals gate the later release cut); reject records the review and transitions the proposal to rejected with decided_at. The proposal author cannot review their own proposal (FR-007): the denial names the conflict, the affected scope, the policy source and the permitted recovery actions, and is audited.
+         */
+        post: operations["createGovernanceProposalReview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/governance/review-batches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * List the open review batches of the workspace
+         * @description The undecided §8.4 batch confirmation queue, newest first with an opaque keyset cursor. Requires the proposal.review capability; batch assembly is a review-preparation command.
+         */
+        get: operations["listGovernanceReviewBatches"];
+        put?: never;
+        /**
+         * Assemble the eligible proposals into review batches
+         * @description Clusters every in_review proposal whose latest policy decision routes to the batch channel and that is not already an active member of an open batch, deterministically by (target object type, dominant diff category, matched rule). Each cluster becomes one open batch whose grouping rule, policy version, member snapshots with added reasons and representative samples persist immediately — the §8.4 audit record is the data. High-risk proposals are never eligible.
+         */
+        post: operations["createGovernanceReviewBatches"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/governance/review-batches/{batchId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                batchId: components["parameters"]["ReviewBatchId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read one review batch with its full audit record
+         * @description The batch with its membership, the representative samples, the exclusions with reasons and the max-risk member, plus the audit fields (grouping rule, policy version, creator, reviewer and decided_at once confirmed).
+         */
+        get: operations["getGovernanceReviewBatch"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/governance/review-batches/{batchId}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                batchId: components["parameters"]["ReviewBatchId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm one open review batch with a single decision
+         * @description Requires the proposal.review capability. Before anything persists, every member's CURRENT policy decision is re-checked: members that are no longer in_review, lost their decision or escalated (high risk or no longer batch-routed) are split out automatically with a reason and never mixed into the batch decision. The decision applies to the remaining members as immutable reviews (rejection also transitions each member to rejected) and freezes the batch audit record: grouping rule, final membership, samples, exclusions with reasons, reviewer and policy version. A reviewer who authored a member is refused with the conflicting members named (FR-007). Double confirmation is refused.
+         */
+        post: operations["confirmGovernanceReviewBatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspaceId}/discovery-runs/{runId}": {
         parameters: {
             query?: never;
@@ -792,6 +887,122 @@ export interface components {
             matchedInputFields: string[];
             createdAt: components["schemas"]["Timestamp"];
         };
+        /**
+         * Format: typeid
+         * @example prn_01arz3ndektsv4rrffq69g5fav
+         */
+        GovernanceReviewerPrincipalId: string;
+        /**
+         * Format: typeid
+         * @example rvb_01arz3ndektsv4rrffq69g5fav
+         */
+        GovernanceReviewBatchId: string;
+        /**
+         * @description Human review command of the expert and batch confirmation commands.
+         * @enum {string}
+         */
+        GovernanceReviewDecision: "approve" | "reject";
+        /**
+         * @description Outcome recorded on an immutable review fact (SSOT §8.4).
+         * @enum {string}
+         */
+        GovernanceReviewRecordedDecision: "approved" | "rejected" | "changes_requested";
+        /**
+         * @description Review channel that produced the fact (SSOT §8.4).
+         * @enum {string}
+         */
+        GovernanceReviewChannel: "automatic" | "batch" | "expert";
+        GovernanceReviewCommandRequest: {
+            decision: components["schemas"]["GovernanceReviewDecision"];
+            /** @description Human-readable justification recorded verbatim on the review facts. */
+            reason: string;
+        };
+        /** @description One immutable §8.4 review fact; never updated or deleted. */
+        GovernanceReview: {
+            /**
+             * Format: typeid
+             * @example rvw_01arz3ndektsv4rrffq69g5fav
+             */
+            id: string;
+            proposalId: components["schemas"]["GovernanceProposalId"];
+            reviewerPrincipalId: components["schemas"]["GovernanceReviewerPrincipalId"];
+            channel: components["schemas"]["GovernanceReviewChannel"];
+            decision: components["schemas"]["GovernanceReviewRecordedDecision"];
+            note: string;
+            createdAt: components["schemas"]["Timestamp"];
+        };
+        /**
+         * @description Closed §8.3 structured-diff category; the grouping-rule component.
+         * @enum {string}
+         */
+        GovernanceDiffCategory: "computation" | "access" | "contract" | "relations" | "definition";
+        /** @description The persisted §8.4 grouping criteria: every member of the batch shares the target object type, the dominant structured-diff category and the matched policy rule of its creation-time decision. */
+        GovernanceReviewGroupingRule: {
+            targetObjectType: components["schemas"]["GovernanceTargetObjectType"];
+            diffCategory: components["schemas"]["GovernanceDiffCategory"];
+            matchedRuleId: string;
+        };
+        /** @description The frozen creation-time decision snapshot that made the proposal batch-eligible; the per-member half of the batch audit record. */
+        GovernanceReviewAddedReason: {
+            matchedRuleId: string;
+            riskLevel: components["schemas"]["GovernanceRiskLevel"];
+            reasonCode: string;
+            ruleVersion: string;
+            inputsDigest: string;
+        };
+        /**
+         * @description One-way batch state; decided batches are frozen.
+         * @enum {string}
+         */
+        GovernanceReviewBatchStatus: "open" | "confirmed" | "rejected";
+        /** @description One frozen member snapshot; the outcome columns fill at confirm time. */
+        GovernanceReviewBatchMember: {
+            proposalId: components["schemas"]["GovernanceProposalId"];
+            addedReason: components["schemas"]["GovernanceReviewAddedReason"];
+            /** @description Part of the deterministic representative sample of the confirmed membership. */
+            sample: boolean;
+            /** @description Auto-split at confirm time (escalation, lost decision or left in_review); a split member never received the batch decision. */
+            splitOut: boolean;
+            /** @description Stable machine-readable reason the member was excluded. */
+            splitReason?: string;
+            decision?: components["schemas"]["GovernanceReviewRecordedDecision"];
+            createdAt: components["schemas"]["Timestamp"];
+        };
+        GovernanceReviewBatch: {
+            id: components["schemas"]["GovernanceReviewBatchId"];
+            status: components["schemas"]["GovernanceReviewBatchStatus"];
+            groupingRule: components["schemas"]["GovernanceReviewGroupingRule"];
+            /** @description Policy (rule table) version current at assembly time. */
+            policyVersion: string;
+            memberCount: number;
+            createdBy: string;
+            /** @description Reviewer of record, set together with decidedAt at confirm time. */
+            decidedBy?: string;
+            decidedAt?: components["schemas"]["Timestamp"];
+            createdAt: components["schemas"]["Timestamp"];
+        };
+        /** @description The full §8.4 audit record of one batch. maxRiskProposalId is the member with the highest recorded creation-time risk rank, ties resolved to the earliest member by assembly sequence. */
+        GovernanceReviewBatchDetail: {
+            id: components["schemas"]["GovernanceReviewBatchId"];
+            status: components["schemas"]["GovernanceReviewBatchStatus"];
+            groupingRule: components["schemas"]["GovernanceReviewGroupingRule"];
+            policyVersion: string;
+            memberCount: number;
+            createdBy: string;
+            decidedBy?: string;
+            decidedAt?: components["schemas"]["Timestamp"];
+            maxRiskProposalId?: components["schemas"]["GovernanceProposalId"];
+            members: components["schemas"]["GovernanceReviewBatchMember"][];
+            /** @description The representative sample members, in assembly order. */
+            samples: components["schemas"]["GovernanceReviewBatchMember"][];
+            /** @description Members split out at confirm time, each with a reason. */
+            exclusions: components["schemas"]["GovernanceReviewBatchMember"][];
+            createdAt: components["schemas"]["Timestamp"];
+        };
+        GovernanceReviewBatchPage: {
+            items: components["schemas"]["GovernanceReviewBatch"][];
+            page: components["schemas"]["PageInfo"];
+        };
     };
     responses: {
         /** @description The request failed. */
@@ -873,6 +1084,7 @@ export interface components {
         RevisionId: components["schemas"]["AssetRevisionId"];
         RunId: components["schemas"]["RunId"];
         ProposalId: components["schemas"]["GovernanceProposalId"];
+        ReviewBatchId: components["schemas"]["GovernanceReviewBatchId"];
         Limit: number;
         Cursor: components["schemas"]["Cursor"];
     };
@@ -1382,6 +1594,156 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    createGovernanceProposalReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                proposalId: components["parameters"]["ProposalId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GovernanceReviewCommandRequest"];
+            };
+        };
+        responses: {
+            /** @description The recorded immutable review fact. */
+            201: {
+                headers: {
+                    "X-Trace-ID": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GovernanceReview"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Error"];
+        };
+    };
+    listGovernanceReviewBatches: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A deterministic page of open review batches. */
+            200: {
+                headers: {
+                    "X-Trace-ID": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GovernanceReviewBatchPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            default: components["responses"]["Error"];
+        };
+    };
+    createGovernanceReviewBatches: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The created open batches, one per cluster; empty when nothing is eligible. */
+            200: {
+                headers: {
+                    "X-Trace-ID": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GovernanceReviewBatchPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getGovernanceReviewBatch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                batchId: components["parameters"]["ReviewBatchId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The review batch audit record. */
+            200: {
+                headers: {
+                    "X-Trace-ID": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GovernanceReviewBatchDetail"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    confirmGovernanceReviewBatch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                batchId: components["parameters"]["ReviewBatchId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GovernanceReviewCommandRequest"];
+            };
+        };
+        responses: {
+            /** @description The decided batch with its final audit record. */
+            200: {
+                headers: {
+                    "X-Trace-ID": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GovernanceReviewBatchDetail"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
             default: components["responses"]["Error"];
         };
     };

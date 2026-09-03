@@ -32,6 +32,7 @@ const (
 	Proposal                Prefix = "prp"
 	ProposalChange          Prefix = "chg"
 	Review                  Prefix = "rvw"
+	ReviewBatch             Prefix = "rvb"
 	ValidationRun           Prefix = "val"
 	ValidationResult        Prefix = "vlr"
 	PolicyDecision          Prefix = "pol"
@@ -66,6 +67,7 @@ var registeredPrefixes = []Prefix{
 	Proposal,
 	ProposalChange,
 	Review,
+	ReviewBatch,
 	ValidationRun,
 	ValidationResult,
 	PolicyDecision,
@@ -262,6 +264,7 @@ type roleBindingKind struct{}
 type proposalKind struct{}
 type proposalChangeKind struct{}
 type reviewKind struct{}
+type reviewBatchKind struct{}
 type validationRunKind struct{}
 type validationResultKind struct{}
 type policyDecisionKind struct{}
@@ -294,6 +297,7 @@ func (roleBindingKind) resourcePrefix() Prefix             { return RoleBinding 
 func (proposalKind) resourcePrefix() Prefix                { return Proposal }
 func (proposalChangeKind) resourcePrefix() Prefix          { return ProposalChange }
 func (reviewKind) resourcePrefix() Prefix                  { return Review }
+func (reviewBatchKind) resourcePrefix() Prefix             { return ReviewBatch }
 func (validationRunKind) resourcePrefix() Prefix           { return ValidationRun }
 func (validationResultKind) resourcePrefix() Prefix        { return ValidationResult }
 func (policyDecisionKind) resourcePrefix() Prefix          { return PolicyDecision }
@@ -326,6 +330,7 @@ type BindingID = TypedID[roleBindingKind]
 type ProposalID = TypedID[proposalKind]
 type ProposalChangeID = TypedID[proposalChangeKind]
 type ReviewID = TypedID[reviewKind]
+type ReviewBatchID = TypedID[reviewBatchKind]
 type ValidationRunID = TypedID[validationRunKind]
 type ValidationResultID = TypedID[validationResultKind]
 type PolicyDecisionID = TypedID[policyDecisionKind]
@@ -358,6 +363,7 @@ func NewBindingID() (BindingID, error)                   { return newTypedID[rol
 func NewProposalID() (ProposalID, error)                 { return newTypedID[proposalKind]() }
 func NewProposalChangeID() (ProposalChangeID, error)     { return newTypedID[proposalChangeKind]() }
 func NewReviewID() (ReviewID, error)                     { return newTypedID[reviewKind]() }
+func NewReviewBatchID() (ReviewBatchID, error)           { return newTypedID[reviewBatchKind]() }
 func NewValidationRunID() (ValidationRunID, error)       { return newTypedID[validationRunKind]() }
 func NewValidationResultID() (ValidationResultID, error) { return newTypedID[validationResultKind]() }
 func NewPolicyDecisionID() (PolicyDecisionID, error)     { return newTypedID[policyDecisionKind]() }
@@ -396,6 +402,9 @@ func ParseProposalChangeID(value string) (ProposalChangeID, error) {
 	return parseTypedID[proposalChangeKind](value)
 }
 func ParseReviewID(value string) (ReviewID, error) { return parseTypedID[reviewKind](value) }
+func ParseReviewBatchID(value string) (ReviewBatchID, error) {
+	return parseTypedID[reviewBatchKind](value)
+}
 func ParseValidationRunID(value string) (ValidationRunID, error) {
 	return parseTypedID[validationRunKind](value)
 }
@@ -485,6 +494,9 @@ func ProposalChangeIDFromUUIDBytes(value [16]byte) (ProposalChangeID, error) {
 }
 func ReviewIDFromUUIDBytes(value [16]byte) (ReviewID, error) {
 	return typedIDFromUUIDBytes[reviewKind](value)
+}
+func ReviewBatchIDFromUUIDBytes(value [16]byte) (ReviewBatchID, error) {
+	return typedIDFromUUIDBytes[reviewBatchKind](value)
 }
 func ValidationRunIDFromUUIDBytes(value [16]byte) (ValidationRunID, error) {
 	return typedIDFromUUIDBytes[validationRunKind](value)

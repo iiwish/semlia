@@ -433,6 +433,30 @@ type Review struct {
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 }
 
+type ReviewBatch struct {
+	ID            pgtype.UUID        `json:"id"`
+	WorkspaceID   pgtype.UUID        `json:"workspace_id"`
+	GroupingRule  []byte             `json:"grouping_rule"`
+	PolicyVersion string             `json:"policy_version"`
+	Status        string             `json:"status"`
+	CreatedBy     string             `json:"created_by"`
+	DecidedBy     pgtype.Text        `json:"decided_by"`
+	DecidedAt     pgtype.Timestamptz `json:"decided_at"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+type ReviewBatchMember struct {
+	ReviewBatchID pgtype.UUID        `json:"review_batch_id"`
+	WorkspaceID   pgtype.UUID        `json:"workspace_id"`
+	ProposalID    pgtype.UUID        `json:"proposal_id"`
+	AddedReason   []byte             `json:"added_reason"`
+	Decision      pgtype.Text        `json:"decision"`
+	Sample        bool               `json:"sample"`
+	SplitOut      bool               `json:"split_out"`
+	SplitReason   pgtype.Text        `json:"split_reason"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
 type RevisionEvidenceLink struct {
 	WorkspaceID        pgtype.UUID        `json:"workspace_id"`
 	AssetRevisionID    pgtype.UUID        `json:"asset_revision_id"`

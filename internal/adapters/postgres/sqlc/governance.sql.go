@@ -30,6 +30,45 @@ func (q *Queries) AssetRevisionExists(ctx context.Context, arg AssetRevisionExis
 	return present, err
 }
 
+const confirmReviewBatch = `-- name: ConfirmReviewBatch :one
+UPDATE review_batches
+SET status = $1, decided_by = $2, decided_at = $3
+WHERE workspace_id = $4 AND id = $5
+  AND status = 'open'
+RETURNING id, workspace_id, grouping_rule, policy_version, status, created_by, decided_by, decided_at, created_at
+`
+
+type ConfirmReviewBatchParams struct {
+	Status        string             `json:"status"`
+	DecidedBy     pgtype.Text        `json:"decided_by"`
+	DecidedAt     pgtype.Timestamptz `json:"decided_at"`
+	WorkspaceID   pgtype.UUID        `json:"workspace_id"`
+	ReviewBatchID pgtype.UUID        `json:"review_batch_id"`
+}
+
+func (q *Queries) ConfirmReviewBatch(ctx context.Context, arg ConfirmReviewBatchParams) (ReviewBatch, error) {
+	row := q.db.QueryRow(ctx, confirmReviewBatch,
+		arg.Status,
+		arg.DecidedBy,
+		arg.DecidedAt,
+		arg.WorkspaceID,
+		arg.ReviewBatchID,
+	)
+	var i ReviewBatch
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.GroupingRule,
+		&i.PolicyVersion,
+		&i.Status,
+		&i.CreatedBy,
+		&i.DecidedBy,
+		&i.DecidedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const countBlockingValidationResults = `-- name: CountBlockingValidationResults :one
 SELECT count(*) FROM validation_results AS result
 JOIN validation_runs AS run ON run.id = result.validation_run_id
@@ -57,6 +96,32 @@ SELECT count(*) FROM proposal_changes WHERE proposal_id = $1
 
 func (q *Queries) CountProposalChanges(ctx context.Context, proposalID pgtype.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, countProposalChanges, proposalID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countProposalReviewsByReviewer = `-- name: CountProposalReviewsByReviewer :one
+SELECT count(*) FROM reviews
+WHERE workspace_id = $1 AND proposal_id = $2
+  AND reviewer_principal_id = $3
+  AND channel = $4
+`
+
+type CountProposalReviewsByReviewerParams struct {
+	WorkspaceID         pgtype.UUID `json:"workspace_id"`
+	ProposalID          pgtype.UUID `json:"proposal_id"`
+	ReviewerPrincipalID pgtype.UUID `json:"reviewer_principal_id"`
+	Channel             string      `json:"channel"`
+}
+
+func (q *Queries) CountProposalReviewsByReviewer(ctx context.Context, arg CountProposalReviewsByReviewerParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countProposalReviewsByReviewer,
+		arg.WorkspaceID,
+		arg.ProposalID,
+		arg.ReviewerPrincipalID,
+		arg.Channel,
+	)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -503,6 +568,81 @@ func (q *Queries) CreateReview(ctx context.Context, arg CreateReviewParams) (Rev
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const createReviewBatch = `-- name: CreateReviewBatch :one
+
+INSERT INTO review_batches (
+    id, workspace_id, grouping_rule, policy_version, status, created_by, created_at
+) VALUES (
+    $1, $2, $3, $4,
+    'open', $5, $6
+)
+RETURNING id, workspace_id, grouping_rule, policy_version, status, created_by, decided_by, decided_at, created_at
+`
+
+type CreateReviewBatchParams struct {
+	ID            pgtype.UUID        `json:"id"`
+	WorkspaceID   pgtype.UUID        `json:"workspace_id"`
+	GroupingRule  []byte             `json:"grouping_rule"`
+	PolicyVersion string             `json:"policy_version"`
+	CreatedBy     string             `json:"created_by"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+// ---------- review batches (SSOT §8.4 batch confirmation channel) ----------
+func (q *Queries) CreateReviewBatch(ctx context.Context, arg CreateReviewBatchParams) (ReviewBatch, error) {
+	row := q.db.QueryRow(ctx, createReviewBatch,
+		arg.ID,
+		arg.WorkspaceID,
+		arg.GroupingRule,
+		arg.PolicyVersion,
+		arg.CreatedBy,
+		arg.CreatedAt,
+	)
+	var i ReviewBatch
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.GroupingRule,
+		&i.PolicyVersion,
+		&i.Status,
+		&i.CreatedBy,
+		&i.DecidedBy,
+		&i.DecidedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createReviewBatchMember = `-- name: CreateReviewBatchMember :exec
+INSERT INTO review_batch_members (
+    review_batch_id, workspace_id, proposal_id, added_reason, sample, created_at
+) VALUES (
+    $1, $2, $3,
+    $4, $5, $6
+)
+`
+
+type CreateReviewBatchMemberParams struct {
+	ReviewBatchID pgtype.UUID        `json:"review_batch_id"`
+	WorkspaceID   pgtype.UUID        `json:"workspace_id"`
+	ProposalID    pgtype.UUID        `json:"proposal_id"`
+	AddedReason   []byte             `json:"added_reason"`
+	Sample        bool               `json:"sample"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) CreateReviewBatchMember(ctx context.Context, arg CreateReviewBatchMemberParams) error {
+	_, err := q.db.Exec(ctx, createReviewBatchMember,
+		arg.ReviewBatchID,
+		arg.WorkspaceID,
+		arg.ProposalID,
+		arg.AddedReason,
+		arg.Sample,
+		arg.CreatedAt,
+	)
+	return err
 }
 
 const createValidationResult = `-- name: CreateValidationResult :one
@@ -1119,6 +1259,61 @@ func (q *Queries) GetRelease(ctx context.Context, arg GetReleaseParams) (Release
 	return i, err
 }
 
+const getReviewBatch = `-- name: GetReviewBatch :one
+SELECT id, workspace_id, grouping_rule, policy_version, status, created_by, decided_by, decided_at, created_at FROM review_batches
+WHERE workspace_id = $1 AND id = $2
+`
+
+type GetReviewBatchParams struct {
+	WorkspaceID   pgtype.UUID `json:"workspace_id"`
+	ReviewBatchID pgtype.UUID `json:"review_batch_id"`
+}
+
+func (q *Queries) GetReviewBatch(ctx context.Context, arg GetReviewBatchParams) (ReviewBatch, error) {
+	row := q.db.QueryRow(ctx, getReviewBatch, arg.WorkspaceID, arg.ReviewBatchID)
+	var i ReviewBatch
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.GroupingRule,
+		&i.PolicyVersion,
+		&i.Status,
+		&i.CreatedBy,
+		&i.DecidedBy,
+		&i.DecidedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getReviewBatchForUpdate = `-- name: GetReviewBatchForUpdate :one
+SELECT id, workspace_id, grouping_rule, policy_version, status, created_by, decided_by, decided_at, created_at FROM review_batches
+WHERE workspace_id = $1 AND id = $2
+FOR UPDATE
+`
+
+type GetReviewBatchForUpdateParams struct {
+	WorkspaceID   pgtype.UUID `json:"workspace_id"`
+	ReviewBatchID pgtype.UUID `json:"review_batch_id"`
+}
+
+func (q *Queries) GetReviewBatchForUpdate(ctx context.Context, arg GetReviewBatchForUpdateParams) (ReviewBatch, error) {
+	row := q.db.QueryRow(ctx, getReviewBatchForUpdate, arg.WorkspaceID, arg.ReviewBatchID)
+	var i ReviewBatch
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.GroupingRule,
+		&i.PolicyVersion,
+		&i.Status,
+		&i.CreatedBy,
+		&i.DecidedBy,
+		&i.DecidedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getValidationRun = `-- name: GetValidationRun :one
 SELECT id, workspace_id, proposal_id, validator_id, validator_version, status, started_at, finished_at FROM validation_runs
 WHERE workspace_id = $1 AND id = $2
@@ -1191,6 +1386,170 @@ func (q *Queries) LinkProposalPolicyDecision(ctx context.Context, arg LinkPropos
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const listBatchEligibleProposals = `-- name: ListBatchEligibleProposals :many
+SELECT proposal.id, proposal.workspace_id, proposal.asset_id, proposal.base_revision_id, proposal.target_object_type, proposal.target_object_id, proposal.state, proposal.title, proposal.summary, proposal.reason, proposal.risk_level, proposal.policy_decision_id, proposal.agent_run_id, proposal.created_by, proposal.submitted_at, proposal.decided_at, proposal.created_at, proposal.updated_at,
+    decision.matched_policy AS decision_matched_policy,
+    decision.risk_level AS decision_risk_level,
+    decision.routing AS decision_routing,
+    decision.reason_code AS decision_reason_code,
+    decision.rule_version AS decision_rule_version,
+    decision.inputs AS decision_inputs,
+    decision.inputs_digest AS decision_inputs_digest
+FROM proposals AS proposal
+JOIN LATERAL (
+    SELECT pd.matched_policy, pd.risk_level, pd.routing, pd.reason_code,
+           pd.rule_version, pd.inputs, pd.inputs_digest
+    FROM policy_decisions AS pd
+    WHERE pd.proposal_id = proposal.id
+    ORDER BY pd.decided_at DESC, pd.id DESC
+    LIMIT 1
+) AS decision ON true
+WHERE proposal.workspace_id = $1
+  AND proposal.state = 'in_review'
+  AND decision.routing = 'batch'
+  AND NOT EXISTS (
+      SELECT 1 FROM review_batch_members AS member
+      JOIN review_batches AS batch ON batch.id = member.review_batch_id
+      WHERE member.proposal_id = proposal.id
+        AND member.split_out = false
+        AND batch.status = 'open'
+  )
+ORDER BY proposal.created_at, proposal.id
+`
+
+type ListBatchEligibleProposalsRow struct {
+	ID                    pgtype.UUID        `json:"id"`
+	WorkspaceID           pgtype.UUID        `json:"workspace_id"`
+	AssetID               pgtype.UUID        `json:"asset_id"`
+	BaseRevisionID        pgtype.UUID        `json:"base_revision_id"`
+	TargetObjectType      string             `json:"target_object_type"`
+	TargetObjectID        pgtype.UUID        `json:"target_object_id"`
+	State                 string             `json:"state"`
+	Title                 string             `json:"title"`
+	Summary               string             `json:"summary"`
+	Reason                string             `json:"reason"`
+	RiskLevel             pgtype.Text        `json:"risk_level"`
+	PolicyDecisionID      pgtype.UUID        `json:"policy_decision_id"`
+	AgentRunID            pgtype.UUID        `json:"agent_run_id"`
+	CreatedBy             string             `json:"created_by"`
+	SubmittedAt           pgtype.Timestamptz `json:"submitted_at"`
+	DecidedAt             pgtype.Timestamptz `json:"decided_at"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+	DecisionMatchedPolicy string             `json:"decision_matched_policy"`
+	DecisionRiskLevel     string             `json:"decision_risk_level"`
+	DecisionRouting       string             `json:"decision_routing"`
+	DecisionReasonCode    string             `json:"decision_reason_code"`
+	DecisionRuleVersion   string             `json:"decision_rule_version"`
+	DecisionInputs        []byte             `json:"decision_inputs"`
+	DecisionInputsDigest  string             `json:"decision_inputs_digest"`
+}
+
+// One deterministic eligibility scan for batch assembly: in_review proposals
+// whose LATEST policy decision routes to the batch channel and that are not
+// already an active member of an open batch.
+func (q *Queries) ListBatchEligibleProposals(ctx context.Context, workspaceID pgtype.UUID) ([]ListBatchEligibleProposalsRow, error) {
+	rows, err := q.db.Query(ctx, listBatchEligibleProposals, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListBatchEligibleProposalsRow{}
+	for rows.Next() {
+		var i ListBatchEligibleProposalsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.AssetID,
+			&i.BaseRevisionID,
+			&i.TargetObjectType,
+			&i.TargetObjectID,
+			&i.State,
+			&i.Title,
+			&i.Summary,
+			&i.Reason,
+			&i.RiskLevel,
+			&i.PolicyDecisionID,
+			&i.AgentRunID,
+			&i.CreatedBy,
+			&i.SubmittedAt,
+			&i.DecidedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DecisionMatchedPolicy,
+			&i.DecisionRiskLevel,
+			&i.DecisionRouting,
+			&i.DecisionReasonCode,
+			&i.DecisionRuleVersion,
+			&i.DecisionInputs,
+			&i.DecisionInputsDigest,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOpenReviewBatches = `-- name: ListOpenReviewBatches :many
+SELECT id, workspace_id, grouping_rule, policy_version, status, created_by, decided_by, decided_at, created_at FROM review_batches
+WHERE workspace_id = $1 AND status = 'open'
+  AND (
+      NOT $2::boolean
+      OR created_at < $3
+      OR (created_at = $3 AND id < $4::uuid)
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT $5
+`
+
+type ListOpenReviewBatchesParams struct {
+	WorkspaceID     pgtype.UUID        `json:"workspace_id"`
+	HasCursor       bool               `json:"has_cursor"`
+	CursorCreatedAt pgtype.Timestamptz `json:"cursor_created_at"`
+	CursorID        pgtype.UUID        `json:"cursor_id"`
+	PageLimit       int32              `json:"page_limit"`
+}
+
+func (q *Queries) ListOpenReviewBatches(ctx context.Context, arg ListOpenReviewBatchesParams) ([]ReviewBatch, error) {
+	rows, err := q.db.Query(ctx, listOpenReviewBatches,
+		arg.WorkspaceID,
+		arg.HasCursor,
+		arg.CursorCreatedAt,
+		arg.CursorID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ReviewBatch{}
+	for rows.Next() {
+		var i ReviewBatch
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.GroupingRule,
+			&i.PolicyVersion,
+			&i.Status,
+			&i.CreatedBy,
+			&i.DecidedBy,
+			&i.DecidedAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listPolicyRules = `-- name: ListPolicyRules :many
@@ -1415,6 +1774,47 @@ func (q *Queries) ListReleaseAssets(ctx context.Context, arg ListReleaseAssetsPa
 	return items, nil
 }
 
+const listReviewBatchMembers = `-- name: ListReviewBatchMembers :many
+SELECT review_batch_id, workspace_id, proposal_id, added_reason, decision, sample, split_out, split_reason, created_at FROM review_batch_members
+WHERE workspace_id = $1 AND review_batch_id = $2
+ORDER BY created_at, proposal_id
+`
+
+type ListReviewBatchMembersParams struct {
+	WorkspaceID   pgtype.UUID `json:"workspace_id"`
+	ReviewBatchID pgtype.UUID `json:"review_batch_id"`
+}
+
+func (q *Queries) ListReviewBatchMembers(ctx context.Context, arg ListReviewBatchMembersParams) ([]ReviewBatchMember, error) {
+	rows, err := q.db.Query(ctx, listReviewBatchMembers, arg.WorkspaceID, arg.ReviewBatchID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ReviewBatchMember{}
+	for rows.Next() {
+		var i ReviewBatchMember
+		if err := rows.Scan(
+			&i.ReviewBatchID,
+			&i.WorkspaceID,
+			&i.ProposalID,
+			&i.AddedReason,
+			&i.Decision,
+			&i.Sample,
+			&i.SplitOut,
+			&i.SplitReason,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listValidationRunResults = `-- name: ListValidationRunResults :many
 SELECT result.id, result.workspace_id, result.validation_run_id, result.severity, result.code, result.message, result.input_digest, result.details, result.created_at FROM validation_results AS result
 JOIN validation_runs AS run ON run.id = result.validation_run_id
@@ -1446,6 +1846,84 @@ func (q *Queries) ListValidationRunResults(ctx context.Context, arg ListValidati
 			&i.InputDigest,
 			&i.Details,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockReviewBatchMembersWithProposals = `-- name: LockReviewBatchMembersWithProposals :many
+SELECT member.review_batch_id, member.workspace_id, member.proposal_id, member.added_reason,
+    member.decision, member.sample, member.split_out, member.split_reason, member.created_at,
+    proposal.state AS proposal_state, proposal.created_by AS proposal_created_by,
+    proposal.title AS proposal_title,
+    proposal.target_object_type AS proposal_target_type,
+    proposal.target_object_id AS proposal_target_object_id,
+    proposal.created_at AS proposal_created_at
+FROM review_batch_members AS member
+JOIN proposals AS proposal
+  ON proposal.workspace_id = member.workspace_id AND proposal.id = member.proposal_id
+WHERE member.workspace_id = $1 AND member.review_batch_id = $2
+ORDER BY member.created_at, member.proposal_id
+FOR UPDATE OF member, proposal
+`
+
+type LockReviewBatchMembersWithProposalsParams struct {
+	WorkspaceID   pgtype.UUID `json:"workspace_id"`
+	ReviewBatchID pgtype.UUID `json:"review_batch_id"`
+}
+
+type LockReviewBatchMembersWithProposalsRow struct {
+	ReviewBatchID          pgtype.UUID        `json:"review_batch_id"`
+	WorkspaceID            pgtype.UUID        `json:"workspace_id"`
+	ProposalID             pgtype.UUID        `json:"proposal_id"`
+	AddedReason            []byte             `json:"added_reason"`
+	Decision               pgtype.Text        `json:"decision"`
+	Sample                 bool               `json:"sample"`
+	SplitOut               bool               `json:"split_out"`
+	SplitReason            pgtype.Text        `json:"split_reason"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	ProposalState          string             `json:"proposal_state"`
+	ProposalCreatedBy      string             `json:"proposal_created_by"`
+	ProposalTitle          string             `json:"proposal_title"`
+	ProposalTargetType     string             `json:"proposal_target_type"`
+	ProposalTargetObjectID pgtype.UUID        `json:"proposal_target_object_id"`
+	ProposalCreatedAt      pgtype.Timestamptz `json:"proposal_created_at"`
+}
+
+// Locks the member rows together with their proposals so the confirm command
+// re-checks and applies outcomes over stable state (no concurrent review or
+// transition can interleave between the check and the write).
+func (q *Queries) LockReviewBatchMembersWithProposals(ctx context.Context, arg LockReviewBatchMembersWithProposalsParams) ([]LockReviewBatchMembersWithProposalsRow, error) {
+	rows, err := q.db.Query(ctx, lockReviewBatchMembersWithProposals, arg.WorkspaceID, arg.ReviewBatchID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []LockReviewBatchMembersWithProposalsRow{}
+	for rows.Next() {
+		var i LockReviewBatchMembersWithProposalsRow
+		if err := rows.Scan(
+			&i.ReviewBatchID,
+			&i.WorkspaceID,
+			&i.ProposalID,
+			&i.AddedReason,
+			&i.Decision,
+			&i.Sample,
+			&i.SplitOut,
+			&i.SplitReason,
+			&i.CreatedAt,
+			&i.ProposalState,
+			&i.ProposalCreatedBy,
+			&i.ProposalTitle,
+			&i.ProposalTargetType,
+			&i.ProposalTargetObjectID,
+			&i.ProposalCreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -1677,4 +2155,35 @@ func (q *Queries) TransitionProposal(ctx context.Context, arg TransitionProposal
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const updateReviewBatchMemberOutcome = `-- name: UpdateReviewBatchMemberOutcome :exec
+UPDATE review_batch_members
+SET decision = $1, sample = $2, split_out = $3,
+    split_reason = $4
+WHERE workspace_id = $5 AND review_batch_id = $6
+  AND proposal_id = $7
+`
+
+type UpdateReviewBatchMemberOutcomeParams struct {
+	Decision      pgtype.Text `json:"decision"`
+	Sample        bool        `json:"sample"`
+	SplitOut      bool        `json:"split_out"`
+	SplitReason   pgtype.Text `json:"split_reason"`
+	WorkspaceID   pgtype.UUID `json:"workspace_id"`
+	ReviewBatchID pgtype.UUID `json:"review_batch_id"`
+	ProposalID    pgtype.UUID `json:"proposal_id"`
+}
+
+func (q *Queries) UpdateReviewBatchMemberOutcome(ctx context.Context, arg UpdateReviewBatchMemberOutcomeParams) error {
+	_, err := q.db.Exec(ctx, updateReviewBatchMemberOutcome,
+		arg.Decision,
+		arg.Sample,
+		arg.SplitOut,
+		arg.SplitReason,
+		arg.WorkspaceID,
+		arg.ReviewBatchID,
+		arg.ProposalID,
+	)
+	return err
 }

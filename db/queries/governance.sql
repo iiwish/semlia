@@ -83,6 +83,121 @@ INSERT INTO reviews (
 )
 RETURNING *;
 
+-- name: CountProposalReviewsByReviewer :one
+SELECT count(*) FROM reviews
+WHERE workspace_id = sqlc.arg(workspace_id) AND proposal_id = sqlc.arg(proposal_id)
+  AND reviewer_principal_id = sqlc.arg(reviewer_principal_id)
+  AND channel = sqlc.arg(channel);
+
+-- ---------- review batches (SSOT §8.4 batch confirmation channel) ----------
+
+-- name: CreateReviewBatch :one
+INSERT INTO review_batches (
+    id, workspace_id, grouping_rule, policy_version, status, created_by, created_at
+) VALUES (
+    sqlc.arg(id), sqlc.arg(workspace_id), sqlc.arg(grouping_rule), sqlc.arg(policy_version),
+    'open', sqlc.arg(created_by), sqlc.arg(created_at)
+)
+RETURNING *;
+
+-- name: CreateReviewBatchMember :exec
+INSERT INTO review_batch_members (
+    review_batch_id, workspace_id, proposal_id, added_reason, sample, created_at
+) VALUES (
+    sqlc.arg(review_batch_id), sqlc.arg(workspace_id), sqlc.arg(proposal_id),
+    sqlc.arg(added_reason), sqlc.arg(sample), sqlc.arg(created_at)
+);
+
+-- name: GetReviewBatch :one
+SELECT * FROM review_batches
+WHERE workspace_id = sqlc.arg(workspace_id) AND id = sqlc.arg(review_batch_id);
+
+-- name: GetReviewBatchForUpdate :one
+SELECT * FROM review_batches
+WHERE workspace_id = sqlc.arg(workspace_id) AND id = sqlc.arg(review_batch_id)
+FOR UPDATE;
+
+-- name: ListOpenReviewBatches :many
+SELECT * FROM review_batches
+WHERE workspace_id = sqlc.arg(workspace_id) AND status = 'open'
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR created_at < sqlc.arg(cursor_created_at)
+      OR (created_at = sqlc.arg(cursor_created_at) AND id < sqlc.arg(cursor_id)::uuid)
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT sqlc.arg(page_limit);
+
+-- name: ListReviewBatchMembers :many
+SELECT * FROM review_batch_members
+WHERE workspace_id = sqlc.arg(workspace_id) AND review_batch_id = sqlc.arg(review_batch_id)
+ORDER BY created_at, proposal_id;
+
+-- Locks the member rows together with their proposals so the confirm command
+-- re-checks and applies outcomes over stable state (no concurrent review or
+-- transition can interleave between the check and the write).
+-- name: LockReviewBatchMembersWithProposals :many
+SELECT member.review_batch_id, member.workspace_id, member.proposal_id, member.added_reason,
+    member.decision, member.sample, member.split_out, member.split_reason, member.created_at,
+    proposal.state AS proposal_state, proposal.created_by AS proposal_created_by,
+    proposal.title AS proposal_title,
+    proposal.target_object_type AS proposal_target_type,
+    proposal.target_object_id AS proposal_target_object_id,
+    proposal.created_at AS proposal_created_at
+FROM review_batch_members AS member
+JOIN proposals AS proposal
+  ON proposal.workspace_id = member.workspace_id AND proposal.id = member.proposal_id
+WHERE member.workspace_id = sqlc.arg(workspace_id) AND member.review_batch_id = sqlc.arg(review_batch_id)
+ORDER BY member.created_at, member.proposal_id
+FOR UPDATE OF member, proposal;
+
+-- name: UpdateReviewBatchMemberOutcome :exec
+UPDATE review_batch_members
+SET decision = sqlc.narg(decision), sample = sqlc.arg(sample), split_out = sqlc.arg(split_out),
+    split_reason = sqlc.narg(split_reason)
+WHERE workspace_id = sqlc.arg(workspace_id) AND review_batch_id = sqlc.arg(review_batch_id)
+  AND proposal_id = sqlc.arg(proposal_id);
+
+-- name: ConfirmReviewBatch :one
+UPDATE review_batches
+SET status = sqlc.arg(status), decided_by = sqlc.arg(decided_by), decided_at = sqlc.arg(decided_at)
+WHERE workspace_id = sqlc.arg(workspace_id) AND id = sqlc.arg(review_batch_id)
+  AND status = 'open'
+RETURNING *;
+
+-- One deterministic eligibility scan for batch assembly: in_review proposals
+-- whose LATEST policy decision routes to the batch channel and that are not
+-- already an active member of an open batch.
+-- name: ListBatchEligibleProposals :many
+SELECT proposal.*,
+    decision.matched_policy AS decision_matched_policy,
+    decision.risk_level AS decision_risk_level,
+    decision.routing AS decision_routing,
+    decision.reason_code AS decision_reason_code,
+    decision.rule_version AS decision_rule_version,
+    decision.inputs AS decision_inputs,
+    decision.inputs_digest AS decision_inputs_digest
+FROM proposals AS proposal
+JOIN LATERAL (
+    SELECT pd.matched_policy, pd.risk_level, pd.routing, pd.reason_code,
+           pd.rule_version, pd.inputs, pd.inputs_digest
+    FROM policy_decisions AS pd
+    WHERE pd.proposal_id = proposal.id
+    ORDER BY pd.decided_at DESC, pd.id DESC
+    LIMIT 1
+) AS decision ON true
+WHERE proposal.workspace_id = sqlc.arg(workspace_id)
+  AND proposal.state = 'in_review'
+  AND decision.routing = 'batch'
+  AND NOT EXISTS (
+      SELECT 1 FROM review_batch_members AS member
+      JOIN review_batches AS batch ON batch.id = member.review_batch_id
+      WHERE member.proposal_id = proposal.id
+        AND member.split_out = false
+        AND batch.status = 'open'
+  )
+ORDER BY proposal.created_at, proposal.id;
+
 -- name: CreateValidationRun :one
 INSERT INTO validation_runs (
     id, workspace_id, proposal_id, validator_id, validator_version, status, started_at
