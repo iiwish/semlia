@@ -85,6 +85,22 @@ func (targetType TargetObjectType) IsGovernedObject() bool {
 	return false
 }
 
+// Prefix maps the governed object type onto its identity TypeID prefix.
+func (targetType TargetObjectType) Prefix() (identity.Prefix, error) {
+	switch targetType {
+	case TargetPhysicalBinding:
+		return identity.PhysicalBinding, nil
+	case TargetModelGrain:
+		return identity.ModelGrain, nil
+	case TargetEntityKey:
+		return identity.EntityKey, nil
+	case TargetJoinContract:
+		return identity.JoinContract, nil
+	default:
+		return "", ErrInvalidArgument
+	}
+}
+
 func validContentObject(content json.RawMessage) bool {
 	if len(content) == 0 {
 		return true

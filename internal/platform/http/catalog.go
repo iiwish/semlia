@@ -37,6 +37,7 @@ type matchedRoute struct {
 	asset     string
 	revision  string
 	discovery string
+	release   string
 	proposal  string
 	batch     string
 }

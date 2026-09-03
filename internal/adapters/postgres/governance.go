@@ -798,10 +798,12 @@ func (store *Store) CutRelease(ctx context.Context, command governanceapp.Releas
 		return governance.Release{}, governanceRepositoryError("allocate release sequence", err)
 	}
 	var proposalID pgtype.UUID
+	var originProposalID pgtype.UUID
 	if command.ProposalID != nil {
 		if proposalID, err = uuidValue(*command.ProposalID); err != nil {
 			return governance.Release{}, fmt.Errorf("encode proposal ID: %w", err)
 		}
+		originProposalID = proposalID
 		locked, lockErr := queries.GetProposalForUpdate(ctx, dbgen.GetProposalForUpdateParams{
 			WorkspaceID: workspaceID, ProposalID: proposalID,
 		})
@@ -816,7 +818,8 @@ func (store *Store) CutRelease(ctx context.Context, command governanceapp.Releas
 	created, err := queries.CreateRelease(ctx, dbgen.CreateReleaseParams{
 		ID: releaseID, WorkspaceID: workspaceID, Sequence: sequence,
 		ManifestDigest: command.Release.ManifestDigest, State: string(command.Release.State),
-		RolledBackToReleaseID: pgtype.UUID{}, PublishedBy: command.Release.PublishedBy,
+		RolledBackToReleaseID: pgtype.UUID{}, OriginProposalID: originProposalID,
+		PublishedBy: command.Release.PublishedBy,
 		PublishedAt: timestamp(command.Release.PublishedAt), CreatedAt: timestamp(command.Release.CreatedAt),
 	})
 	if err != nil {
@@ -913,7 +916,8 @@ func (store *Store) RollbackRelease(ctx context.Context, command governanceapp.R
 	created, err := queries.CreateRelease(ctx, dbgen.CreateReleaseParams{
 		ID: releaseID, WorkspaceID: workspaceID, Sequence: sequence,
 		ManifestDigest: command.Release.ManifestDigest, State: string(command.Release.State),
-		RolledBackToReleaseID: targetID, PublishedBy: command.Release.PublishedBy,
+		RolledBackToReleaseID: targetID, OriginProposalID: pgtype.UUID{},
+		PublishedBy: command.Release.PublishedBy,
 		PublishedAt: timestamp(command.Release.PublishedAt), CreatedAt: timestamp(command.Release.CreatedAt),
 	})
 	if err != nil {
@@ -1319,6 +1323,13 @@ func releaseFromRow(row dbgen.Release) (governance.Release, error) {
 			return governance.Release{}, targetErr
 		}
 		release.RolledBackToReleaseID = &targetID
+	}
+	if row.OriginProposalID.Valid {
+		proposalID, proposalErr := identity.ProposalIDFromUUIDBytes(row.OriginProposalID.Bytes)
+		if proposalErr != nil {
+			return governance.Release{}, proposalErr
+		}
+		release.OriginProposalID = &proposalID
 	}
 	return release, nil
 }

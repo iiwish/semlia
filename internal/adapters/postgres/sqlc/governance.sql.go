@@ -444,13 +444,13 @@ func (q *Queries) CreateProposalChange(ctx context.Context, arg CreateProposalCh
 const createRelease = `-- name: CreateRelease :one
 INSERT INTO releases (
     id, workspace_id, sequence, manifest_digest, state, rolled_back_to_release_id,
-    published_by, published_at, created_at
+    origin_proposal_id, published_by, published_at, created_at
 ) VALUES (
     $1, $2, $3, $4,
     $5, $6, $7,
-    $8, $9
+    $8, $9, $10
 )
-RETURNING id, workspace_id, sequence, manifest_digest, state, rolled_back_to_release_id, published_by, published_at, created_at
+RETURNING id, workspace_id, sequence, manifest_digest, state, rolled_back_to_release_id, published_by, published_at, created_at, origin_proposal_id
 `
 
 type CreateReleaseParams struct {
@@ -460,6 +460,7 @@ type CreateReleaseParams struct {
 	ManifestDigest        string             `json:"manifest_digest"`
 	State                 string             `json:"state"`
 	RolledBackToReleaseID pgtype.UUID        `json:"rolled_back_to_release_id"`
+	OriginProposalID      pgtype.UUID        `json:"origin_proposal_id"`
 	PublishedBy           string             `json:"published_by"`
 	PublishedAt           pgtype.Timestamptz `json:"published_at"`
 	CreatedAt             pgtype.Timestamptz `json:"created_at"`
@@ -473,6 +474,7 @@ func (q *Queries) CreateRelease(ctx context.Context, arg CreateReleaseParams) (R
 		arg.ManifestDigest,
 		arg.State,
 		arg.RolledBackToReleaseID,
+		arg.OriginProposalID,
 		arg.PublishedBy,
 		arg.PublishedAt,
 		arg.CreatedAt,
@@ -488,6 +490,7 @@ func (q *Queries) CreateRelease(ctx context.Context, arg CreateReleaseParams) (R
 		&i.PublishedBy,
 		&i.PublishedAt,
 		&i.CreatedAt,
+		&i.OriginProposalID,
 	)
 	return i, err
 }
@@ -518,6 +521,38 @@ func (q *Queries) CreateReleaseAsset(ctx context.Context, arg CreateReleaseAsset
 		arg.AssetID,
 		arg.RevisionID,
 		arg.Compatibility,
+		arg.Position,
+		arg.CreatedAt,
+	)
+	return err
+}
+
+const createReleaseObject = `-- name: CreateReleaseObject :exec
+INSERT INTO release_objects (
+    workspace_id, release_id, object_type, object_id, version, position, created_at
+) VALUES (
+    $1, $2, $3, $4,
+    $5, $6, $7
+)
+`
+
+type CreateReleaseObjectParams struct {
+	WorkspaceID pgtype.UUID        `json:"workspace_id"`
+	ReleaseID   pgtype.UUID        `json:"release_id"`
+	ObjectType  string             `json:"object_type"`
+	ObjectID    pgtype.UUID        `json:"object_id"`
+	Version     int32              `json:"version"`
+	Position    int32              `json:"position"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) CreateReleaseObject(ctx context.Context, arg CreateReleaseObjectParams) error {
+	_, err := q.db.Exec(ctx, createReleaseObject,
+		arg.WorkspaceID,
+		arg.ReleaseID,
+		arg.ObjectType,
+		arg.ObjectID,
+		arg.Version,
 		arg.Position,
 		arg.CreatedAt,
 	)
@@ -874,6 +909,37 @@ func (q *Queries) GetAgentRun(ctx context.Context, arg GetAgentRunParams) (Agent
 	return i, err
 }
 
+const getAssetRevisionContent = `-- name: GetAssetRevisionContent :one
+SELECT id, sequence, schema_version, content FROM asset_revisions
+WHERE workspace_id = $1 AND asset_id = $2
+  AND id = $3
+`
+
+type GetAssetRevisionContentParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	AssetID     pgtype.UUID `json:"asset_id"`
+	RevisionID  pgtype.UUID `json:"revision_id"`
+}
+
+type GetAssetRevisionContentRow struct {
+	ID            pgtype.UUID `json:"id"`
+	Sequence      int64       `json:"sequence"`
+	SchemaVersion string      `json:"schema_version"`
+	Content       []byte      `json:"content"`
+}
+
+func (q *Queries) GetAssetRevisionContent(ctx context.Context, arg GetAssetRevisionContentParams) (GetAssetRevisionContentRow, error) {
+	row := q.db.QueryRow(ctx, getAssetRevisionContent, arg.WorkspaceID, arg.AssetID, arg.RevisionID)
+	var i GetAssetRevisionContentRow
+	err := row.Scan(
+		&i.ID,
+		&i.Sequence,
+		&i.SchemaVersion,
+		&i.Content,
+	)
+	return i, err
+}
+
 const getAssetRevisionOwnership = `-- name: GetAssetRevisionOwnership :one
 SELECT asset_id FROM asset_revisions
 WHERE workspace_id = $1 AND asset_id = $2
@@ -891,6 +957,31 @@ func (q *Queries) GetAssetRevisionOwnership(ctx context.Context, arg GetAssetRev
 	var asset_id pgtype.UUID
 	err := row.Scan(&asset_id)
 	return asset_id, err
+}
+
+const getLatestAssetPinBefore = `-- name: GetLatestAssetPinBefore :one
+SELECT entry.revision_id AS pinned_revision_id
+FROM release_assets AS entry
+JOIN releases AS release
+  ON release.workspace_id = entry.workspace_id AND release.id = entry.release_id
+WHERE entry.workspace_id = $1
+  AND entry.asset_id = $2
+  AND release.sequence < $3
+ORDER BY release.sequence DESC
+LIMIT 1
+`
+
+type GetLatestAssetPinBeforeParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	AssetID     pgtype.UUID `json:"asset_id"`
+	Sequence    int64       `json:"sequence"`
+}
+
+func (q *Queries) GetLatestAssetPinBefore(ctx context.Context, arg GetLatestAssetPinBeforeParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, getLatestAssetPinBefore, arg.WorkspaceID, arg.AssetID, arg.Sequence)
+	var pinned_revision_id pgtype.UUID
+	err := row.Scan(&pinned_revision_id)
+	return pinned_revision_id, err
 }
 
 const getLatestProposalPolicyDecision = `-- name: GetLatestProposalPolicyDecision :one
@@ -923,6 +1014,18 @@ func (q *Queries) GetLatestProposalPolicyDecision(ctx context.Context, arg GetLa
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const getMaxReleaseSequence = `-- name: GetMaxReleaseSequence :one
+SELECT COALESCE(max(sequence), 0)::bigint AS max_sequence FROM releases
+WHERE workspace_id = $1
+`
+
+func (q *Queries) GetMaxReleaseSequence(ctx context.Context, workspaceID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, getMaxReleaseSequence, workspaceID)
+	var max_sequence int64
+	err := row.Scan(&max_sequence)
+	return max_sequence, err
 }
 
 const getPolicyAssetFacts = `-- name: GetPolicyAssetFacts :one
@@ -1058,7 +1161,7 @@ func (q *Queries) GetPolicyRule(ctx context.Context, arg GetPolicyRuleParams) (P
 }
 
 const getPreviousRelease = `-- name: GetPreviousRelease :one
-SELECT id, workspace_id, sequence, manifest_digest, state, rolled_back_to_release_id, published_by, published_at, created_at FROM releases
+SELECT id, workspace_id, sequence, manifest_digest, state, rolled_back_to_release_id, published_by, published_at, created_at, origin_proposal_id FROM releases
 WHERE workspace_id = $1 AND sequence < $2
 ORDER BY sequence DESC
 LIMIT 1
@@ -1082,6 +1185,7 @@ func (q *Queries) GetPreviousRelease(ctx context.Context, arg GetPreviousRelease
 		&i.PublishedBy,
 		&i.PublishedAt,
 		&i.CreatedAt,
+		&i.OriginProposalID,
 	)
 	return i, err
 }
@@ -1233,7 +1337,7 @@ func (q *Queries) GetProposalValidationRun(ctx context.Context, arg GetProposalV
 }
 
 const getRelease = `-- name: GetRelease :one
-SELECT id, workspace_id, sequence, manifest_digest, state, rolled_back_to_release_id, published_by, published_at, created_at FROM releases
+SELECT id, workspace_id, sequence, manifest_digest, state, rolled_back_to_release_id, published_by, published_at, created_at, origin_proposal_id FROM releases
 WHERE workspace_id = $1 AND id = $2
 `
 
@@ -1255,6 +1359,7 @@ func (q *Queries) GetRelease(ctx context.Context, arg GetReleaseParams) (Release
 		&i.PublishedBy,
 		&i.PublishedAt,
 		&i.CreatedAt,
+		&i.OriginProposalID,
 	)
 	return i, err
 }
@@ -1386,6 +1491,47 @@ func (q *Queries) LinkProposalPolicyDecision(ctx context.Context, arg LinkPropos
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const listApprovingReviews = `-- name: ListApprovingReviews :many
+SELECT id, workspace_id, proposal_id, reviewer_principal_id, channel, decision, note, created_at FROM reviews
+WHERE workspace_id = $1 AND proposal_id = $2
+  AND decision = 'approved'
+ORDER BY created_at, id
+`
+
+type ListApprovingReviewsParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	ProposalID  pgtype.UUID `json:"proposal_id"`
+}
+
+func (q *Queries) ListApprovingReviews(ctx context.Context, arg ListApprovingReviewsParams) ([]Review, error) {
+	rows, err := q.db.Query(ctx, listApprovingReviews, arg.WorkspaceID, arg.ProposalID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Review{}
+	for rows.Next() {
+		var i Review
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.ProposalID,
+			&i.ReviewerPrincipalID,
+			&i.Channel,
+			&i.Decision,
+			&i.Note,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listBatchEligibleProposals = `-- name: ListBatchEligibleProposals :many
@@ -1763,6 +1909,102 @@ func (q *Queries) ListReleaseAssets(ctx context.Context, arg ListReleaseAssetsPa
 			&i.Compatibility,
 			&i.Position,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listReleaseObjects = `-- name: ListReleaseObjects :many
+SELECT workspace_id, release_id, object_type, object_id, version, position, created_at FROM release_objects
+WHERE workspace_id = $1 AND release_id = $2
+ORDER BY position
+`
+
+type ListReleaseObjectsParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	ReleaseID   pgtype.UUID `json:"release_id"`
+}
+
+func (q *Queries) ListReleaseObjects(ctx context.Context, arg ListReleaseObjectsParams) ([]ReleaseObject, error) {
+	rows, err := q.db.Query(ctx, listReleaseObjects, arg.WorkspaceID, arg.ReleaseID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ReleaseObject{}
+	for rows.Next() {
+		var i ReleaseObject
+		if err := rows.Scan(
+			&i.WorkspaceID,
+			&i.ReleaseID,
+			&i.ObjectType,
+			&i.ObjectID,
+			&i.Version,
+			&i.Position,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listReleases = `-- name: ListReleases :many
+SELECT id, workspace_id, sequence, manifest_digest, state, rolled_back_to_release_id, published_by, published_at, created_at, origin_proposal_id FROM releases
+WHERE workspace_id = $1
+  AND (
+      NOT $2::boolean
+      OR published_at < $3
+      OR (published_at = $3 AND id < $4::uuid)
+  )
+ORDER BY published_at DESC, id DESC
+LIMIT $5
+`
+
+type ListReleasesParams struct {
+	WorkspaceID       pgtype.UUID        `json:"workspace_id"`
+	HasCursor         bool               `json:"has_cursor"`
+	CursorPublishedAt pgtype.Timestamptz `json:"cursor_published_at"`
+	CursorID          pgtype.UUID        `json:"cursor_id"`
+	PageLimit         int32              `json:"page_limit"`
+}
+
+func (q *Queries) ListReleases(ctx context.Context, arg ListReleasesParams) ([]Release, error) {
+	rows, err := q.db.Query(ctx, listReleases,
+		arg.WorkspaceID,
+		arg.HasCursor,
+		arg.CursorPublishedAt,
+		arg.CursorID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Release{}
+	for rows.Next() {
+		var i Release
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.Sequence,
+			&i.ManifestDigest,
+			&i.State,
+			&i.RolledBackToReleaseID,
+			&i.PublishedBy,
+			&i.PublishedAt,
+			&i.CreatedAt,
+			&i.OriginProposalID,
 		); err != nil {
 			return nil, err
 		}

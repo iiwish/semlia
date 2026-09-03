@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/iiwish/semlia/internal/application/jobs"
@@ -15,6 +16,7 @@ import (
 )
 
 const CatalogAssetChanged = "catalog.asset.changed"
+const ReleasePublished = "release.published"
 
 type Loader interface {
 	LoadAssetProjection(context.Context, identity.WorkspaceID, identity.AssetID, identity.RevisionID) (domain.Asset, error)
@@ -72,6 +74,95 @@ func (publisher *Publisher) Publish(ctx context.Context, event jobs.OutboxEvent)
 	return err
 }
 
+type ReleaseLoader interface {
+	LoadReleaseProjection(context.Context, identity.WorkspaceID, identity.ReleaseID) (domain.Release, error)
+}
+
+type ReleaseWriter interface {
+	ProjectRelease(context.Context, domain.Release) (domain.Result, error)
+}
+
+// ReleasePublisher consumes the semlia.release/v1 release.published outbox
+// events and drives the append-only Git release documents through the same
+// writer discipline as the asset projection.
+type ReleasePublisher struct {
+	loader ReleaseLoader
+	writer ReleaseWriter
+}
+
+func NewReleasePublisher(loader ReleaseLoader, writer ReleaseWriter) *ReleasePublisher {
+	return &ReleasePublisher{loader: loader, writer: writer}
+}
+
+func (publisher *ReleasePublisher) Publish(ctx context.Context, event jobs.OutboxEvent) error {
+	if publisher == nil || publisher.loader == nil || publisher.writer == nil {
+		return domain.ErrInvalid
+	}
+	if event.Type != ReleasePublished {
+		return domain.ErrUnsupported
+	}
+	payload, err := decodeReleaseEvent(event)
+	if err != nil {
+		return err
+	}
+	releaseID, err := identity.ParseReleaseID(payload.ReleaseID)
+	if err != nil {
+		return domain.ErrInvalid
+	}
+	release, err := publisher.loader.LoadReleaseProjection(ctx, event.WorkspaceID, releaseID)
+	if err != nil {
+		return err
+	}
+	if release.ReleaseID != releaseID || release.Sequence != payload.Sequence ||
+		release.ManifestDigest != payload.ManifestDigest {
+		return domain.ErrInvalid
+	}
+	_, err = publisher.writer.ProjectRelease(ctx, release)
+	return err
+}
+
+type releaseEvent struct {
+	SpecVersion           string `json:"specVersion"`
+	ReleaseID             string `json:"releaseId"`
+	ManifestDigest        string `json:"manifestDigest"`
+	Sequence              int64  `json:"sequence"`
+	Action                string `json:"action"`
+	RolledBackToReleaseID string `json:"rolledBackToReleaseId,omitempty"`
+}
+
+func decodeReleaseEvent(event jobs.OutboxEvent) (releaseEvent, error) {
+	envelope, err := decodeEventEnvelope(event)
+	if err != nil {
+		return releaseEvent{}, err
+	}
+	decoder := json.NewDecoder(bytes.NewReader(envelope.Data))
+	decoder.DisallowUnknownFields()
+	var payload releaseEvent
+	if err := decoder.Decode(&payload); err != nil {
+		return releaseEvent{}, domain.ErrInvalid
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return releaseEvent{}, domain.ErrInvalid
+	}
+	if payload.SpecVersion != "semlia.release/v1" || payload.Sequence < 1 ||
+		(payload.Action != "published" && payload.Action != "rolled_back") ||
+		!strings.HasPrefix(payload.ManifestDigest, "sha256:") {
+		return releaseEvent{}, fmt.Errorf("%w: release event contract", domain.ErrInvalid)
+	}
+	if (payload.Action == "rolled_back") != (payload.RolledBackToReleaseID != "") {
+		return releaseEvent{}, domain.ErrInvalid
+	}
+	if _, err := identity.ParseReleaseID(payload.ReleaseID); err != nil {
+		return releaseEvent{}, domain.ErrInvalid
+	}
+	if payload.RolledBackToReleaseID != "" {
+		if _, err := identity.ParseReleaseID(payload.RolledBackToReleaseID); err != nil {
+			return releaseEvent{}, domain.ErrInvalid
+		}
+	}
+	return payload, nil
+}
+
 type catalogEvent struct {
 	SpecVersion    string `json:"specVersion"`
 	Action         string `json:"action"`
@@ -92,25 +183,33 @@ type eventEnvelope struct {
 	Data        json.RawMessage `json:"data"`
 }
 
-func decodeCatalogEvent(event jobs.OutboxEvent) (catalogEvent, error) {
+func decodeEventEnvelope(event jobs.OutboxEvent) (eventEnvelope, error) {
 	decoder := json.NewDecoder(bytes.NewReader(event.Payload))
 	decoder.DisallowUnknownFields()
 	var envelope eventEnvelope
 	if err := decoder.Decode(&envelope); err != nil {
-		return catalogEvent{}, domain.ErrInvalid
+		return eventEnvelope{}, domain.ErrInvalid
 	}
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		return catalogEvent{}, domain.ErrInvalid
+		return eventEnvelope{}, domain.ErrInvalid
 	}
 	if envelope.SpecVersion != "semlia.events/v1" || envelope.ID != event.ID.String() ||
 		envelope.Type != event.Type || envelope.Source != "urn:semlia:control-plane" ||
 		envelope.WorkspaceID != event.WorkspaceID.String() || envelope.TraceID != event.TraceID {
-		return catalogEvent{}, domain.ErrInvalid
+		return eventEnvelope{}, domain.ErrInvalid
 	}
 	if _, err := time.Parse(time.RFC3339Nano, envelope.Time); err != nil {
-		return catalogEvent{}, domain.ErrInvalid
+		return eventEnvelope{}, domain.ErrInvalid
 	}
-	decoder = json.NewDecoder(bytes.NewReader(envelope.Data))
+	return envelope, nil
+}
+
+func decodeCatalogEvent(event jobs.OutboxEvent) (catalogEvent, error) {
+	envelope, err := decodeEventEnvelope(event)
+	if err != nil {
+		return catalogEvent{}, err
+	}
+	decoder := json.NewDecoder(bytes.NewReader(envelope.Data))
 	decoder.DisallowUnknownFields()
 	var payload catalogEvent
 	if err := decoder.Decode(&payload); err != nil {

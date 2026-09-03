@@ -399,6 +399,7 @@ type Release struct {
 	PublishedBy           string             `json:"published_by"`
 	PublishedAt           pgtype.Timestamptz `json:"published_at"`
 	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	OriginProposalID      pgtype.UUID        `json:"origin_proposal_id"`
 }
 
 type ReleaseAsset struct {
@@ -409,6 +410,16 @@ type ReleaseAsset struct {
 	Compatibility []byte             `json:"compatibility"`
 	Position      int32              `json:"position"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+type ReleaseObject struct {
+	WorkspaceID pgtype.UUID        `json:"workspace_id"`
+	ReleaseID   pgtype.UUID        `json:"release_id"`
+	ObjectType  string             `json:"object_type"`
+	ObjectID    pgtype.UUID        `json:"object_id"`
+	Version     int32              `json:"version"`
+	Position    int32              `json:"position"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
 type ResourceAlias struct {

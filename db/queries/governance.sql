@@ -337,11 +337,11 @@ WHERE workspace_id = sqlc.arg(workspace_id);
 -- name: CreateRelease :one
 INSERT INTO releases (
     id, workspace_id, sequence, manifest_digest, state, rolled_back_to_release_id,
-    published_by, published_at, created_at
+    origin_proposal_id, published_by, published_at, created_at
 ) VALUES (
     sqlc.arg(id), sqlc.arg(workspace_id), sqlc.arg(sequence), sqlc.arg(manifest_digest),
-    sqlc.arg(state), sqlc.narg(rolled_back_to_release_id), sqlc.arg(published_by),
-    sqlc.arg(published_at), sqlc.arg(created_at)
+    sqlc.arg(state), sqlc.narg(rolled_back_to_release_id), sqlc.narg(origin_proposal_id),
+    sqlc.arg(published_by), sqlc.arg(published_at), sqlc.arg(created_at)
 )
 RETURNING *;
 
@@ -352,6 +352,56 @@ INSERT INTO release_assets (
     sqlc.arg(workspace_id), sqlc.arg(release_id), sqlc.arg(asset_id), sqlc.arg(revision_id),
     sqlc.arg(compatibility), sqlc.arg(position), sqlc.arg(created_at)
 );
+
+-- name: CreateReleaseObject :exec
+INSERT INTO release_objects (
+    workspace_id, release_id, object_type, object_id, version, position, created_at
+) VALUES (
+    sqlc.arg(workspace_id), sqlc.arg(release_id), sqlc.arg(object_type), sqlc.arg(object_id),
+    sqlc.arg(version), sqlc.arg(position), sqlc.arg(created_at)
+);
+
+-- name: ListReleaseObjects :many
+SELECT * FROM release_objects
+WHERE workspace_id = sqlc.arg(workspace_id) AND release_id = sqlc.arg(release_id)
+ORDER BY position;
+
+-- name: ListApprovingReviews :many
+SELECT * FROM reviews
+WHERE workspace_id = sqlc.arg(workspace_id) AND proposal_id = sqlc.arg(proposal_id)
+  AND decision = 'approved'
+ORDER BY created_at, id;
+
+-- name: ListReleases :many
+SELECT * FROM releases
+WHERE workspace_id = sqlc.arg(workspace_id)
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR published_at < sqlc.arg(cursor_published_at)
+      OR (published_at = sqlc.arg(cursor_published_at) AND id < sqlc.arg(cursor_id)::uuid)
+  )
+ORDER BY published_at DESC, id DESC
+LIMIT sqlc.arg(page_limit);
+
+-- name: GetMaxReleaseSequence :one
+SELECT COALESCE(max(sequence), 0)::bigint AS max_sequence FROM releases
+WHERE workspace_id = sqlc.arg(workspace_id);
+
+-- name: GetLatestAssetPinBefore :one
+SELECT entry.revision_id AS pinned_revision_id
+FROM release_assets AS entry
+JOIN releases AS release
+  ON release.workspace_id = entry.workspace_id AND release.id = entry.release_id
+WHERE entry.workspace_id = sqlc.arg(workspace_id)
+  AND entry.asset_id = sqlc.arg(asset_id)
+  AND release.sequence < sqlc.arg(sequence)
+ORDER BY release.sequence DESC
+LIMIT 1;
+
+-- name: GetAssetRevisionContent :one
+SELECT id, sequence, schema_version, content FROM asset_revisions
+WHERE workspace_id = sqlc.arg(workspace_id) AND asset_id = sqlc.arg(asset_id)
+  AND id = sqlc.arg(revision_id);
 
 -- name: GetRelease :one
 SELECT * FROM releases

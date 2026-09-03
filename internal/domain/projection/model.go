@@ -37,3 +37,46 @@ type Result struct {
 	CommitHash string
 	Changed    bool
 }
+
+// ManifestAssetProjection is one asset pin of a release manifest, expressed
+// entirely in TypeIDs and readable addresses.
+type ManifestAssetProjection struct {
+	AssetID       identity.AssetID
+	RevisionID    identity.RevisionID
+	Address       semantic.Address
+	Compatibility json.RawMessage
+	Position      int
+}
+
+// ManifestObjectProjection is one governance-object pin of a release manifest.
+type ManifestObjectProjection struct {
+	ObjectType string
+	ObjectID   string
+	Version    int
+	Position   int
+}
+
+// ReleaseProposalMeta describes the originating proposal of a release.
+type ReleaseProposalMeta struct {
+	ProposalID       identity.ProposalID
+	Title            string
+	TargetObjectType string
+	TargetObjectID   string
+	CreatedBy        string
+}
+
+// Release is the read model the Git release projection renders: the immutable
+// release aggregate with its manifest and originating proposal metadata.
+type Release struct {
+	WorkspaceID           identity.WorkspaceID
+	ReleaseID             identity.ReleaseID
+	Sequence              int64
+	ManifestDigest        string
+	State                 string
+	RolledBackToReleaseID *identity.ReleaseID
+	PublishedBy           string
+	PublishedAt           time.Time
+	Assets                []ManifestAssetProjection
+	Objects               []ManifestObjectProjection
+	Proposal              *ReleaseProposalMeta
+}

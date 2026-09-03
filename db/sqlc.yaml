@@ -11,6 +11,7 @@ sql:
       - ../migrations/000007_m2_governance_objects.up.sql
       - ../migrations/000008_m2_policy_rules.up.sql
       - ../migrations/000009_m2_review_batches.up.sql
+      - ../migrations/000010_m2_release_publishing.up.sql
     queries:
       - queries
     gen:
