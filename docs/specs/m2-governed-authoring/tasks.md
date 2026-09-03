@@ -13,7 +13,7 @@
 
 ### T001 Authorization foundation
 
-Status: Needs_Review
+Status: Accepted
 Depends on: M1 Accepted, D6/D7 verdicts recorded 2026-09-02
 Blocks: T002, T006
 
@@ -28,9 +28,11 @@ Execution: implementation `cdba99a`; deny-by-default evaluation with full decisi
 packet red scenarios, real-PostgreSQL integration suites and the complete validation set pass.
 Evidence: `docs/evidence/M2-T001/summary.md`.
 
+Acceptance: founder explicitly accepted T001 on 2026-09-02.
+
 ### T002 Proposal and governance data model
 
-Status: Needs_Review
+Status: Accepted
 Depends on: T001
 Blocks: T003, T008, T009
 
@@ -43,6 +45,10 @@ Execution: implementation `e2adaf9`; the ten-table model, domain transition tabl
 immutability attacks, policy recomputability, populated-migration lifecycle and atomic
 audit+outbox commits pass the complete source gate. Evidence:
 `docs/evidence/M2-T002/summary.md`.
+
+Acceptance: founder explicitly accepted T001 and T002 on 2026-09-02 and authorized continuous M2
+execution through the T007 backend governed loop without per-task approval pauses, with T009
+parallelized once T003 and T006 are delivered.
 
 ### T003 Proposal API and AI output contract
 
