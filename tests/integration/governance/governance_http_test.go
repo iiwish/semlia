@@ -141,6 +141,7 @@ func (environment *fixture) runValidationWorker(t *testing.T) {
 		governanceapp.NewProposalService(environment.store, clock),
 		governanceapp.NewValidationService(environment.store, clock),
 		governanceapp.NewDefaultRegistry(),
+		governanceapp.NewPolicyService(environment.store, clock, governanceapp.WithRuleSource(environment.store)),
 		clock,
 	)
 	worker := jobs.NewWorker(

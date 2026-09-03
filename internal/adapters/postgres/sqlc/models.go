@@ -322,6 +322,18 @@ type PolicyDecision struct {
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 }
 
+type PolicyRule struct {
+	RuleID             string             `json:"rule_id"`
+	RuleVersion        string             `json:"rule_version"`
+	Priority           int32              `json:"priority"`
+	Match              []byte             `json:"match"`
+	OutcomeRiskLevel   string             `json:"outcome_risk_level"`
+	OutcomeRouting     string             `json:"outcome_routing"`
+	OutcomeReasonCode  string             `json:"outcome_reason_code"`
+	OutcomeExplanation string             `json:"outcome_explanation"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
 type Principal struct {
 	ID               pgtype.UUID        `json:"id"`
 	WorkspaceID      pgtype.UUID        `json:"workspace_id"`

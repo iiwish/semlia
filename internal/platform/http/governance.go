@@ -20,12 +20,13 @@ const (
 	routeGovernanceProposal
 	routeGovernanceProposalSubmit
 	routeGovernanceProposalValidationRuns
+	routeGovernanceProposalPolicyDecision
 )
 
 func isGovernanceRoute(kind routeKind) bool {
 	switch kind {
 	case routeGovernanceProposals, routeGovernanceProposal, routeGovernanceProposalSubmit,
-		routeGovernanceProposalValidationRuns:
+		routeGovernanceProposalValidationRuns, routeGovernanceProposalPolicyDecision:
 		return true
 	}
 	return false
@@ -47,6 +48,8 @@ func matchGovernanceRoute(parts []string, base matchedRoute) (matchedRoute, bool
 		base.kind, base.label = routeGovernanceProposalSubmit, "/api/v1/workspaces/{workspaceId}/governance/proposals/{proposalId}/submit"
 	case len(parts) == 8 && parts[7] == "validation-runs":
 		base.kind, base.label = routeGovernanceProposalValidationRuns, "/api/v1/workspaces/{workspaceId}/governance/proposals/{proposalId}/validation-runs"
+	case len(parts) == 8 && parts[7] == "policy-decision":
+		base.kind, base.label = routeGovernanceProposalPolicyDecision, "/api/v1/workspaces/{workspaceId}/governance/proposals/{proposalId}/policy-decision"
 	default:
 		return matchedRoute{}, false
 	}
@@ -126,9 +129,42 @@ func (handler *Handler) routeGovernance(
 		}
 		writeJSON(response, http.StatusOK, contract.GovernanceValidationRunPage{Items: items})
 		return ""
+	case routeGovernanceProposalPolicyDecision:
+		proposalID, parseErr := identity.ParseProposalID(route.proposal)
+		if parseErr != nil {
+			return writeGovernanceError(response, domain.ErrInvalidArgument, traceID)
+		}
+		detail, decisionErr := handler.governance.GetPolicyDecision(request.Context(), governanceapp.GetPolicyDecisionRequest{
+			WorkspaceID: workspaceID, ProposalID: proposalID,
+			PrincipalRef: strings.TrimSpace(request.Header.Get(headerPrincipal)), TraceID: traceID,
+		})
+		if decisionErr != nil {
+			return writeGovernanceError(response, decisionErr, traceID)
+		}
+		writeJSON(response, http.StatusOK, governancePolicyDecisionResponse(detail))
+		return ""
 	default:
 		panic("governance route is not handled")
 	}
+}
+
+func governancePolicyDecisionResponse(detail governanceapp.PolicyDecisionDetail) contract.GovernancePolicyDecision {
+	decision := detail.Decision
+	result := contract.GovernancePolicyDecision{
+		RuleVersion:        decision.RuleVersion,
+		InputsDigest:       decision.InputsDigest,
+		RiskLevel:          contract.GovernanceRiskLevel(decision.RiskLevel),
+		Routing:            contract.GovernanceRoutingChannel(decision.Routing),
+		MatchedRuleId:      decision.MatchedPolicy,
+		ReasonCode:         decision.ReasonCode,
+		Explanation:        detail.Explanation,
+		MatchedInputFields: detail.MatchedInputFields,
+		CreatedAt:          decision.DecidedAt.UTC(),
+	}
+	if result.MatchedInputFields == nil {
+		result.MatchedInputFields = []string{}
+	}
+	return result
 }
 
 func (handler *Handler) listGovernanceProposals(

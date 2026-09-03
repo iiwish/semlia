@@ -199,6 +199,7 @@ INSERT INTO policy_decisions (
     $5, $6, $7, $8,
     $9, $10, $11, $12
 )
+ON CONFLICT (proposal_id, rule_version, inputs_digest) DO NOTHING
 RETURNING id, workspace_id, proposal_id, rule_version, inputs, inputs_digest, matched_policy, risk_level, routing, reason_code, decided_at, created_at
 `
 
@@ -752,6 +753,70 @@ func (q *Queries) GetAssetRevisionOwnership(ctx context.Context, arg GetAssetRev
 	return asset_id, err
 }
 
+const getLatestProposalPolicyDecision = `-- name: GetLatestProposalPolicyDecision :one
+SELECT id, workspace_id, proposal_id, rule_version, inputs, inputs_digest, matched_policy, risk_level, routing, reason_code, decided_at, created_at FROM policy_decisions
+WHERE workspace_id = $1 AND proposal_id = $2
+ORDER BY decided_at DESC, id DESC
+LIMIT 1
+`
+
+type GetLatestProposalPolicyDecisionParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	ProposalID  pgtype.UUID `json:"proposal_id"`
+}
+
+func (q *Queries) GetLatestProposalPolicyDecision(ctx context.Context, arg GetLatestProposalPolicyDecisionParams) (PolicyDecision, error) {
+	row := q.db.QueryRow(ctx, getLatestProposalPolicyDecision, arg.WorkspaceID, arg.ProposalID)
+	var i PolicyDecision
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.ProposalID,
+		&i.RuleVersion,
+		&i.Inputs,
+		&i.InputsDigest,
+		&i.MatchedPolicy,
+		&i.RiskLevel,
+		&i.Routing,
+		&i.ReasonCode,
+		&i.DecidedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getPolicyAssetFacts = `-- name: GetPolicyAssetFacts :one
+SELECT asset.asset_type AS asset_type,
+    (SELECT count(*) FROM revision_evidence_links AS link
+       JOIN asset_revisions AS revision
+         ON revision.workspace_id = link.workspace_id AND revision.id = link.asset_revision_id
+      WHERE revision.asset_id = asset.id) AS evidence_link_count,
+    current_revision.content AS current_content
+FROM semantic_assets AS asset
+LEFT JOIN asset_revisions AS current_revision
+       ON current_revision.workspace_id = asset.workspace_id
+      AND current_revision.id = asset.current_revision_id
+WHERE asset.workspace_id = $1 AND asset.id = $2
+`
+
+type GetPolicyAssetFactsParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	AssetID     pgtype.UUID `json:"asset_id"`
+}
+
+type GetPolicyAssetFactsRow struct {
+	AssetType         string `json:"asset_type"`
+	EvidenceLinkCount int64  `json:"evidence_link_count"`
+	CurrentContent    []byte `json:"current_content"`
+}
+
+func (q *Queries) GetPolicyAssetFacts(ctx context.Context, arg GetPolicyAssetFactsParams) (GetPolicyAssetFactsRow, error) {
+	row := q.db.QueryRow(ctx, getPolicyAssetFacts, arg.WorkspaceID, arg.AssetID)
+	var i GetPolicyAssetFactsRow
+	err := row.Scan(&i.AssetType, &i.EvidenceLinkCount, &i.CurrentContent)
+	return i, err
+}
+
 const getPolicyDecision = `-- name: GetPolicyDecision :one
 SELECT id, workspace_id, proposal_id, rule_version, inputs, inputs_digest, matched_policy, risk_level, routing, reason_code, decided_at, created_at FROM policy_decisions
 WHERE workspace_id = $1 AND id = $2
@@ -777,6 +842,76 @@ func (q *Queries) GetPolicyDecision(ctx context.Context, arg GetPolicyDecisionPa
 		&i.Routing,
 		&i.ReasonCode,
 		&i.DecidedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getPolicyGovernedObjectAsset = `-- name: GetPolicyGovernedObjectAsset :one
+SELECT binding.asset_id FROM physical_bindings AS binding
+  WHERE binding.workspace_id = $1 AND binding.id = $2
+UNION ALL
+SELECT grain.asset_id FROM model_grains AS grain
+  WHERE grain.workspace_id = $1 AND grain.id = $2
+UNION ALL
+SELECT entity_key.asset_id FROM entity_keys AS entity_key
+  WHERE entity_key.workspace_id = $1 AND entity_key.id = $2
+LIMIT 1
+`
+
+type GetPolicyGovernedObjectAssetParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	ObjectID    pgtype.UUID `json:"object_id"`
+}
+
+func (q *Queries) GetPolicyGovernedObjectAsset(ctx context.Context, arg GetPolicyGovernedObjectAssetParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, getPolicyGovernedObjectAsset, arg.WorkspaceID, arg.ObjectID)
+	var asset_id pgtype.UUID
+	err := row.Scan(&asset_id)
+	return asset_id, err
+}
+
+const getPolicyRevisionOwnerContent = `-- name: GetPolicyRevisionOwnerContent :one
+SELECT content FROM asset_revisions
+WHERE workspace_id = $1 AND asset_id = $2
+  AND id = $3
+`
+
+type GetPolicyRevisionOwnerContentParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	AssetID     pgtype.UUID `json:"asset_id"`
+	RevisionID  pgtype.UUID `json:"revision_id"`
+}
+
+func (q *Queries) GetPolicyRevisionOwnerContent(ctx context.Context, arg GetPolicyRevisionOwnerContentParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, getPolicyRevisionOwnerContent, arg.WorkspaceID, arg.AssetID, arg.RevisionID)
+	var content []byte
+	err := row.Scan(&content)
+	return content, err
+}
+
+const getPolicyRule = `-- name: GetPolicyRule :one
+SELECT rule_id, rule_version, priority, match, outcome_risk_level, outcome_routing, outcome_reason_code, outcome_explanation, created_at FROM policy_rules
+WHERE rule_version = $1 AND rule_id = $2
+`
+
+type GetPolicyRuleParams struct {
+	RuleVersion string `json:"rule_version"`
+	RuleID      string `json:"rule_id"`
+}
+
+func (q *Queries) GetPolicyRule(ctx context.Context, arg GetPolicyRuleParams) (PolicyRule, error) {
+	row := q.db.QueryRow(ctx, getPolicyRule, arg.RuleVersion, arg.RuleID)
+	var i PolicyRule
+	err := row.Scan(
+		&i.RuleID,
+		&i.RuleVersion,
+		&i.Priority,
+		&i.Match,
+		&i.OutcomeRiskLevel,
+		&i.OutcomeRouting,
+		&i.OutcomeReasonCode,
+		&i.OutcomeExplanation,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -880,6 +1015,44 @@ func (q *Queries) GetProposalForUpdate(ctx context.Context, arg GetProposalForUp
 		&i.DecidedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getProposalPolicyDecisionByVersionDigest = `-- name: GetProposalPolicyDecisionByVersionDigest :one
+SELECT id, workspace_id, proposal_id, rule_version, inputs, inputs_digest, matched_policy, risk_level, routing, reason_code, decided_at, created_at FROM policy_decisions
+WHERE workspace_id = $1 AND proposal_id = $2
+  AND rule_version = $3 AND inputs_digest = $4
+`
+
+type GetProposalPolicyDecisionByVersionDigestParams struct {
+	WorkspaceID  pgtype.UUID `json:"workspace_id"`
+	ProposalID   pgtype.UUID `json:"proposal_id"`
+	RuleVersion  string      `json:"rule_version"`
+	InputsDigest string      `json:"inputs_digest"`
+}
+
+func (q *Queries) GetProposalPolicyDecisionByVersionDigest(ctx context.Context, arg GetProposalPolicyDecisionByVersionDigestParams) (PolicyDecision, error) {
+	row := q.db.QueryRow(ctx, getProposalPolicyDecisionByVersionDigest,
+		arg.WorkspaceID,
+		arg.ProposalID,
+		arg.RuleVersion,
+		arg.InputsDigest,
+	)
+	var i PolicyDecision
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.ProposalID,
+		&i.RuleVersion,
+		&i.Inputs,
+		&i.InputsDigest,
+		&i.MatchedPolicy,
+		&i.RiskLevel,
+		&i.Routing,
+		&i.ReasonCode,
+		&i.DecidedAt,
+		&i.CreatedAt,
 	)
 	return i, err
 }
@@ -1018,6 +1191,42 @@ func (q *Queries) LinkProposalPolicyDecision(ctx context.Context, arg LinkPropos
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const listPolicyRules = `-- name: ListPolicyRules :many
+SELECT rule_id, rule_version, priority, match, outcome_risk_level, outcome_routing, outcome_reason_code, outcome_explanation, created_at FROM policy_rules
+WHERE rule_version = $1
+ORDER BY priority DESC, rule_id
+`
+
+func (q *Queries) ListPolicyRules(ctx context.Context, ruleVersion string) ([]PolicyRule, error) {
+	rows, err := q.db.Query(ctx, listPolicyRules, ruleVersion)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PolicyRule{}
+	for rows.Next() {
+		var i PolicyRule
+		if err := rows.Scan(
+			&i.RuleID,
+			&i.RuleVersion,
+			&i.Priority,
+			&i.Match,
+			&i.OutcomeRiskLevel,
+			&i.OutcomeRouting,
+			&i.OutcomeReasonCode,
+			&i.OutcomeExplanation,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listProposalChanges = `-- name: ListProposalChanges :many
@@ -1369,6 +1578,53 @@ func (q *Queries) SubmitProposal(ctx context.Context, arg SubmitProposalParams) 
 		&i.DecidedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const summarizeProposalValidationOutcomes = `-- name: SummarizeProposalValidationOutcomes :one
+SELECT
+    (SELECT count(*) FROM validation_runs AS run
+      WHERE run.workspace_id = $1 AND run.proposal_id = $2) AS run_count,
+    (SELECT count(*) FROM validation_runs AS run
+      WHERE run.workspace_id = $1 AND run.proposal_id = $2
+        AND run.status = 'failed') AS failed_count,
+    (SELECT count(*) FROM validation_results AS result
+      JOIN validation_runs AS run ON run.id = result.validation_run_id
+      WHERE result.workspace_id = $1 AND run.proposal_id = $2
+        AND result.severity = 'blocker') AS blocker_count,
+    (SELECT count(*) FROM validation_results AS result
+      JOIN validation_runs AS run ON run.id = result.validation_run_id
+      WHERE result.workspace_id = $1 AND run.proposal_id = $2
+        AND result.severity = 'warning') AS warning_count,
+    (SELECT count(*) FROM validation_results AS result
+      JOIN validation_runs AS run ON run.id = result.validation_run_id
+      WHERE result.workspace_id = $1 AND run.proposal_id = $2
+        AND result.severity = 'info') AS info_count
+`
+
+type SummarizeProposalValidationOutcomesParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	ProposalID  pgtype.UUID `json:"proposal_id"`
+}
+
+type SummarizeProposalValidationOutcomesRow struct {
+	RunCount     int64 `json:"run_count"`
+	FailedCount  int64 `json:"failed_count"`
+	BlockerCount int64 `json:"blocker_count"`
+	WarningCount int64 `json:"warning_count"`
+	InfoCount    int64 `json:"info_count"`
+}
+
+func (q *Queries) SummarizeProposalValidationOutcomes(ctx context.Context, arg SummarizeProposalValidationOutcomesParams) (SummarizeProposalValidationOutcomesRow, error) {
+	row := q.db.QueryRow(ctx, summarizeProposalValidationOutcomes, arg.WorkspaceID, arg.ProposalID)
+	var i SummarizeProposalValidationOutcomesRow
+	err := row.Scan(
+		&i.RunCount,
+		&i.FailedCount,
+		&i.BlockerCount,
+		&i.WarningCount,
+		&i.InfoCount,
 	)
 	return i, err
 }

@@ -36,6 +36,8 @@ type AuthoringRepository interface {
 	VerifyProposalTarget(ctx context.Context, workspace identity.WorkspaceID, asset identity.AssetID, revision identity.RevisionID) error
 	ListProposalValidationRuns(ctx context.Context, workspace identity.WorkspaceID, proposal identity.ProposalID) ([]domain.ValidationRun, error)
 	ListRunResults(ctx context.Context, workspace identity.WorkspaceID, run identity.ValidationRunID) ([]domain.ValidationResult, error)
+	GetLatestProposalPolicyDecision(ctx context.Context, workspace identity.WorkspaceID, proposal identity.ProposalID) (domain.PolicyDecision, error)
+	GetPolicyRule(ctx context.Context, ruleVersion, ruleID string) (domain.PolicyRule, error)
 }
 
 // ProposalCursor is the decoded keyset position of a proposals page.
@@ -365,6 +367,53 @@ func (service *AuthoringService) ListProposals(ctx context.Context, request List
 		}
 	}
 	return page, nil
+}
+
+// PolicyDecisionDetail is the read model of one proposal's policy decision:
+// the immutable decision fact plus the matched rule's explanation and the
+// input categories that drove it. No opaque score exists anywhere in the
+// surface (SSOT §8.3).
+type PolicyDecisionDetail struct {
+	Decision           domain.PolicyDecision
+	Explanation        string
+	MatchedInputFields []string
+}
+
+type GetPolicyDecisionRequest struct {
+	WorkspaceID  identity.WorkspaceID
+	ProposalID   identity.ProposalID
+	PrincipalRef string
+	TraceID      string
+}
+
+// GetPolicyDecision reads the latest policy decision of one proposal with
+// its explainability context. A proposal without a decision (validation has
+// not completed yet) reads as not-found.
+func (service *AuthoringService) GetPolicyDecision(ctx context.Context, request GetPolicyDecisionRequest) (PolicyDecisionDetail, error) {
+	if err := service.authorize(ctx, authorizationapp.EvaluationRequest{
+		PrincipalRef: request.PrincipalRef,
+		WorkspaceID:  request.WorkspaceID,
+		Action:       authorization.ActionAssetRead,
+		Resource:     authorization.Resource{Type: authorization.ScopeWorkspace, ID: request.WorkspaceID.UUID()},
+		TraceID:      request.TraceID,
+	}); err != nil {
+		return PolicyDecisionDetail{}, err
+	}
+	if _, err := service.proposals.GetProposal(ctx, request.WorkspaceID, request.ProposalID); err != nil {
+		return PolicyDecisionDetail{}, err
+	}
+	decision, err := service.repository.GetLatestProposalPolicyDecision(ctx, request.WorkspaceID, request.ProposalID)
+	if err != nil {
+		return PolicyDecisionDetail{}, err
+	}
+	detail := PolicyDecisionDetail{Decision: decision}
+	if rule, ruleErr := service.repository.GetPolicyRule(ctx, decision.RuleVersion, decision.MatchedPolicy); ruleErr == nil {
+		detail.Explanation = rule.Explanation
+		if fields, fieldsErr := domain.PolicyRuleMatchedInputFields(rule.Match); fieldsErr == nil {
+			detail.MatchedInputFields = fields
+		}
+	}
+	return detail, nil
 }
 
 // ValidationRunRecord pairs one validation run with its recorded results.

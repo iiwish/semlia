@@ -498,6 +498,39 @@ paths:
           $ref: "#/components/responses/NotFound"
         default:
           $ref: "#/components/responses/Error"
+  /api/v1/workspaces/{workspaceId}/governance/proposals/{proposalId}/policy-decision:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+      - $ref: "#/components/parameters/ProposalId"
+    get:
+      operationId: getGovernancePolicyDecision
+      summary: Read the recomputable policy decision of one proposal
+      description: >-
+        The latest versioned rule-table decision for the proposal (SSOT §8.2):
+        the rule version, the canonical inputs digest, the explainable risk
+        level and expert|batch routing, the matched rule with its explanation
+        and the input categories that drove it. No decision exists before
+        validation completes; no opaque score is exposed (SSOT §8.3).
+      tags:
+        - Governance
+      responses:
+        "200":
+          description: The latest policy decision of the proposal.
+          headers:
+            X-Trace-ID:
+              $ref: "#/components/headers/TraceId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GovernancePolicyDecision"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        default:
+          $ref: "#/components/responses/Error"
   /api/v1/workspaces/{workspaceId}/discovery-runs/{runId}:
     parameters:
       - $ref: "#/components/parameters/WorkspaceId"
@@ -1793,3 +1826,66 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/GovernanceValidationRun"
+    GovernanceRiskLevel:
+      type: string
+      description: Explainable risk level of a policy decision (SSOT §8.3); never a numeric score.
+      enum:
+        - low
+        - medium
+        - high
+    GovernanceRoutingChannel:
+      type: string
+      description: >-
+        Governance routing channel of a policy decision (SSOT §8.4). M2 routes
+        expert|batch only; the automatic channel is deferred to M4 and is not
+        part of the vocabulary.
+      enum:
+        - expert
+        - batch
+    GovernancePolicyDecision:
+      type: object
+      additionalProperties: false
+      required:
+        - ruleVersion
+        - inputsDigest
+        - riskLevel
+        - routing
+        - matchedRuleId
+        - reasonCode
+        - explanation
+        - matchedInputFields
+        - createdAt
+      properties:
+        ruleVersion:
+          type: string
+          description: Version of the rule table the decision was computed with.
+          pattern: "^[0-9]+\\.[0-9]+$"
+        inputsDigest:
+          description: sha256 content digest of the canonical decision inputs the rule table consumed.
+          type: string
+          pattern: "^sha256:[0-9a-f]{64}$"
+        riskLevel:
+          $ref: "#/components/schemas/GovernanceRiskLevel"
+        routing:
+          $ref: "#/components/schemas/GovernanceRoutingChannel"
+        matchedRuleId:
+          type: string
+          description: Identifier of the matched seeded rule row, or the fail-safe default policy.
+          minLength: 1
+          maxLength: 128
+        reasonCode:
+          type: string
+          description: Stable machine-readable reason the decision is explainable by.
+          pattern: "^[A-Z][A-Z0-9_]{2,63}$"
+        explanation:
+          type: string
+          description: Human-readable explanation carried by the matched rule.
+          maxLength: 512
+        matchedInputFields:
+          type: array
+          description: Decision input categories the matched rule conditions reference.
+          items:
+            type: string
+            description: Closed DecisionInputs field name.
+        createdAt:
+          $ref: "#/components/schemas/Timestamp"

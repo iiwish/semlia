@@ -188,11 +188,14 @@ func runWorker(ctx context.Context, cfg config.Config) error {
 		30*time.Second,
 	)
 	governanceClock := governanceapp.ClockFunc(time.Now)
+	governancePolicy := governanceapp.NewPolicyService(
+		store, governanceClock, governanceapp.WithRuleSource(store))
 	worker.Register(governanceapp.ValidationJobType, governanceapp.NewValidationJobHandler(
 		store,
 		governanceapp.NewProposalService(store, governanceClock),
 		governanceapp.NewValidationService(store, governanceClock),
 		governanceapp.NewDefaultRegistry(),
+		governancePolicy,
 		governanceClock,
 	).Handle)
 	owner := fmt.Sprintf("worker-%d", os.Getpid())

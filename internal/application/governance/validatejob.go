@@ -42,6 +42,7 @@ type ValidationExecutor struct {
 	proposals   *ProposalService
 	validations *ValidationService
 	registry    *Registry
+	decisions   *PolicyDecisionTrigger
 }
 
 func NewValidationExecutor(
@@ -49,19 +50,24 @@ func NewValidationExecutor(
 	proposals *ProposalService,
 	validations *ValidationService,
 	registry *Registry,
+	decisions *PolicyDecisionTrigger,
 ) *ValidationExecutor {
-	if repository == nil || proposals == nil || validations == nil || registry == nil {
-		panic("validation executor requires repository, proposal service, validation service and registry")
+	if repository == nil || proposals == nil || validations == nil || registry == nil || decisions == nil {
+		panic("validation executor requires repository, proposal service, validation service, registry and decision trigger")
 	}
 	return &ValidationExecutor{
-		repository: repository, proposals: proposals, validations: validations, registry: registry,
+		repository: repository, proposals: proposals, validations: validations,
+		registry: registry, decisions: decisions,
 	}
 }
 
 // Execute runs the deterministic validation pipeline for one proposal. A
-// proposal that vanished or left validating completes without transitioning
-// (no error loop); every other outcome — clean, blocker or infra failure —
-// leaves the proposal in in_review with the outcome persisted.
+// proposal that vanished completes without transitioning (no error loop);
+// every other outcome — clean, blocker or infra failure — leaves the proposal
+// in in_review with the outcome persisted and the policy decision ensured.
+// A re-execution over a proposal that already sits in in_review (a crashed
+// attempt after the transition) only re-ensures the decision, which is
+// idempotent for unchanged state.
 func (executor *ValidationExecutor) Execute(
 	ctx context.Context, workspace identity.WorkspaceID, proposal identity.ProposalID, traceID string,
 ) error {
@@ -72,7 +78,12 @@ func (executor *ValidationExecutor) Execute(
 		}
 		return err
 	}
-	if current.State != governance.ProposalValidating {
+	switch current.State {
+	case governance.ProposalInReview:
+		_, err = executor.decisions.EnsureDecisionForProposal(ctx, workspace, proposal)
+		return err
+	case governance.ProposalValidating:
+	default:
 		return nil
 	}
 	changes, err := executor.repository.ListProposalChanges(ctx, workspace, proposal)
@@ -236,8 +247,9 @@ func (executor *ValidationExecutor) buildInput(
 }
 
 // transitionToReview moves validating -> in_review through the T002 state
-// machine. A proposal rejected concurrently is already outside validating;
-// the job completes without transitioning instead of error-looping.
+// machine and then ensures the §8.2 policy decision for the proposal. A
+// proposal rejected concurrently is already outside validating; the job
+// completes without transitioning instead of error-looping.
 func (executor *ValidationExecutor) transitionToReview(
 	ctx context.Context,
 	workspace identity.WorkspaceID,
@@ -259,6 +271,9 @@ func (executor *ValidationExecutor) transitionToReview(
 			return nil
 		}
 		return err
+	}
+	if _, err := executor.decisions.EnsureDecisionForProposal(ctx, workspace, proposalID); err != nil {
+		return fmt.Errorf("ensure policy decision: %w", err)
 	}
 	return nil
 }
@@ -333,13 +348,18 @@ func NewValidationJobHandler(
 	proposals *ProposalService,
 	validations *ValidationService,
 	registry *Registry,
+	policy *PolicyService,
 	clock Clock,
 ) *ValidationJobHandler {
-	if repository == nil || proposals == nil || validations == nil || registry == nil || clock == nil {
-		panic("validation job handler requires repository, services, registry and clock")
+	if repository == nil || proposals == nil || validations == nil || registry == nil || policy == nil || clock == nil {
+		panic("validation job handler requires repository, services, registry, policy service and clock")
+	}
+	facts, ok := repository.(DecisionFactsRepository)
+	if !ok {
+		panic("validation job handler repository must expose the decision input facts")
 	}
 	return &ValidationJobHandler{
-		executor:   NewValidationExecutor(repository, proposals, validations, registry),
+		executor:   NewValidationExecutor(repository, proposals, validations, registry, NewPolicyDecisionTrigger(facts, policy)),
 		repository: repository,
 		clock:      clock,
 	}

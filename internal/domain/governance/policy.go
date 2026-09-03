@@ -32,25 +32,81 @@ const (
 	RoutingBatch  RoutingChannel = "batch"
 )
 
-// MatchedRiskPolicy is the identifier of the single policy row the current
-// rule version consults.
+// MatchedRiskPolicy is the stable identifier recorded when no seeded rule
+// row matches (or the rule table is unevaluable): the fail-safe default that
+// routes the change to expert review (SSOT §8.2 degradation).
 const MatchedRiskPolicy = "semlia.risk.v1/default"
+
+// ReasonRiskPolicyUnmatched is the stable fail-safe reason code. It is the
+// only reason that never appears on a seeded rule row.
+const ReasonRiskPolicyUnmatched = "RISK_POLICY_UNMATCHED"
+
+// Closed input-category vocabularies. The zero value ("") is legal and means
+// "not recorded", so inputs persisted before a vocabulary shipped still parse
+// and re-evaluate (recomputability, SSOT §8.2).
+const (
+	// DecisionInputNotApplicable marks inputs that carry no value for the
+	// target (an asset type for join contracts) or are not yet computable.
+	DecisionInputNotApplicable = "not_applicable"
+	OwnerAssigned              = "assigned"
+	OwnerUnassigned            = "unassigned"
+	OwnerNotApplicable         = DecisionInputNotApplicable
+	AuthorKindHuman            = "human"
+	AuthorKindAgent            = "agent"
+)
 
 // DecisionInputs are the canonical risk-computation inputs (SSOT §8.3). The
 // struct is closed: unknown fields are rejected so the digest always covers
 // exactly the features the rule consumes.
+//
+// Categories that M2 cannot compute from persisted state are represented as
+// explicit not-applicable placeholders (ConsumerCount,
+// HistoricalAcceptRate: JSON null until M4 populates them). They are already
+// part of the schema, so M4 fills values under a new rule version without a
+// schema-shape change that would break stored digests.
 type DecisionInputs struct {
-	AssetType             string `json:"assetType"`
-	AffectsComputation    bool   `json:"affectsComputation"`
-	AffectsAccess         bool   `json:"affectsAccess"`
-	AffectsContract       bool   `json:"affectsContract"`
-	ProductionEnvironment bool   `json:"productionEnvironment"`
-	BlockerCount          int    `json:"blockerCount"`
-	EvidenceComplete      bool   `json:"evidenceComplete"`
+	AssetType             string   `json:"assetType"`
+	TargetObjectType      string   `json:"targetObjectType"`
+	AffectsComputation    bool     `json:"affectsComputation"`
+	AffectsDefinition     bool     `json:"affectsDefinition"`
+	AffectsRelations      bool     `json:"affectsRelations"`
+	AffectsAccess         bool     `json:"affectsAccess"`
+	AffectsContract       bool     `json:"affectsContract"`
+	ProductionEnvironment bool     `json:"productionEnvironment"`
+	ValidationRunCount    int      `json:"validationRunCount"`
+	ValidationFailedCount int      `json:"validationFailedCount"`
+	BlockerCount          int      `json:"blockerCount"`
+	WarningCount          int      `json:"warningCount"`
+	InfoCount             int      `json:"infoCount"`
+	EvidenceLinkCount     int      `json:"evidenceLinkCount"`
+	EvidenceComplete      bool     `json:"evidenceComplete"`
+	OwnerAssigned         string   `json:"ownerAssigned"`
+	AuthorKind            string   `json:"authorKind"`
+	ConsumerCount         *int     `json:"consumerCount"`
+	HistoricalAcceptRate  *float64 `json:"historicalAcceptRate"`
 }
 
 func (inputs DecisionInputs) Validate() error {
-	if inputs.AssetType == "" || inputs.BlockerCount < 0 {
+	if inputs.AssetType == "" {
+		return ErrInvalidArgument
+	}
+	if inputs.BlockerCount < 0 || inputs.WarningCount < 0 || inputs.InfoCount < 0 ||
+		inputs.ValidationRunCount < 0 || inputs.ValidationFailedCount < 0 || inputs.EvidenceLinkCount < 0 {
+		return ErrInvalidArgument
+	}
+	switch TargetObjectType(inputs.TargetObjectType) {
+	case "", TargetSemanticAsset, TargetPhysicalBinding, TargetModelGrain, TargetEntityKey, TargetJoinContract:
+	default:
+		return ErrInvalidArgument
+	}
+	switch inputs.OwnerAssigned {
+	case "", OwnerAssigned, OwnerUnassigned, OwnerNotApplicable:
+	default:
+		return ErrInvalidArgument
+	}
+	switch inputs.AuthorKind {
+	case "", AuthorKindHuman, AuthorKindAgent:
+	default:
 		return ErrInvalidArgument
 	}
 	return nil
@@ -75,46 +131,17 @@ const (
 	ReasonRiskLowBatch               = "RISK_LOW_BATCH"
 )
 
-// EvaluateRiskRule recomputes the risk decision from inputs alone. It is a
-// pure function: no clock, no I/O, no environment. Identical inputs under one
-// rule version always produce identical risk_level, routing and reason.
+// EvaluateRiskRule recomputes the risk decision from inputs alone by
+// evaluating the canonical rule table for the version (migration 000008
+// seeds the same rows). It is a pure function: no clock, no I/O, no
+// environment. Identical inputs under one rule version always produce
+// identical risk_level, routing and reason.
 func EvaluateRiskRule(version string, inputs DecisionInputs) (RiskDecision, error) {
-	if version != RiskRuleVersion {
-		return RiskDecision{}, fmt.Errorf("%w: unknown risk rule version %q", ErrInvalidArgument, version)
-	}
-	if err := inputs.Validate(); err != nil {
+	rules, err := CanonicalPolicyRules(version)
+	if err != nil {
 		return RiskDecision{}, err
 	}
-	decision := RiskDecision{MatchedPolicy: MatchedRiskPolicy}
-	switch {
-	case inputs.BlockerCount > 0:
-		decision.RiskLevel = RiskHigh
-		decision.Routing = RoutingExpert
-		decision.ReasonCode = ReasonRiskBlocker
-	case inputs.AffectsComputation && inputs.ProductionEnvironment:
-		decision.RiskLevel = RiskHigh
-		decision.Routing = RoutingExpert
-		decision.ReasonCode = ReasonRiskProductionComputation
-	case inputs.AffectsAccess || inputs.AffectsContract:
-		// Access-scope and consumption-contract changes always take the
-		// expert channel (SSOT §8.4).
-		decision.RiskLevel = RiskHigh
-		decision.Routing = RoutingExpert
-		decision.ReasonCode = ReasonRiskAccessOrContractChange
-	case inputs.AffectsComputation:
-		decision.RiskLevel = RiskMedium
-		decision.Routing = RoutingExpert
-		decision.ReasonCode = ReasonRiskComputationChange
-	case inputs.ProductionEnvironment:
-		decision.RiskLevel = RiskMedium
-		decision.Routing = RoutingExpert
-		decision.ReasonCode = ReasonRiskProductionChange
-	default:
-		decision.RiskLevel = RiskLow
-		decision.Routing = RoutingBatch
-		decision.ReasonCode = ReasonRiskLowBatch
-	}
-	return decision, nil
+	return EvaluatePolicyRules(rules, inputs)
 }
 
 // ParseDecisionInputs decodes strict canonical inputs from raw JSON. Unknown

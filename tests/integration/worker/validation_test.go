@@ -99,6 +99,7 @@ func newValidationWorker(
 		governanceapp.NewProposalService(store, handlerClock),
 		governanceapp.NewValidationService(store, handlerClock),
 		governanceapp.NewDefaultRegistry(),
+		governanceapp.NewPolicyService(store, handlerClock, governanceapp.WithRuleSource(store)),
 		handlerClock,
 	)
 	worker := jobs.NewWorker(store, clock, jobs.BackoffFunc(func(int32) time.Duration {

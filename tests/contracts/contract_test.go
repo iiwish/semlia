@@ -117,6 +117,9 @@ func TestCanonicalSpecificationIsValidAndMinimal(t *testing.T) {
 		"GovernanceValidationResult",
 		"GovernanceValidationRun",
 		"GovernanceValidationRunPage",
+		"GovernanceRiskLevel",
+		"GovernanceRoutingChannel",
+		"GovernancePolicyDecision",
 	}
 	for _, name := range requiredSchemas {
 		if doc.Components.Schemas[name] == nil {
@@ -137,6 +140,7 @@ func TestCanonicalSpecificationIsValidAndMinimal(t *testing.T) {
 		"/api/v1/workspaces/{workspaceId}/governance/proposals":                              "listGovernanceProposals",
 		"/api/v1/workspaces/{workspaceId}/governance/proposals/{proposalId}":                 "getGovernanceProposal",
 		"/api/v1/workspaces/{workspaceId}/governance/proposals/{proposalId}/validation-runs": "listGovernanceValidationRuns",
+		"/api/v1/workspaces/{workspaceId}/governance/proposals/{proposalId}/policy-decision": "getGovernancePolicyDecision",
 	}
 	for path, operationID := range requiredOperations {
 		item := doc.Paths.Find(path)

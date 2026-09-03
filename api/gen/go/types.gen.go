@@ -217,6 +217,45 @@ func (e GovernanceProposalState) Valid() bool {
 	}
 }
 
+// Defines values for GovernanceRiskLevel.
+const (
+	High   GovernanceRiskLevel = "high"
+	Low    GovernanceRiskLevel = "low"
+	Medium GovernanceRiskLevel = "medium"
+)
+
+// Valid indicates whether the value is a known member of the GovernanceRiskLevel enum.
+func (e GovernanceRiskLevel) Valid() bool {
+	switch e {
+	case High:
+		return true
+	case Low:
+		return true
+	case Medium:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GovernanceRoutingChannel.
+const (
+	Batch  GovernanceRoutingChannel = "batch"
+	Expert GovernanceRoutingChannel = "expert"
+)
+
+// Valid indicates whether the value is a known member of the GovernanceRoutingChannel enum.
+func (e GovernanceRoutingChannel) Valid() bool {
+	switch e {
+	case Batch:
+		return true
+	case Expert:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for GovernanceTargetObjectType.
 const (
 	EntityKey       GovernanceTargetObjectType = "entity_key"
@@ -872,6 +911,38 @@ type GovernanceChangeSetItemRecord struct {
 	Op GovernanceChangeOp        `json:"op"`
 }
 
+// GovernancePolicyDecision defines model for GovernancePolicyDecision.
+type GovernancePolicyDecision struct {
+	// CreatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	CreatedAt Timestamp `json:"createdAt"`
+
+	// Explanation Human-readable explanation carried by the matched rule.
+	Explanation string `json:"explanation"`
+
+	// InputsDigest sha256 content digest of the canonical decision inputs the rule table consumed.
+	InputsDigest string `json:"inputsDigest"`
+
+	// MatchedInputFields Decision input categories the matched rule conditions reference.
+	MatchedInputFields []string `json:"matchedInputFields"`
+
+	// MatchedRuleId Identifier of the matched seeded rule row, or the fail-safe default policy.
+	MatchedRuleId string `json:"matchedRuleId"`
+
+	// ReasonCode Stable machine-readable reason the decision is explainable by.
+	ReasonCode string `json:"reasonCode"`
+
+	// RiskLevel Explainable risk level of a policy decision (SSOT §8.3); never a numeric score.
+	RiskLevel GovernanceRiskLevel `json:"riskLevel"`
+
+	// Routing Governance routing channel of a policy decision (SSOT §8.4). M2 routes expert|batch only; the automatic channel is deferred to M4 and is not part of the vocabulary.
+	Routing GovernanceRoutingChannel `json:"routing"`
+
+	// RuleVersion Version of the rule table the decision was computed with.
+	RuleVersion string `json:"ruleVersion"`
+}
+
 // GovernanceProposalAgentAttribution SSOT §8.6 attribution of an AI-proposed payload to a persisted agent run in the same workspace. The run must already exist and its model, config revision and input hash must match the persisted record.
 type GovernanceProposalAgentAttribution struct {
 	// AgentRunId Example: agr_01arz3ndektsv4rrffq69g5fav
@@ -995,6 +1066,12 @@ type GovernanceProposalSummary struct {
 	// Example: 2026-08-08T08:00:00Z
 	UpdatedAt Timestamp `json:"updatedAt"`
 }
+
+// GovernanceRiskLevel Explainable risk level of a policy decision (SSOT §8.3); never a numeric score.
+type GovernanceRiskLevel string
+
+// GovernanceRoutingChannel Governance routing channel of a policy decision (SSOT §8.4). M2 routes expert|batch only; the automatic channel is deferred to M4 and is not part of the vocabulary.
+type GovernanceRoutingChannel string
 
 // GovernanceTargetObjectId Target TypeID; the prefix must match targetObjectType.
 //
