@@ -213,31 +213,35 @@ test("database-to-answer journey stays inspectable", async ({ page }) => {
   await expect(page.locator(".governance-detail-commandbar")).toHaveCount(0);
   await page.getByRole("button", { name: "审核候选版本 客单价 @9" }).click();
   const dialog = page.getByRole("dialog", { name: "审核 客单价 · @9" });
-  await expect(dialog.getByText("不会写入或发布真实数据", { exact: false })).toBeVisible();
-  await dialog.getByRole("button", { name: "模拟批准版本" }).click();
-  await expect(dialog).toBeHidden();
+  await expect(dialog.getByRole("button", { name: "批准版本" })).toBeDisabled();
+  await dialog.getByRole("textbox", { name: "审核意见" }).fill("退款口径变化已由增长组确认。");
+  await dialog.getByRole("button", { name: "批准版本" }).click();
+  await expect(page.getByRole("status")).toContainText("评审已记录：批准");
 
-  await expect(page.getByRole("button", { name: "模拟发布 @9" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "发布 @9" })).toBeVisible();
   const clippedReleaseElements = await page.locator(".candidate-version-detail, .candidate-review-summary, .candidate-review-layout, .candidate-review-card").evaluateAll((elements) => elements.filter((element) => element.scrollWidth > element.clientWidth + 1).length);
   expect(clippedReleaseElements).toBe(0);
   await expect(page.getByRole("button", { name: "变更与发布" })).toHaveAttribute("aria-current", "page");
   await expect(page.getByRole("button", { name: "比较版本" })).toHaveCount(0);
-  await page.getByRole("button", { name: "模拟发布 @9" }).click();
+  await page.getByRole("button", { name: "发布 @9" }).click();
   const publishDialog = page.getByRole("dialog", { name: "发布客单价 @9" });
-  await expect(publishDialog.getByText("不会真实切换客单价的问答或下游消费绑定", { exact: false })).toBeVisible();
-  await publishDialog.getByRole("button", { name: "确认模拟发布并生效" }).click();
-  await expect(page.getByText("release-2026.08.4-session")).toBeVisible();
+  await expect(publishDialog.getByText("独立发布者由服务端强制")).toBeVisible();
+  await publishDialog.getByRole("button", { name: "确认发布并生效" }).click();
+  const publishedCandidate = page.getByRole("region", { name: "客单价 @9 候选资产版本详情" });
+  await expect(publishedCandidate).toContainText("已发布");
+  await expect(publishedCandidate.getByRole("region", { name: "发布记录" })).toContainText("#7");
 
   await backToAssetVersions.click();
   await page.getByRole("searchbox", { name: "搜索资产版本" }).fill("");
-  await expect(page.getByRole("button", { name: "查看语义资产版本 净收入 @12" })).toContainText("当前版本");
-  await page.getByRole("button", { name: "查看语义资产版本 净收入 @12" }).click();
-  await expect(page.getByRole("heading", { name: "使用这个资产版本的应用" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "查看发布记录 @9 #7" })).toContainText("当前版本");
+  await expect(page.getByRole("button", { name: "查看发布记录 @12 #6" })).toContainText("历史版本");
+  await page.getByRole("button", { name: "查看发布记录 @12 #6" }).click();
+  await expect(page.getByText("消费绑定 · 原型数据")).toBeVisible();
   await expect(page.getByText("Fluxale Production", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "与 @11 比较" }).click();
-  const versionCompareDialog = page.getByRole("dialog", { name: "比较净收入版本" });
-  await expect(versionCompareDialog.getByText("净收入 · 上一版本")).toBeVisible();
-  await expect(versionCompareDialog.getByText("净收入 · 当前选择")).toBeVisible();
+  await page.getByRole("button", { name: "与注册表比较" }).click();
+  const versionCompareDialog = page.getByRole("dialog", { name: "发布与注册表比较" });
+  await expect(versionCompareDialog.getByText("注册表当前 revision")).toBeVisible();
+  await expect(versionCompareDialog.getByText("发布固定的 revision")).toBeVisible();
   await versionCompareDialog.getByRole("button", { name: "完成" }).click();
   await page.getByRole("button", { name: "工作台" }).click();
   const workbenchDetailContext = page.getByRole("complementary", { name: "治理上下文" });
@@ -366,14 +370,14 @@ test("system settings separates LLM inference from Embedding indexing", async ({
   await expect(configuration.getByRole("heading", { name: "模型配置" })).toHaveCount(0);
   await expect(configuration.locator(".model-config-stats")).toHaveCount(0);
   await expect(configuration.getByRole("tab", { name: "LLM 模型" })).toHaveAttribute("aria-selected", "true");
-  await expect(configuration.getByRole("combobox", { name: "默认 LLM 模型" })).toHaveValue("llm-gpt-41");
+  await expect(configuration.getByRole("combobox", { name: "默认 LLM 模型" })).toHaveValue("mdl_fixture_001");
   await expect(configuration.getByText("gpt-4.1", { exact: true })).toBeVisible();
 
   await configuration.getByRole("tab", { name: "Embedding 模型" }).click();
   await expect(configuration.getByText("text-embedding-3-large", { exact: true })).toBeVisible();
   await expect(configuration.locator(".embedding-boundary")).toHaveCount(0);
   await expect(configuration.getByRole("button", { name: "重建向量索引" })).toBeVisible();
-  await configuration.getByRole("combobox", { name: "默认 Embedding 模型" }).selectOption("embedding-bge-m3");
+  await configuration.getByRole("combobox", { name: "默认 Embedding 模型" }).selectOption("mdl_fixture_005");
   await expect(page.getByRole("status")).toContainText("Embedding 默认模型已切换为 bge-m3");
   await configuration.getByRole("button", { name: "重建向量索引" }).click();
   const rebuildDialog = page.getByRole("dialog", { name: "重建向量索引" });
@@ -510,7 +514,7 @@ test("answer feedback becomes a governed knowledge revision", async ({ page }) =
   await expect(workbench.getByRole("complementary", { name: "证据与检查" })).toContainText("修订只改变候选知识");
   await workbench.getByRole("textbox", { name: "计算表达式候选值" }).fill("SUM(paid_amount - confirmed_refund_amount - discount_amount - tax_amount)");
   await workbench.getByRole("button", { name: "运行检查" }).click();
-  await expect(workbench.getByText("3/3 完成")).toBeVisible();
+  await expect(workbench.getByText("已就绪")).toBeVisible();
 
   const clippedWorkbenchElements = await page.locator(".knowledge-revision-workbench, .knowledge-revision-layout, .knowledge-field-editor, .knowledge-revision-inspector, .knowledge-revision-actions").evaluateAll((elements) => elements.filter((element) => element.scrollWidth > element.clientWidth + 1).length);
   expect(clippedWorkbenchElements).toBe(0);
@@ -589,15 +593,101 @@ test("access control remains explainable across supported desktop viewports", as
   await page.getByRole("button", { name: "变更与发布" }).click();
   await page.getByRole("button", { name: "查看候选资产版本 客单价 @9" }).click();
   await page.getByRole("button", { name: "审核候选版本 客单价 @9" }).click();
-  await page.getByRole("dialog", { name: "审核 客单价 · @9" }).getByRole("button", { name: "模拟批准版本" }).click();
-  await page.getByRole("button", { name: "模拟发布 @9" }).click();
+  const reviewDialog = page.getByRole("dialog", { name: "审核 客单价 · @9" });
+  await expect(reviewDialog.getByText("职责分离由服务端强制")).toBeVisible();
+  await expect(reviewDialog.getByRole("button", { name: "批准版本" })).toBeDisabled();
+  await reviewDialog.getByRole("textbox", { name: "审核意见" }).fill("口径变化已确认。");
+  await reviewDialog.getByRole("button", { name: "批准版本" }).click();
+  await expect(page.getByRole("status")).toContainText("评审已记录：批准");
+  await page.getByRole("button", { name: "发布 @9" }).click();
   const publishDialog = page.getByRole("dialog", { name: "发布客单价 @9" });
-  await publishDialog.getByRole("combobox", { name: "发布身份" }).selectOption("USR-REVIEWER");
-  await expect(publishDialog.getByRole("alert")).toContainText("评审者与发布者必须相互独立");
-  await expect(publishDialog.getByRole("button", { name: "确认模拟发布并生效" })).toBeDisabled();
+  await expect(publishDialog.getByText("独立发布者由服务端强制")).toBeVisible();
+  await expect(publishDialog.getByText("发布者不能是提案作者，也不能是唯一批准评审人（D-006 双人控制）")).toBeVisible();
   await page.screenshot({ path: resolve(accessControlEvidenceDirectory, `${testInfo.project.name}-publish-conflict.png`), fullPage: true });
 
   const clippedElements = await page.locator(".access-control-view, .access-role-table, .assignment-table, .access-inspector-form, .member-directory-table, .integration-client-table, .review-dialog").evaluateAll((elements) => elements.filter((element) => element.scrollWidth > element.clientWidth + 1).length);
   expect(clippedElements).toBe(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)).toBe(false);
+});
+
+test("governed journey runs author, submit, validation, review, publish and rollback on real flows", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "知识资产" }).click();
+  await page.getByRole("button", { name: "打开语义资产 支付订单数" }).click();
+  await page.getByRole("button", { name: "修订知识" }).click();
+  await page.getByRole("dialog", { name: "选择知识修订对象" }).getByRole("button", { name: /计算表达式/ }).click();
+
+  const workbench = page.getByRole("region", { name: "支付订单数 知识修订工作台" });
+  await expect(workbench.getByText("已发布版本受保护")).toBeVisible();
+  const expressionField = workbench.getByRole("textbox", { name: "计算表达式候选值" });
+  await expressionField.fill("COUNT_DISTINCT(order_id) FILTER payment_status = 'paid' AND test_order = false");
+  await workbench.getByRole("textbox", { name: "知识修订原因" }).fill("把测试订单从支付口径中排除。");
+  await workbench.getByRole("button", { name: "运行检查" }).click();
+  await expect(workbench.getByText("已就绪")).toBeVisible();
+  await workbench.getByRole("button", { name: "提交审核" }).click();
+
+  const candidate = page.getByRole("region", { name: "支付订单数 @6 候选资产版本详情" });
+  await expect(candidate).toBeVisible();
+  await expect(candidate.getByText("版本范围")).toBeVisible();
+  await expect(candidate.getByText("@5 → @6").first()).toBeVisible();
+  await expect(candidate.getByText("COUNT_DISTINCT(order_id) FILTER payment_status = 'paid' AND test_order = false")).toBeVisible();
+  await expect(candidate.getByText("3/3", { exact: true })).toBeVisible();
+  const policyDecision = candidate.getByRole("region", { name: "策略决策" });
+  await expect(policyDecision).toBeVisible();
+  await expect(policyDecision).toContainText("rule.g1.computation_change");
+  await expect(policyDecision).toContainText("专家评审");
+  await expect(policyDecision).toContainText("COMPUTATION_CHANGED");
+
+  await page.getByRole("button", { name: "变更与发布", exact: true }).click();
+  const candidateRow = page.getByRole("button", { name: "查看候选资产版本 支付订单数 @6" });
+  await expect(candidateRow).toContainText("待审核");
+  await candidateRow.click();
+  await page.getByRole("button", { name: "审核候选版本 支付订单数 @6" }).click();
+  const reviewDialog = page.getByRole("dialog", { name: "审核 支付订单数 · @6" });
+  await expect(reviewDialog.getByText("structural", { exact: false }).first()).toBeVisible();
+  await reviewDialog.getByRole("textbox", { name: "审核意见" }).fill("测试订单排除已与经营组确认。");
+  await reviewDialog.getByRole("button", { name: "批准版本" }).click();
+  await expect(page.getByRole("status")).toContainText("评审已记录：批准");
+
+  await expect(page.getByRole("button", { name: "发布 @6" })).toBeVisible();
+  await page.getByRole("button", { name: "发布 @6" }).click();
+  const publishDialog = page.getByRole("dialog", { name: "发布支付订单数 @6" });
+  await expect(publishDialog.getByText("独立发布者由服务端强制")).toBeVisible();
+  await publishDialog.getByRole("button", { name: "确认发布并生效" }).click();
+  const publishedCandidate = page.getByRole("region", { name: "支付订单数 @6 候选资产版本详情" });
+  await expect(publishedCandidate).toContainText("已发布");
+  await expect(publishedCandidate.getByRole("region", { name: "发布记录" })).toContainText("#7");
+  await expect(publishedCandidate.getByRole("region", { name: "发布记录" })).toContainText("rls_fixture_0007");
+
+  await page.getByRole("button", { name: "返回资产版本列表" }).click();
+  const releaseRow = page.getByRole("button", { name: "查看发布记录 @6 #7" });
+  await expect(releaseRow).toBeVisible();
+  await releaseRow.click();
+  const releaseDetail = page.getByRole("region", { name: "发布 #7 详情" });
+  await expect(releaseDetail).toContainText("当前版本");
+  await expect(releaseDetail).toContainText("rls_fixture_0007");
+  await expect(releaseDetail.getByRole("button", { name: "回滚此发布" })).toBeEnabled();
+  await releaseDetail.getByRole("button", { name: "回滚此发布" }).click();
+  await expect(page.locator(".toast")).toContainText("回滚完成：已创建新的不可变发布 #8");
+
+  await page.getByRole("button", { name: "返回资产版本列表" }).click();
+  await expect(page.getByRole("button", { name: "查看发布记录 @5 #8" })).toContainText("当前版本");
+  await expect(page.getByRole("button", { name: "查看发布记录 @6 #7" })).toContainText("历史版本");
+  await page.getByRole("button", { name: "查看发布记录 @6 #7" }).click();
+  await expect(page.getByRole("region", { name: "发布 #7 详情" })).toContainText("此发布已被 rls_fixture_0008 回滚");
+
+  await page.getByRole("button", { name: "知识资产" }).click();
+  await page.getByRole("button", { name: "打开语义资产 支付订单数" }).click();
+  await page.getByRole("tab", { name: "可信度" }).click();
+  const governanceEvidence = page.getByRole("region", { name: "提案验证与策略决策" });
+  await expect(governanceEvidence).toBeVisible();
+  await expect(governanceEvidence).toContainText("structural");
+  await expect(governanceEvidence).toContainText("v2026.08.4");
+  await expect(governanceEvidence).toContainText("rule.g1.computation_change");
+  await expect(governanceEvidence).toContainText("专家评审");
+  const clippedGovernanceElements = await page.locator(".release-detail, .candidate-version-detail, .review-batch-surface, .governance-list-surface").evaluateAll((elements) => elements.filter((element) => element.scrollWidth > element.clientWidth + 1).length);
+  expect(clippedGovernanceElements).toBe(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)).toBe(false);
 });

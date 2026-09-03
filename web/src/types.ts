@@ -341,7 +341,7 @@ export interface Proposal {
   assetId: string;
   author: string;
   createdAt: string;
-  risk: "低风险" | "中风险" | "高风险";
+  risk: "低风险" | "中风险" | "高风险" | "待评估";
   summary: string;
   changes: Array<{
     field: string;

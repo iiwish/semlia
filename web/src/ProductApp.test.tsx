@@ -3,11 +3,12 @@ import userEvent from "@testing-library/user-event";
 
 import { CatalogRuntimeProvider } from "./catalogRuntime";
 import { ProductApp } from "./ProductApp";
+import type { CapabilitySession } from "./types";
 import { assetTypeProfiles, evaluateAssetTypeRules } from "./assetTypeProfiles";
 import { assets } from "./data";
 
-function App() {
-  return <CatalogRuntimeProvider fixtureAssets={assets}><ProductApp /></CatalogRuntimeProvider>;
+function App({ session }: { session?: CapabilitySession }) {
+  return <CatalogRuntimeProvider fixtureAssets={assets}><ProductApp fixtureGovernance session={session} /></CatalogRuntimeProvider>;
 }
 
 describe("Semlia product workspace", () => {
@@ -122,14 +123,17 @@ describe("Semlia product workspace", () => {
     expect(within(workbench).getByRole<HTMLTextAreaElement>("textbox", { name: "知识修订原因" }).value).toContain("来自问答");
 
     await user.click(within(workbench).getByRole("button", { name: "运行检查" }));
-    expect(within(workbench).getByText("3/3 完成")).toBeVisible();
+    expect(within(workbench).getByText("已就绪")).toBeVisible();
     await user.click(within(workbench).getByRole("button", { name: "提交审核" }));
 
-    expect(screen.getByRole("region", { name: "净收入 @13 候选资产版本详情" })).toBeVisible();
-    expect(screen.getByText("spec.expression")).toBeVisible();
+    const candidate = await screen.findByRole("region", { name: "净收入 @13 候选资产版本详情" });
+    expect(candidate).toBeVisible();
+    expect(await screen.findByText("spec.expression")).toBeVisible();
     expect(screen.getByText(/confirmed_refund_amount/)).toBeVisible();
     await user.click(screen.getByRole("tab", { name: /变更来源.*1/ }));
     expect(screen.getByText("人工知识修订")).toBeVisible();
+    await user.click(screen.getByRole("tab", { name: /版本差异.*/ }));
+    expect(screen.getByRole("region", { name: /策略决策/ })).toBeInTheDocument();
   });
 
   it("filters the semantic asset catalog and opens an explainable asset contract", async () => {
@@ -318,12 +322,14 @@ describe("Semlia product workspace", () => {
     await user.click(screen.getByRole("button", { name: "审核候选版本 客单价 @9" }));
 
     const dialog = screen.getByRole("dialog", { name: "审核 客单价 · @9" });
-    expect(within(dialog).getByText(/不会写入或发布真实数据/)).toBeVisible();
-    expect(within(dialog).getByText("Cube 编译")).toBeVisible();
-
-    await user.click(within(dialog).getByRole("button", { name: "模拟批准版本" }));
-    expect(screen.getByRole("status")).toHaveTextContent("客单价 候选版本已在本次原型会话中标记为批准");
-    expect(screen.getByRole("button", { name: "模拟发布 @9" })).toBeVisible();
+    expect(within(dialog).getAllByText("structural", { exact: false }).length).toBeGreaterThan(0);
+    expect(within(dialog).getByText("职责分离由服务端强制")).toBeVisible();
+    const approve = within(dialog).getByRole("button", { name: "批准版本" });
+    expect(approve).toBeDisabled();
+    await user.type(within(dialog).getByRole("textbox", { name: "审核意见" }), "退款口径变化已由增长组确认。");
+    await user.click(approve);
+    expect(await screen.findByRole("status")).toHaveTextContent("评审已记录：批准");
+    expect(screen.getByRole("button", { name: "发布 @9" })).toBeVisible();
   });
 
   it("shows immutable release bindings", async () => {
@@ -335,7 +341,7 @@ describe("Semlia product workspace", () => {
     expect(versionRegistry.firstElementChild).toHaveClass("asset-version-toolbar");
     expect(within(versionRegistry).queryByRole("heading", { name: "资产版本" })).not.toBeInTheDocument();
     expect(within(versionRegistry).queryByText("3 个候选 · 6 条已发布")).not.toBeInTheDocument();
-    const currentRelease = screen.getByRole("button", { name: "查看语义资产版本 净收入 @12" });
+    const currentRelease = screen.getByRole("button", { name: "查看发布记录 @12 #6" });
     expect(currentRelease).toHaveTextContent("当前版本");
     await user.click(currentRelease);
     expect(screen.getByText("Fluxale Production")).toBeVisible();
@@ -589,7 +595,7 @@ describe("Semlia product workspace", () => {
     expect(within(configuration).queryByRole("heading", { name: "模型配置" })).not.toBeInTheDocument();
     expect(configuration.querySelector(".model-config-stats")).not.toBeInTheDocument();
     expect(within(configuration).getByRole("tab", { name: "LLM 模型" })).toHaveAttribute("aria-selected", "true");
-    expect(within(configuration).getByRole("combobox", { name: "默认 LLM 模型" })).toHaveValue("llm-gpt-41");
+    expect(within(configuration).getByRole("combobox", { name: "默认 LLM 模型" })).toHaveValue("mdl_fixture_001");
     expect(within(configuration).getByText("gpt-4.1")).toBeVisible();
     expect(within(configuration).getByText("claude-sonnet-4-20250514")).toBeVisible();
 
@@ -601,7 +607,7 @@ describe("Semlia product workspace", () => {
     expect(configuration.querySelector(".embedding-boundary")).not.toBeInTheDocument();
     expect(within(configuration).getByRole("button", { name: "重建向量索引" })).toBeVisible();
 
-    await user.selectOptions(within(configuration).getByRole("combobox", { name: "默认 Embedding 模型" }), "embedding-bge-m3");
+    await user.selectOptions(within(configuration).getByRole("combobox", { name: "默认 Embedding 模型" }), "mdl_fixture_005");
     expect(screen.getByRole("status")).toHaveTextContent("Embedding 默认模型已切换为 bge-m3");
     await user.click(within(configuration).getByRole("button", { name: "重建向量索引" }));
     const rebuildDialog = screen.getByRole("dialog", { name: "重建向量索引" });
@@ -618,10 +624,11 @@ describe("Semlia product workspace", () => {
     await user.type(within(dialog).getByLabelText("配置名称"), "企业向量网关");
     await user.selectOptions(within(dialog).getByLabelText("供应商"), "OpenAI 兼容");
     await user.type(within(dialog).getByLabelText("Base URL"), "https://models.example.com/v1");
+    await user.type(within(dialog).getByLabelText("凭据环境变量"), "SEMLIA_COMPAT_GATEWAY_KEY");
     await user.type(within(dialog).getByLabelText("API Key"), "sk-prototype");
     await user.click(within(dialog).getByRole("button", { name: "添加供应商" }));
     expect(within(configuration).getByText("企业向量网关")).toBeVisible();
-    expect(within(configuration).getByText("尚未配置模型")).toBeVisible();
+    expect(within(configuration).getAllByText(/尚未配置模型/).length).toBeGreaterThan(0);
 
     await user.click(within(rebuildState).getByRole("button", { name: "查看进度与日志" }));
     const rebuildProgressDialog = screen.getByRole("dialog", { name: "重建进度与日志" });
@@ -706,8 +713,8 @@ describe("Semlia product workspace", () => {
     expect(within(integrations).getByText("经营分析 Agent")).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: "变更与发布" }));
-    await user.click(screen.getByRole("button", { name: "查看语义资产版本 净收入 @12" }));
-    expect(screen.getByRole("heading", { name: "使用这个资产版本的应用" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "查看发布记录 @12 #6" }));
+    expect(screen.getByRole("region", { name: /发布 #6 详情/ })).toBeVisible();
     expect(screen.getByText("Fluxale Production")).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: "工作台" }));
@@ -744,23 +751,39 @@ describe("Semlia product workspace", () => {
     expect(within(integrations).getByText("2027-01-31")).toBeVisible();
   });
 
-  it("blocks protected publish conflicts while preserving an independent publisher path", async () => {
+  it("gates review decisions behind a mandatory reason with server-enforced separation of duty", async () => {
     const user = userEvent.setup();
     render(<App />);
     await user.click(screen.getByRole("button", { name: "变更与发布" }));
     await user.click(screen.getByRole("button", { name: "查看候选资产版本 客单价 @9" }));
     await user.click(screen.getByRole("button", { name: "审核候选版本 客单价 @9" }));
     const reviewDialog = screen.getByRole("dialog", { name: "审核 客单价 · @9" });
-    expect(within(reviewDialog).getByText("陈默 · Reviewer")).toBeVisible();
-    expect(reviewDialog).toHaveTextContent("发布者必须是独立主体");
-    await user.click(within(reviewDialog).getByRole("button", { name: "模拟批准版本" }));
-    await user.click(screen.getByRole("button", { name: "模拟发布 @9" }));
+    expect(within(reviewDialog).getByText("职责分离由服务端强制")).toBeVisible();
+    expect(within(reviewDialog).getByRole("button", { name: "批准版本" })).toBeDisabled();
+    expect(within(reviewDialog).getByRole("button", { name: "退回版本" })).toBeDisabled();
+    await user.type(within(reviewDialog).getByRole("textbox", { name: "审核意见" }), "退款口径变化需要财务确认。");
+    expect(within(reviewDialog).getByRole("button", { name: "批准版本" })).toBeEnabled();
+
+    await user.click(within(reviewDialog).getByRole("button", { name: "批准版本" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("评审已记录：批准");
+    await user.click(screen.getByRole("button", { name: "发布 @9" }));
     const publishDialog = screen.getByRole("dialog", { name: "发布客单价 @9" });
-    expect(within(publishDialog).getByRole("combobox", { name: "发布身份" })).toHaveValue("USR-PUBLISHER");
-    expect(within(publishDialog).getByText("陈默评审 · 周岚发布")).toBeVisible();
-    await user.selectOptions(within(publishDialog).getByRole("combobox", { name: "发布身份" }), "USR-REVIEWER");
-    expect(within(publishDialog).getByRole("alert")).toHaveTextContent("评审者与发布者必须相互独立");
-    expect(within(publishDialog).getByRole("button", { name: "确认模拟发布并生效" })).toBeDisabled();
+    expect(within(publishDialog).getByText("独立发布者由服务端强制")).toBeVisible();
+    expect(within(publishDialog).getByRole("button", { name: "确认发布并生效" })).toBeEnabled();
+  });
+
+  it("hides governance actions from principals without the matching capabilities", async () => {
+    const user = userEvent.setup();
+    const limitedSession: CapabilitySession = {
+      principalId: "EMP-LIMITED",
+      version: "authzv-2026.09.01-001",
+      capabilities: ["workspace.read", "asset.read", "asset.propose", "workspace.manage"],
+    };
+    render(<App session={limitedSession} />);
+    await user.click(screen.getByRole("button", { name: "变更与发布" }));
+    expect(screen.queryByRole("button", { name: /汇编批次/ })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "查看候选资产版本 客单价 @9" }));
+    expect(screen.queryByRole("button", { name: "审核候选版本 客单价 @9" })).not.toBeInTheDocument();
   });
 
   it("uses the workbench as an actionable queue instead of a duplicate status dashboard", async () => {
@@ -806,13 +829,13 @@ describe("Semlia product workspace", () => {
 
     await user.click(screen.getByRole("button", { name: "变更与发布" }));
     expect(screen.queryByRole("button", { name: "比较版本" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "查看语义资产版本 净收入 @12" }));
-    await user.click(screen.getByRole("button", { name: "与 @11 比较" }));
+    await user.click(screen.getByRole("button", { name: "查看发布记录 @12 #6" }));
+    await user.click(screen.getByRole("button", { name: "与注册表比较" }));
 
-    const dialog = screen.getByRole("dialog", { name: "比较净收入版本" });
+    const dialog = screen.getByRole("dialog", { name: "发布与注册表比较" });
     expect(dialog).toBeVisible();
-    expect(within(dialog).getByText("净收入 · 上一版本")).toBeVisible();
-    expect(within(dialog).getByText("净收入 · 当前选择")).toBeVisible();
+    expect(within(dialog).getByText("注册表当前 revision")).toBeVisible();
+    expect(within(dialog).getByText("发布固定的 revision")).toBeVisible();
   });
 
   it("provides distinct, functional pages for data ingestion", async () => {
@@ -1079,14 +1102,16 @@ describe("Semlia product workspace", () => {
     expect(document.querySelector(".governance-detail-commandbar")).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "客单价 @9 候选资产版本详情" })).toHaveTextContent("版本范围");
     await user.click(screen.getByRole("button", { name: "审核候选版本 客单价 @9" }));
-    await user.click(within(screen.getByRole("dialog", { name: "审核 客单价 · @9" })).getByRole("button", { name: "模拟批准版本" }));
-    await user.click(screen.getByRole("button", { name: "模拟发布 @9" }));
-    await user.click(within(screen.getByRole("dialog", { name: "发布客单价 @9" })).getByRole("button", { name: "确认模拟发布并生效" }));
-    expect(screen.getByText(/release-2026\.08\.4-session/)).toBeVisible();
+    const lifecycleDialog = screen.getByRole("dialog", { name: "审核 客单价 · @9" });
+    await user.type(within(lifecycleDialog).getByRole("textbox", { name: "审核意见" }), "口径变化已确认，可以发布。");
+    await user.click(within(lifecycleDialog).getByRole("button", { name: "批准版本" }));
+    await user.click(await screen.findByRole("button", { name: "发布 @9" }));
+    await user.click(within(screen.getByRole("dialog", { name: "发布客单价 @9" })).getByRole("button", { name: "确认发布并生效" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("发布完成：批次 rls_fixture_0007 · 序列 #7");
 
     await user.click(backToVersions);
-    await user.click(screen.getByRole("button", { name: "查看语义资产版本 净收入 @12" }));
-    expect(screen.getByRole("heading", { name: "使用这个资产版本的应用" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "查看发布记录 @12 #6" }));
+    expect(screen.getByRole("region", { name: /发布 #6 详情/ })).toBeVisible();
     expect(screen.getByText("Fluxale Production")).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: "工作台" }));

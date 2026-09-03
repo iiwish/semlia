@@ -14,7 +14,7 @@ import {
   type SemanticAssetType,
   type Workspace,
 } from "./catalog";
-import type { Asset, AssetReadinessGate, AssetType, AssetTypeSpec, EvidenceAuthority } from "./types";
+import type { Asset, AssetReadinessGate, AssetType, AssetTypeSpec, AssetWorkflowState, EvidenceAuthority } from "./types";
 
 interface CreateAssetInput {
   address: string;
@@ -38,6 +38,7 @@ interface CatalogRuntimeValue {
   createWorkspace: (slug: string, displayName: string) => Promise<void>;
   createAsset: (input: CreateAssetInput) => Promise<Asset>;
   refresh: () => void;
+  setWorkflowStateOverlay: (states: Record<string, AssetWorkflowState>) => void;
 }
 
 const CatalogRuntimeContext = createContext<CatalogRuntimeValue | null>(null);
@@ -52,6 +53,7 @@ export function CatalogRuntimeProvider({ children, fixtureAssets }: { children: 
   const [loading, setLoading] = useState(!fixtureAssets);
   const [error, setError] = useState("");
   const [refreshVersion, setRefreshVersion] = useState(0);
+  const [workflowStateOverlay, setWorkflowStateOverlayState] = useState<Record<string, AssetWorkflowState>>({});
 
   useEffect(() => {
     if (fixtureAssets) return;
@@ -133,11 +135,17 @@ export function CatalogRuntimeProvider({ children, fixtureAssets }: { children: 
     return projected;
   }, [workspaceId]);
 
+  const assetsWithWorkflowStates = useMemo(() => assets.map((item) => {
+    const state = workflowStateOverlay[item.id];
+    if (!state || item.revisionRecord.workflowState === state) return item;
+    return { ...item, revisionRecord: { ...item.revisionRecord, workflowState: state } };
+  }), [assets, workflowStateOverlay]);
+
   const value = useMemo<CatalogRuntimeValue>(() => ({
     workspaces,
     workspaceId,
     workspace: workspaces.find((item) => item.id === workspaceId),
-    assets,
+    assets: assetsWithWorkflowStates,
     loading,
     error,
     query,
@@ -148,7 +156,8 @@ export function CatalogRuntimeProvider({ children, fixtureAssets }: { children: 
     createWorkspace,
     createAsset,
     refresh: () => setRefreshVersion((value) => value + 1),
-  }), [assetType, assets, createAsset, createWorkspace, ensureAsset, error, loading, query, setQuery, setWorkspaceId, workspaceId, workspaces]);
+    setWorkflowStateOverlay: setWorkflowStateOverlayState,
+  }), [assetType, assetsWithWorkflowStates, createAsset, createWorkspace, ensureAsset, error, loading, query, setQuery, setWorkflowStateOverlayState, setWorkspaceId, workspaceId, workspaces]);
 
   return <CatalogRuntimeContext.Provider value={value}>{children}</CatalogRuntimeContext.Provider>;
 }
