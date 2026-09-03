@@ -93,13 +93,22 @@ Acceptance: included in the founder's continuous M2 execution authorization on 2
 
 ### T005 Risk assessment and policy decisions
 
-Status: Blocked
+Status: Accepted
 Depends on: T004
 Blocks: T006
 
 Condition: packet authored after T004 acceptance. Recomputable risk inputs per SSOT §8.3,
 versioned rule-table policy decisions, explainable routing to expert and batch lanes; no auto
 channel and no single opaque score.
+
+Packet: `docs/specs/m2-governed-authoring/packets/T005.yaml`.
+
+Execution: implementation adds the closed versioned inputs schema over persisted state, the
+seeded six-rule policy table (expert|batch only, fail-safe expert default), the in_review decision
+trigger with idempotent append-only decisions and the policy-decision read surface with
+regenerated contracts. Evidence: `docs/evidence/M2-T005/summary.md`.
+
+Acceptance: included in the founder's continuous M2 execution authorization on 2026-09-02.
 
 ### T006 Review workbench and separation of duties
 
