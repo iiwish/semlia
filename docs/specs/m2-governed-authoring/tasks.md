@@ -131,13 +131,23 @@ Acceptance: included in the founder's continuous M2 execution authorization on 2
 
 ### T007 Release and rollback
 
-Status: Blocked
+Status: Accepted
 Depends on: T006
 Blocks: T010, T011
 
 Condition: packet authored after T006 acceptance. Immutable release manifest, current-revision
 switch, Git projection of released content, rollback as a new release pointing at a prior revision
 per decision D8. The packet must forbid tags, remotes and history rewriting in the Git projection.
+
+Packet: `docs/specs/m2-governed-authoring/packets/T007.yaml`.
+
+Execution: implementation adds the publishing service (approval + human-only publish gates with
+audited refusals), one-transaction change-set application (asset revision switch or governed-object
+version bump) with manifest pinning, append-only Git release projection through the existing
+writer, rollback-as-new-release restoring prior state, and the release HTTP surface with
+regenerated contracts. Evidence: `docs/evidence/M2-T007/summary.md`.
+
+Acceptance: included in the founder's continuous M2 execution authorization on 2026-09-02.
 
 ### T008 Governance objects
 
