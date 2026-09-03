@@ -190,7 +190,7 @@ Acceptance: included in the founder's continuous M2 execution authorization on 2
 
 ### T010 Frontend convergence
 
-Status: Blocked
+Status: Accepted
 Depends on: T007, T009
 Blocks: T011
 
@@ -198,6 +198,17 @@ Condition: packet authored after T007/T009 acceptance. Proposal authoring, revie
 rollback views use real M2 APIs at the catalogRuntime seam; Ask and other future-milestone surfaces
 remain preview or session-only with visible disclosure, and production request failures never fall
 back to fixture data.
+
+Packet: `docs/specs/m2-governed-authoring/packets/T010.yaml`.
+
+Execution: implementation wires the governance API client through authoring, validation/policy
+display, expert and batch review, release and rollback, model configuration and live generation;
+governance failures render as failures, preview labels remain for future-milestone surfaces, and
+the governed journey e2e passes at 1440x900 and 1024x768. Evidence:
+`docs/evidence/M2-T010/summary.md`.
+
+Acceptance: included in the founder's continuous M2 execution authorization on 2026-09-02; browser
+milestone acceptance remains with the founder.
 
 ### T011 Production acceptance
 
