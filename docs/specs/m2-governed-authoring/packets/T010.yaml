@@ -1,0 +1,68 @@
+schema_version: 1
+packet_id: M2-T010-A001
+task_id: T010
+feature_id: m2-governed-authoring
+mode: execute_one_task
+status: Ready
+
+goal: >-
+  Converge the M2 authoring surfaces onto the real governance APIs — proposal authoring,
+  validation and policy display, expert and batch review, release and rollback, and persisted
+  model configuration — replacing the session-only preview implementations at the catalogRuntime
+  seam, while Ask and other future-milestone surfaces remain visibly preview and production
+  request failures never fall back to fixture data.
+
+dependencies:
+  - T007 Accepted (2026-09-02)
+  - T009 delivery (model configuration and agent-run APIs)
+  - founder authorization to execute T010 (2026-09-02)
+  - docs/specs/m1-semantic-registry/t009-frontend-convergence-design.md (single-frontend
+    discipline)
+  - docs/specs/m2-governed-authoring/spec.md (AC-M2-001..010)
+
+allowed_files:
+  - web/**
+  - sdk/typescript/**
+  - tests/**
+  - docs/specs/m2-governed-authoring/**
+  - docs/evidence/M2-T010/**
+
+forbidden_changes:
+  - Do not fall back to fixture data when a production governance API call fails; failures render
+    as failures.
+  - Do not remove the preview labeling of Ask, source setup, integration administration or other
+    surfaces whose backend milestones have not shipped.
+  - Do not claim persistence for any session-only surface.
+  - Do not add mobile scope; desktop viewports only (1440x900, 1024x768).
+  - Do not weaken or delete existing tests; e2e additions extend the product-journey suites.
+  - Do not expose storage UUIDs; TypeIDs on the wire already guaranteed by the contracts.
+
+tdd:
+  red:
+    - Component tests fail while the authoring/review/release views consume session fixtures
+      instead of the governance API client.
+    - Failure rendering: a governance API error renders an error state, never fixture data.
+    - E2E: the governed journey (author → submit → validation visible → review decision →
+      publish → rollback) does not exist before this task.
+  green:
+    - Authoring workbench creates and submits real proposals; validation runs and the policy
+      decision render from the API; expert review and batch confirmation act on real data;
+      releases and rollback render immutable release records; model configuration persists via
+      the T009 endpoints.
+  refactor:
+    - One governance API client module shared by all M2 views (mirror catalog.ts discipline).
+
+validation:
+  - pnpm --filter @semlia/web lint
+  - pnpm --filter @semlia/web typecheck
+  - pnpm --filter @semlia/web test
+  - pnpm --filter @semlia/web build
+  - pnpm --filter @semlia/web test:e2e
+  - make check-source
+  - git diff --check
+
+acceptance:
+  - The governed loop is operable end to end in the browser at 1440x900 and 1024x768.
+  - Governance API failures render as failures with visible disclosure; no fixture fallback.
+  - Model configuration persists through the real endpoints; credential fields never echo.
+  - Preview surfaces remain labeled; e2e suites cover the governed journey at both viewports.
