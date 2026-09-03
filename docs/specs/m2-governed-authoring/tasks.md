@@ -112,13 +112,22 @@ Acceptance: included in the founder's continuous M2 execution authorization on 2
 
 ### T006 Review workbench and separation of duties
 
-Status: Blocked
+Status: Accepted
 Depends on: T001, T005
 Blocks: T007, T010
 
 Condition: packet authored after T005 acceptance. Expert approve/reject with reasons, batch
 confirmation with clustering, sampling, exclusions and full batch audit, mid-batch high-risk
 auto-split, server-side FR-007 enforcement including reviewer≠publisher on protected scopes.
+
+Packet: `docs/specs/m2-governed-authoring/packets/T006.yaml`.
+
+Execution: implementation adds expert review commands with immutable reviews, author-cannot-review
+SoD denials, deterministic batch assembly (batch routing + family clustering) with full §8.4
+audit records, confirm-time escalation auto-split and the migration-000009 batch model.
+Evidence: `docs/evidence/M2-T006/summary.md`.
+
+Acceptance: included in the founder's continuous M2 execution authorization on 2026-09-02.
 
 ### T007 Release and rollback
 
