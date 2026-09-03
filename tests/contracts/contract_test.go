@@ -120,6 +120,21 @@ func TestCanonicalSpecificationIsValidAndMinimal(t *testing.T) {
 		"GovernanceRiskLevel",
 		"GovernanceRoutingChannel",
 		"GovernancePolicyDecision",
+		"GovernanceReviewerPrincipalId",
+		"GovernanceReviewBatchId",
+		"GovernanceReviewDecision",
+		"GovernanceReviewRecordedDecision",
+		"GovernanceReviewChannel",
+		"GovernanceReviewCommandRequest",
+		"GovernanceReview",
+		"GovernanceDiffCategory",
+		"GovernanceReviewGroupingRule",
+		"GovernanceReviewAddedReason",
+		"GovernanceReviewBatchStatus",
+		"GovernanceReviewBatchMember",
+		"GovernanceReviewBatch",
+		"GovernanceReviewBatchDetail",
+		"GovernanceReviewBatchPage",
 	}
 	for _, name := range requiredSchemas {
 		if doc.Components.Schemas[name] == nil {
@@ -141,6 +156,8 @@ func TestCanonicalSpecificationIsValidAndMinimal(t *testing.T) {
 		"/api/v1/workspaces/{workspaceId}/governance/proposals/{proposalId}":                 "getGovernanceProposal",
 		"/api/v1/workspaces/{workspaceId}/governance/proposals/{proposalId}/validation-runs": "listGovernanceValidationRuns",
 		"/api/v1/workspaces/{workspaceId}/governance/proposals/{proposalId}/policy-decision": "getGovernancePolicyDecision",
+		"/api/v1/workspaces/{workspaceId}/governance/review-batches":                         "listGovernanceReviewBatches",
+		"/api/v1/workspaces/{workspaceId}/governance/review-batches/{batchId}":               "getGovernanceReviewBatch",
 	}
 	for path, operationID := range requiredOperations {
 		item := doc.Paths.Find(path)
@@ -167,6 +184,18 @@ func TestCanonicalSpecificationIsValidAndMinimal(t *testing.T) {
 	submit := doc.Paths.Find("/api/v1/workspaces/{workspaceId}/governance/proposals/{proposalId}/submit")
 	if submit == nil || submit.Post == nil || submit.Post.OperationID != "submitGovernanceProposal" {
 		t.Error("missing POST submitGovernanceProposal operation")
+	}
+	reviews := doc.Paths.Find("/api/v1/workspaces/{workspaceId}/governance/proposals/{proposalId}/reviews")
+	if reviews == nil || reviews.Post == nil || reviews.Post.OperationID != "createGovernanceProposalReview" {
+		t.Error("missing POST createGovernanceProposalReview operation")
+	}
+	batchAssembly := doc.Paths.Find("/api/v1/workspaces/{workspaceId}/governance/review-batches")
+	if batchAssembly == nil || batchAssembly.Post == nil || batchAssembly.Post.OperationID != "createGovernanceReviewBatches" {
+		t.Error("missing POST createGovernanceReviewBatches operation")
+	}
+	confirm := doc.Paths.Find("/api/v1/workspaces/{workspaceId}/governance/review-batches/{batchId}/confirm")
+	if confirm == nil || confirm.Post == nil || confirm.Post.OperationID != "confirmGovernanceReviewBatch" {
+		t.Error("missing POST confirmGovernanceReviewBatch operation")
 	}
 
 }

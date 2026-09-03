@@ -531,6 +531,190 @@ paths:
           $ref: "#/components/responses/NotFound"
         default:
           $ref: "#/components/responses/Error"
+  /api/v1/workspaces/{workspaceId}/governance/proposals/{proposalId}/reviews:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+      - $ref: "#/components/parameters/ProposalId"
+    post:
+      operationId: createGovernanceProposalReview
+      summary: Record an expert review decision for one proposal
+      description: >-
+        The expert channel of the §8.4 three-channel model. Requires the
+        proposal.review capability server-side. Approve records an immutable
+        review while the proposal stays in_review (approvals gate the later
+        release cut); reject records the review and transitions the proposal
+        to rejected with decided_at. The proposal author cannot review their
+        own proposal (FR-007): the denial names the conflict, the affected
+        scope, the policy source and the permitted recovery actions, and is
+        audited.
+      tags:
+        - Governance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GovernanceReviewCommandRequest"
+      responses:
+        "201":
+          description: The recorded immutable review fact.
+          headers:
+            X-Trace-ID:
+              $ref: "#/components/headers/TraceId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GovernanceReview"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/workspaces/{workspaceId}/governance/review-batches:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+    get:
+      operationId: listGovernanceReviewBatches
+      summary: List the open review batches of the workspace
+      description: >-
+        The undecided §8.4 batch confirmation queue, newest first with an
+        opaque keyset cursor. Requires the proposal.review capability; batch
+        assembly is a review-preparation command.
+      tags:
+        - Governance
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: A deterministic page of open review batches.
+          headers:
+            X-Trace-ID:
+              $ref: "#/components/headers/TraceId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GovernanceReviewBatchPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        default:
+          $ref: "#/components/responses/Error"
+    post:
+      operationId: createGovernanceReviewBatches
+      summary: Assemble the eligible proposals into review batches
+      description: >-
+        Clusters every in_review proposal whose latest policy decision routes
+        to the batch channel and that is not already an active member of an
+        open batch, deterministically by (target object type, dominant diff
+        category, matched rule). Each cluster becomes one open batch whose
+        grouping rule, policy version, member snapshots with added reasons and
+        representative samples persist immediately — the §8.4 audit record is
+        the data. High-risk proposals are never eligible.
+      tags:
+        - Governance
+      responses:
+        "200":
+          description: The created open batches, one per cluster; empty when nothing is eligible.
+          headers:
+            X-Trace-ID:
+              $ref: "#/components/headers/TraceId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GovernanceReviewBatchPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/workspaces/{workspaceId}/governance/review-batches/{batchId}:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+      - $ref: "#/components/parameters/ReviewBatchId"
+    get:
+      operationId: getGovernanceReviewBatch
+      summary: Read one review batch with its full audit record
+      description: >-
+        The batch with its membership, the representative samples, the
+        exclusions with reasons and the max-risk member, plus the audit fields
+        (grouping rule, policy version, creator, reviewer and decided_at once
+        confirmed).
+      tags:
+        - Governance
+      responses:
+        "200":
+          description: The review batch audit record.
+          headers:
+            X-Trace-ID:
+              $ref: "#/components/headers/TraceId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GovernanceReviewBatchDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/workspaces/{workspaceId}/governance/review-batches/{batchId}/confirm:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+      - $ref: "#/components/parameters/ReviewBatchId"
+    post:
+      operationId: confirmGovernanceReviewBatch
+      summary: Confirm one open review batch with a single decision
+      description: >-
+        Requires the proposal.review capability. Before anything persists,
+        every member's CURRENT policy decision is re-checked: members that are
+        no longer in_review, lost their decision or escalated (high risk or no
+        longer batch-routed) are split out automatically with a reason and
+        never mixed into the batch decision. The decision applies to the
+        remaining members as immutable reviews (rejection also transitions each
+        member to rejected) and freezes the batch audit record: grouping rule,
+        final membership, samples, exclusions with reasons, reviewer and policy
+        version. A reviewer who authored a member is refused with the
+        conflicting members named (FR-007). Double confirmation is refused.
+      tags:
+        - Governance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GovernanceReviewCommandRequest"
+      responses:
+        "200":
+          description: The decided batch with its final audit record.
+          headers:
+            X-Trace-ID:
+              $ref: "#/components/headers/TraceId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GovernanceReviewBatchDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        default:
+          $ref: "#/components/responses/Error"
   /api/v1/workspaces/{workspaceId}/discovery-runs/{runId}:
     parameters:
       - $ref: "#/components/parameters/WorkspaceId"
@@ -586,6 +770,12 @@ components:
       required: true
       schema:
         $ref: "#/components/schemas/GovernanceProposalId"
+    ReviewBatchId:
+      name: batchId
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/GovernanceReviewBatchId"
     Limit:
       name: limit
       in: query
@@ -1889,3 +2079,297 @@ components:
             description: Closed DecisionInputs field name.
         createdAt:
           $ref: "#/components/schemas/Timestamp"
+    GovernanceReviewerPrincipalId:
+      type: string
+      format: typeid
+      pattern: "^prn_[0-7][0-9a-hjkmnp-tv-z]{25}$"
+      example: prn_01arz3ndektsv4rrffq69g5fav
+      x-go-type: identity.PrincipalID
+      x-go-type-import:
+        path: github.com/iiwish/semlia/pkg/identity
+        name: identity
+    GovernanceReviewBatchId:
+      type: string
+      format: typeid
+      pattern: "^rvb_[0-7][0-9a-hjkmnp-tv-z]{25}$"
+      example: rvb_01arz3ndektsv4rrffq69g5fav
+      x-go-type: identity.ReviewBatchID
+      x-go-type-import:
+        path: github.com/iiwish/semlia/pkg/identity
+        name: identity
+    GovernanceReviewDecision:
+      type: string
+      description: Human review command of the expert and batch confirmation commands.
+      enum:
+        - approve
+        - reject
+    GovernanceReviewRecordedDecision:
+      type: string
+      description: Outcome recorded on an immutable review fact (SSOT §8.4).
+      enum:
+        - approved
+        - rejected
+        - changes_requested
+    GovernanceReviewChannel:
+      type: string
+      description: Review channel that produced the fact (SSOT §8.4).
+      enum:
+        - automatic
+        - batch
+        - expert
+    GovernanceReviewCommandRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - decision
+        - reason
+      properties:
+        decision:
+          $ref: "#/components/schemas/GovernanceReviewDecision"
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 4096
+          description: Human-readable justification recorded verbatim on the review facts.
+    GovernanceReview:
+      type: object
+      additionalProperties: false
+      description: One immutable §8.4 review fact; never updated or deleted.
+      required:
+        - id
+        - proposalId
+        - reviewerPrincipalId
+        - channel
+        - decision
+        - note
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: typeid
+          pattern: "^rvw_[0-7][0-9a-hjkmnp-tv-z]{25}$"
+          example: rvw_01arz3ndektsv4rrffq69g5fav
+          x-go-type: identity.ReviewID
+          x-go-type-import:
+            path: github.com/iiwish/semlia/pkg/identity
+            name: identity
+        proposalId:
+          $ref: "#/components/schemas/GovernanceProposalId"
+        reviewerPrincipalId:
+          $ref: "#/components/schemas/GovernanceReviewerPrincipalId"
+        channel:
+          $ref: "#/components/schemas/GovernanceReviewChannel"
+        decision:
+          $ref: "#/components/schemas/GovernanceReviewRecordedDecision"
+        note:
+          type: string
+          maxLength: 4096
+        createdAt:
+          $ref: "#/components/schemas/Timestamp"
+    GovernanceDiffCategory:
+      type: string
+      description: Closed §8.3 structured-diff category; the grouping-rule component.
+      enum:
+        - computation
+        - access
+        - contract
+        - relations
+        - definition
+    GovernanceReviewGroupingRule:
+      type: object
+      additionalProperties: false
+      description: >-
+        The persisted §8.4 grouping criteria: every member of the batch shares
+        the target object type, the dominant structured-diff category and the
+        matched policy rule of its creation-time decision.
+      required:
+        - targetObjectType
+        - diffCategory
+        - matchedRuleId
+      properties:
+        targetObjectType:
+          $ref: "#/components/schemas/GovernanceTargetObjectType"
+        diffCategory:
+          $ref: "#/components/schemas/GovernanceDiffCategory"
+        matchedRuleId:
+          type: string
+          minLength: 1
+          maxLength: 128
+    GovernanceReviewAddedReason:
+      type: object
+      additionalProperties: false
+      description: >-
+        The frozen creation-time decision snapshot that made the proposal
+        batch-eligible; the per-member half of the batch audit record.
+      required:
+        - matchedRuleId
+        - riskLevel
+        - reasonCode
+        - ruleVersion
+        - inputsDigest
+      properties:
+        matchedRuleId:
+          type: string
+          minLength: 1
+          maxLength: 128
+        riskLevel:
+          $ref: "#/components/schemas/GovernanceRiskLevel"
+        reasonCode:
+          type: string
+          pattern: "^[A-Z][A-Z0-9_]{2,63}$"
+        ruleVersion:
+          type: string
+          pattern: "^[0-9]+\\.[0-9]+$"
+        inputsDigest:
+          type: string
+          pattern: "^sha256:[0-9a-f]{64}$"
+    GovernanceReviewBatchStatus:
+      type: string
+      description: One-way batch state; decided batches are frozen.
+      enum:
+        - open
+        - confirmed
+        - rejected
+    GovernanceReviewBatchMember:
+      type: object
+      additionalProperties: false
+      description: One frozen member snapshot; the outcome columns fill at confirm time.
+      required:
+        - proposalId
+        - addedReason
+        - sample
+        - splitOut
+        - createdAt
+      properties:
+        proposalId:
+          $ref: "#/components/schemas/GovernanceProposalId"
+        addedReason:
+          $ref: "#/components/schemas/GovernanceReviewAddedReason"
+        sample:
+          type: boolean
+          description: Part of the deterministic representative sample of the confirmed membership.
+        splitOut:
+          type: boolean
+          description: >-
+            Auto-split at confirm time (escalation, lost decision or left
+            in_review); a split member never received the batch decision.
+        splitReason:
+          type: string
+          maxLength: 512
+          description: Stable machine-readable reason the member was excluded.
+        decision:
+          $ref: "#/components/schemas/GovernanceReviewRecordedDecision"
+        createdAt:
+          $ref: "#/components/schemas/Timestamp"
+    GovernanceReviewBatch:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - status
+        - groupingRule
+        - policyVersion
+        - memberCount
+        - createdBy
+        - createdAt
+      properties:
+        id:
+          $ref: "#/components/schemas/GovernanceReviewBatchId"
+        status:
+          $ref: "#/components/schemas/GovernanceReviewBatchStatus"
+        groupingRule:
+          $ref: "#/components/schemas/GovernanceReviewGroupingRule"
+        policyVersion:
+          type: string
+          description: Policy (rule table) version current at assembly time.
+          pattern: "^[0-9]+\\.[0-9]+$"
+        memberCount:
+          type: integer
+          minimum: 1
+          maximum: 1000
+        createdBy:
+          type: string
+          minLength: 1
+          maxLength: 256
+        decidedBy:
+          type: string
+          minLength: 1
+          maxLength: 256
+          description: Reviewer of record, set together with decidedAt at confirm time.
+        decidedAt:
+          $ref: "#/components/schemas/Timestamp"
+        createdAt:
+          $ref: "#/components/schemas/Timestamp"
+    GovernanceReviewBatchDetail:
+      type: object
+      additionalProperties: false
+      description: >-
+        The full §8.4 audit record of one batch. maxRiskProposalId is the
+        member with the highest recorded creation-time risk rank, ties resolved
+        to the earliest member by assembly sequence.
+      required:
+        - id
+        - status
+        - groupingRule
+        - policyVersion
+        - memberCount
+        - createdBy
+        - createdAt
+        - members
+        - samples
+        - exclusions
+      properties:
+        id:
+          $ref: "#/components/schemas/GovernanceReviewBatchId"
+        status:
+          $ref: "#/components/schemas/GovernanceReviewBatchStatus"
+        groupingRule:
+          $ref: "#/components/schemas/GovernanceReviewGroupingRule"
+        policyVersion:
+          type: string
+          pattern: "^[0-9]+\\.[0-9]+$"
+        memberCount:
+          type: integer
+          minimum: 1
+          maximum: 1000
+        createdBy:
+          type: string
+          minLength: 1
+          maxLength: 256
+        decidedBy:
+          type: string
+          minLength: 1
+          maxLength: 256
+        decidedAt:
+          $ref: "#/components/schemas/Timestamp"
+        maxRiskProposalId:
+          $ref: "#/components/schemas/GovernanceProposalId"
+        members:
+          type: array
+          items:
+            $ref: "#/components/schemas/GovernanceReviewBatchMember"
+        samples:
+          type: array
+          description: The representative sample members, in assembly order.
+          items:
+            $ref: "#/components/schemas/GovernanceReviewBatchMember"
+        exclusions:
+          type: array
+          description: Members split out at confirm time, each with a reason.
+          items:
+            $ref: "#/components/schemas/GovernanceReviewBatchMember"
+        createdAt:
+          $ref: "#/components/schemas/Timestamp"
+    GovernanceReviewBatchPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/GovernanceReviewBatch"
+        page:
+          $ref: "#/components/schemas/PageInfo"

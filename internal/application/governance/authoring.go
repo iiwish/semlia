@@ -121,12 +121,14 @@ type ProposalPage struct {
 }
 
 type AuthoringService struct {
-	repository AuthoringRepository
-	proposals  *ProposalService
-	agentRuns  *AgentRunService
-	authorizer authorizationapp.Evaluator
-	clock      Clock
-	validation *ValidationOrchestrator
+	repository      AuthoringRepository
+	batchRepository ReviewBatchRepository
+	proposals       *ProposalService
+	agentRuns       *AgentRunService
+	authorizer      authorizationapp.Evaluator
+	clock           Clock
+	validation      *ValidationOrchestrator
+	decisions       DecisionRefresher
 }
 
 type AuthoringOption func(*AuthoringService)
@@ -152,6 +154,9 @@ func NewAuthoringService(
 	service := &AuthoringService{
 		repository: repository, proposals: proposals, agentRuns: agentRuns,
 		authorizer: authorizer, clock: clock,
+	}
+	if batches, ok := repository.(ReviewBatchRepository); ok {
+		service.batchRepository = batches
 	}
 	for _, option := range options {
 		if option != nil {

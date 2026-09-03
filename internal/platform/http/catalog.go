@@ -38,6 +38,7 @@ type matchedRoute struct {
 	revision  string
 	discovery string
 	proposal  string
+	batch     string
 }
 
 func matchRoute(path string) matchedRoute {

@@ -280,6 +280,8 @@ func serve(ctx context.Context, cfg config.Config, output io.Writer) error {
 		catalogService := catalogapp.NewService(catalogStore, catalogapp.ClockFunc(time.Now), catalogOptions...)
 		options = append(options, httpapi.WithCatalog(catalogService))
 		clock := governanceapp.ClockFunc(time.Now)
+		governancePolicy := governanceapp.NewPolicyService(
+			catalogStore, clock, governanceapp.WithRuleSource(catalogStore))
 		governanceAuthoring := governanceapp.NewAuthoringService(
 			catalogStore,
 			governanceapp.NewProposalService(catalogStore, clock),
@@ -289,6 +291,9 @@ func serve(ctx context.Context, cfg config.Config, output io.Writer) error {
 				governanceapp.NewValidationOrchestrator(
 					governanceapp.NewProposalService(catalogStore, clock), catalogStore, clock,
 				),
+			),
+			governanceapp.WithDecisionRefresher(
+				governanceapp.NewPolicyDecisionTrigger(catalogStore, governancePolicy),
 			),
 		)
 		options = append(options, httpapi.WithGovernance(governanceAuthoring))

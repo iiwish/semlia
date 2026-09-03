@@ -278,19 +278,19 @@ type RecordReviewRequest struct {
 // RecordReview persists an immutable §8.4 review fact; it does not move the
 // proposal state on its own.
 func (service *ProposalService) RecordReview(ctx context.Context, request RecordReviewRequest) (governance.Review, error) {
-	review := governance.Review{
-		WorkspaceID: request.WorkspaceID, ProposalID: request.ProposalID,
-		ReviewerPrincipalID: request.ReviewerPrincipalID, Channel: request.Channel,
-		Decision: request.Decision, Note: request.Note,
-	}
-	if err := review.Validate(); err != nil {
-		return governance.Review{}, err
-	}
 	reviewID, err := identity.NewReviewID()
 	if err != nil {
 		return governance.Review{}, fmt.Errorf("mint review ID: %w", err)
 	}
-	review.ID = reviewID
-	review.CreatedAt = service.clock.Now().UTC()
+	review := governance.Review{
+		ID:          reviewID,
+		WorkspaceID: request.WorkspaceID, ProposalID: request.ProposalID,
+		ReviewerPrincipalID: request.ReviewerPrincipalID, Channel: request.Channel,
+		Decision: request.Decision, Note: request.Note,
+		CreatedAt: service.clock.Now().UTC(),
+	}
+	if err := review.Validate(); err != nil {
+		return governance.Review{}, err
+	}
 	return service.repository.CreateReview(ctx, review)
 }

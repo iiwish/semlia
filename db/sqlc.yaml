@@ -10,6 +10,7 @@ sql:
       - ../migrations/000006_m2_governed_authoring.up.sql
       - ../migrations/000007_m2_governance_objects.up.sql
       - ../migrations/000008_m2_policy_rules.up.sql
+      - ../migrations/000009_m2_review_batches.up.sql
     queries:
       - queries
     gen:
