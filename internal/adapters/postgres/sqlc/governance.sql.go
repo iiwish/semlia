@@ -234,11 +234,12 @@ func (q *Queries) CreatePolicyDecision(ctx context.Context, arg CreatePolicyDeci
 const createProposal = `-- name: CreateProposal :one
 INSERT INTO proposals (
     id, workspace_id, asset_id, base_revision_id, target_object_type, target_object_id,
-    state, title, summary, reason, created_by, created_at, updated_at
+    state, title, summary, reason, agent_run_id, created_by, created_at, updated_at
 ) VALUES (
     $1, $2, $3, $4,
     $5, $6, $7, $8,
-    $9, $10, $11, $12, $13
+    $9, $10, $11, $12,
+    $13, $14
 )
 RETURNING id, workspace_id, asset_id, base_revision_id, target_object_type, target_object_id, state, title, summary, reason, risk_level, policy_decision_id, agent_run_id, created_by, submitted_at, decided_at, created_at, updated_at
 `
@@ -254,6 +255,7 @@ type CreateProposalParams struct {
 	Title            string             `json:"title"`
 	Summary          string             `json:"summary"`
 	Reason           string             `json:"reason"`
+	AgentRunID       pgtype.UUID        `json:"agent_run_id"`
 	CreatedBy        string             `json:"created_by"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
@@ -271,6 +273,7 @@ func (q *Queries) CreateProposal(ctx context.Context, arg CreateProposalParams) 
 		arg.Title,
 		arg.Summary,
 		arg.Reason,
+		arg.AgentRunID,
 		arg.CreatedBy,
 		arg.CreatedAt,
 		arg.UpdatedAt,
@@ -994,6 +997,71 @@ func (q *Queries) ListProposalChanges(ctx context.Context, arg ListProposalChang
 			&i.BeforeValue,
 			&i.AfterValue,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProposals = `-- name: ListProposals :many
+SELECT id, workspace_id, asset_id, base_revision_id, target_object_type, target_object_id, state, title, summary, reason, risk_level, policy_decision_id, agent_run_id, created_by, submitted_at, decided_at, created_at, updated_at FROM proposals
+WHERE workspace_id = $1
+  AND (
+      NOT $2::boolean
+      OR created_at < $3
+      OR (created_at = $3 AND id < $4::uuid)
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT $5
+`
+
+type ListProposalsParams struct {
+	WorkspaceID     pgtype.UUID        `json:"workspace_id"`
+	HasCursor       bool               `json:"has_cursor"`
+	CursorCreatedAt pgtype.Timestamptz `json:"cursor_created_at"`
+	CursorID        pgtype.UUID        `json:"cursor_id"`
+	PageLimit       int32              `json:"page_limit"`
+}
+
+func (q *Queries) ListProposals(ctx context.Context, arg ListProposalsParams) ([]Proposal, error) {
+	rows, err := q.db.Query(ctx, listProposals,
+		arg.WorkspaceID,
+		arg.HasCursor,
+		arg.CursorCreatedAt,
+		arg.CursorID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Proposal{}
+	for rows.Next() {
+		var i Proposal
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.AssetID,
+			&i.BaseRevisionID,
+			&i.TargetObjectType,
+			&i.TargetObjectID,
+			&i.State,
+			&i.Title,
+			&i.Summary,
+			&i.Reason,
+			&i.RiskLevel,
+			&i.PolicyDecisionID,
+			&i.AgentRunID,
+			&i.CreatedBy,
+			&i.SubmittedAt,
+			&i.DecidedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}

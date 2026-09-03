@@ -4,6 +4,7 @@
 package contract
 
 import (
+	"encoding/json"
 	"time"
 
 	identity "github.com/iiwish/semlia/pkg/identity"
@@ -159,6 +160,84 @@ func (e EvidenceArtifactRole) Valid() bool {
 	case Observes:
 		return true
 	case Supports:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GovernanceChangeOp.
+const (
+	Add    GovernanceChangeOp = "add"
+	Remove GovernanceChangeOp = "remove"
+	Update GovernanceChangeOp = "update"
+)
+
+// Valid indicates whether the value is a known member of the GovernanceChangeOp enum.
+func (e GovernanceChangeOp) Valid() bool {
+	switch e {
+	case Add:
+		return true
+	case Remove:
+		return true
+	case Update:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GovernanceProposalState.
+const (
+	GovernanceProposalStateDraft      GovernanceProposalState = "draft"
+	GovernanceProposalStateInReview   GovernanceProposalState = "in_review"
+	GovernanceProposalStateProposed   GovernanceProposalState = "proposed"
+	GovernanceProposalStateRejected   GovernanceProposalState = "rejected"
+	GovernanceProposalStateReleased   GovernanceProposalState = "released"
+	GovernanceProposalStateValidating GovernanceProposalState = "validating"
+)
+
+// Valid indicates whether the value is a known member of the GovernanceProposalState enum.
+func (e GovernanceProposalState) Valid() bool {
+	switch e {
+	case GovernanceProposalStateDraft:
+		return true
+	case GovernanceProposalStateInReview:
+		return true
+	case GovernanceProposalStateProposed:
+		return true
+	case GovernanceProposalStateRejected:
+		return true
+	case GovernanceProposalStateReleased:
+		return true
+	case GovernanceProposalStateValidating:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GovernanceTargetObjectType.
+const (
+	EntityKey       GovernanceTargetObjectType = "entity_key"
+	JoinContract    GovernanceTargetObjectType = "join_contract"
+	ModelGrain      GovernanceTargetObjectType = "model_grain"
+	PhysicalBinding GovernanceTargetObjectType = "physical_binding"
+	SemanticAsset   GovernanceTargetObjectType = "semantic_asset"
+)
+
+// Valid indicates whether the value is a known member of the GovernanceTargetObjectType enum.
+func (e GovernanceTargetObjectType) Valid() bool {
+	switch e {
+	case EntityKey:
+		return true
+	case JoinContract:
+		return true
+	case ModelGrain:
+		return true
+	case PhysicalBinding:
+		return true
+	case SemanticAsset:
 		return true
 	default:
 		return false
@@ -512,6 +591,28 @@ type CreateCatalogAssetRequest struct {
 	SchemaVersion SchemaVersion `json:"schemaVersion"`
 }
 
+// CreateGovernanceProposalRequest defines model for CreateGovernanceProposalRequest.
+type CreateGovernanceProposalRequest struct {
+	// AgentAttribution SSOT §8.6 attribution of an AI-proposed payload to a persisted agent run in the same workspace. The run must already exist and its model, config revision and input hash must match the persisted record.
+	AgentAttribution *GovernanceProposalAgentAttribution `json:"agentAttribution,omitempty"`
+
+	// BaseRevisionId Required for semantic_asset targets; the released baseline the diff applies to.
+	BaseRevisionId *AssetRevisionId          `json:"baseRevisionId,omitempty"`
+	ChangeSet      []GovernanceChangeSetItem `json:"changeSet"`
+	CreatedBy      *string                   `json:"createdBy,omitempty"`
+	Reason         *string                   `json:"reason,omitempty"`
+	Summary        *string                   `json:"summary,omitempty"`
+
+	// TargetObjectId Target TypeID; the prefix must match targetObjectType.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	TargetObjectId GovernanceTargetObjectId `json:"targetObjectId"`
+
+	// TargetObjectType Objects a governed proposal can target.
+	TargetObjectType GovernanceTargetObjectType `json:"targetObjectType"`
+	Title            string                     `json:"title"`
+}
+
 // CreateWorkspaceRequest defines model for CreateWorkspaceRequest.
 type CreateWorkspaceRequest struct {
 	DisplayName string `json:"displayName"`
@@ -673,6 +774,188 @@ type EvidenceArtifactRole string
 // EvidenceArtifactId Example: evd_01arz3ndektsv4rrffq69g5fav
 type EvidenceArtifactId = identity.EvidenceID
 
+// GovernanceAgentRunId Example: agr_01arz3ndektsv4rrffq69g5fav
+type GovernanceAgentRunId = identity.AgentRunID
+
+// GovernanceChangeDigest Recomputable sha256 content digest of the paired value.
+type GovernanceChangeDigest = string
+
+// GovernanceChangeOp defines model for GovernanceChangeOp.
+type GovernanceChangeOp string
+
+// GovernanceChangeSetItem defines model for GovernanceChangeSetItem.
+type GovernanceChangeSetItem struct {
+	// AfterDigest Recomputable sha256 content digest of the paired value.
+	AfterDigest *GovernanceChangeDigest `json:"afterDigest,omitempty"`
+
+	// AfterValue JSON value at fieldPath after the change; required for add and update.
+	AfterValue *json.RawMessage `json:"afterValue,omitempty"`
+
+	// BeforeDigest Recomputable sha256 content digest of the paired value.
+	BeforeDigest *GovernanceChangeDigest `json:"beforeDigest,omitempty"`
+
+	// BeforeValue JSON value at fieldPath before the change; required for update and remove.
+	BeforeValue *json.RawMessage   `json:"beforeValue,omitempty"`
+	FieldPath   string             `json:"fieldPath"`
+	Op          GovernanceChangeOp `json:"op"`
+}
+
+// GovernanceChangeSetItemId Example: chg_01arz3ndektsv4rrffq69g5fav
+type GovernanceChangeSetItemId = identity.ProposalChangeID
+
+// GovernanceChangeSetItemRecord defines model for GovernanceChangeSetItemRecord.
+type GovernanceChangeSetItemRecord struct {
+	// AfterDigest Recomputable sha256 content digest of the paired value.
+	AfterDigest *GovernanceChangeDigest `json:"afterDigest,omitempty"`
+	AfterValue  *json.RawMessage        `json:"afterValue,omitempty"`
+
+	// BeforeDigest Recomputable sha256 content digest of the paired value.
+	BeforeDigest *GovernanceChangeDigest `json:"beforeDigest,omitempty"`
+	BeforeValue  *json.RawMessage        `json:"beforeValue,omitempty"`
+
+	// CreatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	CreatedAt Timestamp `json:"createdAt"`
+	FieldPath string    `json:"fieldPath"`
+
+	// Id Example: chg_01arz3ndektsv4rrffq69g5fav
+	Id GovernanceChangeSetItemId `json:"id"`
+	Op GovernanceChangeOp        `json:"op"`
+}
+
+// GovernanceProposalAgentAttribution SSOT §8.6 attribution of an AI-proposed payload to a persisted agent run in the same workspace. The run must already exist and its model, config revision and input hash must match the persisted record.
+type GovernanceProposalAgentAttribution struct {
+	// AgentRunId Example: agr_01arz3ndektsv4rrffq69g5fav
+	AgentRunId     GovernanceAgentRunId `json:"agentRunId"`
+	ConfigRevision string               `json:"configRevision"`
+
+	// InputHash sha256 digest of the canonical agent input; never raw prompts.
+	InputHash string `json:"inputHash"`
+	Model     string `json:"model"`
+}
+
+// GovernanceProposalDetail defines model for GovernanceProposalDetail.
+type GovernanceProposalDetail struct {
+	// AgentRunId Example: agr_01arz3ndektsv4rrffq69g5fav
+	AgentRunId *GovernanceAgentRunId `json:"agentRunId,omitempty"`
+
+	// AssetId Example: ast_01arz3ndektsv4rrffq69g5fav
+	AssetId *SemanticAssetId `json:"assetId,omitempty"`
+
+	// BaseRevisionId Example: rev_01arz3ndektsv4rrffq69g5fav
+	BaseRevisionId *AssetRevisionId                `json:"baseRevisionId,omitempty"`
+	ChangeSet      []GovernanceChangeSetItemRecord `json:"changeSet"`
+
+	// CreatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	CreatedAt Timestamp `json:"createdAt"`
+	CreatedBy string    `json:"createdBy"`
+
+	// DecidedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	DecidedAt *Timestamp `json:"decidedAt,omitempty"`
+
+	// Id Example: prp_01arz3ndektsv4rrffq69g5fav
+	Id     GovernanceProposalId `json:"id"`
+	Reason string               `json:"reason"`
+
+	// State SSOT §7.5 workflow state of a proposal.
+	State GovernanceProposalState `json:"state"`
+
+	// SubmittedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	SubmittedAt *Timestamp `json:"submittedAt,omitempty"`
+	Summary     string     `json:"summary"`
+
+	// TargetObjectId Target TypeID; the prefix must match targetObjectType.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	TargetObjectId GovernanceTargetObjectId `json:"targetObjectId"`
+
+	// TargetObjectType Objects a governed proposal can target.
+	TargetObjectType GovernanceTargetObjectType `json:"targetObjectType"`
+	Title            string                     `json:"title"`
+
+	// UpdatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	UpdatedAt Timestamp `json:"updatedAt"`
+}
+
+// GovernanceProposalId Example: prp_01arz3ndektsv4rrffq69g5fav
+type GovernanceProposalId = identity.ProposalID
+
+// GovernanceProposalPage defines model for GovernanceProposalPage.
+type GovernanceProposalPage struct {
+	Items []GovernanceProposalSummary `json:"items"`
+	Page  PageInfo                    `json:"page"`
+}
+
+// GovernanceProposalState SSOT §7.5 workflow state of a proposal.
+type GovernanceProposalState string
+
+// GovernanceProposalSummary defines model for GovernanceProposalSummary.
+type GovernanceProposalSummary struct {
+	// AgentRunId Example: agr_01arz3ndektsv4rrffq69g5fav
+	AgentRunId *GovernanceAgentRunId `json:"agentRunId,omitempty"`
+
+	// AssetId Example: ast_01arz3ndektsv4rrffq69g5fav
+	AssetId *SemanticAssetId `json:"assetId,omitempty"`
+
+	// BaseRevisionId Example: rev_01arz3ndektsv4rrffq69g5fav
+	BaseRevisionId *AssetRevisionId `json:"baseRevisionId,omitempty"`
+
+	// CreatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	CreatedAt Timestamp `json:"createdAt"`
+	CreatedBy string    `json:"createdBy"`
+
+	// DecidedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	DecidedAt *Timestamp `json:"decidedAt,omitempty"`
+
+	// Id Example: prp_01arz3ndektsv4rrffq69g5fav
+	Id     GovernanceProposalId `json:"id"`
+	Reason string               `json:"reason"`
+
+	// State SSOT §7.5 workflow state of a proposal.
+	State GovernanceProposalState `json:"state"`
+
+	// SubmittedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	SubmittedAt *Timestamp `json:"submittedAt,omitempty"`
+	Summary     string     `json:"summary"`
+
+	// TargetObjectId Target TypeID; the prefix must match targetObjectType.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	TargetObjectId GovernanceTargetObjectId `json:"targetObjectId"`
+
+	// TargetObjectType Objects a governed proposal can target.
+	TargetObjectType GovernanceTargetObjectType `json:"targetObjectType"`
+	Title            string                     `json:"title"`
+
+	// UpdatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	UpdatedAt Timestamp `json:"updatedAt"`
+}
+
+// GovernanceTargetObjectId Target TypeID; the prefix must match targetObjectType.
+//
+// Example: ast_01arz3ndektsv4rrffq69g5fav
+type GovernanceTargetObjectId = string
+
+// GovernanceTargetObjectType Objects a governed proposal can target.
+type GovernanceTargetObjectType string
+
 // HealthResponse defines model for HealthResponse.
 type HealthResponse struct {
 	Status HealthResponseStatus `json:"status"`
@@ -807,6 +1090,9 @@ type AssetId = SemanticAssetId
 // Limit defines model for Limit.
 type Limit = int
 
+// ProposalId Example: prp_01arz3ndektsv4rrffq69g5fav
+type ProposalId = GovernanceProposalId
+
 // RevisionId Example: rev_01arz3ndektsv4rrffq69g5fav
 type RevisionId = AssetRevisionId
 
@@ -819,11 +1105,17 @@ type Conflict = ErrorResponse
 // Error defines model for Error.
 type Error = ErrorResponse
 
+// Forbidden defines model for Forbidden.
+type Forbidden = ErrorResponse
+
 // NotFound defines model for NotFound.
 type NotFound = ErrorResponse
 
 // ServiceUnavailable defines model for ServiceUnavailable.
 type ServiceUnavailable = ErrorResponse
+
+// UnprocessableEntity defines model for UnprocessableEntity.
+type UnprocessableEntity = ErrorResponse
 
 // ListCatalogAssetsParams defines parameters for ListCatalogAssets.
 type ListCatalogAssetsParams struct {
@@ -852,6 +1144,12 @@ type ListAssetRevisionsParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
+// ListGovernanceProposalsParams defines parameters for ListGovernanceProposals.
+type ListGovernanceProposalsParams struct {
+	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
 // CreateWorkspaceJSONRequestBody defines body for CreateWorkspace for application/json ContentType.
 type CreateWorkspaceJSONRequestBody = CreateWorkspaceRequest
 
@@ -860,3 +1158,6 @@ type CreateCatalogAssetJSONRequestBody = CreateCatalogAssetRequest
 
 // CreateAssetRevisionJSONRequestBody defines body for CreateAssetRevision for application/json ContentType.
 type CreateAssetRevisionJSONRequestBody = CreateAssetRevisionRequest
+
+// CreateGovernanceProposalJSONRequestBody defines body for CreateGovernanceProposal for application/json ContentType.
+type CreateGovernanceProposalJSONRequestBody = CreateGovernanceProposalRequest

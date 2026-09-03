@@ -114,6 +114,179 @@ func (store *Store) GetProposal(
 	return proposalFromRow(row)
 }
 
+// CreateProposalWithChanges commits the draft proposal and its full
+// change-set in one transaction: the T003 authoring surface accepts the
+// change-set inline, so a partial draft (proposal without items) must be
+// unrepresentable.
+func (store *Store) CreateProposalWithChanges(
+	ctx context.Context, proposal governance.Proposal, items []governance.ChangeSetItem,
+) (governance.Proposal, []governance.ChangeSetItem, error) {
+	workspaceID, err := uuidValue(proposal.WorkspaceID)
+	if err != nil {
+		return governance.Proposal{}, nil, fmt.Errorf("encode workspace ID: %w", err)
+	}
+	proposalID, err := uuidValue(proposal.ID)
+	if err != nil {
+		return governance.Proposal{}, nil, fmt.Errorf("encode proposal ID: %w", err)
+	}
+	var assetID, baseRevisionID, agentRunID pgtype.UUID
+	if proposal.AssetID != nil {
+		if assetID, err = uuidValue(*proposal.AssetID); err != nil {
+			return governance.Proposal{}, nil, fmt.Errorf("encode asset ID: %w", err)
+		}
+	}
+	if proposal.BaseRevisionID != nil {
+		if baseRevisionID, err = uuidValue(*proposal.BaseRevisionID); err != nil {
+			return governance.Proposal{}, nil, fmt.Errorf("encode base revision ID: %w", err)
+		}
+	}
+	if proposal.AgentRunID != nil {
+		if agentRunID, err = uuidValue(*proposal.AgentRunID); err != nil {
+			return governance.Proposal{}, nil, fmt.Errorf("encode agent run ID: %w", err)
+		}
+	}
+	targetObjectID, err := uuidFromString(proposal.TargetObjectID)
+	if err != nil {
+		return governance.Proposal{}, nil, fmt.Errorf("encode target object ID: %w", err)
+	}
+	changeIDs := make([]identity.ProposalChangeID, 0, len(items))
+	for range items {
+		changeID, err := identity.NewProposalChangeID()
+		if err != nil {
+			return governance.Proposal{}, nil, fmt.Errorf("mint change-set item ID: %w", err)
+		}
+		changeIDs = append(changeIDs, changeID)
+	}
+	changeParams := make([]dbgen.CreateProposalChangeParams, 0, len(items))
+	for index, item := range items {
+		changeID, err := uuidValue(changeIDs[index])
+		if err != nil {
+			return governance.Proposal{}, nil, fmt.Errorf("encode change-set item ID: %w", err)
+		}
+		changeParams = append(changeParams, dbgen.CreateProposalChangeParams{
+			ID: changeID, WorkspaceID: workspaceID, ProposalID: proposalID,
+			FieldPath: item.FieldPath, Op: string(item.Op),
+			BeforeDigest: optionalTextContent(item.BeforeDigest), AfterDigest: optionalTextContent(item.AfterDigest),
+			BeforeValue: optionalJSON(item.BeforeValue), AfterValue: optionalJSON(item.AfterValue),
+			CreatedAt: timestamp(proposal.CreatedAt),
+		})
+	}
+	tx, err := store.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return governance.Proposal{}, nil, governanceRepositoryError("begin proposal draft creation", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	queries := dbgen.New(tx)
+	row, err := queries.CreateProposal(ctx, dbgen.CreateProposalParams{
+		ID: proposalID, WorkspaceID: workspaceID, AssetID: assetID, BaseRevisionID: baseRevisionID,
+		AgentRunID:       agentRunID,
+		TargetObjectType: string(proposal.TargetObjectType), TargetObjectID: targetObjectID,
+		State: string(proposal.State), Title: proposal.Title, Summary: proposal.Summary,
+		Reason: proposal.Reason, CreatedBy: proposal.CreatedBy,
+		CreatedAt: timestamp(proposal.CreatedAt), UpdatedAt: timestamp(proposal.UpdatedAt),
+	})
+	if err != nil {
+		return governance.Proposal{}, nil, governanceRepositoryError("create proposal", err)
+	}
+	created, err := proposalFromRow(row)
+	if err != nil {
+		return governance.Proposal{}, nil, err
+	}
+	persisted := make([]governance.ChangeSetItem, 0, len(changeParams))
+	for _, params := range changeParams {
+		if _, err := queries.CreateProposalChange(ctx, params); err != nil {
+			return governance.Proposal{}, nil, governanceRepositoryError("create proposal change", err)
+		}
+		changeID, err := identity.ProposalChangeIDFromUUIDBytes(params.ID.Bytes)
+		if err != nil {
+			return governance.Proposal{}, nil, fmt.Errorf("decode change-set item ID: %w", err)
+		}
+		persisted = append(persisted, governance.ChangeSetItem{
+			ID: changeID, WorkspaceID: proposal.WorkspaceID,
+			ProposalID: proposal.ID, FieldPath: params.FieldPath, Op: governance.ChangeOp(params.Op),
+			BeforeDigest: params.BeforeDigest.String, AfterDigest: params.AfterDigest.String,
+			BeforeValue: params.BeforeValue, AfterValue: params.AfterValue, CreatedAt: params.CreatedAt.Time,
+		})
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return governance.Proposal{}, nil, governanceRepositoryError("commit proposal draft creation", err)
+	}
+	return created, persisted, nil
+}
+
+// VerifyProposalTarget rejects semantic-asset proposal targets whose base
+// revision does not exist in the workspace or does not belong to the asset:
+// the proposals FK enforces the same shape at storage level and this check
+// turns the violation into a stable not-found before any write.
+func (store *Store) VerifyProposalTarget(
+	ctx context.Context, workspace identity.WorkspaceID, asset identity.AssetID, revision identity.RevisionID,
+) error {
+	workspaceID, err := uuidValue(workspace)
+	if err != nil {
+		return fmt.Errorf("encode workspace ID: %w", err)
+	}
+	assetUUID, err := uuidValue(asset)
+	if err != nil {
+		return fmt.Errorf("encode asset ID: %w", err)
+	}
+	revisionUUID, err := uuidValue(revision)
+	if err != nil {
+		return fmt.Errorf("encode revision ID: %w", err)
+	}
+	if _, err := store.queries.GetAssetRevisionOwnership(ctx, dbgen.GetAssetRevisionOwnershipParams{
+		WorkspaceID: workspaceID, AssetID: assetUUID, RevisionID: revisionUUID,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("%w: proposal target revision %s", governance.ErrNotFound, revision.String())
+		}
+		return governanceRepositoryError("verify proposal target", err)
+	}
+	return nil
+}
+
+// ListProposals returns one keyset page of workspace proposals ordered
+// newest first (created_at DESC, id DESC).
+func (store *Store) ListProposals(
+	ctx context.Context, workspace identity.WorkspaceID, limit int, cursor *governanceapp.ProposalCursor,
+) ([]governance.Proposal, error) {
+	workspaceID, err := uuidValue(workspace)
+	if err != nil {
+		return nil, fmt.Errorf("encode workspace ID: %w", err)
+	}
+	params := dbgen.ListProposalsParams{
+		WorkspaceID: workspaceID, HasCursor: cursor != nil, PageLimit: int32(limit),
+	}
+	if cursor != nil {
+		cursorID, cursorErr := uuidValue(cursor.ID)
+		if cursorErr != nil {
+			return nil, fmt.Errorf("encode cursor ID: %w", cursorErr)
+		}
+		params.CursorCreatedAt = timestamp(cursor.CreatedAt)
+		params.CursorID = cursorID
+	}
+	rows, err := store.queries.ListProposals(ctx, params)
+	if err != nil {
+		return nil, governanceRepositoryError("list proposals", err)
+	}
+	proposals := make([]governance.Proposal, 0, len(rows))
+	for _, row := range rows {
+		proposal, err := proposalFromRow(row)
+		if err != nil {
+			return nil, err
+		}
+		proposals = append(proposals, proposal)
+	}
+	return proposals, nil
+}
+
+func mustChangeUUID(value identity.ProposalChangeID) pgtype.UUID {
+	result, err := uuidValue(value)
+	if err != nil {
+		panic(err)
+	}
+	return result
+}
+
 func (store *Store) getProposal(
 	ctx context.Context, workspace identity.WorkspaceID, proposal identity.ProposalID,
 ) (dbgen.Proposal, error) {

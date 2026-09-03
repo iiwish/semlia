@@ -15,6 +15,8 @@ tags:
     description: Process and dependency status.
   - name: Catalog
     description: Workspace-scoped semantic assets, immutable revisions and provenance.
+  - name: Governance
+    description: Workspace-scoped governed proposals over semantic assets and governance objects.
   - name: Discovery
     description: Source discovery run state and findings.
 paths:
@@ -339,6 +341,131 @@ paths:
           $ref: "#/components/responses/NotFound"
         default:
           $ref: "#/components/responses/Error"
+  /api/v1/workspaces/{workspaceId}/governance/proposals:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+    get:
+      operationId: listGovernanceProposals
+      summary: List workspace proposals newest first
+      tags:
+        - Governance
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: A deterministic governance proposals page.
+          headers:
+            X-Trace-ID:
+              $ref: "#/components/headers/TraceId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GovernanceProposalPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        default:
+          $ref: "#/components/responses/Error"
+    post:
+      operationId: createGovernanceProposal
+      summary: Open a governed draft proposal with a structured change-set
+      description: >-
+        Creates a draft proposal against a semantic asset or one of the four
+        governance object types. Agent-attributed payloads are validated
+        against the versioned semlia.proposal-input/v1 schema before any
+        domain write; change-sets without a substantive diff are rejected.
+      tags:
+        - Governance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateGovernanceProposalRequest"
+      responses:
+        "201":
+          description: The created draft proposal with its change-set.
+          headers:
+            X-Trace-ID:
+              $ref: "#/components/headers/TraceId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GovernanceProposalDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/workspaces/{workspaceId}/governance/proposals/{proposalId}:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+      - $ref: "#/components/parameters/ProposalId"
+    get:
+      operationId: getGovernanceProposal
+      summary: Read one proposal and its change-set
+      tags:
+        - Governance
+      responses:
+        "200":
+          description: Proposal state, attribution and structured change-set.
+          headers:
+            X-Trace-ID:
+              $ref: "#/components/headers/TraceId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GovernanceProposalDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/workspaces/{workspaceId}/governance/proposals/{proposalId}/submit:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+      - $ref: "#/components/parameters/ProposalId"
+    post:
+      operationId: submitGovernanceProposal
+      summary: Submit a draft proposal for governance
+      description: >-
+        Walks draft -> proposed, freezing the change-set. Proposals whose
+        change-set normalizes to no substantive diff never enter the human
+        queue and stay drafts.
+      tags:
+        - Governance
+      responses:
+        "200":
+          description: The submitted proposal in the proposed state.
+          headers:
+            X-Trace-ID:
+              $ref: "#/components/headers/TraceId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GovernanceProposalDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        default:
+          $ref: "#/components/responses/Error"
   /api/v1/workspaces/{workspaceId}/discovery-runs/{runId}:
     parameters:
       - $ref: "#/components/parameters/WorkspaceId"
@@ -388,6 +515,12 @@ components:
       required: true
       schema:
         $ref: "#/components/schemas/RunId"
+    ProposalId:
+      name: proposalId
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/GovernanceProposalId"
     Limit:
       name: limit
       in: query
@@ -451,6 +584,24 @@ components:
             $ref: "#/components/schemas/ErrorResponse"
     Conflict:
       description: The request conflicts with current registry state.
+      headers:
+        X-Trace-ID:
+          $ref: "#/components/headers/TraceId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Forbidden:
+      description: The acting principal lacks the required capability.
+      headers:
+        X-Trace-ID:
+          $ref: "#/components/headers/TraceId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    UnprocessableEntity:
+      description: The request is well-formed but violates a governance gate.
       headers:
         X-Trace-ID:
           $ref: "#/components/headers/TraceId"
@@ -1201,3 +1352,301 @@ components:
           maxItems: 100
           items:
             $ref: "#/components/schemas/EvidenceArtifactId"
+    GovernanceProposalId:
+      type: string
+      format: typeid
+      pattern: "^prp_[0-7][0-9a-hjkmnp-tv-z]{25}$"
+      example: prp_01arz3ndektsv4rrffq69g5fav
+      x-go-type: identity.ProposalID
+      x-go-type-import:
+        path: github.com/iiwish/semlia/pkg/identity
+        name: identity
+    GovernanceAgentRunId:
+      type: string
+      format: typeid
+      pattern: "^agr_[0-7][0-9a-hjkmnp-tv-z]{25}$"
+      example: agr_01arz3ndektsv4rrffq69g5fav
+      x-go-type: identity.AgentRunID
+      x-go-type-import:
+        path: github.com/iiwish/semlia/pkg/identity
+        name: identity
+    GovernanceChangeSetItemId:
+      type: string
+      format: typeid
+      pattern: "^chg_[0-7][0-9a-hjkmnp-tv-z]{25}$"
+      example: chg_01arz3ndektsv4rrffq69g5fav
+      x-go-type: identity.ProposalChangeID
+      x-go-type-import:
+        path: github.com/iiwish/semlia/pkg/identity
+        name: identity
+    GovernanceTargetObjectType:
+      type: string
+      description: Objects a governed proposal can target.
+      enum:
+        - semantic_asset
+        - physical_binding
+        - model_grain
+        - entity_key
+        - join_contract
+    GovernanceTargetObjectId:
+      type: string
+      format: typeid
+      description: Target TypeID; the prefix must match targetObjectType.
+      pattern: "^(ast|phb|mgn|eky|jct)_[0-7][0-9a-hjkmnp-tv-z]{25}$"
+      example: ast_01arz3ndektsv4rrffq69g5fav
+    GovernanceProposalState:
+      type: string
+      description: SSOT §7.5 workflow state of a proposal.
+      enum:
+        - draft
+        - proposed
+        - validating
+        - in_review
+        - released
+        - rejected
+    GovernanceChangeOp:
+      type: string
+      enum:
+        - add
+        - update
+        - remove
+    GovernanceChangeDigest:
+      type: string
+      description: Recomputable sha256 content digest of the paired value.
+      pattern: "^sha256:[0-9a-f]{64}$"
+    GovernanceChangeSetItem:
+      type: object
+      additionalProperties: false
+      required:
+        - fieldPath
+        - op
+      properties:
+        fieldPath:
+          type: string
+          minLength: 1
+          maxLength: 512
+        op:
+          $ref: "#/components/schemas/GovernanceChangeOp"
+        beforeDigest:
+          $ref: "#/components/schemas/GovernanceChangeDigest"
+        afterDigest:
+          $ref: "#/components/schemas/GovernanceChangeDigest"
+        beforeValue:
+          description: JSON value at fieldPath before the change; required for update and remove.
+          x-go-type: json.RawMessage
+        afterValue:
+          description: JSON value at fieldPath after the change; required for add and update.
+          x-go-type: json.RawMessage
+    GovernanceChangeSetItemRecord:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - fieldPath
+        - op
+        - createdAt
+      properties:
+        id:
+          $ref: "#/components/schemas/GovernanceChangeSetItemId"
+        fieldPath:
+          type: string
+          minLength: 1
+          maxLength: 512
+        op:
+          $ref: "#/components/schemas/GovernanceChangeOp"
+        beforeDigest:
+          $ref: "#/components/schemas/GovernanceChangeDigest"
+        afterDigest:
+          $ref: "#/components/schemas/GovernanceChangeDigest"
+        beforeValue:
+          x-go-type: json.RawMessage
+        afterValue:
+          x-go-type: json.RawMessage
+        createdAt:
+          $ref: "#/components/schemas/Timestamp"
+    GovernanceProposalAgentAttribution:
+      type: object
+      description: >-
+        SSOT §8.6 attribution of an AI-proposed payload to a persisted agent
+        run in the same workspace. The run must already exist and its model,
+        config revision and input hash must match the persisted record.
+      additionalProperties: false
+      required:
+        - agentRunId
+        - model
+        - configRevision
+        - inputHash
+      properties:
+        agentRunId:
+          $ref: "#/components/schemas/GovernanceAgentRunId"
+        model:
+          type: string
+          minLength: 1
+          maxLength: 128
+        configRevision:
+          type: string
+          minLength: 1
+          maxLength: 128
+        inputHash:
+          type: string
+          pattern: "^sha256:[0-9a-f]{64}$"
+          description: sha256 digest of the canonical agent input; never raw prompts.
+    CreateGovernanceProposalRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - targetObjectType
+        - targetObjectId
+        - title
+        - changeSet
+      properties:
+        targetObjectType:
+          $ref: "#/components/schemas/GovernanceTargetObjectType"
+        targetObjectId:
+          $ref: "#/components/schemas/GovernanceTargetObjectId"
+        baseRevisionId:
+          description: Required for semantic_asset targets; the released baseline the diff applies to.
+          allOf:
+            - $ref: "#/components/schemas/AssetRevisionId"
+        title:
+          type: string
+          minLength: 1
+          maxLength: 256
+        summary:
+          type: string
+          maxLength: 4096
+        reason:
+          type: string
+          maxLength: 4096
+        changeSet:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/GovernanceChangeSetItem"
+        agentAttribution:
+          $ref: "#/components/schemas/GovernanceProposalAgentAttribution"
+        createdBy:
+          type: string
+          minLength: 1
+          maxLength: 256
+    GovernanceProposalSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - targetObjectType
+        - targetObjectId
+        - state
+        - title
+        - summary
+        - reason
+        - createdBy
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          $ref: "#/components/schemas/GovernanceProposalId"
+        targetObjectType:
+          $ref: "#/components/schemas/GovernanceTargetObjectType"
+        targetObjectId:
+          $ref: "#/components/schemas/GovernanceTargetObjectId"
+        assetId:
+          $ref: "#/components/schemas/SemanticAssetId"
+        baseRevisionId:
+          $ref: "#/components/schemas/AssetRevisionId"
+        state:
+          $ref: "#/components/schemas/GovernanceProposalState"
+        title:
+          type: string
+          minLength: 1
+          maxLength: 256
+        summary:
+          type: string
+          maxLength: 4096
+        reason:
+          type: string
+          maxLength: 4096
+        agentRunId:
+          $ref: "#/components/schemas/GovernanceAgentRunId"
+        createdBy:
+          type: string
+          minLength: 1
+          maxLength: 256
+        submittedAt:
+          $ref: "#/components/schemas/Timestamp"
+        decidedAt:
+          $ref: "#/components/schemas/Timestamp"
+        createdAt:
+          $ref: "#/components/schemas/Timestamp"
+        updatedAt:
+          $ref: "#/components/schemas/Timestamp"
+    GovernanceProposalDetail:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - targetObjectType
+        - targetObjectId
+        - state
+        - title
+        - summary
+        - reason
+        - createdBy
+        - createdAt
+        - updatedAt
+        - changeSet
+      properties:
+        id:
+          $ref: "#/components/schemas/GovernanceProposalId"
+        targetObjectType:
+          $ref: "#/components/schemas/GovernanceTargetObjectType"
+        targetObjectId:
+          $ref: "#/components/schemas/GovernanceTargetObjectId"
+        assetId:
+          $ref: "#/components/schemas/SemanticAssetId"
+        baseRevisionId:
+          $ref: "#/components/schemas/AssetRevisionId"
+        state:
+          $ref: "#/components/schemas/GovernanceProposalState"
+        title:
+          type: string
+          minLength: 1
+          maxLength: 256
+        summary:
+          type: string
+          maxLength: 4096
+        reason:
+          type: string
+          maxLength: 4096
+        agentRunId:
+          $ref: "#/components/schemas/GovernanceAgentRunId"
+        createdBy:
+          type: string
+          minLength: 1
+          maxLength: 256
+        submittedAt:
+          $ref: "#/components/schemas/Timestamp"
+        decidedAt:
+          $ref: "#/components/schemas/Timestamp"
+        createdAt:
+          $ref: "#/components/schemas/Timestamp"
+        updatedAt:
+          $ref: "#/components/schemas/Timestamp"
+        changeSet:
+          type: array
+          items:
+            $ref: "#/components/schemas/GovernanceChangeSetItemRecord"
+    GovernanceProposalPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/GovernanceProposalSummary"
+        page:
+          $ref: "#/components/schemas/PageInfo"

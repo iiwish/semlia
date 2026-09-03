@@ -18,6 +18,7 @@ import (
 	"github.com/iiwish/semlia/internal/application"
 	authorizationapp "github.com/iiwish/semlia/internal/application/authorization"
 	catalogapp "github.com/iiwish/semlia/internal/application/catalog"
+	governanceapp "github.com/iiwish/semlia/internal/application/governance"
 	"github.com/iiwish/semlia/internal/application/jobs"
 	projectionapp "github.com/iiwish/semlia/internal/application/projection"
 	usageapp "github.com/iiwish/semlia/internal/application/usage"
@@ -263,11 +264,18 @@ func serve(ctx context.Context, cfg config.Config, output io.Writer) error {
 		}
 		// Protected commands always evaluate capabilities server-side against
 		// the M2 authorization foundation (deny-by-default).
-		catalogOptions = append(catalogOptions, catalogapp.WithAuthorizer(
-			authorizationapp.NewService(catalogStore, authorizationapp.ClockFunc(time.Now)),
-		))
+		authorizer := authorizationapp.NewService(catalogStore, authorizationapp.ClockFunc(time.Now))
+		catalogOptions = append(catalogOptions, catalogapp.WithAuthorizer(authorizer))
 		catalogService := catalogapp.NewService(catalogStore, catalogapp.ClockFunc(time.Now), catalogOptions...)
 		options = append(options, httpapi.WithCatalog(catalogService))
+		clock := governanceapp.ClockFunc(time.Now)
+		governanceAuthoring := governanceapp.NewAuthoringService(
+			catalogStore,
+			governanceapp.NewProposalService(catalogStore, clock),
+			governanceapp.NewAgentRunService(catalogStore, clock),
+			authorizer, clock,
+		)
+		options = append(options, httpapi.WithGovernance(governanceAuthoring))
 	}
 	apiHandler := httpapi.NewHandler(service, logger, provider.Tracer("github.com/iiwish/semlia"), options...)
 	server := &http.Server{

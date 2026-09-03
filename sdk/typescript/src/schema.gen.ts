@@ -175,6 +175,72 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspaceId}/governance/proposals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        /** List workspace proposals newest first */
+        get: operations["listGovernanceProposals"];
+        put?: never;
+        /**
+         * Open a governed draft proposal with a structured change-set
+         * @description Creates a draft proposal against a semantic asset or one of the four governance object types. Agent-attributed payloads are validated against the versioned semlia.proposal-input/v1 schema before any domain write; change-sets without a substantive diff are rejected.
+         */
+        post: operations["createGovernanceProposal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/governance/proposals/{proposalId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                proposalId: components["parameters"]["ProposalId"];
+            };
+            cookie?: never;
+        };
+        /** Read one proposal and its change-set */
+        get: operations["getGovernanceProposal"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/governance/proposals/{proposalId}/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                proposalId: components["parameters"]["ProposalId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit a draft proposal for governance
+         * @description Walks draft -> proposed, freezing the change-set. Proposals whose change-set normalizes to no substantive diff never enter the human queue and stay drafts.
+         */
+        post: operations["submitGovernanceProposal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspaceId}/discovery-runs/{runId}": {
         parameters: {
             query?: never;
@@ -492,6 +558,120 @@ export interface components {
             createdBy: string;
             evidenceIds?: components["schemas"]["EvidenceArtifactId"][];
         };
+        /**
+         * Format: typeid
+         * @example prp_01arz3ndektsv4rrffq69g5fav
+         */
+        GovernanceProposalId: string;
+        /**
+         * Format: typeid
+         * @example agr_01arz3ndektsv4rrffq69g5fav
+         */
+        GovernanceAgentRunId: string;
+        /**
+         * Format: typeid
+         * @example chg_01arz3ndektsv4rrffq69g5fav
+         */
+        GovernanceChangeSetItemId: string;
+        /**
+         * @description Objects a governed proposal can target.
+         * @enum {string}
+         */
+        GovernanceTargetObjectType: "semantic_asset" | "physical_binding" | "model_grain" | "entity_key" | "join_contract";
+        /**
+         * Format: typeid
+         * @description Target TypeID; the prefix must match targetObjectType.
+         * @example ast_01arz3ndektsv4rrffq69g5fav
+         */
+        GovernanceTargetObjectId: string;
+        /**
+         * @description SSOT §7.5 workflow state of a proposal.
+         * @enum {string}
+         */
+        GovernanceProposalState: "draft" | "proposed" | "validating" | "in_review" | "released" | "rejected";
+        /** @enum {string} */
+        GovernanceChangeOp: "add" | "update" | "remove";
+        /** @description Recomputable sha256 content digest of the paired value. */
+        GovernanceChangeDigest: string;
+        GovernanceChangeSetItem: {
+            fieldPath: string;
+            op: components["schemas"]["GovernanceChangeOp"];
+            beforeDigest?: components["schemas"]["GovernanceChangeDigest"];
+            afterDigest?: components["schemas"]["GovernanceChangeDigest"];
+            /** @description JSON value at fieldPath before the change; required for update and remove. */
+            beforeValue?: unknown;
+            /** @description JSON value at fieldPath after the change; required for add and update. */
+            afterValue?: unknown;
+        };
+        GovernanceChangeSetItemRecord: {
+            id: components["schemas"]["GovernanceChangeSetItemId"];
+            fieldPath: string;
+            op: components["schemas"]["GovernanceChangeOp"];
+            beforeDigest?: components["schemas"]["GovernanceChangeDigest"];
+            afterDigest?: components["schemas"]["GovernanceChangeDigest"];
+            beforeValue?: unknown;
+            afterValue?: unknown;
+            createdAt: components["schemas"]["Timestamp"];
+        };
+        /** @description SSOT §8.6 attribution of an AI-proposed payload to a persisted agent run in the same workspace. The run must already exist and its model, config revision and input hash must match the persisted record. */
+        GovernanceProposalAgentAttribution: {
+            agentRunId: components["schemas"]["GovernanceAgentRunId"];
+            model: string;
+            configRevision: string;
+            /** @description sha256 digest of the canonical agent input; never raw prompts. */
+            inputHash: string;
+        };
+        CreateGovernanceProposalRequest: {
+            targetObjectType: components["schemas"]["GovernanceTargetObjectType"];
+            targetObjectId: components["schemas"]["GovernanceTargetObjectId"];
+            /** @description Required for semantic_asset targets; the released baseline the diff applies to. */
+            baseRevisionId?: components["schemas"]["AssetRevisionId"];
+            title: string;
+            summary?: string;
+            reason?: string;
+            changeSet: components["schemas"]["GovernanceChangeSetItem"][];
+            agentAttribution?: components["schemas"]["GovernanceProposalAgentAttribution"];
+            createdBy?: string;
+        };
+        GovernanceProposalSummary: {
+            id: components["schemas"]["GovernanceProposalId"];
+            targetObjectType: components["schemas"]["GovernanceTargetObjectType"];
+            targetObjectId: components["schemas"]["GovernanceTargetObjectId"];
+            assetId?: components["schemas"]["SemanticAssetId"];
+            baseRevisionId?: components["schemas"]["AssetRevisionId"];
+            state: components["schemas"]["GovernanceProposalState"];
+            title: string;
+            summary: string;
+            reason: string;
+            agentRunId?: components["schemas"]["GovernanceAgentRunId"];
+            createdBy: string;
+            submittedAt?: components["schemas"]["Timestamp"];
+            decidedAt?: components["schemas"]["Timestamp"];
+            createdAt: components["schemas"]["Timestamp"];
+            updatedAt: components["schemas"]["Timestamp"];
+        };
+        GovernanceProposalDetail: {
+            id: components["schemas"]["GovernanceProposalId"];
+            targetObjectType: components["schemas"]["GovernanceTargetObjectType"];
+            targetObjectId: components["schemas"]["GovernanceTargetObjectId"];
+            assetId?: components["schemas"]["SemanticAssetId"];
+            baseRevisionId?: components["schemas"]["AssetRevisionId"];
+            state: components["schemas"]["GovernanceProposalState"];
+            title: string;
+            summary: string;
+            reason: string;
+            agentRunId?: components["schemas"]["GovernanceAgentRunId"];
+            createdBy: string;
+            submittedAt?: components["schemas"]["Timestamp"];
+            decidedAt?: components["schemas"]["Timestamp"];
+            createdAt: components["schemas"]["Timestamp"];
+            updatedAt: components["schemas"]["Timestamp"];
+            changeSet: components["schemas"]["GovernanceChangeSetItemRecord"][];
+        };
+        GovernanceProposalPage: {
+            items: components["schemas"]["GovernanceProposalSummary"][];
+            page: components["schemas"]["PageInfo"];
+        };
     };
     responses: {
         /** @description The request failed. */
@@ -546,12 +726,33 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
+        /** @description The acting principal lacks the required capability. */
+        Forbidden: {
+            headers: {
+                "X-Trace-ID": components["headers"]["TraceId"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description The request is well-formed but violates a governance gate. */
+        UnprocessableEntity: {
+            headers: {
+                "X-Trace-ID": components["headers"]["TraceId"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
     };
     parameters: {
         WorkspaceId: components["schemas"]["WorkspaceId"];
         AssetId: components["schemas"]["SemanticAssetId"];
         RevisionId: components["schemas"]["AssetRevisionId"];
         RunId: components["schemas"]["RunId"];
+        ProposalId: components["schemas"]["GovernanceProposalId"];
         Limit: number;
         Cursor: components["schemas"]["Cursor"];
     };
@@ -886,6 +1087,125 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    listGovernanceProposals: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A deterministic governance proposals page. */
+            200: {
+                headers: {
+                    "X-Trace-ID": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GovernanceProposalPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            default: components["responses"]["Error"];
+        };
+    };
+    createGovernanceProposal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateGovernanceProposalRequest"];
+            };
+        };
+        responses: {
+            /** @description The created draft proposal with its change-set. */
+            201: {
+                headers: {
+                    "X-Trace-ID": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GovernanceProposalDetail"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["UnprocessableEntity"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getGovernanceProposal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                proposalId: components["parameters"]["ProposalId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Proposal state, attribution and structured change-set. */
+            200: {
+                headers: {
+                    "X-Trace-ID": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GovernanceProposalDetail"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    submitGovernanceProposal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                proposalId: components["parameters"]["ProposalId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The submitted proposal in the proposed state. */
+            200: {
+                headers: {
+                    "X-Trace-ID": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GovernanceProposalDetail"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
             default: components["responses"]["Error"];
         };
     };

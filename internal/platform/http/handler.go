@@ -11,6 +11,7 @@ import (
 	contract "github.com/iiwish/semlia/api/gen/go"
 	"github.com/iiwish/semlia/internal/application"
 	catalogapp "github.com/iiwish/semlia/internal/application/catalog"
+	governanceapp "github.com/iiwish/semlia/internal/application/governance"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -22,16 +23,21 @@ const (
 )
 
 type Handler struct {
-	service *application.SystemService
-	catalog *catalogapp.Service
-	logger  *slog.Logger
-	tracer  trace.Tracer
+	service    *application.SystemService
+	catalog    *catalogapp.Service
+	governance *governanceapp.AuthoringService
+	logger     *slog.Logger
+	tracer     trace.Tracer
 }
 
 type Option func(*Handler)
 
 func WithCatalog(service *catalogapp.Service) Option {
 	return func(handler *Handler) { handler.catalog = service }
+}
+
+func WithGovernance(service *governanceapp.AuthoringService) Option {
+	return func(handler *Handler) { handler.governance = service }
 }
 
 func NewHandler(service *application.SystemService, logger *slog.Logger, tracer trace.Tracer, options ...Option) http.Handler {
@@ -127,6 +133,14 @@ func (handler *Handler) route(response http.ResponseWriter, request *http.Reques
 		})
 		return ""
 	default:
+		if isGovernanceRoute(route.kind) {
+			if handler.governance == nil {
+				response.Header().Set("Retry-After", retryAfter)
+				writeError(response, http.StatusServiceUnavailable, "DEPENDENCY_UNAVAILABLE", "the governance dependency is unavailable", traceID, true)
+				return "DEPENDENCY_UNAVAILABLE"
+			}
+			return handler.routeGovernance(response, request, traceID, route)
+		}
 		if handler.catalog == nil {
 			response.Header().Set("Retry-After", retryAfter)
 			writeError(response, http.StatusServiceUnavailable, "DEPENDENCY_UNAVAILABLE", "the catalog dependency is unavailable", traceID, true)
