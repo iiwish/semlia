@@ -52,7 +52,7 @@ parallelized once T003 and T006 are delivered.
 
 ### T003 Proposal API and AI output contract
 
-Status: Blocked
+Status: Accepted
 Depends on: T002, T008
 Blocks: T004, T009
 
@@ -60,6 +60,16 @@ Condition: packet authored after T002 acceptance. Generated OpenAPI contracts fo
 create/list/detail with structured patches; `github.com/santhosh-tekuri/jsonschema/v6` validates AI
 structured output before domain entry; agent attribution references agent runs; no-substantive-change
 scan keeps empty diffs out of the human queue.
+
+Packet: `docs/specs/m2-governed-authoring/packets/T003.yaml`.
+
+Execution: implementation adds the governance proposal API surface (list/create/detail/submit)
+under `/api/v1/workspaces/{workspaceId}/governance/proposals` with regenerated contracts, the
+versioned AI proposal-input JSON Schema gate (422 with zero domain writes), agent-run attribution
+matching, the no-substantive-change gate and server-side capability enforcement. Evidence:
+`docs/evidence/M2-T003/summary.md`.
+
+Acceptance: included in the founder's continuous M2 execution authorization on 2026-09-02.
 
 ### T004 Validation orchestration
 
