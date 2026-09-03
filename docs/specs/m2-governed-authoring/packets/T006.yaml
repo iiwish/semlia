@@ -1,0 +1,69 @@
+schema_version: 1
+packet_id: M2-T006-A001
+task_id: T006
+feature_id: m2-governed-authoring
+mode: execute_one_task
+status: Ready
+
+goal: >-
+  Add the expert review commands, batch confirmation with clustering, sampling, exclusions and
+  full batch audit, mid-batch high-risk auto-split, and server-side separation-of-duties
+  enforcement — the human decision layer of the governed loop, without release/publish behavior.
+
+dependencies:
+  - T005 Accepted (2026-09-02)
+  - founder continuous M2 execution authorization through T007 (2026-09-02)
+  - docs/SSOT.md §8.4 (batch hard rules), §8.3 (SoD as risk input), D-013
+  - docs/specs/access-control/product-design.md FR-007 (the four hard blocks), FR-003
+  - docs/specs/m2-governed-authoring/data-model.md (reviews aggregate)
+
+allowed_files:
+  - internal/**
+  - api/openapi/**
+  - db/**
+  - migrations/**
+  - sdk/typescript/**
+  - tests/**
+  - docs/specs/m2-governed-authoring/**
+  - docs/evidence/M2-T006/**
+
+forbidden_changes:
+  - Do not add release cuts, publishing, rollback or Git projection behavior (T007).
+  - Do not let a proposal author serve as the only reviewer of their own proposal (FR-007).
+  - Do not mix high-risk items into batch operations; escalation at confirm time must split the
+    item out automatically.
+  - Do not collapse review state into the proposal state machine; reviews are records, approvals
+    gate the later release cut (T007 enforces).
+  - Do not weaken review immutability (T002 triggers) or any existing test.
+
+tdd:
+  red:
+    - Expert review: approve records an immutable review (proposal stays in_review); reject
+      transitions in_review→rejected with decided_at; unauthorized principals are denied with
+      audited 403.
+    - SoD: a proposal author cannot review their own proposal; the denial returns a stable
+      separation-of-duties code naming the conflict, scope and policy source (FR-007).
+    - Batch: batch creation clusters eligible in_review proposals by the grouping rule (target
+      type + diff category + matched rule), persists grouping rule, samples, exclusions, reviewer
+      and policy version; batch confirm applies the decision to current members and auto-splits
+      any member whose risk is high at confirm time.
+    - Batch audit: the persisted batch record reproduces grouping rule, membership, samples,
+      exclusions, reviewer and policy version exactly.
+  green:
+    - End-to-end against real PostgreSQL: expert approve→immutable review; batch create→confirm
+      with one auto-split; reject path with reasons.
+  refactor:
+    - Share one review-recording helper between expert and batch paths.
+
+validation:
+  - go test ./...
+  - go vet ./...
+  - make contracts-check
+  - make check-source
+  - git diff --check
+
+acceptance:
+  - Expert approve/reject commands enforce proposal.review server-side with immutable reviews.
+  - FR-007 author-cannot-review block enforced server-side with stable, explainable denials.
+  - Batch confirmation persists the full §8.4 audit record and auto-splits high-risk members.
+  - High-risk items are never mixed into batch operations at creation or confirm time.
