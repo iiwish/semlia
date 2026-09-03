@@ -1,0 +1,64 @@
+schema_version: 1
+packet_id: M2-T008-A001
+task_id: T008
+feature_id: m2-governed-authoring
+mode: execute_one_task
+status: Ready
+
+goal: >-
+  Add ModelGrain, EntityKey, JoinContract and PhysicalBinding persistence and domain so governed
+  proposals can target the four object types through the T002 object-generic change-set pipeline,
+  without adding HTTP endpoints.
+
+dependencies:
+  - T001 Accepted (2026-09-02)
+  - T002 Accepted (2026-09-02)
+  - founder continuous M2 execution authorization through T007 (2026-09-02)
+  - docs/SSOT.md §17 M2, D-014
+  - docs/specs/m2-governed-authoring/data-model.md migration strategy step 3
+
+allowed_files:
+  - internal/**
+  - db/**
+  - migrations/**
+  - tests/**
+  - docs/specs/m2-governed-authoring/**
+  - docs/evidence/M2-T008/**
+
+forbidden_changes:
+  - Do not add HTTP endpoints, OpenAPI changes or sdk/typescript changes.
+  - Do not alter M0/M1/T001/T002 table semantics; migration 000007 only adds objects.
+  - Do not give the four objects a lifecycle/workflow enum in this task; status dimensions stay
+    with assets and proposals (semantic-asset design §4.8).
+  - Do not mutate object rows outside the governed change application path.
+  - Do not weaken existing tests or migration expectations.
+
+tdd:
+  red:
+    - Targeting: a proposal whose target_object_type is one of the four new types is rejected at
+      submission when the target object does not exist in the workspace.
+    - Object semantics: each of the four types rejects structurally invalid content (JoinContract
+      without both sides, ModelGrain without grain fields, EntityKey without key fields,
+      PhysicalBinding without both asset and physical references).
+    - Governed change application: applying a change bumps the object version, records an audit
+      fact, and rejects concurrent application with an invariant error.
+    - Migration lifecycle: populated M1/M2 upgrade, downgrade and re-upgrade preserve all rows.
+  green:
+    - The four objects persist with workspace scoping, TypeID identity and version pinning for
+      later release manifests.
+    - Proposal submission validates the four target types against existing objects.
+  refactor:
+    - Share one governed-object persistence helper for the four types instead of four divergent
+      implementations.
+
+validation:
+  - go test ./...
+  - go vet ./...
+  - make check-source
+  - git diff --check
+
+acceptance:
+  - All four object types persist with workspace scoping and TypeIDs (phb_, mgn_, eky_, jct_).
+  - Proposals target them through target_object_type/target_object_id with existence validation.
+  - Governed changes apply only through the application path with version bump and audit fact.
+  - Migration version 7 lifecycle proven on populated data; M0/M1/T001/T002 rows untouched.

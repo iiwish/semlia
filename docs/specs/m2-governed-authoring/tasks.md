@@ -103,12 +103,21 @@ per decision D8. The packet must forbid tags, remotes and history rewriting in t
 
 ### T008 Governance objects
 
-Status: Blocked
+Status: Accepted
 Depends on: T002
 Blocks: T003
 
 Condition: packet authored after T002 acceptance. ModelGrain, EntityKey, JoinContract and
 PhysicalBinding domain, migrations and proposal support on the object-generic change-set pipeline.
+
+Packet: `docs/specs/m2-governed-authoring/packets/T008.yaml`.
+
+Execution: implementation adds migration `000007`, the four object domains with structural
+validation, submission-time target existence, governed change application with version bump and
+audit facts, and the populated-migration lifecycle to version 7. Evidence:
+`docs/evidence/M2-T008/summary.md`.
+
+Acceptance: included in the founder's continuous M2 execution authorization on 2026-09-02.
 
 ### T009 Model configuration and live LLM generation
 
