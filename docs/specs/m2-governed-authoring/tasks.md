@@ -73,13 +73,23 @@ Acceptance: included in the founder's continuous M2 execution authorization on 2
 
 ### T004 Validation orchestration
 
-Status: Blocked
+Status: Accepted
 Depends on: T003
 Blocks: T005
 
 Condition: packet authored after T003 acceptance. Deterministic validator registry (schema,
 reference, structural in v1) running as jobs; runs record validator version, input digest and
 results; validator failure degrades to human handling without silent pass.
+
+Packet: `docs/specs/m2-governed-authoring/packets/T004.yaml`.
+
+Execution: implementation adds the ordered validator registry (`schema@1`, `reference@1`,
+`structural@1`), submit-time job orchestration on the leased worker (proposed→validating→
+in_review), canonical input digests, blocker/infra degradation to the human queue and the
+validation-runs read surface with regenerated contracts. Evidence:
+`docs/evidence/M2-T004/summary.md`.
+
+Acceptance: included in the founder's continuous M2 execution authorization on 2026-09-02.
 
 ### T005 Risk assessment and policy decisions
 
