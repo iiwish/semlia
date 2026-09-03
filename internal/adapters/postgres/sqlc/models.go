@@ -119,6 +119,19 @@ type DiscoveryRun struct {
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 }
 
+type EntityKey struct {
+	ID                  pgtype.UUID        `json:"id"`
+	WorkspaceID         pgtype.UUID        `json:"workspace_id"`
+	AssetID             pgtype.UUID        `json:"asset_id"`
+	KeyFieldRefs        []byte             `json:"key_field_refs"`
+	UniquenessSemantics string             `json:"uniqueness_semantics"`
+	Version             int32              `json:"version"`
+	Content             []byte             `json:"content"`
+	CreatedBy           string             `json:"created_by"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+}
+
 type EvidenceArtifact struct {
 	ID               pgtype.UUID        `json:"id"`
 	WorkspaceID      pgtype.UUID        `json:"workspace_id"`
@@ -151,6 +164,24 @@ type Job struct {
 	WorkspaceID       pgtype.UUID        `json:"workspace_id"`
 }
 
+type JoinContract struct {
+	ID             pgtype.UUID        `json:"id"`
+	WorkspaceID    pgtype.UUID        `json:"workspace_id"`
+	LeftDatasetID  pgtype.UUID        `json:"left_dataset_id"`
+	RightDatasetID pgtype.UUID        `json:"right_dataset_id"`
+	LeftFieldRefs  []byte             `json:"left_field_refs"`
+	RightFieldRefs []byte             `json:"right_field_refs"`
+	JoinType       string             `json:"join_type"`
+	Cardinality    string             `json:"cardinality"`
+	JoinExpression string             `json:"join_expression"`
+	ContractNotes  pgtype.Text        `json:"contract_notes"`
+	Version        int32              `json:"version"`
+	Content        []byte             `json:"content"`
+	CreatedBy      string             `json:"created_by"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
 type LineageEdge struct {
 	ID                  pgtype.UUID        `json:"id"`
 	WorkspaceID         pgtype.UUID        `json:"workspace_id"`
@@ -161,6 +192,20 @@ type LineageEdge struct {
 	CodeArtifactID      pgtype.UUID        `json:"code_artifact_id"`
 	Confidence          pgtype.Numeric     `json:"confidence"`
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+}
+
+type ModelGrain struct {
+	ID              pgtype.UUID        `json:"id"`
+	WorkspaceID     pgtype.UUID        `json:"workspace_id"`
+	AssetID         pgtype.UUID        `json:"asset_id"`
+	GrainExpression string             `json:"grain_expression"`
+	GrainFieldRefs  []byte             `json:"grain_field_refs"`
+	DocumentedBy    pgtype.UUID        `json:"documented_by"`
+	Version         int32              `json:"version"`
+	Content         []byte             `json:"content"`
+	CreatedBy       string             `json:"created_by"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 }
 
 type OntologyRevision struct {
@@ -199,6 +244,21 @@ type OutboxEvent struct {
 	PublishedAt       pgtype.Timestamptz `json:"published_at"`
 	ID                pgtype.UUID        `json:"id"`
 	WorkspaceID       pgtype.UUID        `json:"workspace_id"`
+}
+
+type PhysicalBinding struct {
+	ID          pgtype.UUID        `json:"id"`
+	WorkspaceID pgtype.UUID        `json:"workspace_id"`
+	AssetID     pgtype.UUID        `json:"asset_id"`
+	DatasetID   pgtype.UUID        `json:"dataset_id"`
+	FieldID     pgtype.UUID        `json:"field_id"`
+	Transform   pgtype.Text        `json:"transform"`
+	RetiredAt   pgtype.Timestamptz `json:"retired_at"`
+	Version     int32              `json:"version"`
+	Content     []byte             `json:"content"`
+	CreatedBy   string             `json:"created_by"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
 type PhysicalDataset struct {

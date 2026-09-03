@@ -43,17 +43,12 @@ func createMutationEvents(ctx context.Context, queries *dbgen.Queries, event mut
 	if err != nil {
 		return err
 	}
-	payloadData := make(map[string]any, len(event.Data)+2)
-	for key, value := range event.Data {
-		payloadData[key] = value
-	}
-	payloadData["specVersion"] = event.SpecVersion
-	payloadData["action"] = event.Action
+	createdAt := event.CreatedAt.UTC()
+	payloadData := buildMutationPayload(event.Data, event.SpecVersion, event.Action)
 	auditPayload, err := json.Marshal(payloadData)
 	if err != nil {
 		return err
 	}
-	createdAt := event.CreatedAt.UTC()
 	if err := queries.CreateAuditEvent(ctx, dbgen.CreateAuditEventParams{
 		ID: auditID, WorkspaceID: workspaceID, EventType: event.AuditType,
 		ActorID: textValue(event.Actor), Payload: auditPayload, TraceID: event.TraceID,
@@ -81,6 +76,62 @@ func createMutationEvents(ctx context.Context, queries *dbgen.Queries, event mut
 		return fmt.Errorf("enqueue mutation outbox event: %w", err)
 	}
 	return nil
+}
+
+// buildMutationPayload is the shared data+specVersion+action payload builder
+// used by every governance audit fact and outbox event.
+func buildMutationPayload(data map[string]any, specVersion, action string) map[string]any {
+	payloadData := make(map[string]any, len(data)+2)
+	for key, value := range data {
+		payloadData[key] = value
+	}
+	payloadData["specVersion"] = specVersion
+	payloadData["action"] = action
+	return payloadData
+}
+
+// governedObjectEvent is the audit-only fact of one governed object change
+// application. There is deliberately no outbox event: release publication
+// remains the outbox signal, and governed object changes surface through
+// audit queries and the release manifests built on top of the pinned
+// versions (packet M2-T008).
+type governedObjectEvent struct {
+	WorkspaceID identity.WorkspaceID
+	ObjectType  string
+	ObjectID    string
+	AuditID     identity.EventID
+	Action      string
+	Version     int
+	Summary     string
+	Actor       string
+	TraceID     string
+	CreatedAt   time.Time
+}
+
+func createGovernedObjectAuditEvent(ctx context.Context, queries *dbgen.Queries, event governedObjectEvent) error {
+	workspaceID, err := uuidValue(event.WorkspaceID)
+	if err != nil {
+		return err
+	}
+	auditID, err := uuidValue(event.AuditID)
+	if err != nil {
+		return err
+	}
+	payload, err := json.Marshal(buildMutationPayload(map[string]any{
+		"objectType": event.ObjectType,
+		"objectId":   event.ObjectID,
+		"version":    event.Version,
+		"summary":    event.Summary,
+	}, "semlia.governance-object/v1", event.Action))
+	if err != nil {
+		return err
+	}
+	return queries.CreateAuditEvent(ctx, dbgen.CreateAuditEventParams{
+		ID: auditID, WorkspaceID: workspaceID,
+		EventType: "governance." + event.ObjectType + "." + event.Action,
+		ActorID:   textValue(event.Actor), Payload: payload, TraceID: event.TraceID,
+		CreatedAt: timestamp(event.CreatedAt.UTC()),
+	})
 }
 
 type proposalEvent struct {

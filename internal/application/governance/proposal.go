@@ -94,6 +94,47 @@ func (service *ProposalService) CreateProposal(ctx context.Context, request Crea
 	return service.repository.CreateProposal(ctx, proposal)
 }
 
+type CreateGovernedProposalRequest struct {
+	WorkspaceID    identity.WorkspaceID
+	TargetType     governance.TargetObjectType
+	TargetObjectID string
+	Title          string
+	Summary        string
+	Reason         string
+	CreatedBy      string
+}
+
+// CreateGovernedProposal opens a draft against one of the four governance
+// object types (physical_binding, model_grain, entity_key, join_contract).
+// The target object existence is validated at submission, not here: drafts
+// may reference objects that appear before the change-set is complete.
+func (service *ProposalService) CreateGovernedProposal(ctx context.Context, request CreateGovernedProposalRequest) (governance.Proposal, error) {
+	request.Title = strings.TrimSpace(request.Title)
+	request.CreatedBy = strings.TrimSpace(request.CreatedBy)
+	if request.WorkspaceID.IsZero() || !request.TargetType.IsGovernedObject() ||
+		request.Title == "" || len(request.Title) > 256 || len(request.Summary) > 4096 ||
+		len(request.Reason) > 4096 || request.CreatedBy == "" || len(request.CreatedBy) > 256 {
+		return governance.Proposal{}, governance.ErrInvalidArgument
+	}
+	targetUUID, err := ParseGovernedObjectUUID(request.TargetType, request.TargetObjectID)
+	if err != nil {
+		return governance.Proposal{}, err
+	}
+	proposalID, err := identity.NewProposalID()
+	if err != nil {
+		return governance.Proposal{}, fmt.Errorf("mint proposal ID: %w", err)
+	}
+	now := service.clock.Now().UTC()
+	proposal := governance.Proposal{
+		ID: proposalID, WorkspaceID: request.WorkspaceID,
+		TargetObjectType: request.TargetType, TargetObjectID: targetUUID,
+		State: governance.ProposalDraft, Title: request.Title,
+		Summary: request.Summary, Reason: request.Reason, CreatedBy: request.CreatedBy,
+		CreatedAt: now, UpdatedAt: now,
+	}
+	return service.repository.CreateProposal(ctx, proposal)
+}
+
 type AddChangeRequest struct {
 	WorkspaceID identity.WorkspaceID
 	ProposalID  identity.ProposalID
