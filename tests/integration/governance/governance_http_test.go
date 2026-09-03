@@ -105,6 +105,13 @@ func newFixture(t *testing.T) *fixture {
 			governanceapp.NewPolicyDecisionTrigger(store, governancePolicy),
 		),
 	)
+	modelConfig := governanceapp.NewModelConfigService(store, authorizer, clock)
+	governanceapp.WithModelConfig(modelConfig)(authoring)
+	governanceapp.WithGeneration(governanceapp.NewGenerationService(
+		store, modelConfig,
+		governanceapp.NewAgentRunService(store, clock),
+		authoring, authorizer, clock,
+	))(authoring)
 	var logs bytes.Buffer
 	provider := trace.NewTracerProvider()
 	t.Cleanup(func() { _ = provider.Shutdown(context.Background()) })

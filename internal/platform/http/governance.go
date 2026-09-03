@@ -10,6 +10,7 @@ import (
 
 	contract "github.com/iiwish/semlia/api/gen/go"
 	governanceapp "github.com/iiwish/semlia/internal/application/governance"
+	"github.com/iiwish/semlia/internal/application/governance/llm"
 	authz "github.com/iiwish/semlia/internal/domain/authorization"
 	domain "github.com/iiwish/semlia/internal/domain/governance"
 	"github.com/iiwish/semlia/pkg/identity"
@@ -28,6 +29,12 @@ const (
 	routeGovernanceReleases
 	routeGovernanceRelease
 	routeGovernanceReleaseRollback
+	routeGovernanceModelProviders
+	routeGovernanceModelProvider
+	routeGovernanceModelSettings
+	routeGovernanceModelSetting
+	routeGovernanceModelSettingDefault
+	routeGovernanceGenerateProposal
 )
 
 func isGovernanceRoute(kind routeKind) bool {
@@ -36,7 +43,10 @@ func isGovernanceRoute(kind routeKind) bool {
 		routeGovernanceProposalValidationRuns, routeGovernanceProposalPolicyDecision,
 		routeGovernanceProposalReviews, routeGovernanceReviewBatches,
 		routeGovernanceReviewBatch, routeGovernanceReviewBatchConfirm,
-		routeGovernanceReleases, routeGovernanceRelease, routeGovernanceReleaseRollback:
+		routeGovernanceReleases, routeGovernanceRelease, routeGovernanceReleaseRollback,
+		routeGovernanceModelProviders, routeGovernanceModelProvider,
+		routeGovernanceModelSettings, routeGovernanceModelSetting,
+		routeGovernanceModelSettingDefault, routeGovernanceGenerateProposal:
 		return true
 	}
 	return false
@@ -46,7 +56,8 @@ func matchGovernanceRoute(parts []string, base matchedRoute) (matchedRoute, bool
 	if len(parts) < 6 || parts[4] != "governance" {
 		return matchedRoute{}, false
 	}
-	if parts[5] == "review-batches" {
+	switch parts[5] {
+	case "review-batches":
 		switch {
 		case len(parts) == 6:
 			base.kind, base.label = routeGovernanceReviewBatches,
@@ -63,8 +74,7 @@ func matchGovernanceRoute(parts []string, base matchedRoute) (matchedRoute, bool
 			return matchedRoute{}, false
 		}
 		return base, true
-	}
-	if parts[5] == "releases" {
+	case "releases":
 		switch {
 		case len(parts) == 6:
 			base.kind, base.label = routeGovernanceReleases,
@@ -81,8 +91,45 @@ func matchGovernanceRoute(parts []string, base matchedRoute) (matchedRoute, bool
 			return matchedRoute{}, false
 		}
 		return base, true
-	}
-	if parts[5] != "proposals" {
+	case "model-providers":
+		switch {
+		case len(parts) == 6:
+			base.kind, base.label = routeGovernanceModelProviders,
+				"/api/v1/workspaces/{workspaceId}/governance/model-providers"
+		case len(parts) == 7:
+			base.provider = parts[6]
+			base.kind, base.label = routeGovernanceModelProvider,
+				"/api/v1/workspaces/{workspaceId}/governance/model-providers/{providerId}"
+		default:
+			return matchedRoute{}, false
+		}
+		return base, true
+	case "model-settings":
+		switch {
+		case len(parts) == 6:
+			base.kind, base.label = routeGovernanceModelSettings,
+				"/api/v1/workspaces/{workspaceId}/governance/model-settings"
+		case len(parts) == 7:
+			base.setting = parts[6]
+			base.kind, base.label = routeGovernanceModelSetting,
+				"/api/v1/workspaces/{workspaceId}/governance/model-settings/{settingId}"
+		case len(parts) == 8 && parts[7] == "set-default":
+			base.setting = parts[6]
+			base.kind, base.label = routeGovernanceModelSettingDefault,
+				"/api/v1/workspaces/{workspaceId}/governance/model-settings/{settingId}/set-default"
+		default:
+			return matchedRoute{}, false
+		}
+		return base, true
+	case "agent-runs":
+		if len(parts) == 7 && parts[6] == "generate-proposal" {
+			base.kind, base.label = routeGovernanceGenerateProposal,
+				"/api/v1/workspaces/{workspaceId}/governance/agent-runs/generate-proposal"
+			return base, true
+		}
+		return matchedRoute{}, false
+	case "proposals":
+	default:
 		return matchedRoute{}, false
 	}
 	if len(parts) == 6 {
@@ -109,11 +156,15 @@ func matchGovernanceRoute(parts []string, base matchedRoute) (matchedRoute, bool
 
 func governanceRouteMethods(kind routeKind) []string {
 	switch kind {
-	case routeGovernanceProposals, routeGovernanceReviewBatches, routeGovernanceReleases:
+	case routeGovernanceProposals, routeGovernanceReviewBatches, routeGovernanceReleases,
+		routeGovernanceModelProviders, routeGovernanceModelSettings:
 		return []string{http.MethodGet, http.MethodPost}
 	case routeGovernanceProposalSubmit, routeGovernanceProposalReviews,
-		routeGovernanceReviewBatchConfirm, routeGovernanceReleaseRollback:
+		routeGovernanceReviewBatchConfirm, routeGovernanceReleaseRollback,
+		routeGovernanceModelSettingDefault, routeGovernanceGenerateProposal:
 		return []string{http.MethodPost}
+	case routeGovernanceModelProvider, routeGovernanceModelSetting:
+		return []string{http.MethodGet, http.MethodPut}
 	default:
 		return []string{http.MethodGet}
 	}
@@ -273,9 +324,83 @@ func (handler *Handler) routeGovernance(
 		}
 		writeJSON(response, http.StatusOK, governanceReviewBatchDetailResponse(result.Detail))
 		return ""
+	case routeGovernanceModelProviders:
+		if handler.governance.ModelConfig() == nil {
+			return writeGovernanceDependencyUnavailable(response, traceID)
+		}
+		if request.Method == http.MethodPost {
+			return handler.createModelProvider(response, request, traceID, workspaceID)
+		}
+		return handler.listModelProviders(response, request, traceID, workspaceID)
+	case routeGovernanceModelProvider:
+		providerID, parseErr := identity.ParseModelProviderID(route.provider)
+		if parseErr != nil {
+			return writeGovernanceError(response, domain.ErrInvalidArgument, traceID)
+		}
+		if handler.governance.ModelConfig() == nil {
+			return writeGovernanceDependencyUnavailable(response, traceID)
+		}
+		if request.Method == http.MethodPut {
+			return handler.updateModelProvider(response, request, traceID, workspaceID, providerID)
+		}
+		return handler.getModelProvider(response, request, traceID, workspaceID, providerID)
+	case routeGovernanceModelSettings:
+		if handler.governance.ModelConfig() == nil {
+			return writeGovernanceDependencyUnavailable(response, traceID)
+		}
+		if request.Method == http.MethodPost {
+			return handler.createModelSetting(response, request, traceID, workspaceID)
+		}
+		return handler.listModelSettings(response, request, traceID, workspaceID)
+	case routeGovernanceModelSetting:
+		settingID, parseErr := identity.ParseModelSettingID(route.setting)
+		if parseErr != nil {
+			return writeGovernanceError(response, domain.ErrInvalidArgument, traceID)
+		}
+		if handler.governance.ModelConfig() == nil {
+			return writeGovernanceDependencyUnavailable(response, traceID)
+		}
+		if request.Method == http.MethodPut {
+			return handler.updateModelSetting(response, request, traceID, workspaceID, settingID)
+		}
+		return handler.getModelSetting(response, request, traceID, workspaceID, settingID)
+	case routeGovernanceModelSettingDefault:
+		settingID, parseErr := identity.ParseModelSettingID(route.setting)
+		if parseErr != nil {
+			return writeGovernanceError(response, domain.ErrInvalidArgument, traceID)
+		}
+		if handler.governance.ModelConfig() == nil {
+			return writeGovernanceDependencyUnavailable(response, traceID)
+		}
+		setting, defaultErr := handler.governance.ModelConfig().SetDefault(request.Context(), governanceapp.SetDefaultModelSettingRequest{
+			WorkspaceID: workspaceID, SettingID: settingID,
+			PrincipalRef: strings.TrimSpace(request.Header.Get(headerPrincipal)), TraceID: traceID,
+		})
+		if defaultErr != nil {
+			return writeGovernanceError(response, defaultErr, traceID)
+		}
+		writeJSON(response, http.StatusOK, modelSettingResponse(setting))
+		return ""
+	case routeGovernanceGenerateProposal:
+		if handler.governance.Generation() == nil {
+			return writeGovernanceDependencyUnavailable(response, traceID)
+		}
+		result, generateErr := handler.generateProposal(request, traceID, workspaceID)
+		if generateErr != nil {
+			return writeGovernanceError(response, generateErr, traceID)
+		}
+		writeJSON(response, http.StatusCreated, generatedProposalResponse(result))
+		return ""
 	default:
 		panic("governance route is not handled")
 	}
+}
+
+func writeGovernanceDependencyUnavailable(response http.ResponseWriter, traceID string) string {
+	response.Header().Set("Retry-After", retryAfter)
+	writeError(response, http.StatusServiceUnavailable, "DEPENDENCY_UNAVAILABLE",
+		"the governance dependency is unavailable", traceID, true)
+	return "DEPENDENCY_UNAVAILABLE"
 }
 
 func (handler *Handler) createProposalReview(
@@ -885,6 +1010,8 @@ func writeGovernanceError(response http.ResponseWriter, err error, traceID strin
 	var dutyConflict *governanceapp.SeparationOfDutyError
 	var aiOutputInvalid *governanceapp.AIOutputInvalidError
 	var releaseRefusal *governanceapp.ReleaseRefusalError
+	var providerUnsupported *llm.ProviderUnsupportedError
+	var providerUnavailable *llm.ProviderUnavailableError
 	switch {
 	case errors.As(err, &dutyConflict):
 		details := map[string]any{
@@ -911,6 +1038,14 @@ func writeGovernanceError(response http.ResponseWriter, err error, traceID strin
 		writeError(response, http.StatusForbidden, string(denial.Decision.ReasonCode),
 			"the acting principal lacks the required capability", traceID, false)
 		return string(denial.Decision.ReasonCode)
+	case errors.As(err, &providerUnsupported):
+		writeError(response, http.StatusUnprocessableEntity, "PROVIDER_UNSUPPORTED",
+			"the provider protocol has no live adapter", traceID, false)
+		return "PROVIDER_UNSUPPORTED"
+	case errors.As(err, &providerUnavailable):
+		writeError(response, http.StatusServiceUnavailable, "PROVIDER_UNAVAILABLE",
+			"the configured provider is unavailable", traceID, true)
+		return "PROVIDER_UNAVAILABLE"
 	case errors.As(err, &aiOutputInvalid):
 		writeErrorWithDetails(response, http.StatusUnprocessableEntity, "AI_OUTPUT_INVALID",
 			"the agent structured output does not match semlia.proposal-input/v1", traceID,

@@ -130,6 +130,8 @@ type AuthoringService struct {
 	validation      *ValidationOrchestrator
 	decisions       DecisionRefresher
 	publishing      *PublishingService
+	modelConfig     *ModelConfigService
+	generation      *GenerationService
 }
 
 type AuthoringOption func(*AuthoringService)
@@ -172,6 +174,26 @@ func NewAuthoringService(
 // store and evaluator as the authoring service.
 func (service *AuthoringService) Publishing() *PublishingService {
 	return service.publishing
+}
+
+// WithModelConfig attaches the T009 persisted model-configuration surface.
+func WithModelConfig(config *ModelConfigService) AuthoringOption {
+	return func(service *AuthoringService) { service.modelConfig = config }
+}
+
+// WithGeneration attaches the T009 live generation flow.
+func WithGeneration(generation *GenerationService) AuthoringOption {
+	return func(service *AuthoringService) { service.generation = generation }
+}
+
+// ModelConfig exposes the model-configuration service; nil until attached.
+func (service *AuthoringService) ModelConfig() *ModelConfigService {
+	return service.modelConfig
+}
+
+// Generation exposes the generation service; nil until attached.
+func (service *AuthoringService) Generation() *GenerationService {
+	return service.generation
 }
 
 // CreateProposal opens a governed draft: target resolution, §8.6 agent-run

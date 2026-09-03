@@ -23,11 +23,13 @@ const (
 )
 
 type Handler struct {
-	service    *application.SystemService
-	catalog    *catalogapp.Service
-	governance *governanceapp.AuthoringService
-	logger     *slog.Logger
-	tracer     trace.Tracer
+	service     *application.SystemService
+	catalog     *catalogapp.Service
+	governance  *governanceapp.AuthoringService
+	modelConfig *governanceapp.ModelConfigService
+	generation  *governanceapp.GenerationService
+	logger      *slog.Logger
+	tracer      trace.Tracer
 }
 
 type Option func(*Handler)
@@ -38,6 +40,14 @@ func WithCatalog(service *catalogapp.Service) Option {
 
 func WithGovernance(service *governanceapp.AuthoringService) Option {
 	return func(handler *Handler) { handler.governance = service }
+}
+
+func WithModelConfig(service *governanceapp.ModelConfigService) Option {
+	return func(handler *Handler) { handler.modelConfig = service }
+}
+
+func WithGeneration(service *governanceapp.GenerationService) Option {
+	return func(handler *Handler) { handler.generation = service }
 }
 
 func NewHandler(service *application.SystemService, logger *slog.Logger, tracer trace.Tracer, options ...Option) http.Handler {
@@ -54,6 +64,17 @@ func NewHandler(service *application.SystemService, logger *slog.Logger, tracer 
 	for _, option := range options {
 		if option != nil {
 			option(handler)
+		}
+	}
+	// The T009 surfaces hang off the governance service when it composes them
+	// itself (WithModelConfig/WithGeneration on the authoring service); the
+	// explicit options only override that default.
+	if handler.governance != nil {
+		if handler.modelConfig == nil {
+			handler.modelConfig = handler.governance.ModelConfig()
+		}
+		if handler.generation == nil {
+			handler.generation = handler.governance.Generation()
 		}
 	}
 	return handler

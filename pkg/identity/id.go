@@ -50,6 +50,8 @@ const (
 	PhysicalFieldRevision   Prefix = "pfr"
 	CodeArtifact            Prefix = "cod"
 	LineageEdge             Prefix = "lin"
+	ModelProvider           Prefix = "prv"
+	ModelSetting            Prefix = "mdl"
 )
 
 var registeredPrefixes = []Prefix{
@@ -85,6 +87,8 @@ var registeredPrefixes = []Prefix{
 	PhysicalFieldRevision,
 	CodeArtifact,
 	LineageEdge,
+	ModelProvider,
+	ModelSetting,
 }
 
 type ID struct {
@@ -282,6 +286,8 @@ type physicalFieldKind struct{}
 type physicalFieldRevisionKind struct{}
 type codeArtifactKind struct{}
 type lineageEdgeKind struct{}
+type modelProviderKind struct{}
+type modelSettingKind struct{}
 
 func (workspaceKind) resourcePrefix() Prefix               { return Workspace }
 func (assetKind) resourcePrefix() Prefix                   { return Asset }
@@ -315,6 +321,8 @@ func (physicalFieldKind) resourcePrefix() Prefix           { return PhysicalFiel
 func (physicalFieldRevisionKind) resourcePrefix() Prefix   { return PhysicalFieldRevision }
 func (codeArtifactKind) resourcePrefix() Prefix            { return CodeArtifact }
 func (lineageEdgeKind) resourcePrefix() Prefix             { return LineageEdge }
+func (modelProviderKind) resourcePrefix() Prefix           { return ModelProvider }
+func (modelSettingKind) resourcePrefix() Prefix            { return ModelSetting }
 
 type WorkspaceID = TypedID[workspaceKind]
 type AssetID = TypedID[assetKind]
@@ -348,6 +356,8 @@ type PhysicalFieldID = TypedID[physicalFieldKind]
 type PhysicalFieldRevisionID = TypedID[physicalFieldRevisionKind]
 type CodeArtifactID = TypedID[codeArtifactKind]
 type LineageEdgeID = TypedID[lineageEdgeKind]
+type ModelProviderID = TypedID[modelProviderKind]
+type ModelSettingID = TypedID[modelSettingKind]
 
 func NewWorkspaceID() (WorkspaceID, error)               { return newTypedID[workspaceKind]() }
 func NewAssetID() (AssetID, error)                       { return newTypedID[assetKind]() }
@@ -385,6 +395,10 @@ func NewPhysicalFieldRevisionID() (PhysicalFieldRevisionID, error) {
 }
 func NewCodeArtifactID() (CodeArtifactID, error) { return newTypedID[codeArtifactKind]() }
 func NewLineageEdgeID() (LineageEdgeID, error)   { return newTypedID[lineageEdgeKind]() }
+func NewModelProviderID() (ModelProviderID, error) {
+	return newTypedID[modelProviderKind]()
+}
+func NewModelSettingID() (ModelSettingID, error) { return newTypedID[modelSettingKind]() }
 
 func ParseWorkspaceID(value string) (WorkspaceID, error) { return parseTypedID[workspaceKind](value) }
 func ParseAssetID(value string) (AssetID, error)         { return parseTypedID[assetKind](value) }
@@ -453,6 +467,12 @@ func ParseCodeArtifactID(value string) (CodeArtifactID, error) {
 }
 func ParseLineageEdgeID(value string) (LineageEdgeID, error) {
 	return parseTypedID[lineageEdgeKind](value)
+}
+func ParseModelProviderID(value string) (ModelProviderID, error) {
+	return parseTypedID[modelProviderKind](value)
+}
+func ParseModelSettingID(value string) (ModelSettingID, error) {
+	return parseTypedID[modelSettingKind](value)
 }
 
 func WorkspaceIDFromUUIDBytes(value [16]byte) (WorkspaceID, error) {
@@ -548,6 +568,12 @@ func CodeArtifactIDFromUUIDBytes(value [16]byte) (CodeArtifactID, error) {
 }
 func LineageEdgeIDFromUUIDBytes(value [16]byte) (LineageEdgeID, error) {
 	return typedIDFromUUIDBytes[lineageEdgeKind](value)
+}
+func ModelProviderIDFromUUIDBytes(value [16]byte) (ModelProviderID, error) {
+	return typedIDFromUUIDBytes[modelProviderKind](value)
+}
+func ModelSettingIDFromUUIDBytes(value [16]byte) (ModelSettingID, error) {
+	return typedIDFromUUIDBytes[modelSettingKind](value)
 }
 
 func isRegistered(prefix Prefix) bool {
