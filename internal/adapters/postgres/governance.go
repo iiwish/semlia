@@ -36,6 +36,10 @@ func governanceRepositoryError(operation string, err error) error {
 	if errors.Is(err, pgx.ErrNoRows) {
 		return fmt.Errorf("%s: %w", operation, governance.ErrNotFound)
 	}
+	if errors.Is(err, governance.ErrNotFound) || errors.Is(err, governance.ErrConflict) ||
+		errors.Is(err, governance.ErrInvariant) || errors.Is(err, governance.ErrInvalidArgument) {
+		return fmt.Errorf("%s: %w", operation, err)
+	}
 	return fmt.Errorf("%s: %w", operation, errRepositoryOperation)
 }
 
@@ -153,6 +157,19 @@ func (store *Store) SubmitProposal(ctx context.Context, command governanceapp.Pr
 		return governance.Proposal{}, fmt.Errorf(
 			"%w: proposal is %s, not draft", governance.ErrConflict, locked.State)
 	}
+	// Proposals targeting the M2 governance objects must reference an object
+	// that exists in the same workspace; the check runs inside the submission
+	// transaction so a draft can never be proposed against a missing target.
+	// semantic_asset targets are covered by the asset_id foreign key.
+	if targetType := governance.TargetObjectType(locked.TargetObjectType); targetType.IsGovernedObject() {
+		targetID, decodeErr := uuidFromString(locked.TargetObjectID.String())
+		if decodeErr != nil {
+			return governance.Proposal{}, fmt.Errorf("decode proposal target object ID: %w", decodeErr)
+		}
+		if verifyErr := governedTargetExists(ctx, queries, targetType, workspaceID, targetID); verifyErr != nil {
+			return governance.Proposal{}, governanceRepositoryError("verify proposal target", verifyErr)
+		}
+	}
 	changeCount, err := queries.CountProposalChanges(ctx, proposalID)
 	if err != nil {
 		return governance.Proposal{}, governanceRepositoryError("count proposal changes", err)
@@ -168,12 +185,18 @@ func (store *Store) SubmitProposal(ctx context.Context, command governanceapp.Pr
 	if err != nil {
 		return governance.Proposal{}, governanceRepositoryError("submit proposal", err)
 	}
-	assetID, err := identity.AssetIDFromUUIDBytes(locked.AssetID.Bytes)
-	if err != nil {
-		return governance.Proposal{}, err
+	// Governed-object proposals carry no asset; the event data includes the
+	// asset only when the proposal actually targets one.
+	var assetID *identity.AssetID
+	if locked.AssetID.Valid {
+		parsedAssetID, parseErr := identity.AssetIDFromUUIDBytes(locked.AssetID.Bytes)
+		if parseErr != nil {
+			return governance.Proposal{}, parseErr
+		}
+		assetID = &parsedAssetID
 	}
 	if err := createProposalMutationEvents(ctx, queries, proposalEvent{
-		WorkspaceID: command.WorkspaceID, ProposalID: command.ProposalID, AssetID: &assetID,
+		WorkspaceID: command.WorkspaceID, ProposalID: command.ProposalID, AssetID: assetID,
 		AuditID: command.AuditEventID, OutboxID: command.OutboxEventID,
 		Action: "submitted", FromState: locked.State, ToState: submitted.State,
 		Actor: command.Actor, TraceID: command.TraceID, CreatedAt: command.SubmittedAt,
@@ -219,16 +242,20 @@ func (store *Store) TransitionProposal(ctx context.Context, command governanceap
 	if err != nil {
 		return governance.Proposal{}, governanceRepositoryError("transition proposal", err)
 	}
-	assetID, err := identity.AssetIDFromUUIDBytes(locked.AssetID.Bytes)
-	if err != nil {
-		return governance.Proposal{}, err
+	var assetID *identity.AssetID
+	if locked.AssetID.Valid {
+		parsedAssetID, parseErr := identity.AssetIDFromUUIDBytes(locked.AssetID.Bytes)
+		if parseErr != nil {
+			return governance.Proposal{}, parseErr
+		}
+		assetID = &parsedAssetID
 	}
 	action := "state_changed"
 	if command.To == governance.ProposalRejected {
 		action = "rejected"
 	}
 	if err := createProposalMutationEvents(ctx, queries, proposalEvent{
-		WorkspaceID: command.WorkspaceID, ProposalID: command.ProposalID, AssetID: &assetID,
+		WorkspaceID: command.WorkspaceID, ProposalID: command.ProposalID, AssetID: assetID,
 		AuditID: command.AuditEventID, OutboxID: command.OutboxEventID,
 		Action: action, FromState: locked.State, ToState: string(command.To),
 		Actor: command.Actor, TraceID: command.TraceID, CreatedAt: command.UpdatedAt,

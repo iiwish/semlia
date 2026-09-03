@@ -37,6 +37,10 @@ const (
 	PolicyDecision          Prefix = "pol"
 	AgentRun                Prefix = "agr"
 	AgentStep               Prefix = "ags"
+	PhysicalBinding         Prefix = "phb"
+	ModelGrain              Prefix = "mgn"
+	EntityKey               Prefix = "eky"
+	JoinContract            Prefix = "jct"
 	SourceConnection        Prefix = "src"
 	SourceRevision          Prefix = "srv"
 	PhysicalDataset         Prefix = "pds"
@@ -67,6 +71,10 @@ var registeredPrefixes = []Prefix{
 	PolicyDecision,
 	AgentRun,
 	AgentStep,
+	PhysicalBinding,
+	ModelGrain,
+	EntityKey,
+	JoinContract,
 	SourceConnection,
 	SourceRevision,
 	PhysicalDataset,
@@ -259,6 +267,10 @@ type validationResultKind struct{}
 type policyDecisionKind struct{}
 type agentRunKind struct{}
 type agentStepKind struct{}
+type physicalBindingKind struct{}
+type modelGrainKind struct{}
+type entityKeyKind struct{}
+type joinContractKind struct{}
 type sourceConnectionKind struct{}
 type sourceRevisionKind struct{}
 type physicalDatasetKind struct{}
@@ -287,6 +299,10 @@ func (validationResultKind) resourcePrefix() Prefix        { return ValidationRe
 func (policyDecisionKind) resourcePrefix() Prefix          { return PolicyDecision }
 func (agentRunKind) resourcePrefix() Prefix                { return AgentRun }
 func (agentStepKind) resourcePrefix() Prefix               { return AgentStep }
+func (physicalBindingKind) resourcePrefix() Prefix         { return PhysicalBinding }
+func (modelGrainKind) resourcePrefix() Prefix              { return ModelGrain }
+func (entityKeyKind) resourcePrefix() Prefix               { return EntityKey }
+func (joinContractKind) resourcePrefix() Prefix            { return JoinContract }
 func (sourceConnectionKind) resourcePrefix() Prefix        { return SourceConnection }
 func (sourceRevisionKind) resourcePrefix() Prefix          { return SourceRevision }
 func (physicalDatasetKind) resourcePrefix() Prefix         { return PhysicalDataset }
@@ -315,6 +331,10 @@ type ValidationResultID = TypedID[validationResultKind]
 type PolicyDecisionID = TypedID[policyDecisionKind]
 type AgentRunID = TypedID[agentRunKind]
 type AgentStepID = TypedID[agentStepKind]
+type PhysicalBindingID = TypedID[physicalBindingKind]
+type ModelGrainID = TypedID[modelGrainKind]
+type EntityKeyID = TypedID[entityKeyKind]
+type JoinContractID = TypedID[joinContractKind]
 type SourceConnectionID = TypedID[sourceConnectionKind]
 type SourceRevisionID = TypedID[sourceRevisionKind]
 type PhysicalDatasetID = TypedID[physicalDatasetKind]
@@ -343,6 +363,10 @@ func NewValidationResultID() (ValidationResultID, error) { return newTypedID[val
 func NewPolicyDecisionID() (PolicyDecisionID, error)     { return newTypedID[policyDecisionKind]() }
 func NewAgentRunID() (AgentRunID, error)                 { return newTypedID[agentRunKind]() }
 func NewAgentStepID() (AgentStepID, error)               { return newTypedID[agentStepKind]() }
+func NewPhysicalBindingID() (PhysicalBindingID, error)   { return newTypedID[physicalBindingKind]() }
+func NewModelGrainID() (ModelGrainID, error)             { return newTypedID[modelGrainKind]() }
+func NewEntityKeyID() (EntityKeyID, error)               { return newTypedID[entityKeyKind]() }
+func NewJoinContractID() (JoinContractID, error)         { return newTypedID[joinContractKind]() }
 func NewSourceConnectionID() (SourceConnectionID, error) { return newTypedID[sourceConnectionKind]() }
 func NewSourceRevisionID() (SourceRevisionID, error)     { return newTypedID[sourceRevisionKind]() }
 func NewPhysicalDatasetID() (PhysicalDatasetID, error)   { return newTypedID[physicalDatasetKind]() }
@@ -384,6 +408,18 @@ func ParsePolicyDecisionID(value string) (PolicyDecisionID, error) {
 func ParseAgentRunID(value string) (AgentRunID, error) { return parseTypedID[agentRunKind](value) }
 func ParseAgentStepID(value string) (AgentStepID, error) {
 	return parseTypedID[agentStepKind](value)
+}
+func ParsePhysicalBindingID(value string) (PhysicalBindingID, error) {
+	return parseTypedID[physicalBindingKind](value)
+}
+func ParseModelGrainID(value string) (ModelGrainID, error) {
+	return parseTypedID[modelGrainKind](value)
+}
+func ParseEntityKeyID(value string) (EntityKeyID, error) {
+	return parseTypedID[entityKeyKind](value)
+}
+func ParseJoinContractID(value string) (JoinContractID, error) {
+	return parseTypedID[joinContractKind](value)
 }
 func ParseSourceConnectionID(value string) (SourceConnectionID, error) {
 	return parseTypedID[sourceConnectionKind](value)
@@ -464,6 +500,18 @@ func AgentRunIDFromUUIDBytes(value [16]byte) (AgentRunID, error) {
 }
 func AgentStepIDFromUUIDBytes(value [16]byte) (AgentStepID, error) {
 	return typedIDFromUUIDBytes[agentStepKind](value)
+}
+func PhysicalBindingIDFromUUIDBytes(value [16]byte) (PhysicalBindingID, error) {
+	return typedIDFromUUIDBytes[physicalBindingKind](value)
+}
+func ModelGrainIDFromUUIDBytes(value [16]byte) (ModelGrainID, error) {
+	return typedIDFromUUIDBytes[modelGrainKind](value)
+}
+func EntityKeyIDFromUUIDBytes(value [16]byte) (EntityKeyID, error) {
+	return typedIDFromUUIDBytes[entityKeyKind](value)
+}
+func JoinContractIDFromUUIDBytes(value [16]byte) (JoinContractID, error) {
+	return typedIDFromUUIDBytes[joinContractKind](value)
 }
 func SourceConnectionIDFromUUIDBytes(value [16]byte) (SourceConnectionID, error) {
 	return typedIDFromUUIDBytes[sourceConnectionKind](value)
