@@ -264,6 +264,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspaceId}/governance/proposals/{proposalId}/policy-decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                proposalId: components["parameters"]["ProposalId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read the recomputable policy decision of one proposal
+         * @description The latest versioned rule-table decision for the proposal (SSOT §8.2): the rule version, the canonical inputs digest, the explainable risk level and expert|batch routing, the matched rule with its explanation and the input categories that drove it. No decision exists before validation completes; no opaque score is exposed (SSOT §8.3).
+         */
+        get: operations["getGovernancePolicyDecision"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspaceId}/discovery-runs/{runId}": {
         parameters: {
             query?: never;
@@ -741,6 +764,33 @@ export interface components {
         };
         GovernanceValidationRunPage: {
             items: components["schemas"]["GovernanceValidationRun"][];
+        };
+        /**
+         * @description Explainable risk level of a policy decision (SSOT §8.3); never a numeric score.
+         * @enum {string}
+         */
+        GovernanceRiskLevel: "low" | "medium" | "high";
+        /**
+         * @description Governance routing channel of a policy decision (SSOT §8.4). M2 routes expert|batch only; the automatic channel is deferred to M4 and is not part of the vocabulary.
+         * @enum {string}
+         */
+        GovernanceRoutingChannel: "expert" | "batch";
+        GovernancePolicyDecision: {
+            /** @description Version of the rule table the decision was computed with. */
+            ruleVersion: string;
+            /** @description sha256 content digest of the canonical decision inputs the rule table consumed. */
+            inputsDigest: string;
+            riskLevel: components["schemas"]["GovernanceRiskLevel"];
+            routing: components["schemas"]["GovernanceRoutingChannel"];
+            /** @description Identifier of the matched seeded rule row, or the fail-safe default policy. */
+            matchedRuleId: string;
+            /** @description Stable machine-readable reason the decision is explainable by. */
+            reasonCode: string;
+            /** @description Human-readable explanation carried by the matched rule. */
+            explanation: string;
+            /** @description Decision input categories the matched rule conditions reference. */
+            matchedInputFields: string[];
+            createdAt: components["schemas"]["Timestamp"];
         };
     };
     responses: {
@@ -1299,6 +1349,34 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GovernanceValidationRunPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getGovernancePolicyDecision: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                proposalId: components["parameters"]["ProposalId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The latest policy decision of the proposal. */
+            200: {
+                headers: {
+                    "X-Trace-ID": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GovernancePolicyDecision"];
                 };
             };
             400: components["responses"]["BadRequest"];

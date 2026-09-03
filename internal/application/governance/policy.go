@@ -3,6 +3,7 @@ package governance
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -13,6 +14,44 @@ import (
 type PolicyRepository interface {
 	CreatePolicyDecision(ctx context.Context, command PolicyDecisionCommand) (governance.PolicyDecision, error)
 	GetPolicyDecision(ctx context.Context, workspace identity.WorkspaceID, decision identity.PolicyDecisionID) (governance.PolicyDecision, error)
+}
+
+// PolicyRuleSource loads the versioned rule-table rows a decision evaluates.
+// The store-backed implementation reads the rows migration 000008 seeds;
+// decisions are data-driven and stay recomputable because rows are immutable
+// per rule version.
+type PolicyRuleSource interface {
+	ListPolicyRules(ctx context.Context, ruleVersion string) ([]governance.PolicyRule, error)
+}
+
+type PolicyServiceOption func(*PolicyService)
+
+// WithRuleSource attaches the rule-table loader. Without one the service
+// falls back to the canonical built-in table behind EvaluateRiskRule; the
+// integration suite locks both paths to identical outcomes.
+func WithRuleSource(source PolicyRuleSource) PolicyServiceOption {
+	return func(service *PolicyService) { service.ruleSource = source }
+}
+
+// StaticRuleSource pins one rule table, for tests and deployments that
+// evaluate a fixed version.
+func NewStaticRuleSource(ruleVersion string, rules []governance.PolicyRule) PolicyRuleSource {
+	return staticRuleSource{ruleVersion: ruleVersion, rules: rules}
+}
+
+type staticRuleSource struct {
+	ruleVersion string
+	rules       []governance.PolicyRule
+}
+
+func (source staticRuleSource) ListPolicyRules(
+	_ context.Context, ruleVersion string,
+) ([]governance.PolicyRule, error) {
+	if ruleVersion != source.ruleVersion {
+		return nil, fmt.Errorf("%w: static rule source holds %s, not %s",
+			governance.ErrInvalidArgument, source.ruleVersion, ruleVersion)
+	}
+	return append([]governance.PolicyRule(nil), source.rules...), nil
 }
 
 // PolicyDecisionCommand persists the decision and links it to the proposal
@@ -34,11 +73,18 @@ type PolicyDecisionCommand struct {
 
 type PolicyService struct {
 	repository PolicyRepository
+	ruleSource PolicyRuleSource
 	clock      Clock
 }
 
-func NewPolicyService(repository PolicyRepository, clock Clock) *PolicyService {
-	return &PolicyService{repository: repository, clock: clock}
+func NewPolicyService(repository PolicyRepository, clock Clock, options ...PolicyServiceOption) *PolicyService {
+	service := &PolicyService{repository: repository, clock: clock}
+	for _, option := range options {
+		if option != nil {
+			option(service)
+		}
+	}
+	return service
 }
 
 type DecideRequest struct {
@@ -54,6 +100,23 @@ type DecideRequest struct {
 // routing, reason and inputs_digest — the digest is the sha256 of the
 // canonical (sorted-key) inputs encoding.
 func (service *PolicyService) Decide(ctx context.Context, request DecideRequest) (governance.PolicyDecision, error) {
+	return service.decide(ctx, request)
+}
+
+// EnsureDecisionRequest is the idempotent variant of DecideRequest.
+type EnsureDecisionRequest = DecideRequest
+
+// EnsureDecision returns the one decision a proposal owns for
+// (rule_version, inputs_digest): an existing row is returned as-is, a new one
+// is computed and persisted exactly once. Re-running the in_review decision
+// over unchanged state therefore never duplicates rows; materially changed
+// state (a different digest under the same rule version) legitimately
+// produces a new append-only row for the new inputs.
+func (service *PolicyService) EnsureDecision(ctx context.Context, request DecideRequest) (governance.PolicyDecision, error) {
+	return service.decide(ctx, request)
+}
+
+func (service *PolicyService) decide(ctx context.Context, request DecideRequest) (governance.PolicyDecision, error) {
 	if request.WorkspaceID.IsZero() || request.ProposalID.IsZero() || len(request.Inputs) == 0 {
 		return governance.PolicyDecision{}, governance.ErrInvalidArgument
 	}
@@ -61,7 +124,7 @@ func (service *PolicyService) Decide(ctx context.Context, request DecideRequest)
 	if err != nil {
 		return governance.PolicyDecision{}, err
 	}
-	decision, err := governance.EvaluateRiskRule(request.RuleVersion, inputs)
+	decision, err := service.evaluate(ctx, request.RuleVersion, inputs)
 	if err != nil {
 		return governance.PolicyDecision{}, err
 	}
@@ -84,6 +147,28 @@ func (service *PolicyService) Decide(ctx context.Context, request DecideRequest)
 		Routing: decision.Routing, ReasonCode: decision.ReasonCode,
 		DecidedAt: service.clock.Now().UTC(), LinkProposal: true,
 	})
+}
+
+// evaluate consults the wired rule table when present, degrading to the
+// fail-safe expert decision when the table cannot be evaluated (SSOT §8.2:
+// policy conflicts degrade to human handling, never silently pass), and to
+// the canonical built-in table otherwise.
+func (service *PolicyService) evaluate(ctx context.Context, ruleVersion string, inputs governance.DecisionInputs) (governance.RiskDecision, error) {
+	if service.ruleSource == nil {
+		return governance.EvaluateRiskRule(ruleVersion, inputs)
+	}
+	rules, err := service.ruleSource.ListPolicyRules(ctx, ruleVersion)
+	if err != nil {
+		return governance.RiskDecision{}, fmt.Errorf("load policy rules: %w", err)
+	}
+	decision, err := governance.EvaluatePolicyRules(rules, inputs)
+	if err == nil {
+		return decision, nil
+	}
+	if errors.Is(err, governance.ErrInvalidArgument) {
+		return governance.RiskDecision{}, err
+	}
+	return governance.PolicyFallbackDecision(), nil
 }
 
 func (service *PolicyService) GetDecision(

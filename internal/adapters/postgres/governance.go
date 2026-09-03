@@ -721,6 +721,21 @@ func (store *Store) CreatePolicyDecision(ctx context.Context, command governance
 		Routing: string(command.Routing), ReasonCode: command.ReasonCode,
 		DecidedAt: timestamp(command.DecidedAt), CreatedAt: timestamp(command.DecidedAt),
 	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		// The UNIQUE (proposal_id, rule_version, inputs_digest) index
+		// collapsed a duplicate: the recomputable fact already exists, so the
+		// stored decision is returned and the proposal link is left as the
+		// original creation recorded it.
+		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
+			return governance.PolicyDecision{}, governanceRepositoryError("rollback duplicate policy decision", rollbackErr)
+		}
+		existing, existingErr := store.getProposalPolicyDecisionByVersionDigest(
+			ctx, command.WorkspaceID, command.ProposalID, command.RuleVersion, command.InputsDigest)
+		if existingErr != nil {
+			return governance.PolicyDecision{}, existingErr
+		}
+		return existing, nil
+	}
 	if err != nil {
 		return governance.PolicyDecision{}, governanceRepositoryError("create policy decision", err)
 	}

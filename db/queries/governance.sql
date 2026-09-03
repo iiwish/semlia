@@ -135,7 +135,78 @@ INSERT INTO policy_decisions (
     sqlc.arg(inputs), sqlc.arg(inputs_digest), sqlc.arg(matched_policy), sqlc.arg(risk_level),
     sqlc.arg(routing), sqlc.arg(reason_code), sqlc.arg(decided_at), sqlc.arg(created_at)
 )
+ON CONFLICT (proposal_id, rule_version, inputs_digest) DO NOTHING
 RETURNING *;
+
+-- name: GetProposalPolicyDecisionByVersionDigest :one
+SELECT * FROM policy_decisions
+WHERE workspace_id = sqlc.arg(workspace_id) AND proposal_id = sqlc.arg(proposal_id)
+  AND rule_version = sqlc.arg(rule_version) AND inputs_digest = sqlc.arg(inputs_digest);
+
+-- name: GetLatestProposalPolicyDecision :one
+SELECT * FROM policy_decisions
+WHERE workspace_id = sqlc.arg(workspace_id) AND proposal_id = sqlc.arg(proposal_id)
+ORDER BY decided_at DESC, id DESC
+LIMIT 1;
+
+-- name: ListPolicyRules :many
+SELECT * FROM policy_rules
+WHERE rule_version = sqlc.arg(rule_version)
+ORDER BY priority DESC, rule_id;
+
+-- name: GetPolicyRule :one
+SELECT * FROM policy_rules
+WHERE rule_version = sqlc.arg(rule_version) AND rule_id = sqlc.arg(rule_id);
+
+-- name: SummarizeProposalValidationOutcomes :one
+SELECT
+    (SELECT count(*) FROM validation_runs AS run
+      WHERE run.workspace_id = sqlc.arg(workspace_id) AND run.proposal_id = sqlc.arg(proposal_id)) AS run_count,
+    (SELECT count(*) FROM validation_runs AS run
+      WHERE run.workspace_id = sqlc.arg(workspace_id) AND run.proposal_id = sqlc.arg(proposal_id)
+        AND run.status = 'failed') AS failed_count,
+    (SELECT count(*) FROM validation_results AS result
+      JOIN validation_runs AS run ON run.id = result.validation_run_id
+      WHERE result.workspace_id = sqlc.arg(workspace_id) AND run.proposal_id = sqlc.arg(proposal_id)
+        AND result.severity = 'blocker') AS blocker_count,
+    (SELECT count(*) FROM validation_results AS result
+      JOIN validation_runs AS run ON run.id = result.validation_run_id
+      WHERE result.workspace_id = sqlc.arg(workspace_id) AND run.proposal_id = sqlc.arg(proposal_id)
+        AND result.severity = 'warning') AS warning_count,
+    (SELECT count(*) FROM validation_results AS result
+      JOIN validation_runs AS run ON run.id = result.validation_run_id
+      WHERE result.workspace_id = sqlc.arg(workspace_id) AND run.proposal_id = sqlc.arg(proposal_id)
+        AND result.severity = 'info') AS info_count;
+
+-- name: GetPolicyAssetFacts :one
+SELECT asset.asset_type AS asset_type,
+    (SELECT count(*) FROM revision_evidence_links AS link
+       JOIN asset_revisions AS revision
+         ON revision.workspace_id = link.workspace_id AND revision.id = link.asset_revision_id
+      WHERE revision.asset_id = asset.id) AS evidence_link_count,
+    current_revision.content AS current_content
+FROM semantic_assets AS asset
+LEFT JOIN asset_revisions AS current_revision
+       ON current_revision.workspace_id = asset.workspace_id
+      AND current_revision.id = asset.current_revision_id
+WHERE asset.workspace_id = sqlc.arg(workspace_id) AND asset.id = sqlc.arg(asset_id);
+
+-- name: GetPolicyGovernedObjectAsset :one
+SELECT binding.asset_id FROM physical_bindings AS binding
+  WHERE binding.workspace_id = sqlc.arg(workspace_id) AND binding.id = sqlc.arg(object_id)
+UNION ALL
+SELECT grain.asset_id FROM model_grains AS grain
+  WHERE grain.workspace_id = sqlc.arg(workspace_id) AND grain.id = sqlc.arg(object_id)
+UNION ALL
+SELECT entity_key.asset_id FROM entity_keys AS entity_key
+  WHERE entity_key.workspace_id = sqlc.arg(workspace_id) AND entity_key.id = sqlc.arg(object_id)
+LIMIT 1;
+
+-- name: GetPolicyRevisionOwnerContent :one
+SELECT content FROM asset_revisions
+WHERE workspace_id = sqlc.arg(workspace_id) AND asset_id = sqlc.arg(asset_id)
+  AND id = sqlc.arg(revision_id);
+
 
 -- name: GetPolicyDecision :one
 SELECT * FROM policy_decisions
