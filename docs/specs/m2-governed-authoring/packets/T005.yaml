@@ -1,0 +1,73 @@
+schema_version: 1
+packet_id: M2-T005-A001
+task_id: T005
+feature_id: m2-governed-authoring
+mode: execute_one_task
+status: Ready
+
+goal: >-
+  Compute recomputable change-level risk from persisted inputs, decide through the versioned
+  rule-table policy engine, and route every in_review proposal to the expert or batch lane with
+  explainable reasons — no auto channel and no single opaque score.
+
+dependencies:
+  - T004 Accepted (2026-09-02)
+  - founder continuous M2 execution authorization through T007 (2026-09-02)
+  - docs/SSOT.md §8.2 (recomputable decisions), §8.3 (risk inputs, no opaque score), §8.4
+    (batch/expert lanes; auto channel deferred to M4), D-006, D-013
+  - docs/specs/m2-governed-authoring/data-model.md (policy_decisions recomputability)
+  - docs/adr/0002-m1-product-and-semantic-execution.md TDR-015 (cel-go NOT adopted; rule-table
+    evaluator confirmed per decision D3)
+
+allowed_files:
+  - internal/**
+  - api/openapi/**
+  - db/**
+  - migrations/**
+  - sdk/typescript/**
+  - tests/**
+  - docs/specs/m2-governed-authoring/**
+  - docs/evidence/M2-T005/**
+
+forbidden_changes:
+  - Do not adopt cel-go or any policy DSL; the rule-table evaluator is the confirmed D3 decision.
+  - Do not implement the auto channel, auto-publish or G2/G3 levels; routing outputs expert|batch
+    only.
+  - Do not emit risk as a single opaque score; decisions carry level, matched rules, inputs digest
+    and reason codes (§8.3).
+  - Do not add review confirmation, release or rollback behavior (T006/T007).
+  - Do not weaken the recomputability guarantees from T002 or any existing test.
+
+tdd:
+  red:
+    - Inputs: risk inputs are computed deterministically from persisted state (asset type, diff
+      categories, validation outcomes, evidence counts); identical persisted state yields
+      byte-identical DecisionInputs and inputs_digest.
+    - Rule table: the seeded policy rule set (versioned) routes a high-risk input combination
+      (e.g., computation-changing diff with blocker warnings) to expert and a low-risk combination
+      to batch, each with matched rule ids and reason codes.
+    - Recomputability: two decisions over identical inputs and rule version produce identical
+      risk level, routing, reason and digest; changing the rule version changes the recorded
+      version but not past rows.
+    - Routing: every proposal entering in_review obtains exactly one policy decision; the auto
+      lane is unreachable by vocabulary.
+  green:
+    - End-to-end against real PostgreSQL: validation completes → decision persisted → routed
+      lane readable via the API.
+  refactor:
+    - Extract the input-collector per target type so new object types add collectors, not
+      conditionals.
+
+validation:
+  - go test ./...
+  - go vet ./...
+  - make contracts-check
+  - make check-source
+  - git diff --check
+
+acceptance:
+  - Risk inputs are computed from persisted state and hashed into recomputable decisions.
+  - The versioned rule table routes to expert|batch with matched rule ids and explainable reason
+    codes; no auto lane exists in the vocabulary.
+  - Decisions are persisted per in_review proposal and readable via the governance API.
+  - No opaque score; §8.3 input categories are represented in the closed inputs schema.
