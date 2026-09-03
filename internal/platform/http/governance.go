@@ -19,11 +19,13 @@ const (
 	routeGovernanceProposals routeKind = iota + 100
 	routeGovernanceProposal
 	routeGovernanceProposalSubmit
+	routeGovernanceProposalValidationRuns
 )
 
 func isGovernanceRoute(kind routeKind) bool {
 	switch kind {
-	case routeGovernanceProposals, routeGovernanceProposal, routeGovernanceProposalSubmit:
+	case routeGovernanceProposals, routeGovernanceProposal, routeGovernanceProposalSubmit,
+		routeGovernanceProposalValidationRuns:
 		return true
 	}
 	return false
@@ -43,6 +45,8 @@ func matchGovernanceRoute(parts []string, base matchedRoute) (matchedRoute, bool
 		base.kind, base.label = routeGovernanceProposal, "/api/v1/workspaces/{workspaceId}/governance/proposals/{proposalId}"
 	case len(parts) == 8 && parts[7] == "submit":
 		base.kind, base.label = routeGovernanceProposalSubmit, "/api/v1/workspaces/{workspaceId}/governance/proposals/{proposalId}/submit"
+	case len(parts) == 8 && parts[7] == "validation-runs":
+		base.kind, base.label = routeGovernanceProposalValidationRuns, "/api/v1/workspaces/{workspaceId}/governance/proposals/{proposalId}/validation-runs"
 	default:
 		return matchedRoute{}, false
 	}
@@ -103,6 +107,24 @@ func (handler *Handler) routeGovernance(
 			return writeGovernanceError(response, submitErr, traceID)
 		}
 		writeJSON(response, http.StatusOK, governanceProposalDetailResponse(detail))
+		return ""
+	case routeGovernanceProposalValidationRuns:
+		proposalID, parseErr := identity.ParseProposalID(route.proposal)
+		if parseErr != nil {
+			return writeGovernanceError(response, domain.ErrInvalidArgument, traceID)
+		}
+		records, listErr := handler.governance.ListValidationRuns(request.Context(), governanceapp.ListValidationRunsRequest{
+			WorkspaceID: workspaceID, ProposalID: proposalID,
+			PrincipalRef: strings.TrimSpace(request.Header.Get(headerPrincipal)), TraceID: traceID,
+		})
+		if listErr != nil {
+			return writeGovernanceError(response, listErr, traceID)
+		}
+		items := make([]contract.GovernanceValidationRun, 0, len(records))
+		for _, record := range records {
+			items = append(items, governanceValidationRunResponse(record))
+		}
+		writeJSON(response, http.StatusOK, contract.GovernanceValidationRunPage{Items: items})
 		return ""
 	default:
 		panic("governance route is not handled")
@@ -324,6 +346,39 @@ func governanceChangeItemResponse(item domain.ChangeSetItem) contract.Governance
 		record.AfterValue = &afterValue
 	}
 	return record
+}
+
+func governanceValidationRunResponse(record governanceapp.ValidationRunRecord) contract.GovernanceValidationRun {
+	run := record.Run
+	result := contract.GovernanceValidationRun{
+		Id:               run.ID,
+		ProposalId:       run.ProposalID,
+		ValidatorId:      run.ValidatorID,
+		ValidatorVersion: run.ValidatorVersion,
+		Status:           contract.GovernanceValidationStatus(run.Status),
+		StartedAt:        run.StartedAt.UTC(),
+		Results:          make([]contract.GovernanceValidationResult, 0, len(record.Results)),
+	}
+	if run.FinishedAt != nil {
+		finishedAt := run.FinishedAt.UTC()
+		result.FinishedAt = &finishedAt
+	}
+	for _, item := range record.Results {
+		governanceResult := contract.GovernanceValidationResult{
+			Id:          item.ID,
+			Severity:    contract.GovernanceValidationSeverity(item.Severity),
+			Code:        item.Code,
+			Message:     item.Message,
+			InputDigest: item.InputDigest,
+			CreatedAt:   item.CreatedAt.UTC(),
+		}
+		if item.Details != nil {
+			details := json.RawMessage(append([]byte(nil), item.Details...))
+			governanceResult.Details = &details
+		}
+		result.Results = append(result.Results, governanceResult)
+	}
+	return result
 }
 
 func writeGovernanceError(response http.ResponseWriter, err error, traceID string) string {

@@ -75,25 +75,25 @@ func (e DiscoveryFindingSeverity) Valid() bool {
 
 // Defines values for DiscoveryRunStatus.
 const (
-	Cancelled DiscoveryRunStatus = "cancelled"
-	Failed    DiscoveryRunStatus = "failed"
-	Queued    DiscoveryRunStatus = "queued"
-	Running   DiscoveryRunStatus = "running"
-	Succeeded DiscoveryRunStatus = "succeeded"
+	DiscoveryRunStatusCancelled DiscoveryRunStatus = "cancelled"
+	DiscoveryRunStatusFailed    DiscoveryRunStatus = "failed"
+	DiscoveryRunStatusQueued    DiscoveryRunStatus = "queued"
+	DiscoveryRunStatusRunning   DiscoveryRunStatus = "running"
+	DiscoveryRunStatusSucceeded DiscoveryRunStatus = "succeeded"
 )
 
 // Valid indicates whether the value is a known member of the DiscoveryRunStatus enum.
 func (e DiscoveryRunStatus) Valid() bool {
 	switch e {
-	case Cancelled:
+	case DiscoveryRunStatusCancelled:
 		return true
-	case Failed:
+	case DiscoveryRunStatusFailed:
 		return true
-	case Queued:
+	case DiscoveryRunStatusQueued:
 		return true
-	case Running:
+	case DiscoveryRunStatusRunning:
 		return true
-	case Succeeded:
+	case DiscoveryRunStatusSucceeded:
 		return true
 	default:
 		return false
@@ -238,6 +238,54 @@ func (e GovernanceTargetObjectType) Valid() bool {
 	case PhysicalBinding:
 		return true
 	case SemanticAsset:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GovernanceValidationSeverity.
+const (
+	GovernanceValidationSeverityBlocker       GovernanceValidationSeverity = "blocker"
+	GovernanceValidationSeverityInfo          GovernanceValidationSeverity = "info"
+	GovernanceValidationSeverityNotApplicable GovernanceValidationSeverity = "not_applicable"
+	GovernanceValidationSeverityWarning       GovernanceValidationSeverity = "warning"
+)
+
+// Valid indicates whether the value is a known member of the GovernanceValidationSeverity enum.
+func (e GovernanceValidationSeverity) Valid() bool {
+	switch e {
+	case GovernanceValidationSeverityBlocker:
+		return true
+	case GovernanceValidationSeverityInfo:
+		return true
+	case GovernanceValidationSeverityNotApplicable:
+		return true
+	case GovernanceValidationSeverityWarning:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GovernanceValidationStatus.
+const (
+	GovernanceValidationStatusCancelled GovernanceValidationStatus = "cancelled"
+	GovernanceValidationStatusFailed    GovernanceValidationStatus = "failed"
+	GovernanceValidationStatusRunning   GovernanceValidationStatus = "running"
+	GovernanceValidationStatusSucceeded GovernanceValidationStatus = "succeeded"
+)
+
+// Valid indicates whether the value is a known member of the GovernanceValidationStatus enum.
+func (e GovernanceValidationStatus) Valid() bool {
+	switch e {
+	case GovernanceValidationStatusCancelled:
+		return true
+	case GovernanceValidationStatusFailed:
+		return true
+	case GovernanceValidationStatusRunning:
+		return true
+	case GovernanceValidationStatusSucceeded:
 		return true
 	default:
 		return false
@@ -955,6 +1003,76 @@ type GovernanceTargetObjectId = string
 
 // GovernanceTargetObjectType Objects a governed proposal can target.
 type GovernanceTargetObjectType string
+
+// GovernanceValidationResult defines model for GovernanceValidationResult.
+type GovernanceValidationResult struct {
+	// Code Stable machine-readable finding code.
+	Code string `json:"code"`
+
+	// CreatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	CreatedAt Timestamp `json:"createdAt"`
+
+	// Details Bounded structured context of the finding.
+	Details *json.RawMessage `json:"details,omitempty"`
+
+	// Id Example: vlr_01arz3ndektsv4rrffq69g5fav
+	Id GovernanceValidationResultId `json:"id"`
+
+	// InputDigest sha256 content digest of the canonical run inputs this result was computed over.
+	InputDigest string `json:"inputDigest"`
+	Message     string `json:"message"`
+
+	// Severity Semantic-asset design §3.3 severity enum.
+	Severity GovernanceValidationSeverity `json:"severity"`
+}
+
+// GovernanceValidationResultId Example: vlr_01arz3ndektsv4rrffq69g5fav
+type GovernanceValidationResultId = identity.ValidationResultID
+
+// GovernanceValidationRun defines model for GovernanceValidationRun.
+type GovernanceValidationRun struct {
+	// FinishedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	FinishedAt *Timestamp `json:"finishedAt,omitempty"`
+
+	// Id Example: val_01arz3ndektsv4rrffq69g5fav
+	Id GovernanceValidationRunId `json:"id"`
+
+	// ProposalId Example: prp_01arz3ndektsv4rrffq69g5fav
+	ProposalId GovernanceProposalId `json:"proposalId"`
+
+	// Results Recorded findings plus the run completion record.
+	Results []GovernanceValidationResult `json:"results"`
+
+	// StartedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	StartedAt Timestamp `json:"startedAt"`
+
+	// Status Terminal and non-terminal states of one validator run.
+	Status      GovernanceValidationStatus `json:"status"`
+	ValidatorId string                     `json:"validatorId"`
+
+	// ValidatorVersion Semantic version of the validator that produced this run.
+	ValidatorVersion string `json:"validatorVersion"`
+}
+
+// GovernanceValidationRunId Example: val_01arz3ndektsv4rrffq69g5fav
+type GovernanceValidationRunId = identity.ValidationRunID
+
+// GovernanceValidationRunPage defines model for GovernanceValidationRunPage.
+type GovernanceValidationRunPage struct {
+	Items []GovernanceValidationRun `json:"items"`
+}
+
+// GovernanceValidationSeverity Semantic-asset design §3.3 severity enum.
+type GovernanceValidationSeverity string
+
+// GovernanceValidationStatus Terminal and non-terminal states of one validator run.
+type GovernanceValidationStatus string
 
 // HealthResponse defines model for HealthResponse.
 type HealthResponse struct {

@@ -466,6 +466,38 @@ paths:
           $ref: "#/components/responses/UnprocessableEntity"
         default:
           $ref: "#/components/responses/Error"
+  /api/v1/workspaces/{workspaceId}/governance/proposals/{proposalId}/validation-runs:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+      - $ref: "#/components/parameters/ProposalId"
+    get:
+      operationId: listGovernanceValidationRuns
+      summary: List the deterministic validation runs of one proposal
+      description: >-
+        Every executed validator run with its stable validator id and version,
+        terminal status and recorded results, including the input digest each
+        result was computed over (SSOT NFR-003). Failures are recorded as
+        failed runs; they never reject the proposal automatically.
+      tags:
+        - Governance
+      responses:
+        "200":
+          description: The validation runs and results of the proposal.
+          headers:
+            X-Trace-ID:
+              $ref: "#/components/headers/TraceId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GovernanceValidationRunPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        default:
+          $ref: "#/components/responses/Error"
   /api/v1/workspaces/{workspaceId}/discovery-runs/{runId}:
     parameters:
       - $ref: "#/components/parameters/WorkspaceId"
@@ -1650,3 +1682,114 @@ components:
             $ref: "#/components/schemas/GovernanceProposalSummary"
         page:
           $ref: "#/components/schemas/PageInfo"
+    GovernanceValidationRunId:
+      type: string
+      format: typeid
+      pattern: "^val_[0-7][0-9a-hjkmnp-tv-z]{25}$"
+      example: val_01arz3ndektsv4rrffq69g5fav
+      x-go-type: identity.ValidationRunID
+      x-go-type-import:
+        path: github.com/iiwish/semlia/pkg/identity
+        name: identity
+    GovernanceValidationResultId:
+      type: string
+      format: typeid
+      pattern: "^vlr_[0-7][0-9a-hjkmnp-tv-z]{25}$"
+      example: vlr_01arz3ndektsv4rrffq69g5fav
+      x-go-type: identity.ValidationResultID
+      x-go-type-import:
+        path: github.com/iiwish/semlia/pkg/identity
+        name: identity
+    GovernanceValidationStatus:
+      type: string
+      description: Terminal and non-terminal states of one validator run.
+      enum:
+        - running
+        - succeeded
+        - failed
+        - cancelled
+    GovernanceValidationSeverity:
+      type: string
+      description: Semantic-asset design §3.3 severity enum.
+      enum:
+        - blocker
+        - warning
+        - info
+        - not_applicable
+    GovernanceValidationResult:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - severity
+        - code
+        - message
+        - inputDigest
+        - createdAt
+      properties:
+        id:
+          $ref: "#/components/schemas/GovernanceValidationResultId"
+        severity:
+          $ref: "#/components/schemas/GovernanceValidationSeverity"
+        code:
+          type: string
+          description: Stable machine-readable finding code.
+          pattern: "^[A-Z][A-Z0-9_]{2,63}$"
+        message:
+          type: string
+          maxLength: 2048
+        inputDigest:
+          description: sha256 content digest of the canonical run inputs this result was computed over.
+          type: string
+          pattern: "^sha256:[0-9a-f]{64}$"
+        details:
+          description: Bounded structured context of the finding.
+          x-go-type: json.RawMessage
+        createdAt:
+          $ref: "#/components/schemas/Timestamp"
+    GovernanceValidationRun:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - proposalId
+        - validatorId
+        - validatorVersion
+        - status
+        - startedAt
+        - results
+      properties:
+        id:
+          $ref: "#/components/schemas/GovernanceValidationRunId"
+        proposalId:
+          $ref: "#/components/schemas/GovernanceProposalId"
+        validatorId:
+          type: string
+          minLength: 2
+          maxLength: 64
+          pattern: "^[a-z][a-z0-9_.]{1,63}$"
+        validatorVersion:
+          type: string
+          description: Semantic version of the validator that produced this run.
+          pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$"
+        status:
+          $ref: "#/components/schemas/GovernanceValidationStatus"
+        startedAt:
+          $ref: "#/components/schemas/Timestamp"
+        finishedAt:
+          $ref: "#/components/schemas/Timestamp"
+        results:
+          type: array
+          description: Recorded findings plus the run completion record.
+          items:
+            $ref: "#/components/schemas/GovernanceValidationResult"
+    GovernanceValidationRunPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/GovernanceValidationRun"

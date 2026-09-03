@@ -11,6 +11,25 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const assetRevisionExists = `-- name: AssetRevisionExists :one
+SELECT EXISTS (
+    SELECT 1 FROM asset_revisions
+    WHERE workspace_id = $1 AND id = $2
+) AS present
+`
+
+type AssetRevisionExistsParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	RevisionID  pgtype.UUID `json:"revision_id"`
+}
+
+func (q *Queries) AssetRevisionExists(ctx context.Context, arg AssetRevisionExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, assetRevisionExists, arg.WorkspaceID, arg.RevisionID)
+	var present bool
+	err := row.Scan(&present)
+	return present, err
+}
+
 const countBlockingValidationResults = `-- name: CountBlockingValidationResults :one
 SELECT count(*) FROM validation_results AS result
 JOIN validation_runs AS run ON run.id = result.validation_run_id
@@ -865,6 +884,41 @@ func (q *Queries) GetProposalForUpdate(ctx context.Context, arg GetProposalForUp
 	return i, err
 }
 
+const getProposalValidationRun = `-- name: GetProposalValidationRun :one
+SELECT id, workspace_id, proposal_id, validator_id, validator_version, status, started_at, finished_at FROM validation_runs
+WHERE workspace_id = $1 AND proposal_id = $2
+  AND validator_id = $3
+  AND validator_version = $4
+`
+
+type GetProposalValidationRunParams struct {
+	WorkspaceID      pgtype.UUID `json:"workspace_id"`
+	ProposalID       pgtype.UUID `json:"proposal_id"`
+	ValidatorID      string      `json:"validator_id"`
+	ValidatorVersion string      `json:"validator_version"`
+}
+
+func (q *Queries) GetProposalValidationRun(ctx context.Context, arg GetProposalValidationRunParams) (ValidationRun, error) {
+	row := q.db.QueryRow(ctx, getProposalValidationRun,
+		arg.WorkspaceID,
+		arg.ProposalID,
+		arg.ValidatorID,
+		arg.ValidatorVersion,
+	)
+	var i ValidationRun
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.ProposalID,
+		&i.ValidatorID,
+		&i.ValidatorVersion,
+		&i.Status,
+		&i.StartedAt,
+		&i.FinishedAt,
+	)
+	return i, err
+}
+
 const getRelease = `-- name: GetRelease :one
 SELECT id, workspace_id, sequence, manifest_digest, state, rolled_back_to_release_id, published_by, published_at, created_at FROM releases
 WHERE workspace_id = $1 AND id = $2
@@ -997,6 +1051,46 @@ func (q *Queries) ListProposalChanges(ctx context.Context, arg ListProposalChang
 			&i.BeforeValue,
 			&i.AfterValue,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProposalValidationRuns = `-- name: ListProposalValidationRuns :many
+SELECT id, workspace_id, proposal_id, validator_id, validator_version, status, started_at, finished_at FROM validation_runs
+WHERE workspace_id = $1 AND proposal_id = $2
+ORDER BY started_at, validator_id
+`
+
+type ListProposalValidationRunsParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	ProposalID  pgtype.UUID `json:"proposal_id"`
+}
+
+func (q *Queries) ListProposalValidationRuns(ctx context.Context, arg ListProposalValidationRunsParams) ([]ValidationRun, error) {
+	rows, err := q.db.Query(ctx, listProposalValidationRuns, arg.WorkspaceID, arg.ProposalID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ValidationRun{}
+	for rows.Next() {
+		var i ValidationRun
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.ProposalID,
+			&i.ValidatorID,
+			&i.ValidatorVersion,
+			&i.Status,
+			&i.StartedAt,
+			&i.FinishedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -1175,6 +1269,63 @@ func (q *Queries) NextReleaseSequence(ctx context.Context, workspaceID pgtype.UU
 	var next_sequence int64
 	err := row.Scan(&next_sequence)
 	return next_sequence, err
+}
+
+const physicalDatasetExists = `-- name: PhysicalDatasetExists :one
+SELECT EXISTS (
+    SELECT 1 FROM physical_datasets
+    WHERE workspace_id = $1 AND id = $2
+) AS present
+`
+
+type PhysicalDatasetExistsParams struct {
+	WorkspaceID       pgtype.UUID `json:"workspace_id"`
+	PhysicalDatasetID pgtype.UUID `json:"physical_dataset_id"`
+}
+
+func (q *Queries) PhysicalDatasetExists(ctx context.Context, arg PhysicalDatasetExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, physicalDatasetExists, arg.WorkspaceID, arg.PhysicalDatasetID)
+	var present bool
+	err := row.Scan(&present)
+	return present, err
+}
+
+const physicalFieldExists = `-- name: PhysicalFieldExists :one
+SELECT EXISTS (
+    SELECT 1 FROM physical_fields
+    WHERE workspace_id = $1 AND id = $2
+) AS present
+`
+
+type PhysicalFieldExistsParams struct {
+	WorkspaceID     pgtype.UUID `json:"workspace_id"`
+	PhysicalFieldID pgtype.UUID `json:"physical_field_id"`
+}
+
+func (q *Queries) PhysicalFieldExists(ctx context.Context, arg PhysicalFieldExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, physicalFieldExists, arg.WorkspaceID, arg.PhysicalFieldID)
+	var present bool
+	err := row.Scan(&present)
+	return present, err
+}
+
+const semanticAssetExists = `-- name: SemanticAssetExists :one
+SELECT EXISTS (
+    SELECT 1 FROM semantic_assets
+    WHERE workspace_id = $1 AND id = $2
+) AS present
+`
+
+type SemanticAssetExistsParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	AssetID     pgtype.UUID `json:"asset_id"`
+}
+
+func (q *Queries) SemanticAssetExists(ctx context.Context, arg SemanticAssetExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, semanticAssetExists, arg.WorkspaceID, arg.AssetID)
+	var present bool
+	err := row.Scan(&present)
+	return present, err
 }
 
 const submitProposal = `-- name: SubmitProposal :one

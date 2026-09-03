@@ -34,6 +34,8 @@ type AuthoringRepository interface {
 	CreateProposalWithChanges(ctx context.Context, proposal domain.Proposal, items []domain.ChangeSetItem) (domain.Proposal, []domain.ChangeSetItem, error)
 	ListProposals(ctx context.Context, workspace identity.WorkspaceID, limit int, cursor *ProposalCursor) ([]domain.Proposal, error)
 	VerifyProposalTarget(ctx context.Context, workspace identity.WorkspaceID, asset identity.AssetID, revision identity.RevisionID) error
+	ListProposalValidationRuns(ctx context.Context, workspace identity.WorkspaceID, proposal identity.ProposalID) ([]domain.ValidationRun, error)
+	ListRunResults(ctx context.Context, workspace identity.WorkspaceID, run identity.ValidationRunID) ([]domain.ValidationResult, error)
 }
 
 // ProposalCursor is the decoded keyset position of a proposals page.
@@ -122,6 +124,16 @@ type AuthoringService struct {
 	agentRuns  *AgentRunService
 	authorizer authorizationapp.Evaluator
 	clock      Clock
+	validation *ValidationOrchestrator
+}
+
+type AuthoringOption func(*AuthoringService)
+
+// WithValidationOrchestrator attaches the T004 validation orchestration:
+// submit walks the proposal into validating and enqueues exactly one
+// deterministic validation job. Submit fails closed without it.
+func WithValidationOrchestrator(orchestrator *ValidationOrchestrator) AuthoringOption {
+	return func(service *AuthoringService) { service.validation = orchestrator }
 }
 
 func NewAuthoringService(
@@ -130,14 +142,21 @@ func NewAuthoringService(
 	agentRuns *AgentRunService,
 	authorizer authorizationapp.Evaluator,
 	clock Clock,
+	options ...AuthoringOption,
 ) *AuthoringService {
 	if repository == nil || proposals == nil || agentRuns == nil || clock == nil {
 		panic("authoring repository, proposal service, agent run service and clock are required")
 	}
-	return &AuthoringService{
+	service := &AuthoringService{
 		repository: repository, proposals: proposals, agentRuns: agentRuns,
 		authorizer: authorizer, clock: clock,
 	}
+	for _, option := range options {
+		if option != nil {
+			option(service)
+		}
+	}
+	return service
 }
 
 // CreateProposal opens a governed draft: target resolution, §8.6 agent-run
@@ -215,9 +234,13 @@ func (service *AuthoringService) CreateProposal(ctx context.Context, request Cre
 }
 
 // SubmitProposal re-checks the persisted change-set and walks draft ->
-// proposed. A change-set that normalizes to empty never enters the human
-// queue (SSOT §8.2): the proposal stays a draft and the stable
-// ErrNoSubstantiveChange error is returned without any state write.
+// proposed, then the T004 orchestration moves the proposal into validating
+// and enqueues exactly one deterministic validation job. A change-set that
+// normalizes to empty never enters the human queue (SSOT §8.2): the proposal
+// stays a draft and the stable ErrNoSubstantiveChange error is returned
+// without any state write. A crashed submit (proposed or validating state,
+// job enqueue not yet completed) resumes its orchestration instead of
+// failing, so a client retry cannot strand a proposal between states.
 func (service *AuthoringService) SubmitProposal(ctx context.Context, request SubmitAuthoringProposalRequest) (ProposalDetail, error) {
 	proposal, err := service.proposals.GetProposal(ctx, request.WorkspaceID, request.ProposalID)
 	if err != nil {
@@ -243,7 +266,27 @@ func (service *AuthoringService) SubmitProposal(ctx context.Context, request Sub
 	if actor == "" {
 		actor = proposal.CreatedBy
 	}
-	submitted, err := service.proposals.Submit(ctx, SubmitRequest{
+	switch proposal.State {
+	case domain.ProposalDraft:
+		proposal, err = service.proposals.Submit(ctx, SubmitRequest{
+			WorkspaceID: request.WorkspaceID, ProposalID: request.ProposalID,
+			Actor: actor, TraceID: request.TraceID,
+		})
+		if err != nil {
+			return ProposalDetail{}, err
+		}
+	case domain.ProposalProposed, domain.ProposalValidating:
+		// Resume the interrupted submit; the orchestrator is idempotent.
+	default:
+		return ProposalDetail{}, fmt.Errorf(
+			"%w: proposal is %s, submit is no longer applicable",
+			domain.ErrConflict, proposal.State)
+	}
+	if service.validation == nil {
+		return ProposalDetail{}, fmt.Errorf(
+			"%w: submit requires the validation orchestrator", domain.ErrInvariant)
+	}
+	submitted, err := service.validation.BeginValidation(ctx, BeginValidationRequest{
 		WorkspaceID: request.WorkspaceID, ProposalID: request.ProposalID,
 		Actor: actor, TraceID: request.TraceID,
 	})
@@ -322,6 +365,49 @@ func (service *AuthoringService) ListProposals(ctx context.Context, request List
 		}
 	}
 	return page, nil
+}
+
+// ValidationRunRecord pairs one validation run with its recorded results.
+type ValidationRunRecord struct {
+	Run     domain.ValidationRun
+	Results []domain.ValidationResult
+}
+
+type ListValidationRunsRequest struct {
+	WorkspaceID  identity.WorkspaceID
+	ProposalID   identity.ProposalID
+	PrincipalRef string
+	TraceID      string
+}
+
+// ListValidationRuns is the T004 read surface: the deterministic validation
+// runs of one proposal with every recorded result, ordered by run start.
+func (service *AuthoringService) ListValidationRuns(ctx context.Context, request ListValidationRunsRequest) ([]ValidationRunRecord, error) {
+	if err := service.authorize(ctx, authorizationapp.EvaluationRequest{
+		PrincipalRef: request.PrincipalRef,
+		WorkspaceID:  request.WorkspaceID,
+		Action:       authorization.ActionAssetRead,
+		Resource:     authorization.Resource{Type: authorization.ScopeWorkspace, ID: request.WorkspaceID.UUID()},
+		TraceID:      request.TraceID,
+	}); err != nil {
+		return nil, err
+	}
+	if _, err := service.proposals.GetProposal(ctx, request.WorkspaceID, request.ProposalID); err != nil {
+		return nil, err
+	}
+	runs, err := service.repository.ListProposalValidationRuns(ctx, request.WorkspaceID, request.ProposalID)
+	if err != nil {
+		return nil, err
+	}
+	records := make([]ValidationRunRecord, 0, len(runs))
+	for _, run := range runs {
+		results, err := service.repository.ListRunResults(ctx, request.WorkspaceID, run.ID)
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, ValidationRunRecord{Run: run, Results: results})
+	}
+	return records, nil
 }
 
 // resolveTarget validates the target coordinates without touching governed

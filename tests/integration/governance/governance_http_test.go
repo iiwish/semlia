@@ -20,6 +20,7 @@ import (
 	authorizationapp "github.com/iiwish/semlia/internal/application/authorization"
 	catalogapp "github.com/iiwish/semlia/internal/application/catalog"
 	governanceapp "github.com/iiwish/semlia/internal/application/governance"
+	"github.com/iiwish/semlia/internal/application/jobs"
 	"github.com/iiwish/semlia/internal/domain"
 	"github.com/iiwish/semlia/internal/domain/governance"
 	"github.com/iiwish/semlia/internal/domain/semantic"
@@ -93,6 +94,11 @@ func newFixture(t *testing.T) *fixture {
 		governanceapp.NewProposalService(store, clock),
 		governanceapp.NewAgentRunService(store, clock),
 		authorizer, clock,
+		governanceapp.WithValidationOrchestrator(
+			governanceapp.NewValidationOrchestrator(
+				governanceapp.NewProposalService(store, clock), store, clock,
+			),
+		),
 	)
 	var logs bytes.Buffer
 	provider := trace.NewTracerProvider()
@@ -124,6 +130,31 @@ func (environment *fixture) request(t *testing.T, method, path, principalRef, bo
 func (environment *fixture) proposalsPath(t *testing.T, workspace identity.WorkspaceID) string {
 	t.Helper()
 	return "/api/v1/workspaces/" + workspace.String() + "/governance/proposals"
+}
+
+// runValidationWorker drains one enqueued validation job with the production handler wiring.
+func (environment *fixture) runValidationWorker(t *testing.T) {
+	t.Helper()
+	clock := governanceapp.ClockFunc(func() time.Time { return time.Now().UTC() })
+	handler := governanceapp.NewValidationJobHandler(
+		environment.store,
+		governanceapp.NewProposalService(environment.store, clock),
+		governanceapp.NewValidationService(environment.store, clock),
+		governanceapp.NewDefaultRegistry(),
+		clock,
+	)
+	worker := jobs.NewWorker(
+		environment.store, jobs.ClockFunc(time.Now),
+		jobs.BackoffFunc(func(int32) time.Duration { return time.Minute }), time.Minute,
+	)
+	worker.Register(governanceapp.ValidationJobType, handler.Handle)
+	processed, err := worker.RunOne(context.Background(), "governance-test-worker")
+	if err != nil {
+		t.Fatalf("worker run: %v", err)
+	}
+	if !processed {
+		t.Fatal("worker found no validation job to process")
+	}
 }
 
 func (environment *fixture) createAsset(t *testing.T, workspace identity.WorkspaceID) (identity.AssetID, identity.RevisionID) {
