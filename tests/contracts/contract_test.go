@@ -110,6 +110,13 @@ func TestCanonicalSpecificationIsValidAndMinimal(t *testing.T) {
 		"GovernanceProposalSummary",
 		"GovernanceProposalDetail",
 		"GovernanceProposalPage",
+		"GovernanceValidationRunId",
+		"GovernanceValidationResultId",
+		"GovernanceValidationStatus",
+		"GovernanceValidationSeverity",
+		"GovernanceValidationResult",
+		"GovernanceValidationRun",
+		"GovernanceValidationRunPage",
 	}
 	for _, name := range requiredSchemas {
 		if doc.Components.Schemas[name] == nil {
@@ -121,14 +128,15 @@ func TestCanonicalSpecificationIsValidAndMinimal(t *testing.T) {
 		"/health/live":        "getLiveness",
 		"/health/ready":       "getReadiness",
 		"/api/v1/system/info": "getSystemInfo",
-		"/api/v1/workspaces/{workspaceId}/catalog/assets":                                  "listCatalogAssets",
-		"/api/v1/workspaces/{workspaceId}/catalog/assets/{assetId}":                        "getCatalogAsset",
-		"/api/v1/workspaces/{workspaceId}/catalog/assets/{assetId}/revisions":              "listAssetRevisions",
-		"/api/v1/workspaces/{workspaceId}/catalog/assets/{assetId}/revisions/{revisionId}": "getAssetRevision",
-		"/api/v1/workspaces/{workspaceId}/catalog/assets/{assetId}/relations":              "listAssetRelations",
-		"/api/v1/workspaces/{workspaceId}/discovery-runs/{runId}":                          "getDiscoveryRun",
-		"/api/v1/workspaces/{workspaceId}/governance/proposals":                            "listGovernanceProposals",
-		"/api/v1/workspaces/{workspaceId}/governance/proposals/{proposalId}":               "getGovernanceProposal",
+		"/api/v1/workspaces/{workspaceId}/catalog/assets":                                    "listCatalogAssets",
+		"/api/v1/workspaces/{workspaceId}/catalog/assets/{assetId}":                          "getCatalogAsset",
+		"/api/v1/workspaces/{workspaceId}/catalog/assets/{assetId}/revisions":                "listAssetRevisions",
+		"/api/v1/workspaces/{workspaceId}/catalog/assets/{assetId}/revisions/{revisionId}":   "getAssetRevision",
+		"/api/v1/workspaces/{workspaceId}/catalog/assets/{assetId}/relations":                "listAssetRelations",
+		"/api/v1/workspaces/{workspaceId}/discovery-runs/{runId}":                            "getDiscoveryRun",
+		"/api/v1/workspaces/{workspaceId}/governance/proposals":                              "listGovernanceProposals",
+		"/api/v1/workspaces/{workspaceId}/governance/proposals/{proposalId}":                 "getGovernanceProposal",
+		"/api/v1/workspaces/{workspaceId}/governance/proposals/{proposalId}/validation-runs": "listGovernanceValidationRuns",
 	}
 	for path, operationID := range requiredOperations {
 		item := doc.Paths.Find(path)

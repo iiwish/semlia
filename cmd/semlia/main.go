@@ -187,6 +187,14 @@ func runWorker(ctx context.Context, cfg config.Config) error {
 		jobs.BackoffFunc(workerBackoff),
 		30*time.Second,
 	)
+	governanceClock := governanceapp.ClockFunc(time.Now)
+	worker.Register(governanceapp.ValidationJobType, governanceapp.NewValidationJobHandler(
+		store,
+		governanceapp.NewProposalService(store, governanceClock),
+		governanceapp.NewValidationService(store, governanceClock),
+		governanceapp.NewDefaultRegistry(),
+		governanceClock,
+	).Handle)
 	owner := fmt.Sprintf("worker-%d", os.Getpid())
 	if strings.TrimSpace(cfg.GitRepository) == "" {
 		return worker.Run(ctx, owner, 500*time.Millisecond)
@@ -274,6 +282,11 @@ func serve(ctx context.Context, cfg config.Config, output io.Writer) error {
 			governanceapp.NewProposalService(catalogStore, clock),
 			governanceapp.NewAgentRunService(catalogStore, clock),
 			authorizer, clock,
+			governanceapp.WithValidationOrchestrator(
+				governanceapp.NewValidationOrchestrator(
+					governanceapp.NewProposalService(catalogStore, clock), catalogStore, clock,
+				),
+			),
 		)
 		options = append(options, httpapi.WithGovernance(governanceAuthoring))
 	}

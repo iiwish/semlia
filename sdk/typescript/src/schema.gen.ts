@@ -241,6 +241,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspaceId}/governance/proposals/{proposalId}/validation-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                proposalId: components["parameters"]["ProposalId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * List the deterministic validation runs of one proposal
+         * @description Every executed validator run with its stable validator id and version, terminal status and recorded results, including the input digest each result was computed over (SSOT NFR-003). Failures are recorded as failed runs; they never reject the proposal automatically.
+         */
+        get: operations["listGovernanceValidationRuns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspaceId}/discovery-runs/{runId}": {
         parameters: {
             query?: never;
@@ -671,6 +694,53 @@ export interface components {
         GovernanceProposalPage: {
             items: components["schemas"]["GovernanceProposalSummary"][];
             page: components["schemas"]["PageInfo"];
+        };
+        /**
+         * Format: typeid
+         * @example val_01arz3ndektsv4rrffq69g5fav
+         */
+        GovernanceValidationRunId: string;
+        /**
+         * Format: typeid
+         * @example vlr_01arz3ndektsv4rrffq69g5fav
+         */
+        GovernanceValidationResultId: string;
+        /**
+         * @description Terminal and non-terminal states of one validator run.
+         * @enum {string}
+         */
+        GovernanceValidationStatus: "running" | "succeeded" | "failed" | "cancelled";
+        /**
+         * @description Semantic-asset design §3.3 severity enum.
+         * @enum {string}
+         */
+        GovernanceValidationSeverity: "blocker" | "warning" | "info" | "not_applicable";
+        GovernanceValidationResult: {
+            id: components["schemas"]["GovernanceValidationResultId"];
+            severity: components["schemas"]["GovernanceValidationSeverity"];
+            /** @description Stable machine-readable finding code. */
+            code: string;
+            message: string;
+            /** @description sha256 content digest of the canonical run inputs this result was computed over. */
+            inputDigest: string;
+            /** @description Bounded structured context of the finding. */
+            details?: unknown;
+            createdAt: components["schemas"]["Timestamp"];
+        };
+        GovernanceValidationRun: {
+            id: components["schemas"]["GovernanceValidationRunId"];
+            proposalId: components["schemas"]["GovernanceProposalId"];
+            validatorId: string;
+            /** @description Semantic version of the validator that produced this run. */
+            validatorVersion: string;
+            status: components["schemas"]["GovernanceValidationStatus"];
+            startedAt: components["schemas"]["Timestamp"];
+            finishedAt?: components["schemas"]["Timestamp"];
+            /** @description Recorded findings plus the run completion record. */
+            results: components["schemas"]["GovernanceValidationResult"][];
+        };
+        GovernanceValidationRunPage: {
+            items: components["schemas"]["GovernanceValidationRun"][];
         };
     };
     responses: {
@@ -1206,6 +1276,34 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["UnprocessableEntity"];
+            default: components["responses"]["Error"];
+        };
+    };
+    listGovernanceValidationRuns: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                proposalId: components["parameters"]["ProposalId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The validation runs and results of the proposal. */
+            200: {
+                headers: {
+                    "X-Trace-ID": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GovernanceValidationRunPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             default: components["responses"]["Error"];
         };
     };

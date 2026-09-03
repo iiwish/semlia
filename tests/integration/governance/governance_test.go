@@ -55,7 +55,10 @@ func TestGovernanceProposalJourneyOverHTTP(t *testing.T) {
 	if submitted.Code != http.StatusOK {
 		t.Fatalf("proposal submit status = %d, body = %s", submitted.Code, submitted.Body.String())
 	}
-	assertJSONField(t, submitted.Body.Bytes(), "state", "proposed")
+	// T004 orchestration: the submit endpoint walks draft -> proposed ->
+	// validating and enqueues exactly one validation job, so the returned
+	// state is already validating.
+	assertJSONField(t, submitted.Body.Bytes(), "state", "validating")
 	if submittedAt := decodeProposalDetail(t, submitted.Body.Bytes())["submittedAt"]; submittedAt == nil {
 		t.Fatal("submitted proposal without submittedAt")
 	}
@@ -64,7 +67,7 @@ func TestGovernanceProposalJourneyOverHTTP(t *testing.T) {
 	if detail.Code != http.StatusOK {
 		t.Fatalf("proposal detail status = %d, body = %s", detail.Code, detail.Body.String())
 	}
-	assertJSONField(t, detail.Body.Bytes(), "state", "proposed")
+	assertJSONField(t, detail.Body.Bytes(), "state", "validating")
 	assertJSONField(t, detail.Body.Bytes(), "title", "Tighten metric definition")
 	storageLeak := strings.Contains(detail.Body.String(), assetID.UUID())
 	if storageLeak {
@@ -162,7 +165,7 @@ func TestGovernanceProposalOverJoinContractTarget(t *testing.T) {
 	if submitted.Code != http.StatusOK {
 		t.Fatalf("join-contract proposal submit status = %d, body = %s", submitted.Code, submitted.Body.String())
 	}
-	assertJSONField(t, submitted.Body.Bytes(), "state", "proposed")
+	assertJSONField(t, submitted.Body.Bytes(), "state", "validating")
 	assertJSONField(t, submitted.Body.Bytes(), "targetObjectId", contractID.String())
 }
 

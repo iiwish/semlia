@@ -225,3 +225,38 @@ INSERT INTO agent_steps (
     sqlc.arg(created_at)
 )
 RETURNING *;
+
+-- name: GetProposalValidationRun :one
+SELECT * FROM validation_runs
+WHERE workspace_id = sqlc.arg(workspace_id) AND proposal_id = sqlc.arg(proposal_id)
+  AND validator_id = sqlc.arg(validator_id)
+  AND validator_version = sqlc.arg(validator_version);
+
+-- name: ListProposalValidationRuns :many
+SELECT * FROM validation_runs
+WHERE workspace_id = sqlc.arg(workspace_id) AND proposal_id = sqlc.arg(proposal_id)
+ORDER BY started_at, validator_id;
+
+-- name: SemanticAssetExists :one
+SELECT EXISTS (
+    SELECT 1 FROM semantic_assets
+    WHERE workspace_id = sqlc.arg(workspace_id) AND id = sqlc.arg(asset_id)
+) AS present;
+
+-- name: AssetRevisionExists :one
+SELECT EXISTS (
+    SELECT 1 FROM asset_revisions
+    WHERE workspace_id = sqlc.arg(workspace_id) AND id = sqlc.arg(revision_id)
+) AS present;
+
+-- name: PhysicalDatasetExists :one
+SELECT EXISTS (
+    SELECT 1 FROM physical_datasets
+    WHERE workspace_id = sqlc.arg(workspace_id) AND id = sqlc.arg(physical_dataset_id)
+) AS present;
+
+-- name: PhysicalFieldExists :one
+SELECT EXISTS (
+    SELECT 1 FROM physical_fields
+    WHERE workspace_id = sqlc.arg(workspace_id) AND id = sqlc.arg(physical_field_id)
+) AS present;
