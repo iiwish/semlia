@@ -166,6 +166,30 @@ func (e EvidenceArtifactRole) Valid() bool {
 	}
 }
 
+// Defines values for GovernanceAgentRunStatus.
+const (
+	GovernanceAgentRunStatusCancelled GovernanceAgentRunStatus = "cancelled"
+	GovernanceAgentRunStatusFailed    GovernanceAgentRunStatus = "failed"
+	GovernanceAgentRunStatusRunning   GovernanceAgentRunStatus = "running"
+	GovernanceAgentRunStatusSucceeded GovernanceAgentRunStatus = "succeeded"
+)
+
+// Valid indicates whether the value is a known member of the GovernanceAgentRunStatus enum.
+func (e GovernanceAgentRunStatus) Valid() bool {
+	switch e {
+	case GovernanceAgentRunStatusCancelled:
+		return true
+	case GovernanceAgentRunStatusFailed:
+		return true
+	case GovernanceAgentRunStatusRunning:
+		return true
+	case GovernanceAgentRunStatusSucceeded:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for GovernanceChangeOp.
 const (
 	Add    GovernanceChangeOp = "add"
@@ -208,6 +232,48 @@ func (e GovernanceDiffCategory) Valid() bool {
 	case Definition:
 		return true
 	case Relations:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GovernanceModelKind.
+const (
+	Embedding GovernanceModelKind = "embedding"
+	Llm       GovernanceModelKind = "llm"
+)
+
+// Valid indicates whether the value is a known member of the GovernanceModelKind enum.
+func (e GovernanceModelKind) Valid() bool {
+	switch e {
+	case Embedding:
+		return true
+	case Llm:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GovernanceModelProtocol.
+const (
+	Anthropic        GovernanceModelProtocol = "anthropic"
+	Gemini           GovernanceModelProtocol = "gemini"
+	Openai           GovernanceModelProtocol = "openai"
+	OpenaiCompatible GovernanceModelProtocol = "openai_compatible"
+)
+
+// Valid indicates whether the value is a known member of the GovernanceModelProtocol enum.
+func (e GovernanceModelProtocol) Valid() bool {
+	switch e {
+	case Anthropic:
+		return true
+	case Gemini:
+		return true
+	case Openai:
+		return true
+	case OpenaiCompatible:
 		return true
 	default:
 		return false
@@ -804,6 +870,29 @@ type CreateCatalogAssetRequest struct {
 	SchemaVersion SchemaVersion `json:"schemaVersion"`
 }
 
+// CreateGovernanceModelProviderRequest credential is write-only secret material — it is reduced to its revision digest and never persisted or echoed. credentialEnv names the environment variable the runtime resolves.
+type CreateGovernanceModelProviderRequest struct {
+	BaseUrl       *string `json:"baseUrl,omitempty"`
+	Credential    *string `json:"credential,omitempty"`
+	CredentialEnv string  `json:"credentialEnv"`
+	DisplayName   string  `json:"displayName"`
+
+	// Protocol Wire protocol of the provider. anthropic and gemini persist but answer provider_unsupported until their adapters land.
+	Protocol GovernanceModelProtocol `json:"protocol"`
+}
+
+// CreateGovernanceModelSettingRequest defines model for CreateGovernanceModelSettingRequest.
+type CreateGovernanceModelSettingRequest struct {
+	Capability         string              `json:"capability"`
+	EmbeddingDimension *int                `json:"embeddingDimension,omitempty"`
+	Kind               GovernanceModelKind `json:"kind"`
+	Model              string              `json:"model"`
+
+	// ProviderId Example: prv_01arz3ndektsv4rrffq69g5fav
+	ProviderId GovernanceModelProviderId `json:"providerId"`
+	TokenLimit int                       `json:"tokenLimit"`
+}
+
 // CreateGovernanceProposalRequest defines model for CreateGovernanceProposalRequest.
 type CreateGovernanceProposalRequest struct {
 	// AgentAttribution SSOT §8.6 attribution of an AI-proposed payload to a persisted agent run in the same workspace. The run must already exist and its model, config revision and input hash must match the persisted record.
@@ -987,6 +1076,37 @@ type EvidenceArtifactRole string
 // EvidenceArtifactId Example: evd_01arz3ndektsv4rrffq69g5fav
 type EvidenceArtifactId = identity.EvidenceID
 
+// GovernanceAgentRun The §8.6 record of one agent execution — hashes, cost and duration only; raw prompts and provider payloads are unrepresentable.
+type GovernanceAgentRun struct {
+	ConfigRevision string `json:"configRevision"`
+	CostMicros     int64  `json:"costMicros"`
+	DurationMs     *int64 `json:"durationMs,omitempty"`
+
+	// FinishedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	FinishedAt *Timestamp `json:"finishedAt,omitempty"`
+
+	// Id Example: agr_01arz3ndektsv4rrffq69g5fav
+	Id GovernanceAgentRunId `json:"id"`
+
+	// InputHash Recomputable sha256 content digest of the paired value.
+	InputHash GovernanceChangeDigest `json:"inputHash"`
+	Model     string                 `json:"model"`
+
+	// OutputDigest Recomputable sha256 content digest of the paired value.
+	OutputDigest *GovernanceChangeDigest `json:"outputDigest,omitempty"`
+
+	// StartedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	StartedAt Timestamp                `json:"startedAt"`
+	Status    GovernanceAgentRunStatus `json:"status"`
+}
+
+// GovernanceAgentRunStatus defines model for GovernanceAgentRun.Status.
+type GovernanceAgentRunStatus string
+
 // GovernanceAgentRunId Example: agr_01arz3ndektsv4rrffq69g5fav
 type GovernanceAgentRunId = identity.AgentRunID
 
@@ -1039,6 +1159,113 @@ type GovernanceChangeSetItemRecord struct {
 
 // GovernanceDiffCategory Closed §8.3 structured-diff category; the grouping-rule component.
 type GovernanceDiffCategory string
+
+// GovernanceGenerateProposalRequest defines model for GovernanceGenerateProposalRequest.
+type GovernanceGenerateProposalRequest struct {
+	Instruction string `json:"instruction"`
+
+	// ModelSettingId Example: mdl_01arz3ndektsv4rrffq69g5fav
+	ModelSettingId *GovernanceModelSettingId `json:"modelSettingId,omitempty"`
+
+	// TargetObjectId Target TypeID; the prefix must match targetObjectType.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	TargetObjectId GovernanceTargetObjectId `json:"targetObjectId"`
+
+	// TargetObjectType Objects a governed proposal can target.
+	TargetObjectType GovernanceTargetObjectType `json:"targetObjectType"`
+}
+
+// GovernanceGeneratedProposal defines model for GovernanceGeneratedProposal.
+type GovernanceGeneratedProposal struct {
+	// AgentRun The §8.6 record of one agent execution — hashes, cost and duration only; raw prompts and provider payloads are unrepresentable.
+	AgentRun GovernanceAgentRun       `json:"agentRun"`
+	Proposal GovernanceProposalDetail `json:"proposal"`
+}
+
+// GovernanceModelKind defines model for GovernanceModelKind.
+type GovernanceModelKind string
+
+// GovernanceModelProtocol Wire protocol of the provider. anthropic and gemini persist but answer provider_unsupported until their adapters land.
+type GovernanceModelProtocol string
+
+// GovernanceModelProvider One provider entry. Credential material never appears; credentialEnv names the environment variable holding the secret and credentialRevision is its salted sha256 revision digest.
+type GovernanceModelProvider struct {
+	BaseUrl *string `json:"baseUrl,omitempty"`
+
+	// CreatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	CreatedAt     Timestamp `json:"createdAt"`
+	CredentialEnv string    `json:"credentialEnv"`
+
+	// CredentialRevision Recomputable sha256 content digest of the paired value.
+	CredentialRevision GovernanceChangeDigest `json:"credentialRevision"`
+	DisplayName        string                 `json:"displayName"`
+	Enabled            bool                   `json:"enabled"`
+
+	// Id Example: prv_01arz3ndektsv4rrffq69g5fav
+	Id GovernanceModelProviderId `json:"id"`
+
+	// Protocol Wire protocol of the provider. anthropic and gemini persist but answer provider_unsupported until their adapters land.
+	Protocol GovernanceModelProtocol `json:"protocol"`
+
+	// UpdatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	UpdatedAt Timestamp `json:"updatedAt"`
+}
+
+// GovernanceModelProviderDetail defines model for GovernanceModelProviderDetail.
+type GovernanceModelProviderDetail struct {
+	Models []GovernanceModelSetting `json:"models"`
+
+	// Provider One provider entry. Credential material never appears; credentialEnv names the environment variable holding the secret and credentialRevision is its salted sha256 revision digest.
+	Provider GovernanceModelProvider `json:"provider"`
+}
+
+// GovernanceModelProviderId Example: prv_01arz3ndektsv4rrffq69g5fav
+type GovernanceModelProviderId = identity.ModelProviderID
+
+// GovernanceModelProviderPage defines model for GovernanceModelProviderPage.
+type GovernanceModelProviderPage struct {
+	Items []GovernanceModelProviderDetail `json:"items"`
+}
+
+// GovernanceModelSetting defines model for GovernanceModelSetting.
+type GovernanceModelSetting struct {
+	Capability string `json:"capability"`
+
+	// CreatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	CreatedAt          Timestamp `json:"createdAt"`
+	EmbeddingDimension *int      `json:"embeddingDimension,omitempty"`
+	Enabled            bool      `json:"enabled"`
+
+	// Id Example: mdl_01arz3ndektsv4rrffq69g5fav
+	Id        GovernanceModelSettingId `json:"id"`
+	IsDefault bool                     `json:"isDefault"`
+	Kind      GovernanceModelKind      `json:"kind"`
+	Model     string                   `json:"model"`
+
+	// ProviderId Example: prv_01arz3ndektsv4rrffq69g5fav
+	ProviderId GovernanceModelProviderId `json:"providerId"`
+	TokenLimit int                       `json:"tokenLimit"`
+
+	// UpdatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	UpdatedAt Timestamp `json:"updatedAt"`
+}
+
+// GovernanceModelSettingId Example: mdl_01arz3ndektsv4rrffq69g5fav
+type GovernanceModelSettingId = identity.ModelSettingID
+
+// GovernanceModelSettingPage defines model for GovernanceModelSettingPage.
+type GovernanceModelSettingPage struct {
+	Items []GovernanceModelSetting `json:"items"`
+}
 
 // GovernancePolicyDecision defines model for GovernancePolicyDecision.
 type GovernancePolicyDecision struct {
@@ -1671,6 +1898,24 @@ type Timestamp = time.Time
 // Example: 4bf92f3577b34da6a3ce929d0e0e4736
 type TraceId = string
 
+// UpdateGovernanceModelProviderRequest Omitting credential and credentialEnv keeps the persisted env name and revision digest; supplying credential rotates the digest.
+type UpdateGovernanceModelProviderRequest struct {
+	BaseUrl       *string `json:"baseUrl,omitempty"`
+	Credential    *string `json:"credential,omitempty"`
+	CredentialEnv *string `json:"credentialEnv,omitempty"`
+	DisplayName   string  `json:"displayName"`
+	Enabled       bool    `json:"enabled"`
+}
+
+// UpdateGovernanceModelSettingRequest defines model for UpdateGovernanceModelSettingRequest.
+type UpdateGovernanceModelSettingRequest struct {
+	Capability         string `json:"capability"`
+	EmbeddingDimension *int   `json:"embeddingDimension,omitempty"`
+	Enabled            bool   `json:"enabled"`
+	Model              string `json:"model"`
+	TokenLimit         int    `json:"tokenLimit"`
+}
+
 // Workspace defines model for Workspace.
 type Workspace struct {
 	CreatedAt   time.Time `json:"createdAt"`
@@ -1694,6 +1939,9 @@ type Limit = int
 // ProposalId Example: prp_01arz3ndektsv4rrffq69g5fav
 type ProposalId = GovernanceProposalId
 
+// ProviderId Example: prv_01arz3ndektsv4rrffq69g5fav
+type ProviderId = GovernanceModelProviderId
+
 // ReleaseId Example: rls_01arz3ndektsv4rrffq69g5fav
 type ReleaseId = GovernanceReleaseId
 
@@ -1702,6 +1950,9 @@ type ReviewBatchId = GovernanceReviewBatchId
 
 // RevisionId Example: rev_01arz3ndektsv4rrffq69g5fav
 type RevisionId = AssetRevisionId
+
+// SettingId Example: mdl_01arz3ndektsv4rrffq69g5fav
+type SettingId = GovernanceModelSettingId
 
 // BadRequest defines model for BadRequest.
 type BadRequest = ErrorResponse
@@ -1777,6 +2028,21 @@ type CreateCatalogAssetJSONRequestBody = CreateCatalogAssetRequest
 
 // CreateAssetRevisionJSONRequestBody defines body for CreateAssetRevision for application/json ContentType.
 type CreateAssetRevisionJSONRequestBody = CreateAssetRevisionRequest
+
+// GenerateGovernanceProposalJSONRequestBody defines body for GenerateGovernanceProposal for application/json ContentType.
+type GenerateGovernanceProposalJSONRequestBody = GovernanceGenerateProposalRequest
+
+// CreateGovernanceModelProviderJSONRequestBody defines body for CreateGovernanceModelProvider for application/json ContentType.
+type CreateGovernanceModelProviderJSONRequestBody = CreateGovernanceModelProviderRequest
+
+// UpdateGovernanceModelProviderJSONRequestBody defines body for UpdateGovernanceModelProvider for application/json ContentType.
+type UpdateGovernanceModelProviderJSONRequestBody = UpdateGovernanceModelProviderRequest
+
+// CreateGovernanceModelSettingJSONRequestBody defines body for CreateGovernanceModelSetting for application/json ContentType.
+type CreateGovernanceModelSettingJSONRequestBody = CreateGovernanceModelSettingRequest
+
+// UpdateGovernanceModelSettingJSONRequestBody defines body for UpdateGovernanceModelSetting for application/json ContentType.
+type UpdateGovernanceModelSettingJSONRequestBody = UpdateGovernanceModelSettingRequest
 
 // CreateGovernanceProposalJSONRequestBody defines body for CreateGovernanceProposal for application/json ContentType.
 type CreateGovernanceProposalJSONRequestBody = CreateGovernanceProposalRequest

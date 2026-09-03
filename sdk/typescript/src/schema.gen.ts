@@ -454,6 +454,148 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspaceId}/governance/model-providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * List workspace model providers with their model settings
+         * @description The persisted model-configuration surface. Providers and their model settings never expose credential material: only the credential environment-variable name and its revision digest are returned. Requires the workspace.read capability.
+         */
+        get: operations["listGovernanceModelProviders"];
+        put?: never;
+        /**
+         * Add a model provider to the workspace
+         * @description Persists one provider entry. The optional write-only credential is reduced to its salted sha256 revision digest and the credential environment-variable name is persisted; neither the secret nor any credential field is stored or echoed (SSOT §12 S-002). Requires the workspace.manage capability.
+         */
+        post: operations["createGovernanceModelProvider"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/governance/model-providers/{providerId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                providerId: components["parameters"]["ProviderId"];
+            };
+            cookie?: never;
+        };
+        /** Read one model provider with its model settings */
+        get: operations["getGovernanceModelProvider"];
+        /**
+         * Update one model provider
+         * @description Edits the display name, base URL and enabled flag. Supplying the write-only credential rotates the credential revision digest; secrets are never persisted or echoed. Requires the workspace.manage capability.
+         */
+        put: operations["updateGovernanceModelProvider"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/governance/model-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        /** List workspace model settings */
+        get: operations["listGovernanceModelSettings"];
+        put?: never;
+        /**
+         * Add a model entry to a provider
+         * @description Persists one llm or embedding model entry. The first enabled model of a (workspace, kind) becomes its default. Requires the workspace.manage capability.
+         */
+        post: operations["createGovernanceModelSetting"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/governance/model-settings/{settingId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                settingId: components["parameters"]["SettingId"];
+            };
+            cookie?: never;
+        };
+        /** Read one model setting */
+        get: operations["getGovernanceModelSetting"];
+        /**
+         * Update one model setting
+         * @description Edits the model identifier, capability, token limit, embedding dimension and enabled flag. The kind is fixed at creation. Disabling the default model does not clear its default flag; the default must be moved explicitly. Requires the workspace.manage capability.
+         */
+        put: operations["updateGovernanceModelSetting"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/governance/model-settings/{settingId}/set-default": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                settingId: components["parameters"]["SettingId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move the (workspace, kind) default to one enabled model setting
+         * @description The previous default of the same kind is cleared inside one transaction, so exactly one default per (workspace, kind) remains. Requires the workspace.manage capability.
+         */
+        post: operations["setDefaultGovernanceModelSetting"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/governance/agent-runs/generate-proposal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generate a governed proposal through the configured model
+         * @description Runs one live LLM generation with full SSOT §8.6 recording: the agent run records the model, configuration revision, input hash, model step, output digest, cost and duration with a terminal final state. The model output passes the semlia.proposal-input/v1 schema gate before the agent-attributed proposal is created through the governed authoring path — it enters the normal validation and review pipeline, never publication. One request is one agent run is at most one proposal; there are no implicit retries. Provider failures degrade to a recorded failed run and create no proposal. Requires the asset.propose capability for the calling principal.
+         */
+        post: operations["generateGovernanceProposal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspaceId}/discovery-runs/{runId}": {
         parameters: {
             query?: never;
@@ -1143,6 +1285,118 @@ export interface components {
             items: components["schemas"]["GovernanceReviewBatch"][];
             page: components["schemas"]["PageInfo"];
         };
+        /**
+         * Format: typeid
+         * @example prv_01arz3ndektsv4rrffq69g5fav
+         */
+        GovernanceModelProviderId: string;
+        /**
+         * Format: typeid
+         * @example mdl_01arz3ndektsv4rrffq69g5fav
+         */
+        GovernanceModelSettingId: string;
+        /**
+         * @description Wire protocol of the provider. anthropic and gemini persist but answer provider_unsupported until their adapters land.
+         * @enum {string}
+         */
+        GovernanceModelProtocol: "openai" | "anthropic" | "gemini" | "openai_compatible";
+        /** @enum {string} */
+        GovernanceModelKind: "llm" | "embedding";
+        /** @description One provider entry. Credential material never appears; credentialEnv names the environment variable holding the secret and credentialRevision is its salted sha256 revision digest. */
+        GovernanceModelProvider: {
+            id: components["schemas"]["GovernanceModelProviderId"];
+            protocol: components["schemas"]["GovernanceModelProtocol"];
+            displayName: string;
+            /** Format: uri */
+            baseUrl?: string;
+            credentialEnv: string;
+            credentialRevision: components["schemas"]["GovernanceChangeDigest"];
+            enabled: boolean;
+            createdAt: components["schemas"]["Timestamp"];
+            updatedAt: components["schemas"]["Timestamp"];
+        };
+        GovernanceModelSetting: {
+            id: components["schemas"]["GovernanceModelSettingId"];
+            providerId: components["schemas"]["GovernanceModelProviderId"];
+            kind: components["schemas"]["GovernanceModelKind"];
+            model: string;
+            enabled: boolean;
+            isDefault: boolean;
+            capability: string;
+            tokenLimit: number;
+            embeddingDimension?: number;
+            createdAt: components["schemas"]["Timestamp"];
+            updatedAt: components["schemas"]["Timestamp"];
+        };
+        GovernanceModelProviderDetail: {
+            provider: components["schemas"]["GovernanceModelProvider"];
+            models: components["schemas"]["GovernanceModelSetting"][];
+        };
+        GovernanceModelProviderPage: {
+            items: components["schemas"]["GovernanceModelProviderDetail"][];
+        };
+        GovernanceModelSettingPage: {
+            items: components["schemas"]["GovernanceModelSetting"][];
+        };
+        /** @description credential is write-only secret material — it is reduced to its revision digest and never persisted or echoed. credentialEnv names the environment variable the runtime resolves. */
+        CreateGovernanceModelProviderRequest: {
+            protocol: components["schemas"]["GovernanceModelProtocol"];
+            displayName: string;
+            /** Format: uri */
+            baseUrl?: string;
+            credentialEnv: string;
+            credential: string;
+        };
+        /** @description Omitting credential and credentialEnv keeps the persisted env name and revision digest; supplying credential rotates the digest. */
+        UpdateGovernanceModelProviderRequest: {
+            displayName: string;
+            /** Format: uri */
+            baseUrl?: string;
+            enabled: boolean;
+            credentialEnv?: string;
+            credential?: string;
+        };
+        CreateGovernanceModelSettingRequest: {
+            providerId: components["schemas"]["GovernanceModelProviderId"];
+            kind: components["schemas"]["GovernanceModelKind"];
+            model: string;
+            capability: string;
+            tokenLimit: number;
+            embeddingDimension?: number;
+        };
+        UpdateGovernanceModelSettingRequest: {
+            model: string;
+            capability: string;
+            tokenLimit: number;
+            enabled: boolean;
+            embeddingDimension?: number;
+        };
+        GovernanceGenerateProposalRequest: {
+            targetObjectType: components["schemas"]["GovernanceTargetObjectType"];
+            targetObjectId: components["schemas"]["GovernanceTargetObjectId"];
+            instruction: string;
+            modelSettingId?: components["schemas"]["GovernanceModelSettingId"];
+        };
+        /** @description The §8.6 record of one agent execution — hashes, cost and duration only; raw prompts and provider payloads are unrepresentable. */
+        GovernanceAgentRun: {
+            id: components["schemas"]["GovernanceAgentRunId"];
+            model: string;
+            configRevision: string;
+            inputHash: components["schemas"]["GovernanceChangeDigest"];
+            /** @enum {string} */
+            status: "running" | "succeeded" | "failed" | "cancelled";
+            outputDigest?: components["schemas"]["GovernanceChangeDigest"];
+            /** Format: int64 */
+            costMicros: number;
+            startedAt: components["schemas"]["Timestamp"];
+            finishedAt?: components["schemas"]["Timestamp"];
+            /** Format: int64 */
+            durationMs?: number;
+        };
+        GovernanceGeneratedProposal: {
+            agentRun: components["schemas"]["GovernanceAgentRun"];
+            proposal: components["schemas"]["GovernanceProposalDetail"];
+        };
     };
     responses: {
         /** @description The request failed. */
@@ -1226,6 +1480,8 @@ export interface components {
         ProposalId: components["schemas"]["GovernanceProposalId"];
         ReviewBatchId: components["schemas"]["GovernanceReviewBatchId"];
         ReleaseId: components["schemas"]["GovernanceReleaseId"];
+        ProviderId: components["schemas"]["GovernanceModelProviderId"];
+        SettingId: components["schemas"]["GovernanceModelSettingId"];
         Limit: number;
         Cursor: components["schemas"]["Cursor"];
     };
@@ -2005,6 +2261,302 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["UnprocessableEntity"];
+            default: components["responses"]["Error"];
+        };
+    };
+    listGovernanceModelProviders: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Model providers ordered oldest first, each with its model settings. */
+            200: {
+                headers: {
+                    "X-Trace-ID": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GovernanceModelProviderPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            default: components["responses"]["Error"];
+        };
+    };
+    createGovernanceModelProvider: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateGovernanceModelProviderRequest"];
+            };
+        };
+        responses: {
+            /** @description The created provider detail with its (empty) model settings. */
+            201: {
+                headers: {
+                    "X-Trace-ID": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GovernanceModelProviderDetail"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getGovernanceModelProvider: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                providerId: components["parameters"]["ProviderId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The provider detail with its model settings. */
+            200: {
+                headers: {
+                    "X-Trace-ID": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GovernanceModelProviderDetail"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    updateGovernanceModelProvider: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                providerId: components["parameters"]["ProviderId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateGovernanceModelProviderRequest"];
+            };
+        };
+        responses: {
+            /** @description The updated provider detail. */
+            200: {
+                headers: {
+                    "X-Trace-ID": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GovernanceModelProviderDetail"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    listGovernanceModelSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Model settings ordered by provider and creation. */
+            200: {
+                headers: {
+                    "X-Trace-ID": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GovernanceModelSettingPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            default: components["responses"]["Error"];
+        };
+    };
+    createGovernanceModelSetting: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateGovernanceModelSettingRequest"];
+            };
+        };
+        responses: {
+            /** @description The created model setting. */
+            201: {
+                headers: {
+                    "X-Trace-ID": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GovernanceModelSetting"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getGovernanceModelSetting: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                settingId: components["parameters"]["SettingId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The model setting. */
+            200: {
+                headers: {
+                    "X-Trace-ID": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GovernanceModelSetting"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    updateGovernanceModelSetting: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                settingId: components["parameters"]["SettingId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateGovernanceModelSettingRequest"];
+            };
+        };
+        responses: {
+            /** @description The updated model setting. */
+            200: {
+                headers: {
+                    "X-Trace-ID": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GovernanceModelSetting"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    setDefaultGovernanceModelSetting: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                settingId: components["parameters"]["SettingId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The model setting now holding the default. */
+            200: {
+                headers: {
+                    "X-Trace-ID": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GovernanceModelSetting"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Error"];
+        };
+    };
+    generateGovernanceProposal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GovernanceGenerateProposalRequest"];
+            };
+        };
+        responses: {
+            /** @description The finished agent run and the generated agent-attributed proposal. */
+            201: {
+                headers: {
+                    "X-Trace-ID": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GovernanceGeneratedProposal"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
+            503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
     };

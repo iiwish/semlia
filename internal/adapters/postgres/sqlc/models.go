@@ -208,6 +208,34 @@ type ModelGrain struct {
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 }
 
+type ModelProvider struct {
+	ID                 pgtype.UUID        `json:"id"`
+	WorkspaceID        pgtype.UUID        `json:"workspace_id"`
+	Protocol           string             `json:"protocol"`
+	DisplayName        string             `json:"display_name"`
+	BaseUrl            pgtype.Text        `json:"base_url"`
+	CredentialEnv      string             `json:"credential_env"`
+	CredentialRevision string             `json:"credential_revision"`
+	Enabled            bool               `json:"enabled"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ModelSetting struct {
+	ID                 pgtype.UUID        `json:"id"`
+	WorkspaceID        pgtype.UUID        `json:"workspace_id"`
+	ProviderID         pgtype.UUID        `json:"provider_id"`
+	Kind               string             `json:"kind"`
+	Model              string             `json:"model"`
+	Enabled            bool               `json:"enabled"`
+	IsDefault          bool               `json:"is_default"`
+	Capability         string             `json:"capability"`
+	TokenLimit         int32              `json:"token_limit"`
+	EmbeddingDimension pgtype.Int4        `json:"embedding_dimension"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+}
+
 type OntologyRevision struct {
 	ID            pgtype.UUID        `json:"id"`
 	WorkspaceID   pgtype.UUID        `json:"workspace_id"`

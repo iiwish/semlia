@@ -64,7 +64,7 @@ func TestMigrationLifecycleAndTenantSchema(t *testing.T) {
 	if err := migrator.Up(); err != nil {
 		t.Fatalf("upgrade empty database: %v", err)
 	}
-	assertVersion(t, migrator, 10, true)
+	assertVersion(t, migrator, 11, true)
 	if err := migrator.Up(); err != nil {
 		t.Fatalf("repeat upgrade: %v", err)
 	}
@@ -74,7 +74,8 @@ func TestMigrationLifecycleAndTenantSchema(t *testing.T) {
 	wantTables := []string{
 		"actions", "agent_runs", "agent_steps", "asset_revisions", "audit_events", "authorization_events",
 		"code_artifacts", "discovery_findings", "discovery_runs", "entity_keys", "evidence_artifacts", "jobs",
-		"join_contracts", "lineage_edges", "model_grains", "ontology_revision_relations", "ontology_revisions",
+		"join_contracts", "lineage_edges", "model_grains", "model_providers", "model_settings",
+		"ontology_revision_relations", "ontology_revisions",
 		"outbox_events", "physical_bindings", "physical_dataset_revisions", "physical_datasets",
 		"physical_field_revisions", "physical_fields", "policy_decisions", "policy_rules", "principals", "proposal_changes",
 		"proposals", "relation_type_policies", "release_assets", "release_objects", "releases", "resource_aliases", "review_batch_members",
@@ -85,7 +86,7 @@ func TestMigrationLifecycleAndTenantSchema(t *testing.T) {
 	if strings.Join(firstInventory, ",") != strings.Join(wantTables, ",") {
 		t.Fatalf("table inventory = %v, want %v", firstInventory, wantTables)
 	}
-	t.Logf("%s migration version 10 inventory: %v", postgresImage, firstInventory)
+	t.Logf("%s migration version 11 inventory: %v", postgresImage, firstInventory)
 	assertTenantForeignKeys(t, pool)
 
 	if err := migrator.Down(); err != nil {
@@ -149,10 +150,10 @@ func TestPopulatedM0UpgradeAndRollbackPreserveFoundationRows(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := migrator.Steps(9); err != nil {
+	if err := migrator.Steps(10); err != nil {
 		t.Fatalf("upgrade populated M0: %v", err)
 	}
-	assertVersion(t, migrator, 10, true)
+	assertVersion(t, migrator, 11, true)
 
 	for _, table := range []string{"workspaces", "audit_events", "jobs", "outbox_events"} {
 		var count int
@@ -207,6 +208,9 @@ func TestPopulatedM0UpgradeAndRollbackPreserveFoundationRows(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	if err := migrator.Steps(-1); err != nil {
+		t.Fatalf("remove model config schema: %v", err)
+	}
 	if err := migrator.Steps(-1); err != nil {
 		t.Fatalf("remove release publishing schema: %v", err)
 	}
@@ -303,7 +307,7 @@ func TestPostgres17MigrationLifecycle(t *testing.T) {
 	if err := migrator.Up(); err != nil {
 		t.Fatalf("PostgreSQL 17 upgrade: %v", err)
 	}
-	assertVersion(t, migrator, 10, true)
+	assertVersion(t, migrator, 11, true)
 	pool, err := pgstore.Open(ctx, url)
 	if err != nil {
 		t.Fatal(err)
@@ -381,10 +385,10 @@ func TestPopulatedM1UpgradeAndRollbackPreserveRegistryRows(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := migrator.Steps(7); err != nil {
+	if err := migrator.Steps(8); err != nil {
 		t.Fatalf("upgrade populated M1 through M2: %v", err)
 	}
-	assertVersion(t, migrator, 10, true)
+	assertVersion(t, migrator, 11, true)
 
 	proposalID, err := identity.NewProposalID()
 	if err != nil {
@@ -403,6 +407,9 @@ func TestPopulatedM1UpgradeAndRollbackPreserveRegistryRows(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	if err := migrator.Steps(-1); err != nil {
+		t.Fatalf("remove model config schema: %v", err)
+	}
 	if err := migrator.Steps(-1); err != nil {
 		t.Fatalf("remove release publishing schema: %v", err)
 	}
@@ -445,7 +452,7 @@ func TestPopulatedM1UpgradeAndRollbackPreserveRegistryRows(t *testing.T) {
 	if err := migrator.Up(); err != nil {
 		t.Fatalf("re-upgrade populated M1: %v", err)
 	}
-	assertVersion(t, migrator, 10, true)
+	assertVersion(t, migrator, 11, true)
 	store := pgstore.NewStore(pool)
 	detail, err := store.GetCatalogAsset(ctx, workspaceID, assetID)
 	if err != nil {
@@ -685,7 +692,7 @@ func assertTenantForeignKeys(t *testing.T, pool *pgstore.Pool) {
 	}
 	want := []string{
 		"agent_runs", "audit_events", "authorization_events", "entity_keys", "evidence_artifacts", "jobs",
-		"join_contracts", "model_grains", "ontology_revisions", "outbox_events", "physical_bindings",
+		"join_contracts", "model_grains", "model_providers", "ontology_revisions", "outbox_events", "physical_bindings",
 		"principals", "proposals", "releases", "review_batch_members", "review_batches", "reviews",
 		"semantic_assets", "semantic_relations",
 		"source_connections", "usage_events",

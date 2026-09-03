@@ -40,6 +40,8 @@ type matchedRoute struct {
 	release   string
 	proposal  string
 	batch     string
+	provider  string
+	setting   string
 }
 
 func matchRoute(path string) matchedRoute {

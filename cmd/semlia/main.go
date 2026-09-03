@@ -297,6 +297,13 @@ func serve(ctx context.Context, cfg config.Config, output io.Writer) error {
 				governanceapp.NewPolicyDecisionTrigger(catalogStore, governancePolicy),
 			),
 		)
+		modelConfig := governanceapp.NewModelConfigService(catalogStore, authorizer, clock)
+		governanceapp.WithModelConfig(modelConfig)(governanceAuthoring)
+		governanceapp.WithGeneration(governanceapp.NewGenerationService(
+			catalogStore, modelConfig,
+			governanceapp.NewAgentRunService(catalogStore, clock),
+			governanceAuthoring, authorizer, clock,
+		))(governanceAuthoring)
 		options = append(options, httpapi.WithGovernance(governanceAuthoring))
 	}
 	apiHandler := httpapi.NewHandler(service, logger, provider.Tracer("github.com/iiwish/semlia"), options...)
