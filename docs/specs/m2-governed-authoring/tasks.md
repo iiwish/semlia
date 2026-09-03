@@ -169,7 +169,7 @@ Acceptance: included in the founder's continuous M2 execution authorization on 2
 
 ### T009 Model configuration and live LLM generation
 
-Status: Blocked
+Status: Accepted
 Depends on: T003, T006, D1 verdict recorded 2026-09-02
 Blocks: T010
 
@@ -177,6 +177,16 @@ Condition: packets authored after T006 acceptance. Persisted LLM/Embedding
 provider and model settings honoring the ModelConfigurationView contract; live schema-valid
 proposal generation; full §8.6 run recording. The governed loop stays provable on seeded
 agent-attributed proposals if provider integration slips.
+
+Packet: `docs/specs/m2-governed-authoring/packets/T009.yaml`.
+
+Execution: implementation adds migration `000011` (providers/settings + seeded D6 agent
+principal), the model configuration API with credential-material-free persistence, the
+OpenAI-compatible provider client, live generation through the T003 schema gate with complete
+§8.6 run recording, and provider-unavailable degradation. Evidence:
+`docs/evidence/M2-T009/summary.md`.
+
+Acceptance: included in the founder's continuous M2 execution authorization on 2026-09-02.
 
 ### T010 Frontend convergence
 
