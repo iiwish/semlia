@@ -6,7 +6,7 @@ SELECT asset.id,
        asset.asset_type,
        asset.lifecycle_state,
        asset.current_revision_id,
-       COALESCE(revision.content->>'name', revision.content->>'title', asset.key) AS title,
+       COALESCE(NULLIF(revision.content->>'displayName', ''), revision.content->>'name', revision.content->>'title', asset.key) AS title,
        COALESCE(revision.content->>'summary', revision.content->>'definition', '')::text AS summary,
        asset.updated_at,
        CASE
@@ -86,7 +86,7 @@ SELECT asset.id,
        revision.content,
        revision.created_by,
        revision.created_at AS revision_created_at,
-       COALESCE(revision.content->>'name', revision.content->>'title', asset.key) AS title,
+       COALESCE(NULLIF(revision.content->>'displayName', ''), revision.content->>'name', revision.content->>'title', asset.key) AS title,
        COALESCE(revision.content->>'summary', revision.content->>'definition', '')::text AS summary,
        (SELECT count(*)::integer
         FROM semantic_relations relation
@@ -490,7 +490,7 @@ SELECT relation.id,
        counterpart.lifecycle_state,
        counterpart.current_revision_id,
        counterpart.updated_at,
-       COALESCE(revision.content->>'name', revision.content->>'title', counterpart.key) AS counterpart_title,
+       COALESCE(NULLIF(revision.content->>'displayName', ''), revision.content->>'name', revision.content->>'title', counterpart.key) AS counterpart_title,
        COALESCE(revision.content->>'summary', revision.content->>'definition', '')::text AS counterpart_summary
 FROM semantic_relations AS relation
 JOIN semantic_assets AS counterpart

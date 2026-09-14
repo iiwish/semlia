@@ -170,6 +170,14 @@ function CatalogCreationProbe() {
   </div>;
 }
 
+function CatalogProjectionProbe() {
+  const runtime = useCatalogRuntime();
+  return <div>
+    <button disabled={runtime.loading || !runtime.workspaceId} onClick={() => void runtime.ensureAsset(asset.id)}>读取生产资产</button>
+    <output data-testid="production-projection">{runtime.assets.map(item => `${item.name}|${item.owner}`).join(";")}</output>
+  </div>;
+}
+
 describe("production catalog", () => {
   it("keeps the request fingerprint aligned after creating a workspace and its first asset", async () => {
     const createdWorkspace = { ...workspace, id: "wsp_01arz3ndektsv4rrffq69g5faw", slug: "new-space", displayName: "New space" };
@@ -278,6 +286,20 @@ describe("production catalog", () => {
     expect(screen.getByText("JoinContract读取失败")).toBeVisible();
     await user.click(screen.getByRole("tab", { name: "可信度" }));
     expect(screen.getByText("Schema validation")).toBeVisible();
+  });
+
+  it("projects production displayName and ownerPrincipalId without losing legacy compatibility", async () => {
+    const implementation = getAssetMock.getMockImplementation();
+    if (!implementation) throw new Error("catalog detail mock is unavailable");
+    const detail = await implementation();
+    getAssetMock.mockResolvedValueOnce({ ...detail, currentRevision: { ...detail.currentRevision, content: {
+      displayName: "Synthetic production revenue", name: "Legacy name", definition: "Synthetic revenue",
+      ownerPrincipalId: "prn_01arz3ndektsv4rrffq69g5fav", owner: "Legacy owner",
+    } } });
+    render(<CatalogRuntimeProvider><CatalogProjectionProbe /></CatalogRuntimeProvider>);
+    await waitFor(() => expect(screen.getByRole("button", { name: "读取生产资产" })).toBeEnabled());
+    await userEvent.setup().click(screen.getByRole("button", { name: "读取生产资产" }));
+    await waitFor(() => expect(screen.getByTestId("production-projection")).toHaveTextContent("Synthetic production revenue|prn_01arz3ndektsv4rrffq69g5fav"));
   });
 
   it("keeps a newer current revision in draft while showing the older released basis", async () => {
