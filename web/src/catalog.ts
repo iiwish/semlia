@@ -1,16 +1,18 @@
-import { createSemliaClient, type components } from "@semlia/sdk-typescript";
+import type { components } from "@semlia/sdk-typescript";
+
+import { apiClient as client } from "./apiClient";
 
 export type Workspace = components["schemas"]["Workspace"];
 export type CatalogPage = components["schemas"]["CatalogPage"];
 export type CatalogAsset = components["schemas"]["CatalogAssetSummary"];
 export type CatalogAssetDetail = components["schemas"]["CatalogAssetDetail"];
+export type CatalogAuthorityRecordPage = components["schemas"]["CatalogAuthorityRecordPage"];
+export type CatalogAuthoritySectionKind = "relations" | "physical_bindings" | "join_contracts" | "validation" | "lineage" | "consumer_impact";
 export type CatalogRelation = components["schemas"]["AssetRelation"];
 export type CatalogRelationPage = components["schemas"]["AssetRelationPage"];
 export type CatalogRevision = components["schemas"]["AssetRevision"];
 export type CatalogRevisionPage = components["schemas"]["AssetRevisionPage"];
 export type SemanticAssetType = components["schemas"]["SemanticAssetType"];
-
-const client = createSemliaClient({ baseUrl: "" });
 
 export async function listWorkspaces(signal?: AbortSignal): Promise<Workspace[]> {
   const response = await client.GET("/api/v1/workspaces", { signal });
@@ -30,6 +32,7 @@ export async function listAssets(
   workspaceId: string,
   search: string,
   assetType: SemanticAssetType | "",
+  cursor?: string,
   signal?: AbortSignal,
 ): Promise<CatalogPage> {
   const response = await client.GET("/api/v1/workspaces/{workspaceId}/catalog/assets", {
@@ -37,9 +40,28 @@ export async function listAssets(
       path: { workspaceId },
       query: {
         limit: 100,
+        ...(cursor ? { cursor } : {}),
         ...(search ? { search } : {}),
         ...(assetType ? { assetType } : {}),
       },
+    },
+    signal,
+  });
+  if (!response.data) throw new Error(errorMessage(response.error));
+  return response.data;
+}
+
+export async function listAssetAuthorityRecords(
+  workspaceId: string,
+  assetId: string,
+  sectionKind: CatalogAuthoritySectionKind,
+  cursor?: string,
+  signal?: AbortSignal,
+): Promise<CatalogAuthorityRecordPage> {
+  const response = await client.GET("/api/v1/workspaces/{workspaceId}/catalog/assets/{assetId}/authority/{sectionKind}", {
+    params: {
+      path: { workspaceId, assetId, sectionKind },
+      query: { limit: 100, ...(cursor ? { cursor } : {}) },
     },
     signal,
   });
@@ -68,11 +90,11 @@ export async function listAssetRelations(workspaceId: string, assetId: string, s
   return response.data;
 }
 
-export async function listAssetRevisions(workspaceId: string, assetId: string, signal?: AbortSignal): Promise<CatalogRevisionPage> {
+export async function listAssetRevisions(workspaceId: string, assetId: string, cursor?: string, signal?: AbortSignal): Promise<CatalogRevisionPage> {
   const response = await client.GET("/api/v1/workspaces/{workspaceId}/catalog/assets/{assetId}/revisions", {
     params: {
       path: { workspaceId, assetId },
-      query: { limit: 100 },
+      query: { limit: 100, ...(cursor ? { cursor } : {}) },
     },
     signal,
   });

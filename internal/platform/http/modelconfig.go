@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"net/http"
-	"strings"
 
 	contract "github.com/iiwish/semlia/api/gen/go"
 	governanceapp "github.com/iiwish/semlia/internal/application/governance"
@@ -21,7 +20,7 @@ func modelProviderDetailResponse(detail governanceapp.ModelProviderDetail) contr
 		Models:   make([]contract.GovernanceModelSetting, 0, len(detail.Settings)),
 	}
 	for _, setting := range detail.Settings {
-		result.Models = append(result.Models, modelSettingResponse(setting))
+		result.Models = append(result.Models, modelSettingWithGenerationRevision(setting, provider))
 	}
 	return result
 }
@@ -62,8 +61,22 @@ func modelSettingResponse(setting domain.ModelSetting) contract.GovernanceModelS
 	return result
 }
 
+func modelSettingWithGenerationRevision(setting domain.ModelSetting, provider domain.ModelProvider) contract.GovernanceModelSetting {
+	result := modelSettingResponse(setting)
+	if revision, err := domain.ProductionGenerationModelRevision(setting, provider); err == nil {
+		result.GenerationConfigRevision = &revision
+	}
+	return result
+}
+
 func generatedProposalResponse(result governanceapp.GenerationResult) contract.GovernanceGeneratedProposal {
-	run := result.Run
+	return contract.GovernanceGeneratedProposal{
+		AgentRun: governanceAgentRunResponse(result.Run),
+		Proposal: governanceProposalDetailResponse(result.Proposal),
+	}
+}
+
+func governanceAgentRunResponse(run domain.AgentRun) contract.GovernanceAgentRun {
 	agentRun := contract.GovernanceAgentRun{
 		Id:             run.ID,
 		Model:          run.Model,
@@ -85,10 +98,7 @@ func generatedProposalResponse(result governanceapp.GenerationResult) contract.G
 		duration := *run.DurationMS
 		agentRun.DurationMs = &duration
 	}
-	return contract.GovernanceGeneratedProposal{
-		AgentRun: agentRun,
-		Proposal: governanceProposalDetailResponse(result.Proposal),
-	}
+	return agentRun
 }
 
 func (handler *Handler) listModelProviders(
@@ -99,7 +109,7 @@ func (handler *Handler) listModelProviders(
 ) string {
 	details, err := handler.governance.ModelConfig().ListProviders(request.Context(), governanceapp.GetModelConfigRequest{
 		WorkspaceID:  workspaceID,
-		PrincipalRef: strings.TrimSpace(request.Header.Get(headerPrincipal)), TraceID: traceID,
+		PrincipalRef: principalRef(request), TraceID: traceID,
 	})
 	if err != nil {
 		return writeGovernanceError(response, err, traceID)
@@ -133,7 +143,7 @@ func (handler *Handler) createModelProvider(
 		BaseURL:       body.BaseUrl,
 		CredentialEnv: body.CredentialEnv,
 		Credential:    dereferenceString(body.Credential),
-		PrincipalRef:  strings.TrimSpace(request.Header.Get(headerPrincipal)),
+		PrincipalRef:  principalRef(request),
 		TraceID:       traceID,
 	})
 	if err != nil {
@@ -154,7 +164,7 @@ func (handler *Handler) getModelProvider(
 ) string {
 	details, err := handler.governance.ModelConfig().ListProviders(request.Context(), governanceapp.GetModelConfigRequest{
 		WorkspaceID:  workspaceID,
-		PrincipalRef: strings.TrimSpace(request.Header.Get(headerPrincipal)), TraceID: traceID,
+		PrincipalRef: principalRef(request), TraceID: traceID,
 	})
 	if err != nil {
 		return writeGovernanceError(response, err, traceID)
@@ -186,7 +196,7 @@ func (handler *Handler) updateModelProvider(
 	updateRequest := governanceapp.UpdateModelProviderRequest{
 		WorkspaceID: workspaceID, ProviderID: providerID,
 		DisplayName: body.DisplayName, BaseURL: body.BaseUrl, Enabled: body.Enabled,
-		PrincipalRef: strings.TrimSpace(request.Header.Get(headerPrincipal)), TraceID: traceID,
+		PrincipalRef: principalRef(request), TraceID: traceID,
 	}
 	if body.CredentialEnv != nil {
 		credentialEnv := *body.CredentialEnv
@@ -201,7 +211,7 @@ func (handler *Handler) updateModelProvider(
 	}
 	settings, err := handler.governance.ModelConfig().ListProviders(request.Context(), governanceapp.GetModelConfigRequest{
 		WorkspaceID:  workspaceID,
-		PrincipalRef: strings.TrimSpace(request.Header.Get(headerPrincipal)), TraceID: traceID,
+		PrincipalRef: principalRef(request), TraceID: traceID,
 	})
 	if err != nil {
 		return writeGovernanceError(response, err, traceID)
@@ -223,7 +233,7 @@ func (handler *Handler) listModelSettings(
 ) string {
 	details, err := handler.governance.ModelConfig().ListProviders(request.Context(), governanceapp.GetModelConfigRequest{
 		WorkspaceID:  workspaceID,
-		PrincipalRef: strings.TrimSpace(request.Header.Get(headerPrincipal)), TraceID: traceID,
+		PrincipalRef: principalRef(request), TraceID: traceID,
 	})
 	if err != nil {
 		return writeGovernanceError(response, err, traceID)
@@ -231,7 +241,7 @@ func (handler *Handler) listModelSettings(
 	items := make([]contract.GovernanceModelSetting, 0)
 	for _, detail := range details {
 		for _, setting := range detail.Settings {
-			items = append(items, modelSettingResponse(setting))
+			items = append(items, modelSettingWithGenerationRevision(setting, detail.Provider))
 		}
 	}
 	writeJSON(response, http.StatusOK, contract.GovernanceModelSettingPage{Items: items})
@@ -257,7 +267,7 @@ func (handler *Handler) createModelSetting(
 		Kind: domain.ModelKind(body.Kind), Model: body.Model,
 		Capability: body.Capability, TokenLimit: body.TokenLimit,
 		EmbeddingDimension: body.EmbeddingDimension,
-		PrincipalRef:       strings.TrimSpace(request.Header.Get(headerPrincipal)), TraceID: traceID,
+		PrincipalRef:       principalRef(request), TraceID: traceID,
 	})
 	if err != nil {
 		return writeGovernanceError(response, err, traceID)
@@ -275,7 +285,7 @@ func (handler *Handler) getModelSetting(
 ) string {
 	setting, err := handler.governance.ModelConfig().GetSetting(request.Context(), governanceapp.GetModelSettingRequest{
 		WorkspaceID: workspaceID, SettingID: settingID,
-		PrincipalRef: strings.TrimSpace(request.Header.Get(headerPrincipal)), TraceID: traceID,
+		PrincipalRef: principalRef(request), TraceID: traceID,
 	})
 	if err != nil {
 		return writeGovernanceError(response, err, traceID)
@@ -303,7 +313,7 @@ func (handler *Handler) updateModelSetting(
 		WorkspaceID: workspaceID, SettingID: settingID,
 		Model: body.Model, Capability: body.Capability, TokenLimit: body.TokenLimit,
 		EmbeddingDimension: body.EmbeddingDimension, Enabled: body.Enabled,
-		PrincipalRef: strings.TrimSpace(request.Header.Get(headerPrincipal)), TraceID: traceID,
+		PrincipalRef: principalRef(request), TraceID: traceID,
 	})
 	if err != nil {
 		return writeGovernanceError(response, err, traceID)
@@ -330,7 +340,7 @@ func (handler *Handler) generateProposal(
 		TargetObjectType: domain.TargetObjectType(body.TargetObjectType),
 		TargetObjectID:   string(body.TargetObjectId),
 		Instruction:      body.Instruction,
-		PrincipalRef:     strings.TrimSpace(request.Header.Get(headerPrincipal)),
+		PrincipalRef:     principalRef(request),
 		TraceID:          traceID,
 	}
 	if body.ModelSettingId != nil {

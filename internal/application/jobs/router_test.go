@@ -1,30 +1,20 @@
-package jobs_test
+package jobs
 
 import (
 	"context"
 	"errors"
 	"testing"
-
-	"github.com/iiwish/semlia/internal/application/jobs"
 )
 
-func TestRouterPublisherFailsClosed(t *testing.T) {
-	router := jobs.NewRouterPublisher()
-	if err := router.Publish(context.Background(), jobs.OutboxEvent{Type: "unknown"}); !errors.Is(err, jobs.ErrPublisherNotRegistered) {
-		t.Fatalf("unknown event error = %v", err)
-	}
-	called := false
-	router.Register("known", publisherFunc(func(context.Context, jobs.OutboxEvent) error {
-		called = true
-		return nil
-	}))
-	if err := router.Publish(context.Background(), jobs.OutboxEvent{Type: "known"}); err != nil || !called {
-		t.Fatalf("known publish called=%t err=%v", called, err)
-	}
-}
+type publisherFunc func(context.Context, OutboxEvent) error
 
-type publisherFunc func(context.Context, jobs.OutboxEvent) error
-
-func (fn publisherFunc) Publish(ctx context.Context, event jobs.OutboxEvent) error {
-	return fn(ctx, event)
+func (f publisherFunc) Publish(ctx context.Context, event OutboxEvent) error { return f(ctx, event) }
+func TestRouterFanoutDoesNotBlockOtherSubscribers(t *testing.T) {
+	router := NewRouterPublisher()
+	called := 0
+	router.Register("release.published", publisherFunc(func(context.Context, OutboxEvent) error { called++; return errors.New("git unavailable") }))
+	router.Register("release.published", publisherFunc(func(context.Context, OutboxEvent) error { called++; return nil }))
+	if err := router.Publish(context.Background(), OutboxEvent{Type: "release.published"}); err == nil || called != 2 {
+		t.Fatalf("fanout error=%v called=%d", err, called)
+	}
 }

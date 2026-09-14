@@ -1,0 +1,24 @@
+package postgresql_test
+
+import (
+	"context"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/iiwish/semlia/internal/adapters/discovery/postgresql"
+	"github.com/iiwish/semlia/internal/domain/discovery"
+)
+
+func TestReviewLongSQLPath(t *testing.T) {
+	path := strings.Repeat("dir/", 64) + "a.sql"
+	input := discovery.Input{Locator: "git://review", ObservedAt: time.Date(2026, 9, 9, 7, 0, 0, 0, time.UTC), Files: map[string][]byte{path: []byte("CREATE TABLE public.orders(id bigint);")}}
+	if err := input.Validate(); err != nil {
+		t.Fatalf("input rejected before adapter: %v", err)
+	}
+	snapshot, err := (postgresql.Adapter{}).Discover(context.Background(), input)
+	t.Logf("pathBytes=%d datasets=%d err=%v", len(path), len(snapshot.Datasets), err)
+	if err != nil {
+		t.Fatalf("valid existing SQL path must remain accepted: %v", err)
+	}
+}

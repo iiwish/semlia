@@ -1,0 +1,27 @@
+{
+  "owner": "PM",
+  "command": [
+    "go",
+    "test",
+    "-p=1",
+    "-count=1",
+    "-timeout=10m",
+    "-overlay=docs/evidence/SP-T002/pm/lineage-overlay.json",
+    "./tests/integration/discovery",
+    "-run",
+    "^TestPMUnresolvedLineageCannotBeComplete$",
+    "-v"
+  ],
+  "clearedEnvironment": [
+    "SEMLIA_INGESTION_TEST_DATABASE_URL",
+    "SEMLIA_EXECUTION_CRASH_HELPER",
+    "SEMLIA_EXECUTION_TEST_DB",
+    "SEMLIA_DATABASE_URL"
+  ],
+  "start": "2026-09-09T07:24:15.811Z",
+  "end": "2026-09-09T07:24:24.110Z",
+  "exitStatus": 1,
+  "signal": null,
+  "stdout": "2026/09/09 15:24:19 github.com/testcontainers/testcontainers-go - Connected to docker: \n  Server Version: 29.4.0\n  API Version: 1.54\n  Operating System: OrbStack\n  Total Memory: 16040 MB\n  Testcontainers for Go Version: v0.44.0\n  Resolved Docker Host: unix:///var/run/docker.sock\n  Resolved Docker Socket Path: /var/run/docker.sock\n  Test SessionID: c20a9b65ae65e9529ba1236042b119363902c1a09d80234472bc983d4acfee03\n  Test ProcessID: 5a926300-a5f9-47b0-98ae-e2e10185465c\n2026/09/09 15:24:19 🐳 Creating container for image postgres:18-alpine\n2026/09/09 15:24:19 🐳 Creating container for image testcontainers/ryuk:0.14.0\n2026/09/09 15:24:19 ✅ Container created: 2cc3322758f9\n2026/09/09 15:24:19 🐳 Starting container: 2cc3322758f9\n2026/09/09 15:24:19 ✅ Container started: 2cc3322758f9\n2026/09/09 15:24:19 ⏳ Waiting for container id 2cc3322758f9 image: testcontainers/ryuk:0.14.0. Waiting for: all of: [log message \"Started\", port 8080/tcp to be listening]\n2026/09/09 15:24:19 Shell not found in container\n2026/09/09 15:24:19 🔔 Container is ready: 2cc3322758f9\n2026/09/09 15:24:19 ✅ Container created: bb640609f529\n2026/09/09 15:24:19 🐳 Starting container: bb640609f529\n2026/09/09 15:24:19 ✅ Container started: bb640609f529\n2026/09/09 15:24:19 ⏳ Waiting for container id bb640609f529 image: postgres:18-alpine. Waiting for: all of: [log message \"database system is ready to accept connections\" (occurrence: 2), port 5432/tcp to be listening]\n2026/09/09 15:24:21 🔔 Container is ready: bb640609f529\n=== RUN   TestPMUnresolvedLineageCannotBeComplete\n    pm_lineage_review_test.go:31: quality=verified coverage=complete scope=complete diagnostic=warning lineageMembers=0 effectiveHeads=1\n    pm_lineage_review_test.go:33: unresolved lineage was declared complete or advanced an effective head\n--- FAIL: TestPMUnresolvedLineageCannotBeComplete (0.91s)\nFAIL\n2026/09/09 15:24:23 🐳 Stopping container: bb640609f529\n2026/09/09 15:24:23 ✅ Container stopped: bb640609f529\n2026/09/09 15:24:23 🐳 Terminating container: bb640609f529\n2026/09/09 15:24:23 🚫 Container terminated: bb640609f529\nFAIL\tgithub.com/iiwish/semlia/tests/integration/discovery\t5.399s\nFAIL\n",
+  "stderr": ""
+}

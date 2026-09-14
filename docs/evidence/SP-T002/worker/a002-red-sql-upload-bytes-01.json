@@ -1,0 +1,22 @@
+{
+  "command": [
+    "go",
+    "test",
+    "-count=1",
+    "./internal/adapters/discovery/postgresql",
+    "-run",
+    "^TestPostgreSQLAdapterPreservesSupportedUploadBytes$"
+  ],
+  "clearedEnvironment": [
+    "SEMLIA_INGESTION_TEST_DATABASE_URL",
+    "SEMLIA_EXECUTION_CRASH_HELPER",
+    "SEMLIA_EXECUTION_TEST_DB",
+    "SEMLIA_DATABASE_URL"
+  ],
+  "start": "2026-09-09T07:59:36.069Z",
+  "end": "2026-09-09T07:59:39.294Z",
+  "exitStatus": 1,
+  "signal": null,
+  "stdout": "--- FAIL: TestPostgreSQLAdapterPreservesSupportedUploadBytes (0.45s)\n    adapter_test.go:20: SQL upload below the existing 50 MiB boundary rejected: invalid discovery snapshot\nFAIL\nFAIL\tgithub.com/iiwish/semlia/internal/adapters/discovery/postgresql\t1.758s\nFAIL\n",
+  "stderr": ""
+}

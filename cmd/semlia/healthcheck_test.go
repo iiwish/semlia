@@ -22,7 +22,7 @@ func TestHealthcheckCommandUsesConfiguredLocalEndpoint(t *testing.T) {
 	go func() { _ = server.Serve(listener) }()
 	t.Cleanup(func() { _ = server.Shutdown(context.Background()) })
 
-	lookup := mapEnvironment(map[string]string{"SEMLIA_HTTP_ADDR": listener.Addr().String()})
+	lookup := passwordTestEnvironment(map[string]string{"SEMLIA_HTTP_ADDR": listener.Addr().String()})
 	var stderr bytes.Buffer
 	if code := run(context.Background(), []string{"healthcheck", "ready"}, lookup, ioDiscard{}, &stderr); code != 0 {
 		t.Fatalf("exit = %d, stderr = %s", code, stderr.String())
@@ -37,7 +37,7 @@ func TestHealthcheckCommandReturnsSafeFailure(t *testing.T) {
 	address := listener.Addr().String()
 	_ = listener.Close()
 
-	lookup := mapEnvironment(map[string]string{"SEMLIA_HTTP_ADDR": address})
+	lookup := passwordTestEnvironment(map[string]string{"SEMLIA_HTTP_ADDR": address})
 	var stderr bytes.Buffer
 	if code := run(context.Background(), []string{"healthcheck", "live"}, lookup, ioDiscard{}, &stderr); code != 1 {
 		t.Fatalf("exit = %d, stderr = %s", code, stderr.String())

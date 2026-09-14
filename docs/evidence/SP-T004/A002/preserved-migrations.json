@@ -1,0 +1,252 @@
+[
+  {
+    "path": "migrations/000001_m0_foundation.down.sql",
+    "unchanged": true,
+    "sha256": "b048636af6a924f53dfcf675e70570d1b0d91fd745f7e28f44b40173f7252342"
+  },
+  {
+    "path": "migrations/000001_m0_foundation.up.sql",
+    "unchanged": true,
+    "sha256": "e65ed0c13e3e4392d3e989d862da39e0dc91b8492929f80bed8b3e824d35ec98"
+  },
+  {
+    "path": "migrations/000002_foundation_uuidv7.down.sql",
+    "unchanged": true,
+    "sha256": "76a2ef2ffd87e9178b7a8a5f7e602ce53d8b85996a7b611a7669630c5e756536"
+  },
+  {
+    "path": "migrations/000002_foundation_uuidv7.up.sql",
+    "unchanged": true,
+    "sha256": "121d1d8905d4b3e4ea0763f8d0512cc4c917cde731264958fa7ae673b3cb70d0"
+  },
+  {
+    "path": "migrations/000003_semantic_registry_foundation.down.sql",
+    "unchanged": true,
+    "sha256": "1b2999d4eb526fb466c07c21d669238c98bcb457335b31ec7e12fd5f825e12a0"
+  },
+  {
+    "path": "migrations/000003_semantic_registry_foundation.up.sql",
+    "unchanged": true,
+    "sha256": "aea81b3224c767fbabdab541df60369df93202182ad84eee1c0e67f4064ad6da"
+  },
+  {
+    "path": "migrations/000004_usage_events.down.sql",
+    "unchanged": true,
+    "sha256": "fef2d5f14597ecc28eb753938fc569bdf75ea384e8ca5b796f22cdbca883ea75"
+  },
+  {
+    "path": "migrations/000004_usage_events.up.sql",
+    "unchanged": true,
+    "sha256": "74aa44e16c57bcd0fe57e471b5f5095f03fa5d1de30691d670a561699ff0bdb4"
+  },
+  {
+    "path": "migrations/000005_m2_authorization_foundation.down.sql",
+    "unchanged": true,
+    "sha256": "896c72103ddff4976f8cd9a0ff5a59893123b3e5c7397a286c86527c1e780b4f"
+  },
+  {
+    "path": "migrations/000005_m2_authorization_foundation.up.sql",
+    "unchanged": true,
+    "sha256": "81956a7e870ca6466bbcb1a25d14df0957d94cb6568a385c76645771568240e5"
+  },
+  {
+    "path": "migrations/000006_m2_governed_authoring.down.sql",
+    "unchanged": true,
+    "sha256": "122f2a82055d88a94fa1cc2b8bcec7ed00316470016d781a62d1e80f5c22ca2b"
+  },
+  {
+    "path": "migrations/000006_m2_governed_authoring.up.sql",
+    "unchanged": true,
+    "sha256": "c22f3846dfea1e309baf45d01a6dff8d6cf8fcd3f0df60c26585fdecaa4bfb8a"
+  },
+  {
+    "path": "migrations/000007_m2_governance_objects.down.sql",
+    "unchanged": true,
+    "sha256": "4d4d9b875a7bae70c95ffbcec71cc9bdcdce4e85a8303074d012d12638565447"
+  },
+  {
+    "path": "migrations/000007_m2_governance_objects.up.sql",
+    "unchanged": true,
+    "sha256": "645975af3f46a57cba3e015be6453aef292a4e11f9ca0e33e34bdf83c6a246b4"
+  },
+  {
+    "path": "migrations/000008_m2_policy_rules.down.sql",
+    "unchanged": true,
+    "sha256": "82ee7ad87244160b422a72c0e0854e4f69a2b53f5dfc4995f7e417d073f3ac7e"
+  },
+  {
+    "path": "migrations/000008_m2_policy_rules.up.sql",
+    "unchanged": true,
+    "sha256": "63f18d544f86f95e671bdb6c325d33b92410c1f72c3ccef3c342e2f749a949b4"
+  },
+  {
+    "path": "migrations/000009_m2_review_batches.down.sql",
+    "unchanged": true,
+    "sha256": "27acfa1eefdb8a569cf46852a6f30405bebfc3ccc4559a5e973b37424ca1eb18"
+  },
+  {
+    "path": "migrations/000009_m2_review_batches.up.sql",
+    "unchanged": true,
+    "sha256": "2b201d61b79deb469c815e5800b377612f38848ce5ceb713c6e7a11dfc5ccbe7"
+  },
+  {
+    "path": "migrations/000010_m2_release_publishing.down.sql",
+    "unchanged": true,
+    "sha256": "488d4719a4d3fbb781cea6e0bf917e7e7890583199df184a7cc7da3402013329"
+  },
+  {
+    "path": "migrations/000010_m2_release_publishing.up.sql",
+    "unchanged": true,
+    "sha256": "b69bd3d6ac99f768cffc9c9eb457292f72df2025f79d381adda5fd73d5ca8c39"
+  },
+  {
+    "path": "migrations/000011_m2_model_config.down.sql",
+    "unchanged": true,
+    "sha256": "115d4ce944da55404f1fb973732222a88fe5602abcb94594a1e95e3df45c9fcc"
+  },
+  {
+    "path": "migrations/000011_m2_model_config.up.sql",
+    "unchanged": true,
+    "sha256": "eda745d22d7946ecfd0f29630e3803ad9aed9f6fde6b55238756ec6bfbd81b0b"
+  },
+  {
+    "path": "migrations/000012_m2_local_uat_reviewer.down.sql",
+    "unchanged": true,
+    "sha256": "7e830cfa39fe3485d538c17a85a2d71d732f062b2b098bfb82e09de49ead96ef"
+  },
+  {
+    "path": "migrations/000012_m2_local_uat_reviewer.up.sql",
+    "unchanged": true,
+    "sha256": "3c89fb949803efbd33f3e1e5aaea54621661d9df86c894d8cd2d2eb8dbc0ac2f"
+  },
+  {
+    "path": "migrations/000013_alpha_identity_sessions.down.sql",
+    "unchanged": true,
+    "sha256": "fa39e02f85065f677f98bf948f123fee0e8b72bd29cf8f7c57c7dde7ea2b34b6"
+  },
+  {
+    "path": "migrations/000013_alpha_identity_sessions.up.sql",
+    "unchanged": true,
+    "sha256": "44a7390918a46cf18eb451b53d06bfd8c860f66e881e67d832af92779aa5e7ef"
+  },
+  {
+    "path": "migrations/000014_alpha_source_discovery.down.sql",
+    "unchanged": true,
+    "sha256": "f83b44da9dc65bbd1c22ad6cbd26bd6251d708cfc80b39dec8c8c8c4adc4ccf7"
+  },
+  {
+    "path": "migrations/000014_alpha_source_discovery.up.sql",
+    "unchanged": true,
+    "sha256": "d528ef3dc610e948d1f7da7000702957d2fc5a27729672d64760d52c456edb8f"
+  },
+  {
+    "path": "migrations/000015_alpha_semantic_distribution.down.sql",
+    "unchanged": true,
+    "sha256": "84085a7738da749bb5bccf60ddeb55ac1ac2cd0ffb149bb96eb3d80acf010e49"
+  },
+  {
+    "path": "migrations/000015_alpha_semantic_distribution.up.sql",
+    "unchanged": true,
+    "sha256": "8a9c789201ede584ba01763012773d57b7bf76747aa863c51d25809b9fe42afe"
+  },
+  {
+    "path": "migrations/000016_fmb_authorization_admin.down.sql",
+    "unchanged": true,
+    "sha256": "59facaa9f2b4bcf2dfd627f491ba8b83be47f44a0474bc217e585533e61817fc"
+  },
+  {
+    "path": "migrations/000016_fmb_authorization_admin.up.sql",
+    "unchanged": true,
+    "sha256": "cb3259b254d8c4b23a5807ae4430bc02ea208a02242548f08f03768357704f01"
+  },
+  {
+    "path": "migrations/000017_fmb_operations_runtime.down.sql",
+    "unchanged": true,
+    "sha256": "bf982b1df83ca324f9437695cea0310396307f304439679dbddd16040f3b066f"
+  },
+  {
+    "path": "migrations/000017_fmb_operations_runtime.up.sql",
+    "unchanged": true,
+    "sha256": "1adb49a0186198c05f5cac6bb56bd2544e37da8d562b52128a5e1d4d8b6e608a"
+  },
+  {
+    "path": "migrations/000018_fmb_file_ingestion_schedules.down.sql",
+    "unchanged": true,
+    "sha256": "4b051b8d711e52e808c46537dd30ba8531b4a292394efc66d056433c1f8571af"
+  },
+  {
+    "path": "migrations/000018_fmb_file_ingestion_schedules.up.sql",
+    "unchanged": true,
+    "sha256": "b5a2ab46f69118d52ba677204215abdd4712a5161d5996ca8ef287d01fc3ffa7"
+  },
+  {
+    "path": "migrations/000019_fmb_embedding_index.down.sql",
+    "unchanged": true,
+    "sha256": "50ec8bcc4e0a15cfdba3fbecf83e11bbe4216cc8d9f7ba62976b970d6fc1f7eb"
+  },
+  {
+    "path": "migrations/000019_fmb_embedding_index.up.sql",
+    "unchanged": true,
+    "sha256": "d243531b98dfba8fc7f0bb5e4061d84b066e7b2a976c8de4899f6e83a63cf3a1"
+  },
+  {
+    "path": "migrations/000020_fmb_distribution_interfaces.down.sql",
+    "unchanged": true,
+    "sha256": "79ba09168523bf1dd06cfc9646df1596579bfb08de719c464ca0802dd88a8cbb"
+  },
+  {
+    "path": "migrations/000020_fmb_distribution_interfaces.up.sql",
+    "unchanged": true,
+    "sha256": "de223aeeb93bbba0a8e7d3c9ebbe4c47032f318f43f8c4eeacb2ce27b92c686e"
+  },
+  {
+    "path": "migrations/000021_fmb_query_execution.down.sql",
+    "unchanged": true,
+    "sha256": "039e36b61cd3227c8dbd87036e456dab86c8e40d71a6aa1fe23e198283b1ac0b"
+  },
+  {
+    "path": "migrations/000021_fmb_query_execution.up.sql",
+    "unchanged": true,
+    "sha256": "21074e0f74e1257d2904b70f9749a064bde1f366bc6672701964f1fab45f0392"
+  },
+  {
+    "path": "migrations/000022_semantic_production_sources.down.sql",
+    "unchanged": true,
+    "sha256": "e4cdc68eefa666733ad477c1088b739c5164cb75b4edbc2426aefac9f1f51d79"
+  },
+  {
+    "path": "migrations/000022_semantic_production_sources.up.sql",
+    "unchanged": true,
+    "sha256": "650acab529f2e7937dda783023b490c1ea14f5dabab96eb43e898dcf50f6c91c"
+  },
+  {
+    "path": "migrations/000023_semantic_production_authoring.down.sql",
+    "unchanged": true,
+    "sha256": "f057c5a2b2598a2ced818a51022db77b3c902b6d57848aa0c2e537c95dc94ea2"
+  },
+  {
+    "path": "migrations/000023_semantic_production_authoring.up.sql",
+    "unchanged": true,
+    "sha256": "c57bb9c331b9448356e5474e61d96f41ea002c3b6fc554de8695ad16b0bfd53a"
+  },
+  {
+    "path": "migrations/000024_semantic_production_publishing.down.sql",
+    "unchanged": true,
+    "sha256": "fc115d9029e99a8357d23583b63859c3ee1458beb29248b3917cb7fdc566ee45"
+  },
+  {
+    "path": "migrations/000024_semantic_production_publishing.up.sql",
+    "unchanged": true,
+    "sha256": "d8b40dbc4f44541225c9fea33f7253e6088ed1117a5092afa28b5ca18de9f4a1"
+  },
+  {
+    "path": "migrations/000025_semantic_production_authoring_integrity.down.sql",
+    "unchanged": true,
+    "sha256": "4ad253a2ef19a27b14195060706958201bcb44cbf5da7899858a67e63980f7cd"
+  },
+  {
+    "path": "migrations/000025_semantic_production_authoring_integrity.up.sql",
+    "unchanged": true,
+    "sha256": "5fa1a8e23192cdfa4c9ee6c767caa36da528845bea7847074d383ddfaafa65e2"
+  }
+]

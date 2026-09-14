@@ -1,0 +1,42 @@
+{
+  "startedAt": "2026-09-09T04:16:25Z",
+  "recordedAt": "2026-09-09T05:31:31.936Z",
+  "elapsedSeconds": 4506.936,
+  "measurement": "Wall clock through final integration; overlapping stages are not summed.",
+  "stages": [
+    {
+      "name": "A001 execution",
+      "start": "2026-09-09T04:20:25Z",
+      "end": "2026-09-09T04:53:31Z",
+      "seconds": 1986
+    },
+    {
+      "name": "Independent review",
+      "start": "2026-09-09T04:53:43Z",
+      "end": "2026-09-09T04:58:15Z",
+      "seconds": 272
+    },
+    {
+      "name": "A002 fixes",
+      "start": "2026-09-09T05:00:19Z",
+      "end": "2026-09-09T05:21:17Z",
+      "seconds": 1258
+    },
+    {
+      "name": "Independent re-review",
+      "start": "2026-09-09T05:21:43Z",
+      "end": "2026-09-09T05:23:16Z",
+      "seconds": 93
+    },
+    {
+      "name": "Baseline commands",
+      "seconds": 155.593,
+      "overlaps": "A001 execution"
+    }
+  ],
+  "userAcceptance": "Pending",
+  "remainingEstimateHoursWithBuffer": [
+    14,
+    28
+  ]
+}

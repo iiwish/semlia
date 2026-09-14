@@ -1,0 +1,2764 @@
+--- a/api/README.md
++++ b/api/README.md
+@@ -18,6 +18,19 @@
+ 
+ Run `make contracts` after editing the specification and `make contracts-check` before review.
+ 
++Production business definitions require an explicit authorized-human POST to
++`production-operations/{operationId}/business-rule-confirmations`. A `confirm`
++binds selected declared evidence, or an explicit `declaration` supplied by an
++authorized human, to the exact version and target content; a
++`revoke` appends a withdrawal. GET with `version` returns latest events and current
++validity, including the original human declaration for independent review.
++Human declarations create immutable evidence atomically without SQL seeding.
++The TypeScript production client exposes `recordBusinessRule` and
++`businessRules`. Confirmers are contributors, not independent reviewers or
++publishers. Saved drafts remain allowed without confirmation, but validation
++and publication fail closed. Migration 28 and validator `1.0.0-production.2`
++are required; older validation receipts must be rerun, not backfilled.
++
+ ## Source History
+ 
+ Source history exposes four `GET` routes under
+--- a/api/gen/go/types.gen.go
++++ b/api/gen/go/types.gen.go
+@@ -2363,12 +2363,96 @@
+ func (e PresentHeadReferencePresence) Valid() bool {
+ 	switch e {
+ 	case PresentHeadReferencePresencePresent:
++		return true
++	default:
++		return false
++	}
++}
++
++// Defines values for ProductionBusinessRuleEventAction.
++const (
++	ProductionBusinessRuleEventActionConfirm ProductionBusinessRuleEventAction = "confirm"
++	ProductionBusinessRuleEventActionRevoke  ProductionBusinessRuleEventAction = "revoke"
++)
++
++// Valid indicates whether the value is a known member of the ProductionBusinessRuleEventAction enum.
++func (e ProductionBusinessRuleEventAction) Valid() bool {
++	switch e {
++	case ProductionBusinessRuleEventActionConfirm:
++		return true
++	case ProductionBusinessRuleEventActionRevoke:
++		return true
++	default:
++		return false
++	}
++}
++
++// Defines values for ProductionBusinessRuleEventEvidenceOrigin.
++const (
++	HumanDeclaration ProductionBusinessRuleEventEvidenceOrigin = "human_declaration"
++	None             ProductionBusinessRuleEventEvidenceOrigin = "none"
++	SelectedEvidence ProductionBusinessRuleEventEvidenceOrigin = "selected_evidence"
++)
++
++// Valid indicates whether the value is a known member of the ProductionBusinessRuleEventEvidenceOrigin enum.
++func (e ProductionBusinessRuleEventEvidenceOrigin) Valid() bool {
++	switch e {
++	case HumanDeclaration:
+ 		return true
++	case None:
++		return true
++	case SelectedEvidence:
++		return true
+ 	default:
+ 		return false
+ 	}
+ }
+ 
++// Defines values for ProductionBusinessRuleRequest0Action.
++const (
++	ProductionBusinessRuleRequest0ActionConfirm ProductionBusinessRuleRequest0Action = "confirm"
++)
++
++// Valid indicates whether the value is a known member of the ProductionBusinessRuleRequest0Action enum.
++func (e ProductionBusinessRuleRequest0Action) Valid() bool {
++	switch e {
++	case ProductionBusinessRuleRequest0ActionConfirm:
++		return true
++	default:
++		return false
++	}
++}
++
++// Defines values for ProductionBusinessRuleRequest1Action.
++const (
++	ProductionBusinessRuleRequest1ActionConfirm ProductionBusinessRuleRequest1Action = "confirm"
++)
++
++// Valid indicates whether the value is a known member of the ProductionBusinessRuleRequest1Action enum.
++func (e ProductionBusinessRuleRequest1Action) Valid() bool {
++	switch e {
++	case ProductionBusinessRuleRequest1ActionConfirm:
++		return true
++	default:
++		return false
++	}
++}
++
++// Defines values for ProductionBusinessRuleRequest2Action.
++const (
++	ProductionBusinessRuleRequest2ActionRevoke ProductionBusinessRuleRequest2Action = "revoke"
++)
++
++// Valid indicates whether the value is a known member of the ProductionBusinessRuleRequest2Action enum.
++func (e ProductionBusinessRuleRequest2Action) Valid() bool {
++	switch e {
++	case ProductionBusinessRuleRequest2ActionRevoke:
++		return true
++	default:
++		return false
++	}
++}
++
+ // Defines values for ProductionCommandResultOutcome.
+ const (
+ 	ProductionCommandResultOutcomeCreated          ProductionCommandResultOutcome = "created"
+@@ -6908,7 +6992,87 @@
+ 
+ // PrincipalId defines model for PrincipalId.
+ type PrincipalId = identity.PrincipalID
++
++// ProductionBusinessRuleEvent defines model for ProductionBusinessRuleEvent.
++type ProductionBusinessRuleEvent struct {
++	Action               ProductionBusinessRuleEventAction `json:"action"`
++	AuthorizationVersion int64                             `json:"authorizationVersion"`
++	ContentDigest        Digest                            `json:"contentDigest"`
++	CreatedAt            time.Time                         `json:"createdAt"`
++	EvidenceDigest       *Digest                           `json:"evidenceDigest,omitempty"`
++
++	// EvidenceId Example: evd_01arz3ndektsv4rrffq69g5fav
++	EvidenceId     *EvidenceArtifactId                       `json:"evidenceId,omitempty"`
++	EvidenceOrigin ProductionBusinessRuleEventEvidenceOrigin `json:"evidenceOrigin"`
++
++	// OperationId Example: prodop_01arz3ndektsv4rrffq69g5fav
++	OperationId       ProductionOperationId `json:"operationId"`
++	PrincipalId       PrincipalId           `json:"principalId"`
++	ProductionVersion Version               `json:"productionVersion"`
++	Replayed          bool                  `json:"replayed"`
++	Sequence          int64                 `json:"sequence"`
++	SetDigest         Digest                `json:"setDigest"`
++	TargetKey         string                `json:"targetKey"`
++
++	// WorkspaceId Example: wsp_01arz3ndektsv4rrffq69g5fav
++	WorkspaceId WorkspaceId `json:"workspaceId"`
++}
++
++// ProductionBusinessRuleEventAction defines model for ProductionBusinessRuleEvent.Action.
++type ProductionBusinessRuleEventAction string
++
++// ProductionBusinessRuleEventEvidenceOrigin defines model for ProductionBusinessRuleEvent.EvidenceOrigin.
++type ProductionBusinessRuleEventEvidenceOrigin string
++
++// ProductionBusinessRuleRequest Server derives actor, evidence origin and all digests. Confirm either selects declared evidence or atomically records an explicit human declaration supporting the exact target definition and scope. Revoke withdraws the current confirmation. Maximum 256 events per version; replay does not add an event.
++type ProductionBusinessRuleRequest struct {
++	union json.RawMessage
++}
++
++// ProductionBusinessRuleRequest0 defines model for ProductionBusinessRuleRequest.0.
++type ProductionBusinessRuleRequest0 struct {
++	Action ProductionBusinessRuleRequest0Action `json:"action"`
++
++	// EvidenceId Example: evd_01arz3ndektsv4rrffq69g5fav
++	EvidenceId      EvidenceArtifactId `json:"evidenceId"`
++	ExpectedVersion Version            `json:"expectedVersion"`
++	SetDigest       Digest             `json:"setDigest"`
++	TargetKey       string             `json:"targetKey"`
++}
++
++// ProductionBusinessRuleRequest0Action defines model for ProductionBusinessRuleRequest.0.Action.
++type ProductionBusinessRuleRequest0Action string
+ 
++// ProductionBusinessRuleRequest1 defines model for ProductionBusinessRuleRequest.1.
++type ProductionBusinessRuleRequest1 struct {
++	Action          ProductionBusinessRuleRequest1Action `json:"action"`
++	Declaration     string                               `json:"declaration"`
++	ExpectedVersion Version                              `json:"expectedVersion"`
++	SetDigest       Digest                               `json:"setDigest"`
++	TargetKey       string                               `json:"targetKey"`
++}
++
++// ProductionBusinessRuleRequest1Action defines model for ProductionBusinessRuleRequest.1.Action.
++type ProductionBusinessRuleRequest1Action string
++
++// ProductionBusinessRuleRequest2 defines model for ProductionBusinessRuleRequest.2.
++type ProductionBusinessRuleRequest2 struct {
++	Action          ProductionBusinessRuleRequest2Action `json:"action"`
++	ExpectedVersion Version                              `json:"expectedVersion"`
++	SetDigest       Digest                               `json:"setDigest"`
++	TargetKey       string                               `json:"targetKey"`
++}
++
++// ProductionBusinessRuleRequest2Action defines model for ProductionBusinessRuleRequest.2.Action.
++type ProductionBusinessRuleRequest2Action string
++
++// ProductionBusinessRuleWitness defines model for ProductionBusinessRuleWitness.
++type ProductionBusinessRuleWitness struct {
++	Declaration *string                     `json:"declaration,omitempty"`
++	Event       ProductionBusinessRuleEvent `json:"event"`
++	Valid       bool                        `json:"valid"`
++}
++
+ // ProductionCommandResult defines model for ProductionCommandResult.
+ type ProductionCommandResult struct {
+ 	// OperationId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+@@ -8962,6 +9126,17 @@
+ 
+ // ReplaceProductionDraftParams defines parameters for ReplaceProductionDraft.
+ type ReplaceProductionDraftParams struct {
++	// IdempotencyKey Workspace-scoped command replay key.
++	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
++}
++
++// ListProductionBusinessRulesParams defines parameters for ListProductionBusinessRules.
++type ListProductionBusinessRulesParams struct {
++	Version Version `form:"version" json:"version"`
++}
++
++// RecordProductionBusinessRuleParams defines parameters for RecordProductionBusinessRule.
++type RecordProductionBusinessRuleParams struct {
+ 	// IdempotencyKey Workspace-scoped command replay key.
+ 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+ }
+@@ -9267,6 +9442,9 @@
+ 
+ // ReplaceProductionDraftJSONRequestBody defines body for ReplaceProductionDraft for application/json ContentType.
+ type ReplaceProductionDraftJSONRequestBody = ReplaceProductionRequest
++
++// RecordProductionBusinessRuleJSONRequestBody defines body for RecordProductionBusinessRule for application/json ContentType.
++type RecordProductionBusinessRuleJSONRequestBody = ProductionBusinessRuleRequest
+ 
+ // GenerateProductionSuggestionsJSONRequestBody defines body for GenerateProductionSuggestions for application/json ContentType.
+ type GenerateProductionSuggestionsJSONRequestBody = GenerateProductionRequest
+@@ -10111,6 +10289,94 @@
+ }
+ 
+ func (t *HeadReference) UnmarshalJSON(b []byte) error {
++	err := t.union.UnmarshalJSON(b)
++	return err
++}
++
++// AsProductionBusinessRuleRequest0 returns the union data inside the ProductionBusinessRuleRequest as a ProductionBusinessRuleRequest0
++func (t ProductionBusinessRuleRequest) AsProductionBusinessRuleRequest0() (ProductionBusinessRuleRequest0, error) {
++	var body ProductionBusinessRuleRequest0
++	err := json.Unmarshal(t.union, &body)
++	return body, err
++}
++
++// FromProductionBusinessRuleRequest0 overwrites any union data inside the ProductionBusinessRuleRequest as the provided ProductionBusinessRuleRequest0
++func (t *ProductionBusinessRuleRequest) FromProductionBusinessRuleRequest0(v ProductionBusinessRuleRequest0) error {
++	b, err := json.Marshal(v)
++	t.union = b
++	return err
++}
++
++// MergeProductionBusinessRuleRequest0 performs a merge with any union data inside the ProductionBusinessRuleRequest, using the provided ProductionBusinessRuleRequest0
++func (t *ProductionBusinessRuleRequest) MergeProductionBusinessRuleRequest0(v ProductionBusinessRuleRequest0) error {
++	b, err := json.Marshal(v)
++	if err != nil {
++		return err
++	}
++
++	merged, err := runtime.JSONMerge(t.union, b)
++	t.union = merged
++	return err
++}
++
++// AsProductionBusinessRuleRequest1 returns the union data inside the ProductionBusinessRuleRequest as a ProductionBusinessRuleRequest1
++func (t ProductionBusinessRuleRequest) AsProductionBusinessRuleRequest1() (ProductionBusinessRuleRequest1, error) {
++	var body ProductionBusinessRuleRequest1
++	err := json.Unmarshal(t.union, &body)
++	return body, err
++}
++
++// FromProductionBusinessRuleRequest1 overwrites any union data inside the ProductionBusinessRuleRequest as the provided ProductionBusinessRuleRequest1
++func (t *ProductionBusinessRuleRequest) FromProductionBusinessRuleRequest1(v ProductionBusinessRuleRequest1) error {
++	b, err := json.Marshal(v)
++	t.union = b
++	return err
++}
++
++// MergeProductionBusinessRuleRequest1 performs a merge with any union data inside the ProductionBusinessRuleRequest, using the provided ProductionBusinessRuleRequest1
++func (t *ProductionBusinessRuleRequest) MergeProductionBusinessRuleRequest1(v ProductionBusinessRuleRequest1) error {
++	b, err := json.Marshal(v)
++	if err != nil {
++		return err
++	}
++
++	merged, err := runtime.JSONMerge(t.union, b)
++	t.union = merged
++	return err
++}
++
++// AsProductionBusinessRuleRequest2 returns the union data inside the ProductionBusinessRuleRequest as a ProductionBusinessRuleRequest2
++func (t ProductionBusinessRuleRequest) AsProductionBusinessRuleRequest2() (ProductionBusinessRuleRequest2, error) {
++	var body ProductionBusinessRuleRequest2
++	err := json.Unmarshal(t.union, &body)
++	return body, err
++}
++
++// FromProductionBusinessRuleRequest2 overwrites any union data inside the ProductionBusinessRuleRequest as the provided ProductionBusinessRuleRequest2
++func (t *ProductionBusinessRuleRequest) FromProductionBusinessRuleRequest2(v ProductionBusinessRuleRequest2) error {
++	b, err := json.Marshal(v)
++	t.union = b
++	return err
++}
++
++// MergeProductionBusinessRuleRequest2 performs a merge with any union data inside the ProductionBusinessRuleRequest, using the provided ProductionBusinessRuleRequest2
++func (t *ProductionBusinessRuleRequest) MergeProductionBusinessRuleRequest2(v ProductionBusinessRuleRequest2) error {
++	b, err := json.Marshal(v)
++	if err != nil {
++		return err
++	}
++
++	merged, err := runtime.JSONMerge(t.union, b)
++	t.union = merged
++	return err
++}
++
++func (t ProductionBusinessRuleRequest) MarshalJSON() ([]byte, error) {
++	b, err := t.union.MarshalJSON()
++	return b, err
++}
++
++func (t *ProductionBusinessRuleRequest) UnmarshalJSON(b []byte) error {
+ 	err := t.union.UnmarshalJSON(b)
+ 	return err
+ }
+--- a/api/openapi/semlia.v1.yaml
++++ b/api/openapi/semlia.v1.yaml
+@@ -3661,6 +3661,68 @@
+           $ref: "#/components/responses/UnprocessableEntity"
+         default:
+           $ref: "#/components/responses/Error"
++  /api/v1/workspaces/{workspaceId}/production-operations/{operationId}/business-rule-confirmations:
++    parameters:
++      - $ref: '#/components/parameters/WorkspaceId'
++      - $ref: '#/components/parameters/OperationId'
++    post:
++      operationId: recordProductionBusinessRule
++      summary: Confirm or revoke business definitions as an authorized human contributor
++      tags: [Governance]
++      parameters:
++        - $ref: '#/components/parameters/IdempotencyKey'
++      requestBody:
++        required: true
++        content:
++          application/json:
++            schema: { $ref: '#/components/schemas/ProductionBusinessRuleRequest' }
++      responses:
++        '201':
++          description: Immutable event committed; existing validation must be rerun
++          content:
++            application/json:
++              schema: { $ref: '#/components/schemas/ProductionBusinessRuleEvent' }
++        '200':
++          description: Authorized replay of the original event, not a fresh confirmation
++          content:
++            application/json:
++              schema: { $ref: '#/components/schemas/ProductionBusinessRuleEvent' }
++        '400': { $ref: '#/components/responses/Error' }
++        '401': { $ref: '#/components/responses/Error' }
++        '403': { $ref: '#/components/responses/Error' }
++        '404': { $ref: '#/components/responses/Error' }
++        '409': { $ref: '#/components/responses/Error' }
++        '413': { $ref: '#/components/responses/Error' }
++        '422': { $ref: '#/components/responses/Error' }
++        '503': { $ref: '#/components/responses/Error' }
++    get:
++      operationId: listProductionBusinessRules
++      summary: Read latest confirmation events and current validity for an exact version
++      tags: [Governance]
++      parameters:
++        - name: version
++          in: query
++          required: true
++          schema: { $ref: '#/components/schemas/Version' }
++      responses:
++        '200':
++          description: Latest event per target, ordered by target key
++          content:
++            application/json:
++              schema:
++                type: object
++                additionalProperties: false
++                required: [items]
++                properties:
++                  items:
++                    type: array
++                    maxItems: 64
++                    items: { $ref: '#/components/schemas/ProductionBusinessRuleWitness' }
++        '400': { $ref: '#/components/responses/Error' }
++        '401': { $ref: '#/components/responses/Error' }
++        '403': { $ref: '#/components/responses/Error' }
++        '404': { $ref: '#/components/responses/Error' }
++        '503': { $ref: '#/components/responses/Error' }
+   /api/v1/workspaces/{workspaceId}/production-operations/{operationId}/generation:
+     parameters:
+       - $ref: '#/components/parameters/WorkspaceId'
+@@ -8974,6 +9036,63 @@
+           properties:
+             status: { type: string, enum: [not_requested] }
+         - $ref: '#/components/schemas/ValidationAttemptResult'
++    ProductionBusinessRuleRequest:
++      description: Server derives actor, evidence origin and all digests. Confirm either selects declared evidence or atomically records an explicit human declaration supporting the exact target definition and scope. Revoke withdraws the current confirmation. Maximum 256 events per version; replay does not add an event.
++      oneOf:
++        - type: object
++          additionalProperties: false
++          required: [expectedVersion, setDigest, targetKey, action, evidenceId]
++          properties:
++            expectedVersion: { $ref: '#/components/schemas/Version' }
++            setDigest: { $ref: '#/components/schemas/Digest' }
++            targetKey: { type: string, minLength: 1, maxLength: 128 }
++            action: { type: string, enum: [confirm] }
++            evidenceId: { $ref: '#/components/schemas/EvidenceArtifactId' }
++        - type: object
++          additionalProperties: false
++          required: [expectedVersion, setDigest, targetKey, action, declaration]
++          properties:
++            expectedVersion: { $ref: '#/components/schemas/Version' }
++            setDigest: { $ref: '#/components/schemas/Digest' }
++            targetKey: { type: string, minLength: 1, maxLength: 128 }
++            action: { type: string, enum: [confirm] }
++            declaration: { type: string, minLength: 1, maxLength: 8192 }
++        - type: object
++          additionalProperties: false
++          required: [expectedVersion, setDigest, targetKey, action]
++          properties:
++            expectedVersion: { $ref: '#/components/schemas/Version' }
++            setDigest: { $ref: '#/components/schemas/Digest' }
++            targetKey: { type: string, minLength: 1, maxLength: 128 }
++            action: { type: string, enum: [revoke] }
++    ProductionBusinessRuleEvent:
++      type: object
++      additionalProperties: false
++      required: [sequence, workspaceId, operationId, productionVersion, targetKey, action, setDigest, contentDigest, evidenceOrigin, principalId, authorizationVersion, createdAt, replayed]
++      properties:
++        sequence: { type: integer, format: int64, minimum: 1 }
++        workspaceId: { $ref: '#/components/schemas/WorkspaceId' }
++        operationId: { $ref: '#/components/schemas/ProductionOperationId' }
++        productionVersion: { $ref: '#/components/schemas/Version' }
++        targetKey: { type: string, minLength: 1, maxLength: 128 }
++        action: { type: string, enum: [confirm, revoke] }
++        setDigest: { $ref: '#/components/schemas/Digest' }
++        contentDigest: { $ref: '#/components/schemas/Digest' }
++        evidenceId: { $ref: '#/components/schemas/EvidenceArtifactId' }
++        evidenceDigest: { $ref: '#/components/schemas/Digest' }
++        evidenceOrigin: { type: string, enum: [selected_evidence, human_declaration, none] }
++        principalId: { $ref: '#/components/schemas/PrincipalId' }
++        authorizationVersion: { type: integer, format: int64, minimum: 0 }
++        createdAt: { type: string, format: date-time }
++        replayed: { type: boolean }
++    ProductionBusinessRuleWitness:
++      type: object
++      additionalProperties: false
++      required: [event, valid]
++      properties:
++        event: { $ref: '#/components/schemas/ProductionBusinessRuleEvent' }
++        valid: { type: boolean }
++        declaration: { type: string, minLength: 1, maxLength: 8192 }
+     GenerateProductionRequest:
+       type: object
+       additionalProperties: false
+--- a/cmd/semlia/readiness.go
++++ b/cmd/semlia/readiness.go
+@@ -9,7 +9,7 @@
+ 	"github.com/jackc/pgx/v5/pgxpool"
+ )
+ 
+-const requiredMigrationVersion = 27
++const requiredMigrationVersion = 28
+ 
+ const productionGenerationSchemaCheck = `
+ SELECT to_regclass('public.production_generation_requests') IS NOT NULL
+@@ -33,6 +33,7 @@
+  ('production_generation_links'),
+  ('production_generation_outputs'),
+  ('production_generation_applications')
++ ,('production_business_rule_events')
+ )
+ SELECT NOT EXISTS (
+  SELECT 1 FROM expected_tables e WHERE to_regclass('public.'||e.table_name) IS NULL
+@@ -52,6 +53,7 @@
+  ('production_identity_reservations','production_reservations_identity_guard'),('production_contributors','production_contributors_immutable'),
+  ('production_request_claims','production_claims_immutable'),('production_generation_links','production_generation_links_immutable'),
+  ('production_generation_outputs','production_generation_outputs_immutable'),('production_generation_applications','production_generation_applications_immutable'),
++ ('production_business_rule_events','production_business_rule_events_immutable'),('production_business_rule_events','production_business_rule_event_guard'),
+  ('proposals','production_proposal_content_guard'),('proposals','production_proposal_reservation_guard'),('proposals','production_proposal_transition_guard'),
+  ('proposal_changes','production_proposal_changes_guard'),('semantic_assets','production_asset_write_guard'),('asset_revisions','production_revision_write_guard')) AS required(table_name,trigger_name)
+  WHERE NOT EXISTS (SELECT 1 FROM pg_trigger t WHERE t.tgrelid=to_regclass('public.'||required.table_name) AND t.tgname=required.trigger_name AND t.tgenabled IN ('O','A'))
+--- a/cmd/semlia/readiness_test.go
++++ b/cmd/semlia/readiness_test.go
+@@ -55,8 +55,8 @@
+ }
+ 
+ func TestReadinessRequiresSourceSnapshotMigration(t *testing.T) {
+-	if requiredMigrationVersion != 27 {
+-		t.Fatalf("required migration version = %d, want 27", requiredMigrationVersion)
++	if requiredMigrationVersion != 28 {
++		t.Fatalf("required migration version = %d, want 28", requiredMigrationVersion)
+ 	}
+ }
+ 
+@@ -104,10 +104,14 @@
+ 	t.Logf("code byte constraint: %s", codeBytesDefinition)
+ 	const dropCodeBytesCheck = `ALTER TABLE source_code_revisions DROP CONSTRAINT source_code_revisions_content_bytes_check; ALTER TABLE source_code_revisions ADD CONSTRAINT source_code_revisions_content_bytes_check `
+ 	for _, test := range []struct{ name, breakSQL, restoreSQL string }{
+-		{"old source version", `UPDATE schema_migrations SET version=23`, `UPDATE schema_migrations SET version=27`},
+-		{"old authoring version", `UPDATE schema_migrations SET version=24`, `UPDATE schema_migrations SET version=27`},
+-		{"old publishing version", `UPDATE schema_migrations SET version=25`, `UPDATE schema_migrations SET version=27`},
+-		{"old generation version", `UPDATE schema_migrations SET version=26`, `UPDATE schema_migrations SET version=27`},
++		{"old source version", `UPDATE schema_migrations SET version=23`, `UPDATE schema_migrations SET version=28`},
++		{"old authoring version", `UPDATE schema_migrations SET version=24`, `UPDATE schema_migrations SET version=28`},
++		{"old publishing version", `UPDATE schema_migrations SET version=25`, `UPDATE schema_migrations SET version=28`},
++		{"old generation version", `UPDATE schema_migrations SET version=26`, `UPDATE schema_migrations SET version=28`},
++		{"old business rule version", `UPDATE schema_migrations SET version=27`, `UPDATE schema_migrations SET version=28`},
++		{"disabled business rule immutability", `ALTER TABLE production_business_rule_events DISABLE TRIGGER production_business_rule_events_immutable`, `ALTER TABLE production_business_rule_events ENABLE TRIGGER production_business_rule_events_immutable`},
++		{"disabled business rule binding", `ALTER TABLE production_business_rule_events DISABLE TRIGGER production_business_rule_event_guard`, `ALTER TABLE production_business_rule_events ENABLE TRIGGER production_business_rule_event_guard`},
++		{"missing business rule table", `ALTER TABLE production_business_rule_events RENAME TO misplaced_business_rules`, `ALTER TABLE misplaced_business_rules RENAME TO production_business_rule_events`},
+ 		{"disabled generation guard", `ALTER TABLE production_generation_requests DISABLE TRIGGER production_generation_result_guard`, `ALTER TABLE production_generation_requests ENABLE TRIGGER production_generation_result_guard`},
+ 		{"disabled publishing seal", `ALTER TABLE production_validation_seals DISABLE TRIGGER production_validation_seal_guard`, `ALTER TABLE production_validation_seals ENABLE TRIGGER production_validation_seal_guard`},
+ 		{"missing canonical input", `ALTER TABLE production_versions RENAME COLUMN canonical_input TO unavailable_input`, `ALTER TABLE production_versions RENAME COLUMN unavailable_input TO canonical_input`},
+--- a/db/sqlc.yaml
++++ b/db/sqlc.yaml
+@@ -29,6 +29,7 @@
+       - ../migrations/000025_semantic_production_authoring_integrity.up.sql
+       - ../migrations/000026_semantic_production_release_integrity.up.sql
+       - ../migrations/000027_semantic_production_generation.up.sql
++      - ../migrations/000028_production_business_rules.up.sql
+     queries:
+       - queries
+     gen:
+--- a/docs/specs/semantic-production/analysis.md
++++ b/docs/specs/semantic-production/analysis.md
+@@ -44,10 +44,14 @@
+ 
+ ## 剩余风险
+ 
+-### High：无业务规则证据的非空口径通过验证
++### 已处理：非空口径的可信业务规则确认
+ 
+-验收复核的真实 PostgreSQL/生成/人工应用/submit 反例证明，无收入业务依据、evidenceIds 为空的非空 metric 定义仍获得 succeeded。null 检查不能替代规则依据与有效确认检查。T005 暂不验收，T006 前置条件不成立；详见 [验收复核](../../evidence/SP-T005/acceptance-review/review.md)。
++A002 的服务端确认记录绑定真实人类、版本、目标内容与证据摘要；缺确认、撤销、权限失效或版本变化阻断验证和发布。显式人类声明路径通过真实接口创建证据，不需要手工数据库预填。原反例、正向发布、并发原子性和职责分离均通过，详见 [修复复核](../../evidence/SP-T005/A002/review.md)。T005 等待用户验收，T006 前置条件不自动放行。
+ 
++### 已知基线失败：旧数据库迁移测试
++
++全量数据库 suite 有 5 个旧测试在 A002 前像与当前代码均失败，涉及固定迁移步数/最新版本假设及版本 6 schema 与最新 repository 不匹配。目标语义生产迁移与最新 schema 生命周期通过；不能将全量数据库 suite 宣称为绿色。前像复现及具体测试名见 A002 修复复核。
++
+ ### 已处理：未决定义的确定性验证阻断
+ 
+ 共享验证器独立阻断 null definition/scope，草稿 schema 仍接受未决内容。用户批准的修复包含失败 findings 持久化一致性及真实集成反例。全量治理与生成 race 检查通过，见 [修复记录](../../evidence/SP-T005/A001/validation-blocker.md) 和 [交付报告](../../evidence/SP-T005/summary.md)。
+@@ -79,6 +83,6 @@
+ 
+ ## 执行闸门
+ 
+-Result: SP-T001 至 T004 Accepted；SP-T005-A001 Needs_Review，等待用户验收。执行前像为 `.semlia/evidence-work/SP-T005-A001-baseline.tar`，包括共享源码、迁移、生成物和数据库测试。迁移 1–26 保持原字节，27 用于本任务增量。测试只使用自行创建的一次性 PostgreSQL，不操作默认 Compose 栈及已有开发数据库。数据库测试使用 `-p=1`，不清理共享 Docker 资源。
++Result: SP-T001 至 T004 Accepted；SP-T005-A001/A002 Needs_Review，等待用户验收。A002 执行前像为 `.semlia/evidence-work/SP-T005-A002-baseline.tar`，包括共享源码、迁移、生成物和数据库测试；sqlc 配置在首次编辑前补充入前像。A002 保留迁移 1-27 原字节，28 承载业务规则确认。测试只使用自行创建的一次性 PostgreSQL，不操作默认 Compose 栈及已有开发数据库。数据库测试使用 `-p=1`，不清理共享 Docker 资源。
+ 
+ T005 必须完成运行验证、风险复核及用户验收后再开放后续任务。实际模型和完整验收资源不可假定已具备；测试或模型受阻时，不得将阶段验收为通过。完成标准不因工期压力而下降。
+--- a/docs/specs/semantic-production/checklists/requirements.md
++++ b/docs/specs/semantic-production/checklists/requirements.md
+@@ -37,4 +37,4 @@
+ 
+ SP-T001 至 T004 已接受；用户授权 T005 及其受限范围扩展。若详细设计改变产品范围或计划决策，重新提交审核。
+ 
+-产品、计划与任务图已获确认；T005 的执行包与共享验证器扩展已获授权。null definition/scope 检查已通过回归，但验收复核确认新的 P1：非空口径在无业务规则证据时仍通过验证。T005 为 Needs_Review，不满足验收条件。见 [验收复核](../../../evidence/SP-T005/acceptance-review/review.md)。本清单不代替运行证据。
++产品、计划与任务图已获确认；T005 的可信业务规则确认扩展已获授权。空定义及无可信确认的非空定义均阻断验证，显式声明、确认/撤销、当前权限和发布复核通过，见 [A002 修复复核](../../../evidence/SP-T005/A002/review.md)。全量数据库 suite 有 5 项前像已存在的旧测试失败，目标迁移测试通过。T005 为 Needs_Review，等待用户验收；T006 不启动。本清单不代替运行证据。
+--- a/docs/specs/semantic-production/contracts/business-rule-confirmation.md
++++ b/docs/specs/semantic-production/contracts/business-rule-confirmation.md
+@@ -0,0 +1,24 @@
++# 业务规则确认
++
++状态：Confirmed。归属 SP-T005-A002，2026-09-11 用户批准受限扩展。
++
++所有有实质变更的 semantic_asset 的 definition 和 scope 必须由有写入权限的真实人类明确确认。非空文本、普通 source observation、inferred evidence、模型输出、declared 类型或 metadata 自身均不是确认。reference/no-op 目标不创建新的业务定义；历史已发布内容不伪造回填确认。
++
++POST `production-operations/{operationId}/business-rule-confirmations` 接收 expectedVersion、setDigest、targetKey、action（confirm/revoke）。confirm 必须在 evidenceId 和 declaration 中选择一项：已有 evidenceId 必须是当前版本 input 选定且目标 evidenceIds 引用的 declared artifact；declaration 是有权人类明确提供的业务规则声明（1 至 8192 字节），服务器在同一事务创建绑定目标完整内容的人类声明证据。该证据通过确认事件引用，不改写冻结版本的 input 或目标 evidenceIds。confirm 表示人类确认该证据支持目标的业务定义与范围；来源类型、证据摘要、目标内容摘要、版本、workspace、实际会话主体和授权版本由服务器绑定。客户端不得指定确认人、证据来源类型或摘要。
++
++记录为不可变追加事件；同目标最近事件决定当前确认状态。revoke 由同等当前人类写权限执行，保留原确认与撤销记录；再次确认需要新 key。Idempotency-Key 在 workspace 和主体内唯一，重放必须重新检查当前授权和目标版本，不重复写入。确认和撤销均纳入操作贡献者，不能审核或发布同一操作。
++
++每版本最多 256 个事件。GET 同路径必须提供 `version`，返回按 targetKey 排序的最新事件及当前 valid 状态。重放返回原事件并标记 replayed，不改变后来发生的撤销状态；已发布操作拒绝确认、撤销及写入重放。
++
++确认可以发生在草稿或冻结版本，不能修改已发布操作。冻结版本新增或撤销确认使旧验证失效，必须重新验证与审核。版本变化不继承确认，即使内容摘要相同。验证排队、执行、提交结果、批准和发布均读取同一可信确认见证；权限撤销、主体停用、证据失效或新事件使旧凭证不能用于发布。锁顺序沿用 workspace -> operation -> version，和权限变更/发布串行化。
++
++验证器版本升级为 production.2，旧凭证必须重新验证。没有确认的目标产生 PRODUCTION_BUSINESS_RULE_UNCONFIRMED blocker，不拒绝保存未决草稿。API 不新增角色，复用目标读取/写入与 asset.propose 授权，并额外要求 human 主体。
++
++## 预检
++
++- [x] 授权、版本、证据与 SoD 边界明确；不把业务确认等同 release review。
++- [x] 旧验证升级和版本失效规则明确；不回填历史信任。
++- [x] 迁移仅新增 28；修复范围不包含 T006、部署或真实模型。
++- [x] RED、正反例、撤销、竞态和发布复核均有验证计划。
++
++分析结论：现存 P1 是本次修复目标；受限方案无额外未决 High/Critical 设计问题。实现完成前 P1 保持开放。
+--- a/docs/specs/semantic-production/contracts/production.md
++++ b/docs/specs/semantic-production/contracts/production.md
+@@ -10,6 +10,8 @@
+ 
+ ## 1. 通用约定
+ 
++业务定义与范围的发布前确认遵循 [业务规则确认契约](business-rule-confirmation.md)。`business-rule-confirmations` 是独立的明确人类确认动作，不由人工 PUT、模型输出、证据 metadata 或 release review 隐式生成。
++
+ 所有路径前缀为 `/api/v1/workspaces/{workspaceId}`，使用既有管理端 SessionCookie、CSRF/origin 防护和服务端 workspace/principal 解析。路径中的 workspace 是检查条件，不是权限来源。机器 bearer allowlist、机器发布权限和消费协议均不扩展；开发身份适配只限既有显式 development 模式。本契约中的公开管理 API 不等于外部 machine API。
+ 
+ 新 TypeID 为 ssnp、prodop、codrev、linrev；已有 ID 前缀保持不变。YAML ResourceId 验证通用 shape，服务端按字段强制 wsp/src/ssnp/prodop/agr/rls/ast/rev/phb/mgn/eky/jct/pds/pdr/pfd/pfr/evd/scd 等准确 domain 类型和 UUIDv7。ID、revision、candidate、evidence 及所有 nested 引用必须属于同 workspace；跨 workspace 或不存在的对象统一 404，不先泄露名称。已知 workspace 内 capability 拒绝为 403。
+--- a/docs/specs/semantic-production/contracts/production.openapi.yaml
++++ b/docs/specs/semantic-production/contracts/production.openapi.yaml
+@@ -369,6 +369,69 @@
+         '413': { $ref: '#/components/responses/Error' }
+         '422': { $ref: '#/components/responses/Error' }
+         '503': { $ref: '#/components/responses/Error' }
++  /api/v1/workspaces/{workspaceId}/production-operations/{operationId}/business-rule-confirmations:
++    parameters:
++      - $ref: '#/components/parameters/WorkspaceId'
++      - $ref: '#/components/parameters/OperationId'
++    post:
++      operationId: recordProductionBusinessRule
++      summary: Confirm or revoke exact business definitions as a human contributor
++      x-semlia-actions: [asset.read, asset.propose, evidence.read, source.read]
++      x-semlia-reauthorize: true
++      x-semlia-human-required: true
++      parameters:
++        - $ref: '#/components/parameters/IdempotencyKey'
++      requestBody:
++        required: true
++        content:
++          application/json:
++            schema: { $ref: '#/components/schemas/ProductionBusinessRuleRequest' }
++      responses:
++        '201':
++          description: Immutable event committed; old validation requires rerun
++          content:
++            application/json:
++              schema: { $ref: '#/components/schemas/ProductionBusinessRuleEvent' }
++        '200':
++          description: Original event replay, not a renewed confirmation
++          content:
++            application/json:
++              schema: { $ref: '#/components/schemas/ProductionBusinessRuleEvent' }
++        '400': { $ref: '#/components/responses/Error' }
++        '401': { $ref: '#/components/responses/Error' }
++        '403': { $ref: '#/components/responses/Error' }
++        '404': { $ref: '#/components/responses/Error' }
++        '409': { $ref: '#/components/responses/Error' }
++        '413': { $ref: '#/components/responses/Error' }
++        '422': { $ref: '#/components/responses/Error' }
++    get:
++      operationId: listProductionBusinessRules
++      summary: Latest event per target and current validity for an exact version
++      x-semlia-actions: [asset.read, evidence.read, source.read]
++      x-semlia-reauthorize: true
++      parameters:
++        - name: version
++          in: query
++          required: true
++          schema: { $ref: '#/components/schemas/Version' }
++      responses:
++        '200':
++          description: Latest events ordered by target key
++          content:
++            application/json:
++              schema:
++                type: object
++                additionalProperties: false
++                required: [items]
++                properties:
++                  items:
++                    type: array
++                    maxItems: 32
++                    items: { $ref: '#/components/schemas/ProductionBusinessRuleWitness' }
++        '400': { $ref: '#/components/responses/Error' }
++        '401': { $ref: '#/components/responses/Error' }
++        '403': { $ref: '#/components/responses/Error' }
++        '404': { $ref: '#/components/responses/Error' }
+   /api/v1/workspaces/{workspaceId}/production-operations/{operationId}/generation:
+     parameters:
+       - $ref: '#/components/parameters/WorkspaceId'
+@@ -1045,6 +1108,62 @@
+         setDigest: { $ref: '#/components/schemas/Digest' }
+         expectedHead: { $ref: '#/components/schemas/HeadReference' }
+         reason: { type: string, minLength: 1, maxLength: 4096 }
++    ProductionBusinessRuleRequest:
++      oneOf:
++        - type: object
++          additionalProperties: false
++          required: [expectedVersion, setDigest, targetKey, action, evidenceId]
++          properties:
++            expectedVersion: { $ref: '#/components/schemas/Version' }
++            setDigest: { $ref: '#/components/schemas/Digest' }
++            targetKey: { type: string, minLength: 1, maxLength: 128 }
++            action: { type: string, enum: [confirm] }
++            evidenceId: { $ref: '#/components/schemas/ResourceId' }
++        - type: object
++          additionalProperties: false
++          required: [expectedVersion, setDigest, targetKey, action, declaration]
++          properties:
++            expectedVersion: { $ref: '#/components/schemas/Version' }
++            setDigest: { $ref: '#/components/schemas/Digest' }
++            targetKey: { type: string, minLength: 1, maxLength: 128 }
++            action: { type: string, enum: [confirm] }
++            declaration: { type: string, minLength: 1, maxLength: 8192 }
++        - type: object
++          additionalProperties: false
++          required: [expectedVersion, setDigest, targetKey, action]
++          properties:
++            expectedVersion: { $ref: '#/components/schemas/Version' }
++            setDigest: { $ref: '#/components/schemas/Digest' }
++            targetKey: { type: string, minLength: 1, maxLength: 128 }
++            action: { type: string, enum: [revoke] }
++    ProductionBusinessRuleEvent:
++      type: object
++      additionalProperties: false
++      required: [sequence, workspaceId, operationId, productionVersion, targetKey, action, setDigest, contentDigest, evidenceOrigin, principalId, authorizationVersion, createdAt, replayed]
++      properties:
++        sequence: { type: integer, format: int64, minimum: 1 }
++        workspaceId: { $ref: '#/components/schemas/ResourceId' }
++        operationId: { $ref: '#/components/schemas/ResourceId' }
++        productionVersion: { $ref: '#/components/schemas/Version' }
++        targetKey: { type: string, minLength: 1, maxLength: 128 }
++        action: { type: string, enum: [confirm, revoke] }
++        setDigest: { $ref: '#/components/schemas/Digest' }
++        contentDigest: { $ref: '#/components/schemas/Digest' }
++        evidenceId: { $ref: '#/components/schemas/ResourceId' }
++        evidenceDigest: { $ref: '#/components/schemas/Digest' }
++        evidenceOrigin: { type: string, enum: [selected_evidence, human_declaration, none] }
++        principalId: { $ref: '#/components/schemas/ResourceId' }
++        authorizationVersion: { type: integer, format: int64, minimum: 0 }
++        createdAt: { type: string, format: date-time }
++        replayed: { type: boolean }
++    ProductionBusinessRuleWitness:
++      type: object
++      additionalProperties: false
++      required: [event, valid]
++      properties:
++        event: { $ref: '#/components/schemas/ProductionBusinessRuleEvent' }
++        valid: { type: boolean }
++        declaration: { type: string, minLength: 1, maxLength: 8192 }
+     GenerateProductionRequest:
+       type: object
+       additionalProperties: false
+--- a/docs/specs/semantic-production/data-model.md
++++ b/docs/specs/semantic-production/data-model.md
+@@ -9,6 +9,8 @@
+ 
+ ## 1. 权威与复用
+ 
++`production_business_rule_events` 记录 workspace、operation/version/targetKey、set/content/evidence 摘要、真实人类 principal、authorization version、幂等请求摘要及时间。记录不可变、按 sequence 追加；最新 confirm/revoke 事件决定当前确认，当前权限独立复核。仅持久化摘要和证据引用，不复制语义正文。每版本最多 256 个事件，跨版本不继承确认；有历史事件的降级返回 `DOWN_MIGRATION_UNSAFE`。完整约束见 [业务规则确认](contracts/business-rule-confirmation.md)。
++
+ 系统采用现有 PostgreSQL 模块化单体。来源、工件、发现运行、物理对象 revision、候选、Proposal、Validation、Review、Release、审计和 outbox 保持各自权威。生产操作只协调固定输入、目标、命令幂等及结果定位；不增加审批状态机、语义内容副本或消费者前置条件。
+ 
+ 当前代码依据如下，全部以工作区实际内容为准：
+--- a/docs/specs/semantic-production/packets/SP-T005-A002.yaml
++++ b/docs/specs/semantic-production/packets/SP-T005-A002.yaml
+@@ -0,0 +1,71 @@
++schema_version: 1
++packet_id: SP-T005-A002
++task_id: SP-T005
++feature_id: semantic-production
++mode: execute_one_task
++adapter: codex
++status: Needs_Review
++governance_inputs:
++  approval: 2026-09-11 用户明确批准可信业务规则确认记录、接口、增量迁移、API/SDK 及验证发布复核的受限扩展。
++  contract: docs/specs/semantic-production/contracts/business-rule-confirmation.md
++  product: docs/specs/semantic-production/product-design.md
++  tasks: docs/specs/semantic-production/tasks.md
++work_unit:
++  objective: 修复非空业务定义在无可信确认时通过验证的 P1；不推进 T006。
++  dependencies: [SP-T004 Accepted]
++  parallel: false
++codebase_context:
++  baseline: .semlia/evidence-work/SP-T005-A002-baseline.tar
++  ownership: 保留既有脏工作区，以 A002 前像识别本次改动。
++execution_constraints:
++  mode: Direct Execute；当前没有用户委派授权，不使用子代理。
++  allowed_files:
++    - internal/domain/governance/production_business_rule.go
++    - internal/application/governance/production_business_rule*.go
++    - internal/application/governance/production_validation*.go
++    - internal/adapters/postgres/production_business_rule*.go
++    - internal/adapters/postgres/production_validation*.go
++    - internal/platform/http/production_business_rule*.go
++    - internal/platform/http/semantic_production.go
++    - internal/platform/http/catalog.go
++    - migrations/000028_production_business_rules.*.sql
++    - cmd/semlia/readiness*.go
++    - tests/integration/governance/production*test.go
++    - tests/integration/db/*test.go
++    - tests/contracts/*test.go
++    - internal/adapters/postgres/sqlc/*.go
++    - db/sqlc.yaml
++    - api/openapi/semlia.v1.yaml
++    - api/gen/go/types.gen.go
++    - sdk/typescript/src/schema.gen.ts
++    - sdk/typescript/src/client.ts
++    - sdk/typescript/src/client.test.ts
++    - sdk/typescript/src/index.ts
++    - api/README.md
++    - docs/specs/semantic-production/**
++    - docs/evidence/SP-T005/**
++  forbidden: 不改迁移 1-27，不部署、不付费调用、不提交推送、不扩展前端。
++tdd_plan:
++  red: 将 review 的无证据 metric 反例加入正式测试并确认失败。
++  green: 服务端追加确认事件，锁内鉴权、版本和证据绑定，worker 与发布门禁共享新鲜度见证；声明路径原子生成真实人类证据，不依赖手工数据库预填。
++  refactor: 限定可信确认与复核代码，不重构无关模块。
++validation_loop:
++  commands:
++    - go test -count=1 ./internal/application/governance ./internal/platform/http ./cmd/semlia
++    - go test -count=1 -p=1 -timeout=20m ./tests/integration/governance
++    - go test -count=1 -p=1 -timeout=10m ./tests/integration/db
++    - make db-generate-check
++    - make contracts-check
++    - make test-contracts
++    - make test-repository
++  retry_budget: 修复真实失败后复验，不降低断言。
++evidence_contract:
++  path: docs/evidence/SP-T005/A002
++  required: [RED/GREEN, confirmation and revocation, replay authorization, version and content binding, SoD, worker and publish freshness, migration, scope delta]
++review_contract:
++  order: [spec compliance, code and security review, QA]
++handoff:
++  final_status: Needs_Review
++  acceptance: 本轮不标记 Accepted，不自动开始 T006。
++stop_conditions:
++  - 超过已批准范围或发现不能闭合的安全边界。
+--- a/docs/specs/semantic-production/tasks.md
++++ b/docs/specs/semantic-production/tasks.md
+@@ -323,7 +323,7 @@
+ 
+ 交付状态：Needs_Review。用户已批准共享验证器及对应测试的扩展；未决 definition/scope 阻断已修复，全量治理集成、生成 race、迁移及契约检查通过。见 [交付报告](../../evidence/SP-T005/summary.md) 与 [风险复核](../../evidence/SP-T005/A001/review.md)。实际模型与后续桌面任务不在本轮执行范围。
+ 
+-验收复核：P1 未解决，非空口径在无业务规则证据时仍通过确定性验证。见 [真实反例](../../evidence/SP-T005/acceptance-review/review.md)。用户的无问题条件验收未满足，T005 未 Accepted，T006 不启动。
++修复复核：P1 已通过 [A002 可信业务规则确认](../../evidence/SP-T005/A002/review.md) 修复。用户已批准记录、接口、迁移与 API/SDK 扩展，精确范围见 [A002 执行包](packets/SP-T005-A002.yaml)。全量治理、规则 race、目标迁移和契约检查通过；全量数据库 suite 有 5 项前像已存在的旧测试失败。T005 保持 Needs_Review，未 Accepted，T006 不启动。
+ 
+ ## 8. SP-T006：连续桌面生产体验
+ 
+@@ -429,6 +429,6 @@
+ 
+ ## 10. 执行状态与恢复
+ 
+-SP-T001 至 SP-T004 为 Accepted。SP-T005-A001 为 Needs_Review，等待用户验收；SP-T006、SP-T007 保持各自前置验收门禁，不从执行授权推断提前验收。任何任务超过允许文件或改变产品边界时先重新审核。
++SP-T001 至 SP-T004 为 Accepted。SP-T005-A001/A002 为 Needs_Review，等待用户验收；SP-T006、SP-T007 保持各自前置验收门禁，不从执行授权推断提前验收。任何任务超过允许文件或改变产品边界时先重新审核。
+ 
+ 任务的有效小时是估算，不是持续后台执行承诺。SP-T001 与 SP-T003 验收时校准剩余工期；具体假设、缓冲和检查点见计划第 6 节。外部接入任务保持 Deferred。
+--- a/internal/adapters/postgres/production_business_rule.go
++++ b/internal/adapters/postgres/production_business_rule.go
+@@ -0,0 +1,328 @@
++package postgres
++
++import (
++	"context"
++	"encoding/json"
++	"errors"
++	"time"
++
++	authapp "github.com/iiwish/semlia/internal/application/authorization"
++	app "github.com/iiwish/semlia/internal/application/governance"
++	authz "github.com/iiwish/semlia/internal/domain/authorization"
++	domain "github.com/iiwish/semlia/internal/domain/governance"
++	"github.com/iiwish/semlia/pkg/identity"
++	"github.com/jackc/pgx/v5"
++	"github.com/jackc/pgx/v5/pgtype"
++)
++
++const businessRuleColumns = `sequence,workspace_id,operation_id,production_version,target_key,action,set_digest,content_digest,evidence_id,COALESCE(evidence_digest,''),evidence_origin,principal_id,authorization_version,created_at`
++
++func scanBusinessRule(row pgx.Row) (domain.ProductionBusinessRuleEvent, error) {
++	var e domain.ProductionBusinessRuleEvent
++	var w, op, p, ev pgtype.UUID
++	err := row.Scan(&e.Sequence, &w, &op, &e.ProductionVersion, &e.TargetKey, &e.Action, &e.SetDigest, &e.ContentDigest, &ev, &e.EvidenceDigest, &e.EvidenceOrigin, &p, &e.AuthorizationVersion, &e.CreatedAt)
++	if err != nil {
++		return e, err
++	}
++	e.WorkspaceID, err = identity.WorkspaceIDFromUUIDBytes(w.Bytes)
++	if err != nil {
++		return e, err
++	}
++	e.OperationID, err = identity.ProductionOperationIDFromUUIDBytes(op.Bytes)
++	if err != nil {
++		return e, err
++	}
++	e.PrincipalID, err = identity.PrincipalIDFromUUIDBytes(p.Bytes)
++	if err != nil {
++		return e, err
++	}
++	if ev.Valid {
++		id, err := identity.EvidenceIDFromUUIDBytes(ev.Bytes)
++		if err != nil {
++			return e, err
++		}
++		e.EvidenceID = id.String()
++	}
++	return e, nil
++}
++
++func (s *Store) authorizeBusinessRuleTx(ctx context.Context, tx pgx.Tx, ver domain.ProductionVersion, targets []domain.ProductionTarget, target domain.ProductionTarget) (int64, error) {
++	if err := s.validateProductionInputTx(ctx, tx, ver, targets, false); err != nil {
++		return 0, err
++	}
++	if !domain.RequiresProductionBusinessRule(target) {
++		return 0, domain.ErrInvalidArgument
++	}
++	access, err := authapp.NewService(s, authapp.ClockFunc(time.Now)).Snapshot(ctx, ver.WorkspaceID, ver.CreatedBy)
++	if err != nil {
++		return 0, err
++	}
++	if access.Principal.Kind != authz.PrincipalHuman || access.Principal.Status != authz.PrincipalActive {
++		return 0, &authz.DenialError{Decision: authz.Decision{ReasonCode: authz.ReasonNoMatchingGrant}}
++	}
++	if err := authorizeProductionTargets(ctx, tx, access, ver.WorkspaceID, []domain.ProductionTarget{target}, true, ver.BaselineJSON); err != nil {
++		return 0, err
++	}
++	return access.AuthorizationVersion, nil
++}
++
++func businessRuleEvidenceTx(ctx context.Context, tx pgx.Tx, ver domain.ProductionVersion, target domain.ProductionTarget, evidence string) (string, error) {
++	if target.Declaration == nil {
++		return "", domain.ErrEvidenceMissing
++	}
++	linked := false
++	for _, id := range target.Declaration.EvidenceIDs {
++		if id == evidence {
++			linked = true
++		}
++	}
++	if !linked {
++		return "", domain.ErrEvidenceMissing
++	}
++	var wrapper struct {
++		Scope json.RawMessage `json:"scope"`
++	}
++	if err := json.Unmarshal(ver.InputJSON, &wrapper); err != nil {
++		return "", err
++	}
++	inputJSON := ver.InputJSON
++	if len(wrapper.Scope) > 0 {
++		inputJSON = wrapper.Scope
++	}
++	var input productionInput
++	if err := json.Unmarshal(inputJSON, &input); err != nil {
++		return "", err
++	}
++	id, err := identity.ParseEvidenceID(evidence)
++	if err != nil {
++		return "", domain.ErrEvidenceMissing
++	}
++	var kind, digest string
++	if err := tx.QueryRow(ctx, `SELECT evidence_type,content_digest FROM evidence_artifacts WHERE workspace_id=$1 AND id=$2`, ver.WorkspaceID.UUID(), id.UUID()).Scan(&kind, &digest); err != nil {
++		return "", governanceRepositoryError("business rule evidence", err)
++	}
++	if kind != "declared" {
++		return "", domain.ErrEvidenceMissing
++	}
++	for _, pin := range input.Evidence {
++		if pin.EvidenceID == evidence && pin.Digest == digest {
++			return digest, nil
++		}
++	}
++	return "", domain.ErrEvidenceMissing
++}
++
++func (s *Store) RecordProductionBusinessRule(ctx context.Context, cmd domain.ProductionBusinessRuleCommand) (domain.ProductionBusinessRuleEvent, error) {
++	empty := domain.ProductionBusinessRuleEvent{}
++	_, ver, targets, _, _, err := s.GetProductionOperationVersion(ctx, cmd.WorkspaceID, cmd.OperationID, cmd.ExpectedVersion)
++	if err != nil {
++		return empty, err
++	}
++	var target domain.ProductionTarget
++	for _, t := range targets {
++		if t.LocalKey == cmd.TargetKey {
++			target = t
++		}
++	}
++	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
++	if err != nil {
++		return empty, err
++	}
++	defer func() { _ = tx.Rollback(ctx) }()
++	ver.CreatedBy = cmd.PrincipalID
++	authorizationVersion, err := s.authorizeBusinessRuleTx(ctx, tx, ver, targets, target)
++	if err != nil {
++		return empty, err
++	}
++	var current int
++	if err := tx.QueryRow(ctx, `SELECT current_version FROM production_operations WHERE workspace_id=$1 AND id=$2 FOR UPDATE`, cmd.WorkspaceID.UUID(), cmd.OperationID.UUID()).Scan(&current); err != nil {
++		return empty, err
++	}
++	if current != cmd.ExpectedVersion || ver.SetDigest != cmd.SetDigest {
++		return empty, domain.ErrVersionConflict
++	}
++	var published bool
++	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM release_proposals WHERE workspace_id=$1 AND operation_id=$2)`, cmd.WorkspaceID.UUID(), cmd.OperationID.UUID()).Scan(&published); err != nil {
++		return empty, err
++	}
++	if published {
++		return empty, domain.ErrVersionConflict
++	}
++	raw, err := json.Marshal(struct {
++		Operation string                               `json:"operationId"`
++		Command   domain.ProductionBusinessRuleCommand `json:"command"`
++	}{cmd.OperationID.String(), cmd})
++	if err != nil {
++		return empty, err
++	}
++	requestDigest, err := domain.DigestJSON(raw)
++	if err != nil {
++		return empty, err
++	}
++	var previousDigest string
++	err = tx.QueryRow(ctx, `SELECT request_digest FROM production_business_rule_events WHERE workspace_id=$1 AND principal_id=$2 AND idempotency_key=$3`, cmd.WorkspaceID.UUID(), cmd.PrincipalID.UUID(), cmd.IdempotencyKey).Scan(&previousDigest)
++	if err == nil {
++		if previousDigest != requestDigest {
++			return empty, domain.ErrIdempotencyConflict
++		}
++		e, err := scanBusinessRule(tx.QueryRow(ctx, `SELECT `+businessRuleColumns+` FROM production_business_rule_events WHERE workspace_id=$1 AND principal_id=$2 AND idempotency_key=$3`, cmd.WorkspaceID.UUID(), cmd.PrincipalID.UUID(), cmd.IdempotencyKey))
++		e.Replayed = true
++		return e, err
++	}
++	if !errors.Is(err, pgx.ErrNoRows) {
++		return empty, err
++	}
++	var count int
++	if err := tx.QueryRow(ctx, `SELECT count(*) FROM production_business_rule_events WHERE workspace_id=$1 AND operation_id=$2 AND production_version=$3`, cmd.WorkspaceID.UUID(), cmd.OperationID.UUID(), cmd.ExpectedVersion).Scan(&count); err != nil {
++		return empty, err
++	}
++	if count >= 256 {
++		return empty, domain.ErrLimitExceeded
++	}
++	var evidenceID, evidenceDigest any
++	evidenceOrigin := "none"
++	if cmd.Action == "confirm" {
++		var content struct {
++			Definition *string `json:"definition"`
++			Scope      *string `json:"scope"`
++		}
++		if json.Unmarshal(target.ContentJSON, &content) != nil || content.Definition == nil || content.Scope == nil {
++			return empty, domain.ErrInvalidArgument
++		}
++		if cmd.Declaration != "" {
++			id, digest, err := createBusinessRuleDeclarationTx(ctx, tx, ver, target, cmd.Declaration)
++			if err != nil {
++				return empty, err
++			}
++			evidenceID, evidenceDigest, evidenceOrigin = id.UUID(), digest, "human_declaration"
++		} else {
++			digest, err := businessRuleEvidenceTx(ctx, tx, ver, target, cmd.EvidenceID)
++			if err != nil {
++				return empty, err
++			}
++			id, _ := identity.ParseEvidenceID(cmd.EvidenceID)
++			evidenceID, evidenceDigest, evidenceOrigin = id.UUID(), digest, "selected_evidence"
++		}
++	} else if cmd.Action != "revoke" {
++		return empty, domain.ErrInvalidArgument
++	}
++	if _, err := tx.Exec(ctx, `INSERT INTO production_contributors(workspace_id,operation_id,principal_id,role) VALUES($1,$2,$3,'editor') ON CONFLICT DO NOTHING`, cmd.WorkspaceID.UUID(), cmd.OperationID.UUID(), cmd.PrincipalID.UUID()); err != nil {
++		return empty, err
++	}
++	event, err := scanBusinessRule(tx.QueryRow(ctx, `INSERT INTO production_business_rule_events(workspace_id,operation_id,production_version,target_key,action,set_digest,content_digest,evidence_id,evidence_digest,evidence_origin,principal_id,authorization_version,idempotency_key,request_digest)
++ VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING `+businessRuleColumns, cmd.WorkspaceID.UUID(), cmd.OperationID.UUID(), cmd.ExpectedVersion, cmd.TargetKey, cmd.Action, ver.SetDigest, target.ContentDigest, evidenceID, evidenceDigest, evidenceOrigin, cmd.PrincipalID.UUID(), authorizationVersion, cmd.IdempotencyKey, requestDigest))
++	if err != nil {
++		return empty, err
++	}
++	ver.CreatedAt = event.CreatedAt
++	if err := insertProductionMutationEvents(ctx, s.queries.WithTx(tx), ver, "business_rule_"+cmd.Action); err != nil {
++		return empty, err
++	}
++	if err := tx.Commit(ctx); err != nil {
++		return empty, err
++	}
++	return event, nil
++}
++
++func (s *Store) productionBusinessRulesTx(ctx context.Context, tx pgx.Tx, ver domain.ProductionVersion, targets []domain.ProductionTarget) ([]domain.ProductionBusinessRuleWitness, error) {
++	rows, err := tx.Query(ctx, `SELECT `+businessRuleColumns+` FROM (SELECT DISTINCT ON(target_key) * FROM production_business_rule_events WHERE workspace_id=$1 AND operation_id=$2 AND production_version=$3 ORDER BY target_key,sequence DESC) latest ORDER BY target_key`, ver.WorkspaceID.UUID(), ver.OperationID.UUID(), ver.Version)
++	if err != nil {
++		return nil, err
++	}
++	events := []domain.ProductionBusinessRuleEvent{}
++	for rows.Next() {
++		e, err := scanBusinessRule(rows)
++		if err != nil {
++			rows.Close()
++			return nil, err
++		}
++		events = append(events, e)
++	}
++	rows.Close()
++	if err := rows.Err(); err != nil {
++		return nil, err
++	}
++	result := []domain.ProductionBusinessRuleWitness{}
++	for _, event := range events {
++		valid := false
++		for _, target := range targets {
++			if target.LocalKey != event.TargetKey || event.Action != "confirm" || event.SetDigest != ver.SetDigest || event.ContentDigest != target.ContentDigest {
++				continue
++			}
++			actorVersion := ver
++			actorVersion.CreatedBy = event.PrincipalID
++			_, err := s.authorizeBusinessRuleTx(ctx, tx, actorVersion, targets, target)
++			if err != nil {
++				if productionValidationFailure(err) == "" {
++					return nil, err
++				}
++				continue
++			}
++			var digest string
++			if event.EvidenceOrigin == "human_declaration" {
++				digest, err = businessRuleDeclarationDigestTx(ctx, tx, actorVersion, target, event.EvidenceID)
++			} else if event.EvidenceOrigin == "selected_evidence" {
++				digest, err = businessRuleEvidenceTx(ctx, tx, ver, target, event.EvidenceID)
++			} else {
++				continue
++			}
++			if err != nil {
++				if productionValidationFailure(err) == "" {
++					return nil, err
++				}
++				continue
++			}
++			valid = digest == event.EvidenceDigest
++		}
++		result = append(result, domain.ProductionBusinessRuleWitness{Event: event, Valid: valid})
++	}
++	return result, nil
++}
++
++func (s *Store) productionFreshnessTx(ctx context.Context, tx pgx.Tx, ver domain.ProductionVersion, targets []domain.ProductionTarget, rules []domain.PolicyRule) (json.RawMessage, map[string]bool, error) {
++	witnesses, err := s.productionBusinessRulesTx(ctx, tx, ver, targets)
++	if err != nil {
++		return nil, nil, err
++	}
++	confirmed := map[string]bool{}
++	for _, w := range witnesses {
++		confirmed[w.Event.TargetKey] = w.Valid
++	}
++	raw, err := app.ProductionFreshnessWitness(ver, rules, witnesses...)
++	return raw, confirmed, err
++}
++
++func (s *Store) ReadProductionBusinessRules(ctx context.Context, w identity.WorkspaceID, p identity.PrincipalID, op identity.ProductionOperationID, version int) ([]domain.ProductionBusinessRuleWitness, error) {
++	_, ver, targets, _, _, err := s.GetProductionOperationVersion(ctx, w, op, version)
++	if err != nil {
++		return nil, err
++	}
++	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
++	if err != nil {
++		return nil, err
++	}
++	defer func() { _ = tx.Rollback(ctx) }()
++	ver.CreatedBy = p
++	if err := s.validateProductionInputTx(ctx, tx, ver, targets, false); err != nil {
++		return nil, err
++	}
++	witnesses, err := s.productionBusinessRulesTx(ctx, tx, ver, targets)
++	if err != nil {
++		return nil, err
++	}
++	// The read response exposes the original declaration for independent review;
++	// validation witnesses pin its digest without duplicating the statement.
++	for i := range witnesses {
++		if witnesses[i].Event.EvidenceOrigin != "human_declaration" {
++			continue
++		}
++		id, err := identity.ParseEvidenceID(witnesses[i].Event.EvidenceID)
++		if err != nil {
++			return nil, domain.ErrEvidenceMissing
++		}
++		if err := tx.QueryRow(ctx, `SELECT metadata->>'statement' FROM evidence_artifacts WHERE workspace_id=$1 AND id=$2`, w.UUID(), id.UUID()).Scan(&witnesses[i].Declaration); err != nil {
++			return nil, err
++		}
++	}
++	return witnesses, nil
++}
+--- a/internal/adapters/postgres/production_business_rule_declaration.go
++++ b/internal/adapters/postgres/production_business_rule_declaration.go
+@@ -0,0 +1,75 @@
++package postgres
++
++import (
++	"context"
++	"encoding/json"
++	"strings"
++
++	domain "github.com/iiwish/semlia/internal/domain/governance"
++	"github.com/iiwish/semlia/pkg/identity"
++	"github.com/jackc/pgx/v5"
++)
++
++func businessRuleDeclaration(ver domain.ProductionVersion, target domain.ProductionTarget, statement string) (json.RawMessage, error) {
++	if strings.TrimSpace(statement) == "" || len(statement) > 8192 {
++		return nil, domain.ErrInvalidArgument
++	}
++	return json.Marshal(map[string]any{"schema": "semlia.business-rule-declaration/v1", "workspaceId": ver.WorkspaceID.String(), "operationId": ver.OperationID.String(), "productionVersion": ver.Version, "targetKey": target.LocalKey, "setDigest": ver.SetDigest, "contentDigest": target.ContentDigest, "declaredBy": ver.CreatedBy.String(), "statement": statement})
++}
++
++// The authenticated human's explicit declaration is new evidence, not a rewrite
++// of source observations or of the immutable draft input.
++func createBusinessRuleDeclarationTx(ctx context.Context, tx pgx.Tx, ver domain.ProductionVersion, target domain.ProductionTarget, statement string) (identity.EvidenceID, string, error) {
++	empty := identity.EvidenceID{}
++	raw, err := businessRuleDeclaration(ver, target, statement)
++	if err != nil {
++		return empty, "", err
++	}
++	digest, err := domain.DigestJSON(raw)
++	if err != nil {
++		return empty, "", err
++	}
++	id, err := identity.NewEvidenceID()
++	if err != nil {
++		return empty, "", err
++	}
++	_, err = tx.Exec(ctx, `INSERT INTO evidence_artifacts(id,workspace_id,evidence_type,locator,content_digest,metadata) VALUES($1,$2,'declared',$3,$4,$5)`, id.UUID(), ver.WorkspaceID.UUID(), "semlia://business-rule-declarations/"+id.String(), digest, raw)
++	return id, digest, err
++}
++
++func businessRuleDeclarationDigestTx(ctx context.Context, tx pgx.Tx, ver domain.ProductionVersion, target domain.ProductionTarget, evidence string) (string, error) {
++	id, err := identity.ParseEvidenceID(evidence)
++	if err != nil {
++		return "", domain.ErrEvidenceMissing
++	}
++	var raw []byte
++	var digest, kind string
++	if err := tx.QueryRow(ctx, `SELECT evidence_type,content_digest,metadata FROM evidence_artifacts WHERE workspace_id=$1 AND id=$2`, ver.WorkspaceID.UUID(), id.UUID()).Scan(&kind, &digest, &raw); err != nil {
++		return "", governanceRepositoryError("read human declaration", err)
++	}
++	if kind != "declared" {
++		return "", domain.ErrEvidenceMissing
++	}
++	var content struct {
++		Statement string `json:"statement"`
++	}
++	if json.Unmarshal(raw, &content) != nil {
++		return "", domain.ErrEvidenceMissing
++	}
++	expected, err := businessRuleDeclaration(ver, target, content.Statement)
++	if err != nil {
++		return "", domain.ErrEvidenceMissing
++	}
++	actual, err := domain.DigestJSON(raw)
++	if err != nil {
++		return "", err
++	}
++	expectedDigest, err := domain.DigestJSON(expected)
++	if err != nil {
++		return "", err
++	}
++	if digest != actual || actual != expectedDigest {
++		return "", domain.ErrEvidenceMissing
++	}
++	return digest, nil
++}
+--- a/internal/adapters/postgres/production_validation.go
++++ b/internal/adapters/postgres/production_validation.go
+@@ -105,6 +105,18 @@
+ 		}
+ 	}
+ 	q := s.queries.WithTx(tx)
++	rules, err := s.productionRulesTx(ctx, tx)
++	if err != nil {
++		return err
++	}
++	attempt.FreshnessWitnessJSON, _, err = s.productionFreshnessTx(ctx, tx, ver, targets, rules)
++	if err != nil {
++		return err
++	}
++	attempt.FreshnessDigest, err = domain.DigestJSON(attempt.FreshnessWitnessJSON)
++	if err != nil {
++		return err
++	}
+ 	wUUID, _ := uuidFromString(w.UUID())
+ 	opUUID, _ := uuidFromString(op.UUID())
+ 	principal, _ := uuidFromString(cmd.PrincipalID.UUID())
+--- a/internal/adapters/postgres/production_validation_gate.go
++++ b/internal/adapters/postgres/production_validation_gate.go
+@@ -92,10 +92,15 @@
+ 		if err != nil {
+ 			return err
+ 		}
+-		witness, err := app.ProductionFreshnessWitness(ver, rules)
++		witness, confirmed, err := s.productionFreshnessTx(ctx, tx, ver, targets, rules)
+ 		if err != nil {
+ 			return err
+ 		}
++		for _, target := range targets {
++			if domain.RequiresProductionBusinessRule(target) && !confirmed[target.LocalKey] {
++				return domain.ErrValidationRequired
++			}
++		}
+ 		fresh, err := domain.DigestJSON(witness)
+ 		if err != nil {
+ 			return err
+--- a/internal/adapters/postgres/production_validation_worker.go
++++ b/internal/adapters/postgres/production_validation_worker.go
+@@ -73,7 +73,8 @@
+ 			return work, err
+ 		}
+ 	}
+-	witness, witnessErr := app.ProductionFreshnessWitness(ver, work.Rules)
++	witness, confirmed, witnessErr := s.productionFreshnessTx(ctx, tx, ver, targets, work.Rules)
++	work.BusinessRules = confirmed
+ 	if witnessErr != nil {
+ 		return work, witnessErr
+ 	}
+@@ -82,7 +83,7 @@
+ 		return work, digestErr
+ 	}
+ 	if digest != attempt.FreshnessDigest {
+-		work.ReferenceFailure = "PRODUCTION_POLICY_CHANGED"
++		work.ReferenceFailure = "PRODUCTION_VALIDATION_CONTEXT_CHANGED"
+ 	}
+ 	return work, nil
+ }
+@@ -163,13 +164,13 @@
+ 	if freshErr == nil {
+ 		freshErr = checkProductionBaselineTx(ctx, tx, ver, targets)
+ 	}
+-	policyChanged := false
++	contextChanged := false
+ 	if freshErr == nil {
+ 		rules, err := s.productionRulesTx(ctx, tx)
+ 		if err != nil {
+ 			return err
+ 		}
+-		witness, err := app.ProductionFreshnessWitness(ver, rules)
++		witness, _, err := s.productionFreshnessTx(ctx, tx, ver, targets, rules)
+ 		if err != nil {
+ 			return err
+ 		}
+@@ -177,12 +178,12 @@
+ 		if err != nil {
+ 			return err
+ 		}
+-		policyChanged = digest != a.FreshnessDigest
++		contextChanged = digest != a.FreshnessDigest
+ 	}
+-	if freshErr != nil || policyChanged {
++	if freshErr != nil || contextChanged {
+ 		code := productionValidationFailure(freshErr)
+-		if policyChanged {
+-			code = "PRODUCTION_POLICY_CHANGED"
++		if contextChanged {
++			code = "PRODUCTION_VALIDATION_CONTEXT_CHANGED"
+ 		}
+ 		if code == "" {
+ 			return freshErr
+--- a/internal/adapters/postgres/sqlc/models.go
++++ b/internal/adapters/postgres/sqlc/models.go
+@@ -622,6 +622,25 @@
+ 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+ }
+ 
++type ProductionBusinessRuleEvent struct {
++	Sequence             int64              `json:"sequence"`
++	WorkspaceID          pgtype.UUID        `json:"workspace_id"`
++	OperationID          pgtype.UUID        `json:"operation_id"`
++	ProductionVersion    int32              `json:"production_version"`
++	TargetKey            string             `json:"target_key"`
++	Action               string             `json:"action"`
++	SetDigest            string             `json:"set_digest"`
++	ContentDigest        string             `json:"content_digest"`
++	EvidenceID           pgtype.UUID        `json:"evidence_id"`
++	EvidenceDigest       pgtype.Text        `json:"evidence_digest"`
++	EvidenceOrigin       string             `json:"evidence_origin"`
++	PrincipalID          pgtype.UUID        `json:"principal_id"`
++	AuthorizationVersion int64              `json:"authorization_version"`
++	IdempotencyKey       string             `json:"idempotency_key"`
++	RequestDigest        string             `json:"request_digest"`
++	CreatedAt            pgtype.Timestamptz `json:"created_at"`
++}
++
+ type ProductionCandidateLink struct {
+ 	WorkspaceID     pgtype.UUID `json:"workspace_id"`
+ 	CandidateID     pgtype.UUID `json:"candidate_id"`
+--- a/internal/application/governance/production_business_rule.go
++++ b/internal/application/governance/production_business_rule.go
+@@ -0,0 +1,48 @@
++package governance
++
++import (
++	"context"
++	"strings"
++
++	domain "github.com/iiwish/semlia/internal/domain/governance"
++	"github.com/iiwish/semlia/pkg/identity"
++)
++
++type productionBusinessRuleRepository interface {
++	RecordProductionBusinessRule(context.Context, domain.ProductionBusinessRuleCommand) (domain.ProductionBusinessRuleEvent, error)
++	ReadProductionBusinessRules(context.Context, identity.WorkspaceID, identity.PrincipalID, identity.ProductionOperationID, int) ([]domain.ProductionBusinessRuleWitness, error)
++}
++
++func (s *ProductionService) RecordBusinessRule(ctx context.Context, cmd domain.ProductionBusinessRuleCommand) (domain.ProductionBusinessRuleEvent, error) {
++	empty := domain.ProductionBusinessRuleEvent{}
++	if cmd.WorkspaceID.IsZero() || cmd.OperationID.IsZero() || cmd.PrincipalID.IsZero() || cmd.ExpectedVersion < 1 || !domain.IsValidContentDigest(cmd.SetDigest) || strings.TrimSpace(cmd.TargetKey) == "" || len(cmd.TargetKey) > 128 || strings.TrimSpace(cmd.IdempotencyKey) == "" || len(cmd.IdempotencyKey) > 256 {
++		return empty, domain.ErrInvalidArgument
++	}
++	if cmd.Action == "confirm" {
++		if cmd.Declaration != "" {
++			if strings.TrimSpace(cmd.Declaration) == "" || len(cmd.Declaration) > 8192 || cmd.EvidenceID != "" {
++				return empty, domain.ErrInvalidArgument
++			}
++		} else if _, err := identity.ParseEvidenceID(cmd.EvidenceID); err != nil {
++			return empty, domain.ErrInvalidArgument
++		}
++	} else if cmd.Action != "revoke" || cmd.EvidenceID != "" || cmd.Declaration != "" {
++		return empty, domain.ErrInvalidArgument
++	}
++	repo, ok := s.repo.(productionBusinessRuleRepository)
++	if !ok {
++		return empty, domain.ErrInvariant
++	}
++	return repo.RecordProductionBusinessRule(ctx, cmd)
++}
++
++func (s *ProductionService) BusinessRules(ctx context.Context, w identity.WorkspaceID, p identity.PrincipalID, op identity.ProductionOperationID, version int) ([]domain.ProductionBusinessRuleWitness, error) {
++	if w.IsZero() || p.IsZero() || op.IsZero() || version < 1 {
++		return nil, domain.ErrInvalidArgument
++	}
++	repo, ok := s.repo.(productionBusinessRuleRepository)
++	if !ok {
++		return nil, domain.ErrInvariant
++	}
++	return repo.ReadProductionBusinessRules(ctx, w, p, op, version)
++}
+--- a/internal/application/governance/production_validation.go
++++ b/internal/application/governance/production_validation.go
+@@ -18,7 +18,7 @@
+ 	ValidatorVersion string `json:"validatorVersion"`
+ }
+ 
+-const ProductionValidatorVersion = "1.0.0-production.1"
++const ProductionValidatorVersion = "1.0.0-production.2"
+ 
+ func ProductionRequiredChecks(targets []domain.ProductionTarget) ([]ProductionCheck, error) {
+ 	checks := []ProductionCheck{}
+@@ -179,6 +179,9 @@
+ 	return result, nil
+ }
+ 
+-func ProductionFreshnessWitness(ver domain.ProductionVersion, rules []domain.PolicyRule) (json.RawMessage, error) {
+-	return json.Marshal(map[string]any{"input": ver.InputJSON, "baseline": ver.BaselineJSON, "policyVersion": domain.RiskRuleVersion, "rules": rules})
++func ProductionFreshnessWitness(ver domain.ProductionVersion, rules []domain.PolicyRule, businessRules ...domain.ProductionBusinessRuleWitness) (json.RawMessage, error) {
++	if businessRules == nil {
++		businessRules = []domain.ProductionBusinessRuleWitness{}
++	}
++	return json.Marshal(map[string]any{"input": ver.InputJSON, "baseline": ver.BaselineJSON, "policyVersion": domain.RiskRuleVersion, "rules": rules, "businessRules": businessRules})
+ }
+--- a/internal/application/governance/production_validation_worker.go
++++ b/internal/application/governance/production_validation_worker.go
+@@ -18,6 +18,7 @@
+ 	Proposals        map[string]domain.Proposal
+ 	Rules            []domain.PolicyRule
+ 	ReferenceFailure string
++	BusinessRules    map[string]bool
+ }
+ 
+ type ProductionCheckResult struct {
+@@ -140,6 +141,9 @@
+ 			}
+ 			switch id {
+ 			case ValidatorIDSchema:
++				if domain.RequiresProductionBusinessRule(target) && !work.BusinessRules[target.LocalKey] {
++					block("PRODUCTION_BUSINESS_RULE_UNCONFIRMED")
++				}
+ 				if target.Declaration == nil {
+ 					block("PRODUCTION_SCHEMA_MISSING")
+ 				} else if _, err := domain.InspectProductionContent(target.Kind, target.Declaration.Content); err != nil {
+--- a/internal/domain/governance/production_business_rule.go
++++ b/internal/domain/governance/production_business_rule.go
+@@ -0,0 +1,48 @@
++package governance
++
++import (
++	"time"
++
++	"github.com/iiwish/semlia/pkg/identity"
++)
++
++type ProductionBusinessRuleCommand struct {
++	WorkspaceID     identity.WorkspaceID           `json:"-"`
++	OperationID     identity.ProductionOperationID `json:"-"`
++	PrincipalID     identity.PrincipalID           `json:"-"`
++	IdempotencyKey  string                         `json:"-"`
++	ExpectedVersion int                            `json:"expectedVersion"`
++	SetDigest       string                         `json:"setDigest"`
++	TargetKey       string                         `json:"targetKey"`
++	Action          string                         `json:"action"`
++	EvidenceID      string                         `json:"evidenceId,omitempty"`
++	Declaration     string                         `json:"declaration,omitempty"`
++}
++
++type ProductionBusinessRuleEvent struct {
++	Sequence             int64                          `json:"sequence"`
++	WorkspaceID          identity.WorkspaceID           `json:"workspaceId"`
++	OperationID          identity.ProductionOperationID `json:"operationId"`
++	ProductionVersion    int                            `json:"productionVersion"`
++	TargetKey            string                         `json:"targetKey"`
++	Action               string                         `json:"action"`
++	SetDigest            string                         `json:"setDigest"`
++	ContentDigest        string                         `json:"contentDigest"`
++	EvidenceID           string                         `json:"evidenceId,omitempty"`
++	EvidenceDigest       string                         `json:"evidenceDigest,omitempty"`
++	EvidenceOrigin       string                         `json:"evidenceOrigin"`
++	PrincipalID          identity.PrincipalID           `json:"principalId"`
++	AuthorizationVersion int64                          `json:"authorizationVersion"`
++	CreatedAt            time.Time                      `json:"createdAt"`
++	Replayed             bool                           `json:"replayed"`
++}
++
++type ProductionBusinessRuleWitness struct {
++	Event       ProductionBusinessRuleEvent `json:"event"`
++	Valid       bool                        `json:"valid"`
++	Declaration string                      `json:"declaration,omitempty"`
++}
++
++func RequiresProductionBusinessRule(target ProductionTarget) bool {
++	return target.Kind == TargetKindSemanticAsset && target.ProposalID != nil
++}
+--- a/internal/platform/http/catalog.go
++++ b/internal/platform/http/catalog.go
+@@ -68,6 +68,7 @@
+ 	routeProductionRollback
+ 	routeProductionGeneration
+ 	routeProductionGenerationRun
++	routeProductionBusinessRules
+ )
+ 
+ type matchedRoute struct {
+@@ -153,8 +154,8 @@
+ 			return base
+ 		}
+ 		base.operation = parts[5]
+-		if len(parts)==8 && parts[6]=="generation" {
+-			base.kind,base.label,base.run=routeProductionGenerationRun,"/api/v1/workspaces/{workspaceId}/production-operations/{operationId}/generation/{runId}",parts[7]
++		if len(parts) == 8 && parts[6] == "generation" {
++			base.kind, base.label, base.run = routeProductionGenerationRun, "/api/v1/workspaces/{workspaceId}/production-operations/{operationId}/generation/{runId}", parts[7]
+ 			return base
+ 		}
+ 		if len(parts) == 6 {
+@@ -163,8 +164,11 @@
+ 		}
+ 		if len(parts) == 7 {
+ 			switch parts[6] {
++			case "business-rule-confirmations":
++				base.kind, base.label = routeProductionBusinessRules, "/api/v1/workspaces/{workspaceId}/production-operations/{operationId}/business-rule-confirmations"
++				return base
+ 			case "generation":
+-				base.kind,base.label=routeProductionGeneration,"/api/v1/workspaces/{workspaceId}/production-operations/{operationId}/generation"
++				base.kind, base.label = routeProductionGeneration, "/api/v1/workspaces/{workspaceId}/production-operations/{operationId}/generation"
+ 				return base
+ 			case "submit":
+ 				base.kind, base.label = routeProductionSubmit, "/api/v1/workspaces/{workspaceId}/production-operations/{operationId}/submit"
+@@ -320,6 +324,8 @@
+ 		return []string{http.MethodPost}
+ 	case routeProductionGenerationRun:
+ 		return []string{http.MethodGet}
++	case routeProductionBusinessRules:
++		return []string{http.MethodGet, http.MethodPost}
+ 	case routeEmbeddingStatus:
+ 		return []string{http.MethodGet, http.MethodPost}
+ 	case routeEmbeddingCancel:
+--- a/internal/platform/http/production_business_rule.go
++++ b/internal/platform/http/production_business_rule.go
+@@ -0,0 +1,92 @@
++package httpapi
++
++import (
++	"bytes"
++	"encoding/json"
++	"net/http"
++	"strconv"
++	"strings"
++
++	domain "github.com/iiwish/semlia/internal/domain/governance"
++	"github.com/iiwish/semlia/pkg/identity"
++)
++
++type productionBusinessRulePayload domain.ProductionBusinessRuleCommand
++
++func (p *productionBusinessRulePayload) UnmarshalJSON(raw []byte) error {
++	value, err := domain.ParseProductionJSON(raw)
++	if err != nil {
++		return err
++	}
++	object, ok := value.(map[string]any)
++	if !ok {
++		return domain.ErrInvalidArgument
++	}
++	for _, key := range []string{"expectedVersion", "setDigest", "targetKey", "action"} {
++		if v, exists := object[key]; !exists || v == nil {
++			return domain.ErrInvalidArgument
++		}
++	}
++	if object["action"] == "confirm" {
++		evidence, hasEvidence := object["evidenceId"]
++		declaration, hasDeclaration := object["declaration"]
++		if hasEvidence == hasDeclaration || (hasEvidence && evidence == nil) || (hasDeclaration && declaration == nil) {
++			return domain.ErrInvalidArgument
++		}
++	} else {
++		if _, exists := object["evidenceId"]; exists {
++			return domain.ErrInvalidArgument
++		}
++		if _, exists := object["declaration"]; exists {
++			return domain.ErrInvalidArgument
++		}
++	}
++	type plain productionBusinessRulePayload
++	decoder := json.NewDecoder(bytes.NewReader(raw))
++	decoder.DisallowUnknownFields()
++	return decoder.Decode((*plain)(p))
++}
++
++func (handler *Handler) productionBusinessRuleRequest(response http.ResponseWriter, request *http.Request, traceID string, w identity.WorkspaceID, route matchedRoute) string {
++	if handler.production == nil {
++		writeError(response, http.StatusServiceUnavailable, "FEATURE_UNAVAILABLE", "production is not configured", traceID, false)
++		return "FEATURE_UNAVAILABLE"
++	}
++	principal, err := identity.ParsePrincipalID(principalRef(request))
++	if err != nil {
++		writeError(response, http.StatusUnauthorized, "UNAUTHENTICATED", "authentication required", traceID, false)
++		return "UNAUTHENTICATED"
++	}
++	op, err := identity.ParseProductionOperationID(route.operation)
++	if err != nil {
++		return writeProductionError(response, domain.ErrInvalidArgument, traceID)
++	}
++	if request.Method == http.MethodGet {
++		version, err := strconv.Atoi(request.URL.Query().Get("version"))
++		if err != nil || version < 1 {
++			return writeProductionError(response, domain.ErrInvalidArgument, traceID)
++		}
++		records, err := handler.production.BusinessRules(request.Context(), w, principal, op, version)
++		if err != nil {
++			return writeProductionError(response, err, traceID)
++		}
++		writeJSON(response, http.StatusOK, map[string]any{"items": records})
++		return ""
++	}
++	var payload productionBusinessRulePayload
++	if err := decodeStrictJSON(response, request, &payload); err != nil {
++		return writeProductionError(response, err, traceID)
++	}
++	cmd := domain.ProductionBusinessRuleCommand(payload)
++	cmd.WorkspaceID, cmd.OperationID, cmd.PrincipalID, cmd.IdempotencyKey = w, op, principal, strings.TrimSpace(request.Header.Get("Idempotency-Key"))
++	result, err := handler.production.RecordBusinessRule(request.Context(), cmd)
++	if err != nil {
++		return writeProductionError(response, err, traceID)
++	}
++	status := http.StatusCreated
++	if result.Replayed {
++		status = http.StatusOK
++	}
++	writeJSON(response, status, result)
++	return ""
++}
+--- a/internal/platform/http/production_business_rule_test.go
++++ b/internal/platform/http/production_business_rule_test.go
+@@ -0,0 +1,33 @@
++package httpapi
++
++import (
++	"encoding/json"
++	"strings"
++	"testing"
++)
++
++func TestProductionBusinessRulePayloadStrictShape(t *testing.T) {
++	base := `{"expectedVersion":1,"setDigest":"sha256:` + strings.Repeat("a", 64) + `","targetKey":"revenue","action":"confirm","evidenceId":"evd_01arz3ndektsv4rrffq69g5fav"}`
++	for _, test := range []struct {
++		name, body string
++		valid      bool
++	}{
++		{"confirm", base, true},
++		{"human declaration", strings.Replace(base, `"evidenceId":"evd_01arz3ndektsv4rrffq69g5fav"`, `"declaration":"Explicit human declaration"`, 1), true},
++		{"ambiguous declaration", strings.TrimSuffix(base, "}") + `,"declaration":"must not override evidence"}`, false},
++		{"revoke", strings.Replace(strings.Replace(base, `"confirm"`, `"revoke"`, 1), `,"evidenceId":"evd_01arz3ndektsv4rrffq69g5fav"`, "", 1), true},
++		{"duplicate", strings.Replace(base, `"action":"confirm"`, `"action":"revoke","action":"confirm"`, 1), false},
++		{"null", strings.Replace(base, `"expectedVersion":1`, `"expectedVersion":null`, 1), false},
++		{"missing evidence", strings.Replace(base, `,"evidenceId":"evd_01arz3ndektsv4rrffq69g5fav"`, "", 1), false},
++		{"forged actor", strings.TrimSuffix(base, "}") + `,"principalId":"forged"}`, false},
++		{"revoke with evidence", strings.Replace(base, `"confirm"`, `"revoke"`, 1), false},
++	} {
++		t.Run(test.name, func(t *testing.T) {
++			var payload productionBusinessRulePayload
++			err := json.Unmarshal([]byte(test.body), &payload)
++			if (err == nil) != test.valid {
++				t.Fatalf("valid=%v want=%v error=%v", err == nil, test.valid, err)
++			}
++		})
++	}
++}
+--- a/internal/platform/http/semantic_production.go
++++ b/internal/platform/http/semantic_production.go
+@@ -36,6 +36,7 @@
+ 		kind == routeProductionRelease ||
+ 		kind == routeProductionGeneration ||
+ 		kind == routeProductionGenerationRun ||
++		kind == routeProductionBusinessRules ||
+ 		kind == routeProductionRollback
+ }
+ 
+@@ -47,6 +48,8 @@
+ 	}
+ 
+ 	switch route.kind {
++	case routeProductionBusinessRules:
++		return handler.productionBusinessRuleRequest(response, request, traceID, workspaceID, route)
+ 	case routeProductionGeneration, routeProductionGenerationRun:
+ 		return handler.productionGenerationRequest(response, request, traceID, workspaceID, route)
+ 	case routeProductionOperations:
+--- a/migrations/000028_production_business_rules.down.sql
++++ b/migrations/000028_production_business_rules.down.sql
+@@ -0,0 +1,7 @@
++DO $$ BEGIN
++    IF EXISTS (SELECT 1 FROM production_business_rule_events) THEN
++        RAISE EXCEPTION 'DOWN_MIGRATION_UNSAFE: business rule confirmation history exists';
++    END IF;
++END $$;
++DROP TABLE production_business_rule_events;
++DROP FUNCTION guard_production_business_rule_event();
+--- a/migrations/000028_production_business_rules.up.sql
++++ b/migrations/000028_production_business_rules.up.sql
+@@ -0,0 +1,49 @@
++CREATE TABLE production_business_rule_events (
++    sequence bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
++    workspace_id uuid NOT NULL,
++    operation_id uuid NOT NULL,
++    production_version integer NOT NULL,
++    target_key text NOT NULL,
++    action text NOT NULL CHECK (action IN ('confirm','revoke')),
++    set_digest text NOT NULL CHECK (set_digest ~ '^sha256:[0-9a-f]{64}$'),
++    content_digest text NOT NULL CHECK (content_digest ~ '^sha256:[0-9a-f]{64}$'),
++    evidence_id uuid,
++    evidence_digest text CHECK (evidence_digest ~ '^sha256:[0-9a-f]{64}$'),
++    evidence_origin text NOT NULL CHECK (evidence_origin IN ('selected_evidence','human_declaration','none')),
++    principal_id uuid NOT NULL,
++    authorization_version bigint NOT NULL,
++    idempotency_key text NOT NULL CHECK (length(idempotency_key) BETWEEN 1 AND 256),
++    request_digest text NOT NULL CHECK (request_digest ~ '^sha256:[0-9a-f]{64}$'),
++    created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
++    CHECK ((action='confirm' AND evidence_id IS NOT NULL AND evidence_digest IS NOT NULL AND evidence_origin<>'none') OR
++           (action='revoke' AND evidence_id IS NULL AND evidence_digest IS NULL AND evidence_origin='none')),
++    UNIQUE (workspace_id,principal_id,idempotency_key),
++    FOREIGN KEY (workspace_id,operation_id,production_version,target_key)
++        REFERENCES production_targets(workspace_id,operation_id,version,local_key) ON DELETE RESTRICT,
++    FOREIGN KEY (workspace_id,principal_id) REFERENCES principals(workspace_id,id) ON DELETE RESTRICT,
++    FOREIGN KEY (workspace_id,evidence_id) REFERENCES evidence_artifacts(workspace_id,id) ON DELETE RESTRICT
++);
++CREATE INDEX production_business_rule_latest ON production_business_rule_events
++    (workspace_id,operation_id,production_version,target_key,sequence DESC);
++CREATE TRIGGER production_business_rule_events_immutable BEFORE UPDATE OR DELETE ON production_business_rule_events
++    FOR EACH ROW EXECUTE FUNCTION reject_immutable_registry_row();
++
++CREATE FUNCTION guard_production_business_rule_event() RETURNS trigger LANGUAGE plpgsql AS $$
++BEGIN
++    IF NOT EXISTS (SELECT 1 FROM production_targets t JOIN production_versions v
++        ON v.workspace_id=t.workspace_id AND v.operation_id=t.operation_id AND v.version=t.version
++        JOIN principals p ON p.workspace_id=t.workspace_id AND p.id=NEW.principal_id
++        JOIN production_contributors c ON c.workspace_id=t.workspace_id AND c.operation_id=t.operation_id AND c.principal_id=p.id
++        WHERE t.workspace_id=NEW.workspace_id AND t.operation_id=NEW.operation_id AND t.version=NEW.production_version
++        AND t.local_key=NEW.target_key AND t.kind='semantic_asset' AND t.proposal_id IS NOT NULL
++        AND t.content_digest=NEW.content_digest AND v.set_digest=NEW.set_digest AND p.kind='human' AND p.status='active') THEN
++        RAISE EXCEPTION 'business rule requires a bound human contributor' USING ERRCODE='23514';
++    END IF;
++    IF NEW.action='confirm' AND NOT EXISTS (SELECT 1 FROM evidence_artifacts e WHERE e.workspace_id=NEW.workspace_id
++        AND e.id=NEW.evidence_id AND e.content_digest=NEW.evidence_digest AND e.evidence_type='declared') THEN
++        RAISE EXCEPTION 'business rule requires declared evidence' USING ERRCODE='23514';
++    END IF;
++    RETURN NEW;
++END $$;
++CREATE CONSTRAINT TRIGGER production_business_rule_event_guard AFTER INSERT ON production_business_rule_events
++    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION guard_production_business_rule_event();
+--- a/sdk/typescript/src/client.test.ts
++++ b/sdk/typescript/src/client.test.ts
+@@ -165,5 +165,19 @@
+   maxCostMicros: 2000000,
+ }, "generate-1");
+ void prodClient.generation("prodop_01arz3ndektsv4rrffq69g5fav", "agr_01arz3ndektsv4rrffq69g5fav");
++void prodClient.recordBusinessRule("prodop_01arz3ndektsv4rrffq69g5fav", {
++  expectedVersion: 1, setDigest: "sha256:" + "0".repeat(64), targetKey: "revenue",
++  action: "confirm", evidenceId: "evd_01arz3ndektsv4rrffq69g5fav",
++}, "confirm-rule-1");
++void prodClient.recordBusinessRule("prodop_01arz3ndektsv4rrffq69g5fav", {
++  expectedVersion: 1, setDigest: "sha256:" + "0".repeat(64), targetKey: "revenue", action: "revoke",
++}, "revoke-rule-1");
++void prodClient.businessRules("prodop_01arz3ndektsv4rrffq69g5fav", 1);
++void prodClient.recordBusinessRule("prodop_01arz3ndektsv4rrffq69g5fav", {
++  expectedVersion: 1, setDigest: "sha256:" + "0".repeat(64), targetKey: "revenue", action: "confirm",
++  declaration: "I declare this synthetic revenue definition and scope as the authorized business owner.",
++}, "declare-rule-1");
++// @ts-expect-error Confirm requires evidence, not just non-empty generated text.
++void prodClient.recordBusinessRule("prodop_01arz3ndektsv4rrffq69g5fav", { expectedVersion: 1, setDigest: "sha256:" + "0".repeat(64), targetKey: "revenue", action: "confirm" }, "missing-evidence");
+ void prodRelClient.get("rls_01arz3ndektsv4rrffq69g5fav");
+ void prodRelClient.rollback("rls_01arz3ndektsv4rrffq69g5fav", { expectedVersion: 1, setDigest: "sha256:0000000000000000000000000000000000000000000000000000000000000000", expectedHead: { presence: "absent" }, reason: "rollback test" }, "rb-1");
+--- a/sdk/typescript/src/client.ts
++++ b/sdk/typescript/src/client.ts
+@@ -118,6 +118,15 @@
+         params: { path: { ...workspacePath, operationId }, header: { "Idempotency-Key": idempotencyKey } },
+         body,
+       }),
++    recordBusinessRule: (operationId: string, body: components["schemas"]["ProductionBusinessRuleRequest"], idempotencyKey: string) =>
++      client.POST("/api/v1/workspaces/{workspaceId}/production-operations/{operationId}/business-rule-confirmations", {
++        params: { path: { ...workspacePath, operationId }, header: { "Idempotency-Key": idempotencyKey } },
++        body,
++      }),
++    businessRules: (operationId: string, version: number) =>
++      client.GET("/api/v1/workspaces/{workspaceId}/production-operations/{operationId}/business-rule-confirmations", {
++        params: { path: { ...workspacePath, operationId }, query: { version } },
++      }),
+     generate: (operationId: string, body: components["schemas"]["GenerateProductionRequest"], idempotencyKey: string) =>
+       client.POST("/api/v1/workspaces/{workspaceId}/production-operations/{operationId}/generation", {
+         params: { path: { ...workspacePath, operationId }, header: { "Idempotency-Key": idempotencyKey } },
+--- a/sdk/typescript/src/schema.gen.ts
++++ b/sdk/typescript/src/schema.gen.ts
+@@ -2116,6 +2116,27 @@
+         patch?: never;
+         trace?: never;
+     };
++    "/api/v1/workspaces/{workspaceId}/production-operations/{operationId}/business-rule-confirmations": {
++        parameters: {
++            query?: never;
++            header?: never;
++            path: {
++                workspaceId: components["parameters"]["WorkspaceId"];
++                operationId: components["parameters"]["OperationId"];
++            };
++            cookie?: never;
++        };
++        /** Read latest confirmation events and current validity for an exact version */
++        get: operations["listProductionBusinessRules"];
++        put?: never;
++        /** Confirm or revoke business definitions as an authorized human contributor */
++        post: operations["recordProductionBusinessRule"];
++        delete?: never;
++        options?: never;
++        head?: never;
++        patch?: never;
++        trace?: never;
++    };
+     "/api/v1/workspaces/{workspaceId}/production-operations/{operationId}/generation": {
+         parameters: {
+             query?: never;
+@@ -4615,6 +4636,55 @@
+             /** @enum {string} */
+             status: "not_requested";
+         } | components["schemas"]["ValidationAttemptResult"];
++        /** @description Server derives actor, evidence origin and all digests. Confirm either selects declared evidence or atomically records an explicit human declaration supporting the exact target definition and scope. Revoke withdraws the current confirmation. Maximum 256 events per version; replay does not add an event. */
++        ProductionBusinessRuleRequest: {
++            expectedVersion: components["schemas"]["Version"];
++            setDigest: components["schemas"]["Digest"];
++            targetKey: string;
++            /** @enum {string} */
++            action: "confirm";
++            evidenceId: components["schemas"]["EvidenceArtifactId"];
++        } | {
++            expectedVersion: components["schemas"]["Version"];
++            setDigest: components["schemas"]["Digest"];
++            targetKey: string;
++            /** @enum {string} */
++            action: "confirm";
++            declaration: string;
++        } | {
++            expectedVersion: components["schemas"]["Version"];
++            setDigest: components["schemas"]["Digest"];
++            targetKey: string;
++            /** @enum {string} */
++            action: "revoke";
++        };
++        ProductionBusinessRuleEvent: {
++            /** Format: int64 */
++            sequence: number;
++            workspaceId: components["schemas"]["WorkspaceId"];
++            operationId: components["schemas"]["ProductionOperationId"];
++            productionVersion: components["schemas"]["Version"];
++            targetKey: string;
++            /** @enum {string} */
++            action: "confirm" | "revoke";
++            setDigest: components["schemas"]["Digest"];
++            contentDigest: components["schemas"]["Digest"];
++            evidenceId?: components["schemas"]["EvidenceArtifactId"];
++            evidenceDigest?: components["schemas"]["Digest"];
++            /** @enum {string} */
++            evidenceOrigin: "selected_evidence" | "human_declaration" | "none";
++            principalId: components["schemas"]["PrincipalId"];
++            /** Format: int64 */
++            authorizationVersion: number;
++            /** Format: date-time */
++            createdAt: string;
++            replayed: boolean;
++        };
++        ProductionBusinessRuleWitness: {
++            event: components["schemas"]["ProductionBusinessRuleEvent"];
++            valid: boolean;
++            declaration?: string;
++        };
+         /** @description Client ceilings only narrow a current server grant; they never authorize spending. Generation does not apply or publish drafts. */
+         GenerateProductionRequest: {
+             expectedVersion: components["schemas"]["Version"];
+@@ -9322,6 +9392,85 @@
+             default: components["responses"]["Error"];
+         };
+     };
++    listProductionBusinessRules: {
++        parameters: {
++            query: {
++                version: components["schemas"]["Version"];
++            };
++            header?: never;
++            path: {
++                workspaceId: components["parameters"]["WorkspaceId"];
++                operationId: components["parameters"]["OperationId"];
++            };
++            cookie?: never;
++        };
++        requestBody?: never;
++        responses: {
++            /** @description Latest event per target, ordered by target key */
++            200: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/json": {
++                        items: components["schemas"]["ProductionBusinessRuleWitness"][];
++                    };
++                };
++            };
++            400: components["responses"]["Error"];
++            401: components["responses"]["Error"];
++            403: components["responses"]["Error"];
++            404: components["responses"]["Error"];
++            503: components["responses"]["Error"];
++        };
++    };
++    recordProductionBusinessRule: {
++        parameters: {
++            query?: never;
++            header: {
++                /** @description Workspace-scoped command replay key. */
++                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
++            };
++            path: {
++                workspaceId: components["parameters"]["WorkspaceId"];
++                operationId: components["parameters"]["OperationId"];
++            };
++            cookie?: never;
++        };
++        requestBody: {
++            content: {
++                "application/json": components["schemas"]["ProductionBusinessRuleRequest"];
++            };
++        };
++        responses: {
++            /** @description Authorized replay of the original event, not a fresh confirmation */
++            200: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/json": components["schemas"]["ProductionBusinessRuleEvent"];
++                };
++            };
++            /** @description Immutable event committed; existing validation must be rerun */
++            201: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/json": components["schemas"]["ProductionBusinessRuleEvent"];
++                };
++            };
++            400: components["responses"]["Error"];
++            401: components["responses"]["Error"];
++            403: components["responses"]["Error"];
++            404: components["responses"]["Error"];
++            409: components["responses"]["Error"];
++            413: components["responses"]["Error"];
++            422: components["responses"]["Error"];
++            503: components["responses"]["Error"];
++        };
++    };
+     generateProductionSuggestions: {
+         parameters: {
+             query?: never;
+--- a/tests/contracts/production_business_rule_contract_test.go
++++ b/tests/contracts/production_business_rule_contract_test.go
+@@ -0,0 +1,54 @@
++package contracts_test
++
++import (
++	"context"
++	"path/filepath"
++	"testing"
++
++	"github.com/getkin/kin-openapi/openapi3"
++)
++
++func TestProductionBusinessRuleContracts(t *testing.T) {
++	for _, path := range []string{"api/openapi/semlia.v1.yaml", "docs/specs/semantic-production/contracts/production.openapi.yaml"} {
++		t.Run(path, func(t *testing.T) {
++			doc, err := openapi3.NewLoader().LoadFromFile(filepath.Join(root, path))
++			if err != nil {
++				t.Fatal(err)
++			}
++			if err := doc.Validate(context.Background()); err != nil {
++				t.Fatal(err)
++			}
++			endpoint := doc.Paths.Value("/api/v1/workspaces/{workspaceId}/production-operations/{operationId}/business-rule-confirmations")
++			if endpoint == nil || endpoint.Get == nil || endpoint.Post == nil {
++				t.Fatal("missing business rule methods")
++			}
++			if !productionHasParameter(endpoint.Parameters, endpoint.Post.Parameters, "header", "Idempotency-Key") || !productionHasParameter(endpoint.Parameters, endpoint.Get.Parameters, "query", "version") {
++				t.Fatal("unbound business rule request")
++			}
++			body := map[string]any{"expectedVersion": 1, "setDigest": productionDigest(), "targetKey": "revenue", "action": "confirm", "evidenceId": productionID("evd")}
++			productionAccepts(t, doc, "ProductionBusinessRuleRequest", body, true)
++			for _, field := range []string{"expectedVersion", "setDigest", "targetKey", "action", "evidenceId"} {
++				bad := productionClone(body)
++				delete(bad, field)
++				productionAccepts(t, doc, "ProductionBusinessRuleRequest", bad, false)
++			}
++			for _, field := range []string{"principalId", "contentDigest", "authorizationVersion", "confirmed"} {
++				bad := productionClone(body)
++				bad[field] = "forged"
++				productionAccepts(t, doc, "ProductionBusinessRuleRequest", bad, false)
++			}
++			body["action"] = "revoke"
++			productionAccepts(t, doc, "ProductionBusinessRuleRequest", body, false)
++			delete(body, "evidenceId")
++			productionAccepts(t, doc, "ProductionBusinessRuleRequest", body, true)
++			body["evidenceId"] = nil
++			productionAccepts(t, doc, "ProductionBusinessRuleRequest", body, false)
++			delete(body, "evidenceId")
++			body["action"] = "confirm"
++			body["declaration"] = "An explicit human business rule declaration"
++			productionAccepts(t, doc, "ProductionBusinessRuleRequest", body, true)
++			body["evidenceId"] = productionID("evd")
++			productionAccepts(t, doc, "ProductionBusinessRuleRequest", body, false)
++		})
++	}
++}
+--- a/tests/contracts/semantic_production_contract_test.go
++++ b/tests/contracts/semantic_production_contract_test.go
+@@ -37,20 +37,21 @@
+ 	t.Run("operations_and_authority", func(t *testing.T) {
+ 		prefix := "/api/v1/workspaces/{workspaceId}"
+ 		paths := map[string][]string{
+-			"/sources/{sourceId}/snapshots":                           {"GET"},
+-			"/sources/{sourceId}/snapshots/{snapshotId}":              {"GET"},
+-			"/sources/{sourceId}/snapshots/{snapshotId}/members":      {"GET"},
+-			"/sources/{sourceId}/snapshots/{snapshotId}/diagnostics":  {"GET"},
+-			"/production-operations":                                  {"GET", "POST"},
+-			"/production-operations/{operationId}":                    {"GET", "PUT"},
+-			"/production-operations/{operationId}/submit":             {"POST"},
+-			"/production-operations/{operationId}/validations":        {"GET", "POST"},
+-			"/production-operations/{operationId}/reviews":            {"POST"},
+-			"/production-operations/{operationId}/publish":            {"POST"},
+-			"/production-operations/{operationId}/generation":         {"POST"},
+-			"/production-operations/{operationId}/generation/{runId}": {"GET"},
+-			"/production-releases/{releaseId}":                        {"GET"},
+-			"/production-releases/{releaseId}/rollback":               {"POST"},
++			"/sources/{sourceId}/snapshots":                                    {"GET"},
++			"/sources/{sourceId}/snapshots/{snapshotId}":                       {"GET"},
++			"/sources/{sourceId}/snapshots/{snapshotId}/members":               {"GET"},
++			"/sources/{sourceId}/snapshots/{snapshotId}/diagnostics":           {"GET"},
++			"/production-operations":                                           {"GET", "POST"},
++			"/production-operations/{operationId}":                             {"GET", "PUT"},
++			"/production-operations/{operationId}/submit":                      {"POST"},
++			"/production-operations/{operationId}/validations":                 {"GET", "POST"},
++			"/production-operations/{operationId}/reviews":                     {"POST"},
++			"/production-operations/{operationId}/publish":                     {"POST"},
++			"/production-operations/{operationId}/generation":                  {"POST"},
++			"/production-operations/{operationId}/generation/{runId}":          {"GET"},
++			"/production-operations/{operationId}/business-rule-confirmations": {"GET", "POST"},
++			"/production-releases/{releaseId}":                                 {"GET"},
++			"/production-releases/{releaseId}/rollback":                        {"POST"},
+ 		}
+ 		seen := map[string]bool{}
+ 		for path, methods := range paths {
+--- a/tests/integration/db/database_test.go
++++ b/tests/integration/db/database_test.go
+@@ -64,7 +64,7 @@
+ 	if err := migrator.Up(); err != nil {
+ 		t.Fatalf("upgrade empty database: %v", err)
+ 	}
+-	assertVersion(t, migrator, 27, true)
++	assertVersion(t, migrator, 28, true)
+ 	if err := migrator.Up(); err != nil {
+ 		t.Fatalf("repeat upgrade: %v", err)
+ 	}
+@@ -85,13 +85,13 @@
+ 		"source_snapshots", "source_snapshot_runs", "source_snapshot_scope", "source_snapshot_members", "source_snapshot_diagnostics", "source_code_revisions", "source_lineage_revisions", "source_effective_snapshots", "source_coverage_heads",
+ 		"production_operations", "production_versions", "production_targets", "production_candidate_links", "production_contributors", "production_identity_reservations", "production_commands", "production_request_claims", "production_generation_links", "production_generation_outputs", "production_generation_applications",
+ 		"production_validation_attempts", "production_validation_bindings", "production_review_bindings", "release_proposals", "production_release_manifests", "production_release_before_pins", "production_release_binding_inputs",
+-		"production_validation_seals", "production_release_integrity", "production_generation_requests",
++		"production_validation_seals", "production_release_integrity", "production_generation_requests", "production_business_rule_events",
+ 	}
+ 	sort.Strings(wantTables)
+ 	if strings.Join(firstInventory, ",") != strings.Join(wantTables, ",") {
+ 		t.Fatalf("table inventory = %v, want %v", firstInventory, wantTables)
+ 	}
+-	t.Logf("%s migration version 27 inventory: %v", postgresImage, firstInventory)
++	t.Logf("%s migration version 28 inventory: %v", postgresImage, firstInventory)
+ 	assertTenantForeignKeys(t, pool)
+ 
+ 	if err := migrator.Down(); err != nil {
+@@ -330,7 +330,7 @@
+ 	if err := migrator.Up(); err != nil {
+ 		t.Fatalf("PostgreSQL 17 upgrade: %v", err)
+ 	}
+-	assertVersion(t, migrator, 27, true)
++	assertVersion(t, migrator, 28, true)
+ 	pool, err := pgstore.Open(ctx, url)
+ 	if err != nil {
+ 		t.Fatal(err)
+@@ -805,7 +805,7 @@
+ 	if err := migrator.Up(); err != nil {
+ 		t.Fatalf("re-upgrade populated M1: %v", err)
+ 	}
+-	assertVersion(t, migrator, 27, true)
++	assertVersion(t, migrator, 28, true)
+ 	store := pgstore.NewStore(pool)
+ 	detail, err := store.GetCatalogAsset(ctx, workspaceID, assetID)
+ 	if err != nil {
+--- a/tests/integration/db/semantic_production_migrations_test.go
++++ b/tests/integration/db/semantic_production_migrations_test.go
+@@ -83,6 +83,26 @@
+ 		t.Fatal(err)
+ 	}
+ 	assertVersion(t, migrator, 22, true)
++}
++
++func TestSemanticProductionMigrationBusinessRuleLifecycle(t *testing.T) {
++	pool, migrator := semanticProductionDatabase(t, "business_rule28_lifecycle", 27)
++	if err := migrator.Steps(1); err != nil {
++		t.Fatal(err)
++	}
++	assertVersion(t, migrator, 28, true)
++	var count int
++	if err := pool.QueryRow(context.Background(), `SELECT count(*) FROM production_business_rule_events`).Scan(&count); err != nil || count != 0 {
++		t.Fatalf("migration fabricated confirmations: %d %v", count, err)
++	}
++	if err := migrator.Steps(-1); err != nil {
++		t.Fatal(err)
++	}
++	assertVersion(t, migrator, 27, true)
++	if err := migrator.Steps(1); err != nil {
++		t.Fatal(err)
++	}
++	assertVersion(t, migrator, 28, true)
+ }
+ 
+ func TestSemanticProductionMigrationGenerationLifecycle(t *testing.T) {
+--- a/tests/integration/governance/production_authoring_fixture_test.go
++++ b/tests/integration/governance/production_authoring_fixture_test.go
+@@ -3,7 +3,9 @@
+ import (
+ 	"context"
+ 	"encoding/json"
++	"fmt"
+ 	"github.com/google/uuid"
++	"net/http"
+ 	"testing"
+ 	"time"
+ 
+@@ -17,7 +19,7 @@
+ 
+ // The source history is produced by the real discovery projection, not by
+ // inserting a fabricated source snapshot or bypassing its sealing triggers.
+-func productionFixtureInput(t *testing.T, f *fixture, workspace identity.WorkspaceID, candidate identity.SemanticCandidateID) map[string]any {
++func productionFixtureInput(t *testing.T, f *fixture, workspace identity.WorkspaceID, candidate identity.SemanticCandidateID, businessEvidence ...bool) map[string]any {
+ 	t.Helper()
+ 	ctx := context.Background()
+ 	source := mustID(t, identity.NewSourceConnectionID)
+@@ -61,6 +63,27 @@
+ 		t.Fatal(err)
+ 	}
+ 	input := map[string]any{"snapshots": []any{map[string]any{"sourceId": source.String(), "snapshotId": id.String(), "digest": digest, "coverageKeys": keys}}, "candidates": []any{}, "evidence": []any{}, "dependencies": []any{}}
++	if len(businessEvidence) > 0 && businessEvidence[0] {
++		// Synthetic business declaration, not an observation or a trusted confirmation.
++		metadata := json.RawMessage(`{"disclosure":"Synthetic test business rules; the human confirmation API is required."}`)
++		digest, err := governance.DigestJSON(metadata)
++		if err != nil {
++			t.Fatal(err)
++		}
++		revisionBytes, err := uuid.Parse(revisionUUID)
++		if err != nil {
++			t.Fatal(err)
++		}
++		revision, err := identity.SourceRevisionIDFromUUIDBytes(revisionBytes)
++		if err != nil {
++			t.Fatal(err)
++		}
++		evidence, err := f.store.CreateEvidence(ctx, semantic.EvidenceArtifact{ID: mustID(t, identity.NewEvidenceID), WorkspaceID: workspace, EvidenceType: "declared", SourceRevisionID: &revision, Locator: "fixture://business-rules/" + source.String(), ContentDigest: digest, Metadata: metadata})
++		if err != nil {
++			t.Fatal(err)
++		}
++		input["evidence"] = []any{map[string]any{"evidenceId": evidence.ID.String(), "snapshotId": id.String(), "digest": digest}}
++	}
+ 	if !candidate.IsZero() {
+ 		content := []byte(`{"schemaVersion":"semlia.proposal-input/v1","candidateKind":"entity","qualifiedName":"orders"}`)
+ 		candidateDigest, err := governance.DigestJSON(content)
+@@ -153,9 +176,36 @@
+ 		if _, exists := target["evidenceIds"]; !exists {
+ 			target["evidenceIds"] = []any{}
+ 		}
++		if target["kind"] == "semantic_asset" {
++			if input, ok := payload["input"].(map[string]any); ok {
++				if evidence, ok := input["evidence"].([]any); ok && len(evidence) > 0 {
++					target["evidenceIds"] = []any{evidence[0].(map[string]any)["evidenceId"]}
++				}
++			}
++		}
+ 	}
+ }
+ 
++// Positive release fixtures explicitly perform the same human HTTP confirmation
++// as a client. Negative validation fixtures never call this helper.
++func confirmProductionFixtureRules(t *testing.T, f *fixture, h http.Handler, w identity.WorkspaceID, p identity.PrincipalID, created map[string]any) {
++	t.Helper()
++	op := mustParseProductionOperationID(t, created["operationId"].(string))
++	_, ver, targets, _, _, err := f.store.GetProductionOperation(context.Background(), w, op)
++	if err != nil {
++		t.Fatal(err)
++	}
++	for _, target := range targets {
++		if !governance.RequiresProductionBusinessRule(target) {
++			continue
++		}
++		if target.Declaration == nil || len(target.Declaration.EvidenceIDs) == 0 {
++			t.Fatalf("positive fixture %s has no declared business evidence", target.LocalKey)
++		}
++		productionRequestResult(t, h, http.MethodPost, fmt.Sprintf("/api/v1/workspaces/%s/production-operations/%s/business-rule-confirmations", w, op), p, fmt.Sprintf("confirm-fixture-%s-%d-%s", op, ver.Version, target.LocalKey), map[string]any{"expectedVersion": ver.Version, "setDigest": ver.SetDigest, "targetKey": target.LocalKey, "action": "confirm", "evidenceId": target.Declaration.EvidenceIDs[0]}, http.StatusCreated)
++	}
++}
++
+ func completeProductionPayload(t *testing.T, body string, owner identity.PrincipalID) string {
+ 	t.Helper()
+ 	var payload map[string]any
+--- a/tests/integration/governance/production_authoring_regression_test.go
++++ b/tests/integration/governance/production_authoring_regression_test.go
+@@ -72,7 +72,7 @@
+ 	t.Helper()
+ 	path := fmt.Sprintf("/api/v1/workspaces/%s/production-operations", w)
+ 	body := authoringLifecycleBody(`{}`)
+-	body = productionPayloadInput(t, body, productionFixtureInput(t, f, w, identity.SemanticCandidateID{}), p)
++	body = productionPayloadInput(t, body, productionFixtureInput(t, f, w, identity.SemanticCandidateID{}, true), p)
+ 	r := sendProdRequest(h, http.MethodPost, path, p.String(), "acceptance-create", body)
+ 	if r.Code != http.StatusCreated {
+ 		t.Fatalf("setup create: %d %s", r.Code, r.Body.String())
+--- a/tests/integration/governance/production_business_rule_test.go
++++ b/tests/integration/governance/production_business_rule_test.go
+@@ -0,0 +1,386 @@
++package governance_test
++
++import (
++	"context"
++	"encoding/json"
++	"fmt"
++	"net/http"
++	"os"
++	"path/filepath"
++	"strings"
++	"sync"
++	"testing"
++	"time"
++
++	authapp "github.com/iiwish/semlia/internal/application/authorization"
++	app "github.com/iiwish/semlia/internal/application/governance"
++	"github.com/iiwish/semlia/internal/application/jobs"
++	authz "github.com/iiwish/semlia/internal/domain/authorization"
++	gov "github.com/iiwish/semlia/internal/domain/governance"
++	"github.com/iiwish/semlia/internal/domain/semantic"
++	"github.com/iiwish/semlia/pkg/identity"
++)
++
++func runBusinessRuleAttempt(t *testing.T, f *fixture, w identity.WorkspaceID, op identity.ProductionOperationID, version, attempt int) string {
++	t.Helper()
++	job := jobs.Job{WorkspaceID: w, Attempt: 1, MaxAttempts: 3}
++	if err := f.pool.QueryRow(context.Background(), `SELECT payload,trace_id FROM jobs WHERE workspace_id=$1 AND job_type='governance.proposal.validate' AND payload->>'operationId'=$2 AND payload->>'attempt'=$3`, w.UUID(), op.String(), fmt.Sprint(attempt)).Scan(&job.Payload, &job.TraceID); err != nil {
++		t.Fatal(err)
++	}
++	if err := runProductionValidationJob(t, f, job); err != nil {
++		t.Fatal(err)
++	}
++	var status string
++	if err := f.pool.QueryRow(context.Background(), `SELECT status FROM production_validation_attempts WHERE workspace_id=$1 AND operation_id=$2 AND production_version=$3 AND attempt_no=$4`, w.UUID(), op.UUID(), version, attempt).Scan(&status); err != nil {
++		t.Fatal(err)
++	}
++	return status
++}
++
++func ruleCommandFor(t *testing.T, f *fixture, w identity.WorkspaceID, created map[string]any) map[string]any {
++	t.Helper()
++	op := mustParseProductionOperationID(t, created["operationId"].(string))
++	_, ver, targets, _, _, err := f.store.GetProductionOperation(context.Background(), w, op)
++	if err != nil {
++		t.Fatal(err)
++	}
++	return map[string]any{"expectedVersion": ver.Version, "setDigest": ver.SetDigest, "targetKey": targets[0].LocalKey, "action": "confirm", "evidenceId": targets[0].Declaration.EvidenceIDs[0]}
++}
++
++func TestProductionBusinessRuleHumanDeclarationPublishesWithoutSeededEvidence(t *testing.T) {
++	f, h, w, author := authoringLifecycleSetup(t)
++	input := productionFixtureInput(t, f, w, identity.SemanticCandidateID{})
++	body := productionPayloadInput(t, authoringLifecycleBody(`{}`), input, author)
++	path := fmt.Sprintf("/api/v1/workspaces/%s/production-operations", w)
++	r := sendProdRequest(h, http.MethodPost, path, author.String(), "declare-draft", body)
++	if r.Code != http.StatusCreated {
++		t.Fatalf("draft: %d %s", r.Code, r.Body.String())
++	}
++	created := authoringLifecycleDecode(t, r.Body.Bytes())
++	op := mustParseProductionOperationID(t, created["operationId"].(string))
++	base := path + "/" + op.String()
++	_, ver, targets, _, _, err := f.store.GetProductionOperation(context.Background(), w, op)
++	if err != nil {
++		t.Fatal(err)
++	}
++	assertTableCount(t, f.pool, "evidence_artifacts", 0)
++	confirmed := productionRequestResult(t, h, http.MethodPost, base+"/business-rule-confirmations", author, "declare-rule", map[string]any{"expectedVersion": 1, "setDigest": ver.SetDigest, "targetKey": targets[0].LocalKey, "action": "confirm", "declaration": "As the authorized synthetic business owner, I declare Net revenue and the stated fixture scope to be the business rule for this test."}, http.StatusCreated)
++	if confirmed["evidenceOrigin"] != "human_declaration" || confirmed["principalId"] != author.String() {
++		t.Fatalf("declaration has no human provenance: %v", confirmed)
++	}
++	read := productionRequestResult(t, h, http.MethodGet, base+"/business-rule-confirmations?version=1", author, "", nil, http.StatusOK)
++	if declaration, ok := read["items"].([]any)[0].(map[string]any)["declaration"].(string); !ok || !strings.Contains(declaration, "synthetic business owner") {
++		t.Fatalf("declaration not reviewable: %v", read)
++	}
++	assertTableCount(t, f.pool, "evidence_artifacts", 1)
++	productionRequestResult(t, h, http.MethodPost, base+"/submit", author, "submit-declared-rule", map[string]any{"expectedVersion": 1, "setDigest": ver.SetDigest}, http.StatusAccepted)
++	if status := runBusinessRuleAttempt(t, f, w, op, 1, 1); status != "succeeded" {
++		t.Fatal(status)
++	}
++	attempt, err := f.store.GetValidationAttempt(context.Background(), w, op, 1, 1)
++	if err != nil {
++		t.Fatal(err)
++	}
++	reviewer := authoringLifecyclePrincipal(t, f, w, "Declaration reviewer")
++	publisher := authoringLifecyclePrincipal(t, f, w, "Declaration publisher")
++	validation := map[string]any{"attemptNo": 1, "validationDigest": *attempt.ValidationDigest}
++	productionRequestResult(t, h, http.MethodPost, base+"/reviews", reviewer, "review-declaration", map[string]any{"expectedVersion": 1, "setDigest": ver.SetDigest, "validation": validation, "proposalIds": created["proposalIds"], "decision": "approve", "note": "reviewed the synthetic human business declaration"}, http.StatusCreated)
++	productionRequestResult(t, h, http.MethodPost, base+"/publish", publisher, "publish-declaration", map[string]any{"expectedVersion": 1, "setDigest": ver.SetDigest, "validation": validation, "expectedHead": map[string]any{"presence": "absent"}}, http.StatusCreated)
++}
++
++func TestProductionBusinessRuleEvidenceIsNotConfirmation(t *testing.T) {
++	for _, kind := range []string{"declared", "observed", "inferred"} {
++		t.Run(kind, func(t *testing.T) {
++			f, h, w, p := authoringLifecycleSetup(t)
++			input := productionFixtureInput(t, f, w, identity.SemanticCandidateID{})
++			// Deliberately forged metadata must not become a server confirmation.
++			metadata := json.RawMessage(`{"businessRule":"Revenue excludes refunds","attestation":{"confirmed":true,"actor":"human"}}`)
++			digest, _ := gov.DigestJSON(metadata)
++			evidence, err := f.store.CreateEvidence(context.Background(), semantic.EvidenceArtifact{ID: mustID(t, identity.NewEvidenceID), WorkspaceID: w, EvidenceType: kind, Locator: "fixture://forged-rule", ContentDigest: digest, Metadata: metadata})
++			if err != nil {
++				t.Fatal(err)
++			}
++			input["evidence"] = []any{map[string]any{"evidenceId": evidence.ID.String(), "digest": digest}}
++			body := productionPayloadInput(t, authoringLifecycleBody(`{}`), input, p)
++			path := fmt.Sprintf("/api/v1/workspaces/%s/production-operations", w)
++			created := authoringLifecycleDecode(t, sendProdRequest(h, http.MethodPost, path, p.String(), "rule-draft", body).Body.Bytes())
++			op := mustParseProductionOperationID(t, created["operationId"].(string))
++			base := path + "/" + op.String()
++			if kind != "declared" {
++				productionRequestResult(t, h, http.MethodPost, base+"/business-rule-confirmations", p, "cannot-confirm-observation", ruleCommandFor(t, f, w, created), http.StatusUnprocessableEntity)
++			}
++			productionRequestResult(t, h, http.MethodPost, base+"/submit", p, "rule-submit", map[string]any{"expectedVersion": 1, "setDigest": created["setDigest"]}, http.StatusAccepted)
++			if status := runBusinessRuleAttempt(t, f, w, op, 1, 1); status != "failed" {
++				t.Fatalf("%s metadata passed as human rule: %s", kind, status)
++			}
++			var raw []byte
++			if err := f.pool.QueryRow(context.Background(), `SELECT results_json FROM production_validation_seals WHERE operation_id=$1`, op.UUID()).Scan(&raw); err != nil {
++				t.Fatal(err)
++			}
++			if !strings.Contains(string(raw), "PRODUCTION_BUSINESS_RULE_UNCONFIRMED") {
++				t.Fatalf("missing rule blocker: %s", raw)
++			}
++			assertTableCount(t, f.pool, "production_business_rule_events", 0)
++		})
++	}
++}
++
++func TestProductionBusinessRuleConfirmationAuthorizationAndReplay(t *testing.T) {
++	f, h, w, p := authoringLifecycleSetup(t)
++	path, _, created := authoringLifecycleCreate(t, f, h, w, p)
++	base := path + "/" + created["operationId"].(string)
++	endpoint := base + "/business-rule-confirmations"
++	body := ruleCommandFor(t, f, w, created)
++	observer := createPrincipalWithRoles(t, f, w, "Rule observer", []string{"consumer_developer"})
++	productionRequestResult(t, h, http.MethodPost, endpoint, observer, "observer-confirm", body, http.StatusForbidden)
++	agent, err := f.store.WorkspaceAgentPrincipal(context.Background(), w)
++	if err != nil {
++		t.Fatal(err)
++	}
++	for _, role := range []string{"semantic_steward", "source_operator"} {
++		if _, err := f.store.CreateRoleBinding(context.Background(), authz.RoleBinding{ID: mustID(t, identity.NewBindingID), PrincipalID: agent.ID, RoleID: role, ScopeType: authz.ScopeWorkspace, ScopeID: w.UUID()}); err != nil {
++			t.Fatal(err)
++		}
++	}
++	productionRequestResult(t, h, http.MethodPost, endpoint, agent.ID, "agent-confirm", body, http.StatusForbidden)
++	forged := map[string]any{}
++	for k, v := range body {
++		forged[k] = v
++	}
++	forged["principalId"] = p.String()
++	productionRequestResult(t, h, http.MethodPost, endpoint, p, "forged-confirm", forged, http.StatusBadRequest)
++	confirmed := productionRequestResult(t, h, http.MethodPost, endpoint, p, "human-confirm", body, http.StatusCreated)
++	replay := productionRequestResult(t, h, http.MethodPost, endpoint, p, "human-confirm", body, http.StatusOK)
++	if replay["sequence"] != confirmed["sequence"] || replay["replayed"] != true || confirmed["principalId"] != p.String() {
++		t.Fatalf("unstable actor-bound receipt: %v %v", confirmed, replay)
++	}
++	changed := map[string]any{}
++	for k, v := range body {
++		changed[k] = v
++	}
++	changed["action"] = "revoke"
++	delete(changed, "evidenceId")
++	productionRequestResult(t, h, http.MethodPost, endpoint, p, "human-confirm", changed, http.StatusConflict)
++	productionRequestResult(t, h, http.MethodGet, endpoint+"?version=1", p, "", nil, http.StatusOK)
++	if _, err := f.pool.Exec(context.Background(), `UPDATE principals SET status='suspended' WHERE id=$1`, p.UUID()); err != nil {
++		t.Fatal(err)
++	}
++	productionRequestResult(t, h, http.MethodPost, endpoint, p, "human-confirm", body, http.StatusForbidden)
++	assertTableCount(t, f.pool, "production_business_rule_events", 1)
++	down, err := os.ReadFile(filepath.Join("..", "..", "..", "migrations", "000028_production_business_rules.down.sql"))
++	if err != nil {
++		t.Fatal(err)
++	}
++	if _, err := f.pool.Exec(context.Background(), string(down)); err == nil || !strings.Contains(err.Error(), "DOWN_MIGRATION_UNSAFE") {
++		t.Fatalf("unsafe business rule downgrade: %v", err)
++	}
++	assertTableCount(t, f.pool, "production_business_rule_events", 1)
++	for _, sql := range []string{`UPDATE production_business_rule_events SET content_digest=request_digest`, `DELETE FROM production_business_rule_events`} {
++		if _, err := f.pool.Exec(context.Background(), sql); err == nil {
++			t.Fatalf("mutable confirmation: %s", sql)
++		}
++	}
++}
++
++func TestProductionBusinessRuleRevokedGrantCannotReplayOrPublish(t *testing.T) {
++	f, h, w, author := authoringLifecycleSetup(t)
++	path, _, created := authoringLifecycleCreate(t, f, h, w, author)
++	confirmer := mustID(t, identity.NewPrincipalID)
++	if _, err := f.store.CreatePrincipal(context.Background(), authz.Principal{ID: confirmer, WorkspaceID: w, Kind: authz.PrincipalHuman, DisplayName: "Scoped business confirmer", Status: authz.PrincipalActive}); err != nil {
++		t.Fatal(err)
++	}
++	if _, err := f.store.CreateRoleBinding(context.Background(), authz.RoleBinding{ID: mustID(t, identity.NewBindingID), PrincipalID: confirmer, RoleID: "auditor", ScopeType: authz.ScopeWorkspace, ScopeID: w.UUID()}); err != nil {
++		t.Fatal(err)
++	}
++	binding, err := f.store.CreateRoleBinding(context.Background(), authz.RoleBinding{ID: mustID(t, identity.NewBindingID), PrincipalID: confirmer, RoleID: "asset_owner", ScopeType: authz.ScopeDomain, ScopeID: "finance"})
++	if err != nil {
++		t.Fatal(err)
++	}
++	op := mustParseProductionOperationID(t, created["operationId"].(string))
++	base := path + "/" + op.String()
++	endpoint := base + "/business-rule-confirmations"
++	body := ruleCommandFor(t, f, w, created)
++	productionRequestResult(t, h, http.MethodPost, endpoint, confirmer, "scoped-confirm", body, http.StatusCreated)
++	productionRequestResult(t, h, http.MethodPost, base+"/submit", author, "submit-scoped-rule", map[string]any{"expectedVersion": 1, "setDigest": created["setDigest"]}, http.StatusAccepted)
++	if status := runBusinessRuleAttempt(t, f, w, op, 1, 1); status != "succeeded" {
++		t.Fatal(status)
++	}
++	attempt, err := f.store.GetValidationAttempt(context.Background(), w, op, 1, 1)
++	if err != nil {
++		t.Fatal(err)
++	}
++	reviewer := authoringLifecyclePrincipal(t, f, w, "Grant reviewer")
++	publisher := authoringLifecyclePrincipal(t, f, w, "Grant publisher")
++	validation := map[string]any{"attemptNo": 1, "validationDigest": *attempt.ValidationDigest}
++	productionRequestResult(t, h, http.MethodPost, base+"/reviews", reviewer, "review-scoped", map[string]any{"expectedVersion": 1, "setDigest": created["setDigest"], "validation": validation, "proposalIds": created["proposalIds"], "decision": "approve", "note": "independent rule review"}, http.StatusCreated)
++	service := authapp.NewService(f.store, authapp.ClockFunc(time.Now))
++	if _, _, err := service.RevokeBinding(context.Background(), authapp.RevokeRoleBindingRequest{AccessRequest: authapp.AccessRequest{WorkspaceID: w, PrincipalRef: author.String(), TraceID: traceID}, BindingID: binding.ID, ExpectedVersion: binding.Version, Reason: "withdraw business rule authority"}); err != nil {
++		t.Fatal(err)
++	}
++	productionRequestResult(t, h, http.MethodPost, endpoint, confirmer, "scoped-confirm", body, http.StatusForbidden)
++	productionRequestResult(t, h, http.MethodPost, base+"/publish", publisher, "publish-revoked-rule-grant", map[string]any{"expectedVersion": 1, "setDigest": created["setDigest"], "validation": validation, "expectedHead": map[string]any{"presence": "absent"}}, http.StatusUnprocessableEntity)
++	assertTableCount(t, f.pool, "releases", 0)
++}
++
++func TestProductionBusinessRuleVersionDoesNotInheritConfirmation(t *testing.T) {
++	for _, change := range []bool{false, true} {
++		t.Run(fmt.Sprint(change), func(t *testing.T) {
++			f, h, w, p := authoringLifecycleSetup(t)
++			path, raw, created := authoringLifecycleCreate(t, f, h, w, p)
++			confirmProductionFixtureRules(t, f, h, w, p, created)
++			base := path + "/" + created["operationId"].(string)
++			old := ruleCommandFor(t, f, w, created)
++			var body map[string]any
++			if err := json.Unmarshal([]byte(raw), &body); err != nil {
++				t.Fatal(err)
++			}
++			body["expectedVersion"] = 1
++			if change {
++				body["targets"].([]any)[0].(map[string]any)["content"].(map[string]any)["definition"] = "A different synthetic rule"
++			}
++			updated := productionRequestResult(t, h, http.MethodPut, base, p, "rule-edit", body, http.StatusOK)
++			productionRequestResult(t, h, http.MethodPost, base+"/business-rule-confirmations", p, "stale-rule", old, http.StatusConflict)
++			productionRequestResult(t, h, http.MethodPost, base+"/submit", p, "rule-submit-v2", map[string]any{"expectedVersion": 2, "setDigest": updated["setDigest"]}, http.StatusAccepted)
++			if status := runBusinessRuleAttempt(t, f, w, mustParseProductionOperationID(t, created["operationId"].(string)), 2, 1); status != "failed" {
++				t.Fatalf("version inherited rule: %s", status)
++			}
++		})
++	}
++}
++
++func TestProductionBusinessRuleConcurrentReplayAndAtomicFailure(t *testing.T) {
++	f, h, w, p := authoringLifecycleSetup(t)
++	path, _, created := authoringLifecycleCreate(t, f, h, w, p)
++	endpoint := path + "/" + created["operationId"].(string) + "/business-rule-confirmations"
++	actor := authoringLifecyclePrincipal(t, f, w, "Atomic business confirmer")
++	body := ruleCommandFor(t, f, w, created)
++	delete(body, "evidenceId")
++	body["declaration"] = "I explicitly declare this synthetic definition and scope."
++	if _, err := f.pool.Exec(context.Background(), `CREATE FUNCTION fail_business_rule_test() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected rule commit failure'; END $$`); err != nil {
++		t.Fatal(err)
++	}
++	t.Cleanup(func() {
++		_, _ = f.pool.Exec(context.Background(), `DROP FUNCTION IF EXISTS fail_business_rule_test() CASCADE`)
++	})
++	if _, err := f.pool.Exec(context.Background(), `CREATE CONSTRAINT TRIGGER fail_business_rule_test AFTER INSERT ON production_business_rule_events DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION fail_business_rule_test()`); err != nil {
++		t.Fatal(err)
++	}
++	var beforeAudit, beforeOutbox int
++	if err := f.pool.QueryRow(context.Background(), `SELECT (SELECT count(*) FROM audit_events),(SELECT count(*) FROM outbox_events)`).Scan(&beforeAudit, &beforeOutbox); err != nil {
++		t.Fatal(err)
++	}
++	raw, _ := json.Marshal(body)
++	r := sendProdRequest(h, http.MethodPost, endpoint, actor.String(), "atomic-rule", string(raw))
++	if r.Code < 500 {
++		t.Fatalf("commit fault swallowed: %d %s", r.Code, r.Body.String())
++	}
++	assertTableCount(t, f.pool, "production_business_rule_events", 0)
++	assertTableCount(t, f.pool, "evidence_artifacts", 1)
++	assertTableCount(t, f.pool, "audit_events", beforeAudit)
++	assertTableCount(t, f.pool, "outbox_events", beforeOutbox)
++	var contributor bool
++	if err := f.pool.QueryRow(context.Background(), `SELECT EXISTS(SELECT 1 FROM production_contributors WHERE principal_id=$1)`, actor.UUID()).Scan(&contributor); err != nil || contributor {
++		t.Fatalf("failed transaction left contributor: %v %v", contributor, err)
++	}
++	if _, err := f.pool.Exec(context.Background(), `DROP FUNCTION fail_business_rule_test() CASCADE`); err != nil {
++		t.Fatal(err)
++	}
++	var wg sync.WaitGroup
++	statuses := make(chan int, 2)
++	for i := 0; i < 2; i++ {
++		wg.Add(1)
++		go func() {
++			defer wg.Done()
++			r := sendProdRequest(h, http.MethodPost, endpoint, actor.String(), "atomic-rule", string(raw))
++			statuses <- r.Code
++		}()
++	}
++	wg.Wait()
++	close(statuses)
++	counts := map[int]int{}
++	for status := range statuses {
++		counts[status]++
++	}
++	if counts[http.StatusCreated] != 1 || counts[http.StatusOK] != 1 {
++		t.Fatalf("concurrent confirmation results: %v", counts)
++	}
++	assertTableCount(t, f.pool, "production_business_rule_events", 1)
++	assertTableCount(t, f.pool, "evidence_artifacts", 2)
++	assertTableCount(t, f.pool, "audit_events", beforeAudit+1)
++	assertTableCount(t, f.pool, "outbox_events", beforeOutbox+1)
++}
++
++func TestProductionBusinessRuleRevocationFencesWorkerCompletion(t *testing.T) {
++	f, h, w, p := authoringLifecycleSetup(t)
++	path, _, created := authoringLifecycleCreate(t, f, h, w, p)
++	confirmProductionFixtureRules(t, f, h, w, p, created)
++	op := mustParseProductionOperationID(t, created["operationId"].(string))
++	base := path + "/" + op.String()
++	productionRequestResult(t, h, http.MethodPost, base+"/submit", p, "rule-submit", map[string]any{"expectedVersion": 1, "setDigest": created["setDigest"]}, http.StatusAccepted)
++	work, err := f.store.LoadProductionValidationWork(context.Background(), w, op, 1, 1)
++	if err != nil {
++		t.Fatal(err)
++	}
++	completion, err := app.EvaluateProductionValidation(work, time.Now().UTC())
++	if err != nil {
++		t.Fatal(err)
++	}
++	if completion.Attempt.Status != "succeeded" {
++		t.Fatalf("positive work: %+v", completion.Checks)
++	}
++	body := ruleCommandFor(t, f, w, created)
++	body["action"] = "revoke"
++	delete(body, "evidenceId")
++	productionRequestResult(t, h, http.MethodPost, base+"/business-rule-confirmations", p, "revoke-in-flight", body, http.StatusCreated)
++	if err := f.store.CompleteProductionValidation(context.Background(), completion); err != nil {
++		t.Fatal(err)
++	}
++	attempt, err := f.store.GetValidationAttempt(context.Background(), w, op, 1, 1)
++	if err != nil || attempt.Status != "failed" {
++		t.Fatalf("stale worker completion: %+v %v", attempt, err)
++	}
++	body["action"] = "confirm"
++	body["evidenceId"] = ruleCommandFor(t, f, w, created)["evidenceId"]
++	productionRequestResult(t, h, http.MethodPost, base+"/business-rule-confirmations", p, "reconfirm", body, http.StatusCreated)
++	productionRequestResult(t, h, http.MethodPost, base+"/validations", p, "rerun-rule", map[string]any{"expectedVersion": 1, "setDigest": created["setDigest"], "previousAttemptNo": 1, "reason": "human reconfirmed rule"}, http.StatusAccepted)
++	if status := runBusinessRuleAttempt(t, f, w, op, 1, 2); status != "succeeded" {
++		t.Fatalf("reconfirmed rule failed: %s", status)
++	}
++}
++
++func TestProductionBusinessRuleConfirmerCannotReviewOrPublish(t *testing.T) {
++	f, h, w, author := authoringLifecycleSetup(t)
++	path, _, created := authoringLifecycleCreate(t, f, h, w, author)
++	confirmer := authoringLifecyclePrincipal(t, f, w, "Business confirmer")
++	reviewer := authoringLifecyclePrincipal(t, f, w, "Rule reviewer")
++	publisher := authoringLifecyclePrincipal(t, f, w, "Rule publisher")
++	op := mustParseProductionOperationID(t, created["operationId"].(string))
++	base := path + "/" + op.String()
++	confirmProductionFixtureRules(t, f, h, w, confirmer, created)
++	productionRequestResult(t, h, http.MethodPost, base+"/submit", author, "rule-submit", map[string]any{"expectedVersion": 1, "setDigest": created["setDigest"]}, http.StatusAccepted)
++	if status := runBusinessRuleAttempt(t, f, w, op, 1, 1); status != "succeeded" {
++		t.Fatal(status)
++	}
++	attempt, err := f.store.GetValidationAttempt(context.Background(), w, op, 1, 1)
++	if err != nil {
++		t.Fatal(err)
++	}
++	review := map[string]any{"expectedVersion": 1, "setDigest": created["setDigest"], "validation": map[string]any{"attemptNo": 1, "validationDigest": *attempt.ValidationDigest}, "proposalIds": created["proposalIds"], "decision": "approve", "note": "business rule reviewed"}
++	productionRequestResult(t, h, http.MethodPost, base+"/reviews", confirmer, "self-review", review, http.StatusForbidden)
++	productionRequestResult(t, h, http.MethodPost, base+"/reviews", reviewer, "independent-review", review, http.StatusCreated)
++	publish := map[string]any{"expectedVersion": 1, "setDigest": created["setDigest"], "validation": review["validation"], "expectedHead": map[string]any{"presence": "absent"}}
++	productionRequestResult(t, h, http.MethodPost, base+"/publish", confirmer, "self-publish", publish, http.StatusForbidden)
++	if _, err := f.pool.Exec(context.Background(), `UPDATE principals SET status='suspended' WHERE id=$1`, confirmer.UUID()); err != nil {
++		t.Fatal(err)
++	}
++	productionRequestResult(t, h, http.MethodPost, base+"/publish", publisher, "inactive-confirmer", publish, http.StatusUnprocessableEntity)
++	if _, err := f.pool.Exec(context.Background(), `UPDATE principals SET status='active' WHERE id=$1`, confirmer.UUID()); err != nil {
++		t.Fatal(err)
++	}
++	revoke := ruleCommandFor(t, f, w, created)
++	revoke["action"] = "revoke"
++	delete(revoke, "evidenceId")
++	productionRequestResult(t, h, http.MethodPost, base+"/business-rule-confirmations", confirmer, "revoke-reviewed", revoke, http.StatusCreated)
++	productionRequestResult(t, h, http.MethodPost, base+"/publish", publisher, "revoked-confirmation", publish, http.StatusUnprocessableEntity)
++	assertTableCount(t, f.pool, "releases", 0)
++}
+--- a/tests/integration/governance/production_composite_release_test.go
++++ b/tests/integration/governance/production_composite_release_test.go
+@@ -16,7 +16,7 @@
+ 
+ func productionFiveCreatePayload(t *testing.T, f *fixture, w identity.WorkspaceID, p identity.PrincipalID) map[string]any {
+ 	t.Helper()
+-	input := productionFixtureInput(t, f, w, identity.SemanticCandidateID{})
++	input := productionFixtureInput(t, f, w, identity.SemanticCandidateID{}, true)
+ 	dataset, field := productionPhysicalFixture(t, f, w, input)
+ 	inputJSON, _ := json.Marshal(input)
+ 	var payload map[string]any
+@@ -57,6 +57,7 @@
+ 	op := created["operationId"].(string)
+ 	version := int(created["version"].(float64))
+ 	path := fmt.Sprintf("/api/v1/workspaces/%s/production-operations/%s", w, op)
++	confirmProductionFixtureRules(t, f, h, w, author, created)
+ 	productionRequestResult(t, h, http.MethodPost, path+"/submit", author, "submit-"+op, map[string]any{"expectedVersion": version, "setDigest": created["setDigest"]}, http.StatusAccepted)
+ 	job := jobs.Job{WorkspaceID: w, Attempt: 1, MaxAttempts: 3}
+ 	if err := f.pool.QueryRow(context.Background(), `SELECT payload,trace_id FROM jobs WHERE workspace_id=$1 AND job_type='governance.proposal.validate' AND payload->>'operationId'=$2`, w.UUID(), op).Scan(&job.Payload, &job.TraceID); err != nil {
+@@ -238,6 +239,7 @@
+ 	}
+ 	extraContent["address"] = "finance.extra_revenue"
+ 	payload["targets"] = []any{map[string]any{"localKey": "extra", "kind": "semantic_asset", "intent": "create", "identityKey": "finance.extra_revenue", "title": "Extra revenue", "content": extraContent, "changes": []any{}, "evidenceIds": []any{}}}
++	payload["targets"].([]any)[0].(map[string]any)["evidenceIds"] = []any{payload["input"].(map[string]any)["evidence"].([]any)[0].(map[string]any)["evidenceId"]}
+ 	extra := productionRequestResult(t, h, http.MethodPost, path, p, "extra-create", payload, http.StatusCreated)
+ 	extraDigest := productionValidateAndApprove(t, f, h, w, p, reviewer, extra)
+ 	extraRelease := productionRequestResult(t, h, http.MethodPost, path+"/"+extra["operationId"].(string)+"/publish", publisher, "extra-publish", map[string]any{"expectedVersion": 1, "setDigest": extra["setDigest"], "validation": map[string]any{"attemptNo": 1, "validationDigest": extraDigest}, "expectedHead": map[string]any{"presence": "present", "releaseId": restored["releaseId"], "manifestDigest": restored["manifestDigest"]}}, http.StatusCreated)
+@@ -262,7 +264,7 @@
+ 	if err != nil {
+ 		t.Fatal(err)
+ 	}
+-	for _, grant := range []authz.RoleBinding{{ID: mustID(t, identity.NewBindingID), PrincipalID: scoped, RoleID: "asset_owner", ScopeType: authz.ScopeAsset, ScopeID: extraAssetID.UUID()}, {ID: mustID(t, identity.NewBindingID), PrincipalID: scoped, RoleID: "source_operator", ScopeType: authz.ScopeSource, ScopeID: source.UUID()}} {
++	for _, grant := range []authz.RoleBinding{{ID: mustID(t, identity.NewBindingID), PrincipalID: scoped, RoleID: "asset_owner", ScopeType: authz.ScopeAsset, ScopeID: extraAssetID.UUID()}, {ID: mustID(t, identity.NewBindingID), PrincipalID: scoped, RoleID: "source_operator", ScopeType: authz.ScopeSource, ScopeID: source.UUID()}, {ID: mustID(t, identity.NewBindingID), PrincipalID: scoped, RoleID: "auditor", ScopeType: authz.ScopeSource, ScopeID: source.UUID()}} {
+ 		if _, err := f.store.CreateRoleBinding(context.Background(), grant); err != nil {
+ 			t.Fatal(err)
+ 		}
+--- a/tests/integration/governance/production_generation_validation_test.go
++++ b/tests/integration/governance/production_generation_validation_test.go
+@@ -11,6 +11,40 @@
+ 	gov "github.com/iiwish/semlia/internal/domain/governance"
+ )
+ 
++func TestProductionGenerationReviewMissingBusinessRule(t *testing.T) {
++	g := newProductionGenerationFixture(t)
++	targets := append([]any{}, g.payload["targets"].([]any)...)
++	targets = append(targets, map[string]any{
++		"localKey": "revenue", "title": "Revenue", "kind": "semantic_asset", "intent": "create", "identityKey": "sales.revenue",
++		"changes": []any{}, "evidenceIds": []any{},
++		"content": map[string]any{"address": "sales.revenue", "assetType": "metric", "displayName": "Revenue", "definition": "Revenue excludes refunds and taxes", "scope": "All completed orders", "ownerPrincipalId": g.actor.String()},
++	})
++	raw, _ := json.Marshal(map[string]any{"schemaVersion": gov.ProductionSuggestionsSchema, "targets": targets})
++	g.output = string(raw)
++	queued := g.queue(t)
++	g.run(t)
++	if result := g.get(t, queued.RunID); result.Status != "succeeded" {
++		t.Fatalf("suggestion should remain an unconfirmed draft: %+v", result)
++	}
++	g.payload["targets"], g.payload["expectedVersion"], g.payload["suggestionRunId"] = targets, 1, queued.RunID.String()
++	applied := productionRequestResult(t, g.h, http.MethodPut, g.path(), g.actor, "apply-no-rule", g.payload, http.StatusOK)
++	productionRequestResult(t, g.h, http.MethodPost, g.path()+"/submit", g.actor, "submit-no-rule", map[string]any{"expectedVersion": 2, "setDigest": applied["setDigest"]}, http.StatusAccepted)
++	job := jobs.Job{WorkspaceID: g.w, Attempt: 1, MaxAttempts: 3}
++	if err := g.f.pool.QueryRow(context.Background(), `SELECT payload,trace_id FROM jobs WHERE workspace_id=$1 AND job_type='governance.proposal.validate' AND payload->>'operationId'=$2`, g.w.UUID(), g.op.String()).Scan(&job.Payload, &job.TraceID); err != nil {
++		t.Fatal(err)
++	}
++	if err := runProductionValidationJob(t, g.f, job); err != nil {
++		t.Fatal(err)
++	}
++	var status string
++	if err := g.f.pool.QueryRow(context.Background(), `SELECT status FROM production_validation_attempts WHERE operation_id=$1 AND production_version=2 AND attempt_no=1`, g.op.UUID()).Scan(&status); err != nil {
++		t.Fatal(err)
++	}
++	if status != "failed" {
++		t.Fatalf("metric with no business-rule evidence passed deterministic validation: %s", status)
++	}
++}
++
+ func TestProductionGenerationUnresolvedApplicationCannotPassValidation(t *testing.T) {
+ 	g := newProductionGenerationFixture(t)
+ 	content := g.payload["targets"].([]any)[0].(map[string]any)["content"].(map[string]any)
+--- a/tests/integration/governance/production_publish_integrity_test.go
++++ b/tests/integration/governance/production_publish_integrity_test.go
+@@ -16,6 +16,7 @@
+ 	f, h, w, p := authoringLifecycleSetup(t)
+ 	path, _, created := authoringLifecycleCreate(t, f, h, w, p)
+ 	op := created["operationId"].(string)
++	confirmProductionFixtureRules(t, f, h, w, p, created)
+ 	r := sendProdRequest(h, http.MethodPost, path+"/"+op+"/submit", p.String(), "publish-submit", fmt.Sprintf(`{"expectedVersion":1,"setDigest":%q}`, created["setDigest"]))
+ 	if r.Code != http.StatusAccepted {
+ 		t.Fatalf("submit %d %s", r.Code, r.Body.String())
+--- a/tests/integration/governance/production_release_test.go
++++ b/tests/integration/governance/production_release_test.go
+@@ -173,7 +173,7 @@
+ 		]
+ 	}`, candID.String())
+ 
+-	createPayload = productionPayloadInput(t, createPayload, productionFixtureInput(t, fixture, workspace, candID), authorID)
++	createPayload = productionPayloadInput(t, createPayload, productionFixtureInput(t, fixture, workspace, candID, true), authorID)
+ 	createRec := sendProdRequest(handler, http.MethodPost, collectionPath, authorID.String(), "key-rel-create-001", createPayload)
+ 	if createRec.Code != http.StatusCreated {
+ 		t.Fatalf("expected 201 Created on operation creation, got %d: %s", createRec.Code, createRec.Body.String())
+@@ -218,6 +218,7 @@
+ 	}
+ 
+ 	// Step 4: Successful production submit
++	confirmProductionFixtureRules(t, fixture, handler, workspace, authorID, createResult)
+ 	submitPayload := fmt.Sprintf(`{"expectedVersion": 1, "setDigest": %q}`, setDigest)
+ 	submitRec := sendProdRequest(handler, http.MethodPost, submitPath, authorID.String(), "key-rel-sub-001", submitPayload)
+ 	if submitRec.Code != http.StatusAccepted {
+--- a/tests/integration/governance/production_validation_integrity_test.go
++++ b/tests/integration/governance/production_validation_integrity_test.go
+@@ -102,6 +102,7 @@
+ 	f, h, w, p := authoringLifecycleSetup(t)
+ 	path, _, created := authoringLifecycleCreate(t, f, h, w, p)
+ 	op := created["operationId"].(string)
++	confirmProductionFixtureRules(t, f, h, w, p, created)
+ 	r := sendProdRequest(h, http.MethodPost, path+"/"+op+"/submit", p.String(), "worker-submit", fmt.Sprintf(`{"expectedVersion":1,"setDigest":%q}`, created["setDigest"]))
+ 	if r.Code != http.StatusAccepted {
+ 		t.Fatalf("submit %d %s", r.Code, r.Body.String())

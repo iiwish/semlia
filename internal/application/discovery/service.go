@@ -12,6 +12,7 @@ import (
 var ErrAdapterNotFound = errors.New("discovery adapter not found")
 
 type PersistResult struct {
+	SnapshotID       string
 	SourceRevisionID identity.SourceRevisionID
 	RunID            identity.RunID
 	Status           string

@@ -22,22 +22,40 @@ var (
 	schemaCompileErr error
 )
 
-func validatePublishedSchemas(manifestJSON, catalogJSON []byte) error {
+func validatePublishedSchemas(manifestJSON, catalogJSON []byte, hasCatalog bool) error {
 	schemasOnce.Do(compileSchemas)
 	if schemaCompileErr != nil {
 		return fmt.Errorf("compile embedded dbt schemas: %w", schemaCompileErr)
 	}
-	for name, validation := range map[string]struct {
+	validations := map[string]struct {
 		content []byte
 		schema  *jsonschema.Schema
 	}{
 		"manifest.json": {manifestJSON, manifestSchema},
-		"catalog.json":  {catalogJSON, catalogSchema},
-	} {
+	}
+	if hasCatalog {
+		validations["catalog.json"] = struct {
+			content []byte
+			schema  *jsonschema.Schema
+		}{catalogJSON, catalogSchema}
+	}
+	for name, validation := range validations {
 		document, err := jsonschema.UnmarshalJSON(bytes.NewReader(validation.content))
 		if err != nil || validation.schema.Validate(document) != nil {
 			return fmt.Errorf("%w: %s does not match its published dbt schema", discovery.ErrInvalidInput, name)
 		}
+	}
+	return nil
+}
+
+func validateCatalogSchema(catalogJSON []byte) error {
+	schemasOnce.Do(compileSchemas)
+	if schemaCompileErr != nil {
+		return fmt.Errorf("compile embedded dbt schemas: %w", schemaCompileErr)
+	}
+	document, err := jsonschema.UnmarshalJSON(bytes.NewReader(catalogJSON))
+	if err != nil || catalogSchema.Validate(document) != nil {
+		return fmt.Errorf("%w: catalog.json does not match its published dbt schema", discovery.ErrInvalidInput)
 	}
 	return nil
 }

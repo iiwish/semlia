@@ -1,0 +1,26 @@
+{
+  "owner": "PM",
+  "command": [
+    "go",
+    "test",
+    "-p=1",
+    "-count=1",
+    "-v",
+    "-overlay=docs/evidence/SP-T002/pm/long-path/current.json",
+    "./internal/adapters/discovery/postgresql",
+    "-run",
+    "^TestReviewLongSQLPath$"
+  ],
+  "clearedEnvironment": [
+    "SEMLIA_INGESTION_TEST_DATABASE_URL",
+    "SEMLIA_EXECUTION_CRASH_HELPER",
+    "SEMLIA_EXECUTION_TEST_DB",
+    "SEMLIA_DATABASE_URL"
+  ],
+  "start": "2026-09-09T07:28:21.881Z",
+  "end": "2026-09-09T07:28:25.899Z",
+  "exitStatus": 1,
+  "signal": null,
+  "stdout": "=== RUN   TestReviewLongSQLPath\n    adapter_test.go:20: pathBytes=261 datasets=0 err=invalid discovery snapshot\n    adapter_test.go:22: valid existing SQL path must remain accepted: invalid discovery snapshot\n--- FAIL: TestReviewLongSQLPath (0.44s)\nFAIL\nFAIL\tgithub.com/iiwish/semlia/internal/adapters/discovery/postgresql\t0.936s\nFAIL\n",
+  "stderr": ""
+}

@@ -89,6 +89,11 @@ WHERE workspace_id = sqlc.arg(workspace_id) AND proposal_id = sqlc.arg(proposal_
   AND reviewer_principal_id = sqlc.arg(reviewer_principal_id)
   AND channel = sqlc.arg(channel);
 
+-- name: ListProposalReviews :many
+SELECT * FROM reviews
+WHERE workspace_id = sqlc.arg(workspace_id) AND proposal_id = sqlc.arg(proposal_id)
+ORDER BY created_at DESC, id DESC;
+
 -- ---------- review batches (SSOT §8.4 batch confirmation channel) ----------
 
 -- name: CreateReviewBatch :one
@@ -364,7 +369,8 @@ INSERT INTO release_objects (
 -- name: ListReleaseObjects :many
 SELECT * FROM release_objects
 WHERE workspace_id = sqlc.arg(workspace_id) AND release_id = sqlc.arg(release_id)
-ORDER BY position;
+ORDER BY position
+LIMIT 1001;
 
 -- name: ListApprovingReviews :many
 SELECT * FROM reviews
@@ -382,6 +388,11 @@ WHERE workspace_id = sqlc.arg(workspace_id)
   )
 ORDER BY published_at DESC, id DESC
 LIMIT sqlc.arg(page_limit);
+
+-- name: CountReleases :one
+SELECT count(*)::bigint
+FROM releases
+WHERE workspace_id = sqlc.arg(workspace_id);
 
 -- name: GetMaxReleaseSequence :one
 SELECT COALESCE(max(sequence), 0)::bigint AS max_sequence FROM releases
@@ -420,7 +431,116 @@ WHERE workspace_id = sqlc.arg(workspace_id) AND rolled_back_to_release_id = sqlc
 -- name: ListReleaseAssets :many
 SELECT * FROM release_assets
 WHERE workspace_id = sqlc.arg(workspace_id) AND release_id = sqlc.arg(release_id)
-ORDER BY position;
+ORDER BY position
+LIMIT 1001;
+
+-- name: GetReleaseConsumerImpact :one
+SELECT count(*) FILTER (
+           WHERE binding.mode = 'current'
+	             AND (SELECT target.sequence FROM releases AS target
+	                  WHERE target.workspace_id = sqlc.arg(workspace_id)
+	                    AND target.id = sqlc.arg(release_id)) =
+	                 (SELECT max(current.sequence) FROM releases AS current
+	                  WHERE current.workspace_id = sqlc.arg(workspace_id))
+       )::bigint AS current_count,
+       count(*) FILTER (WHERE binding.mode = 'pinned' AND binding.release_id = sqlc.arg(release_id))::bigint AS pinned_count
+FROM consumer_bindings AS binding
+WHERE binding.workspace_id = sqlc.arg(workspace_id)
+  AND binding.status = 'active'
+  AND (binding.expires_at IS NULL OR binding.expires_at > CURRENT_TIMESTAMP);
+
+-- name: ListReleaseStableDiff :many
+WITH target AS (
+    SELECT release.id, release.sequence
+    FROM releases AS release
+    WHERE release.workspace_id = sqlc.arg(workspace_id)
+      AND release.id = sqlc.arg(release_id)
+), asset_versions AS (
+    SELECT current.asset_id AS target_id,
+           prior.revision_id AS prior_version,
+           current.revision_id AS selected_version,
+           registry.current_revision_id AS registry_version
+    FROM target
+    JOIN release_assets AS current
+      ON current.workspace_id = sqlc.arg(workspace_id)
+     AND current.release_id = target.id
+    LEFT JOIN LATERAL (
+        SELECT previous.revision_id
+        FROM release_assets AS previous
+        JOIN releases AS release
+          ON release.workspace_id = previous.workspace_id
+         AND release.id = previous.release_id
+        WHERE previous.workspace_id = current.workspace_id
+          AND previous.asset_id = current.asset_id
+          AND release.sequence < target.sequence
+        ORDER BY release.sequence DESC, release.id DESC
+        LIMIT 1
+    ) prior ON true
+    JOIN semantic_assets AS registry
+      ON registry.workspace_id = current.workspace_id
+     AND registry.id = current.asset_id
+), registry_objects AS (
+    SELECT 'physical_binding'::text AS object_type, id AS object_id, version
+    FROM physical_bindings WHERE workspace_id = sqlc.arg(workspace_id)
+    UNION ALL
+    SELECT 'model_grain', id, version FROM model_grains WHERE workspace_id = sqlc.arg(workspace_id)
+    UNION ALL
+    SELECT 'entity_key', id, version FROM entity_keys WHERE workspace_id = sqlc.arg(workspace_id)
+    UNION ALL
+    SELECT 'join_contract', id, version FROM join_contracts WHERE workspace_id = sqlc.arg(workspace_id)
+), object_versions AS (
+    SELECT current.object_type AS target_type,
+           current.object_id AS target_id,
+           prior.version AS prior_version,
+           current.version AS selected_version,
+           registry.version AS registry_version
+    FROM target
+    JOIN release_objects AS current
+      ON current.workspace_id = sqlc.arg(workspace_id)
+     AND current.release_id = target.id
+    LEFT JOIN LATERAL (
+        SELECT previous.version
+        FROM release_objects AS previous
+        JOIN releases AS release
+          ON release.workspace_id = previous.workspace_id
+         AND release.id = previous.release_id
+        WHERE previous.workspace_id = current.workspace_id
+          AND previous.object_type = current.object_type
+          AND previous.object_id = current.object_id
+          AND release.sequence < target.sequence
+        ORDER BY release.sequence DESC, release.id DESC
+        LIMIT 1
+    ) prior ON true
+    JOIN registry_objects AS registry
+      ON registry.object_type = current.object_type
+     AND registry.object_id = current.object_id
+), diffs AS (
+    SELECT 'prior_pin'::text AS comparison_kind, 'semantic_asset'::text AS target_type,
+           target_id, COALESCE(prior_version::text, '')::text AS baseline_version,
+           selected_version::text AS selected_version,
+           CASE WHEN prior_version IS NULL THEN 'added'
+                WHEN prior_version = selected_version THEN 'unchanged' ELSE 'changed' END::text AS change
+    FROM asset_versions
+    UNION ALL
+    SELECT 'current_registry', 'semantic_asset', target_id, COALESCE(registry_version::text, ''),
+           selected_version::text,
+           CASE WHEN registry_version IS NULL THEN 'added'
+                WHEN registry_version = selected_version THEN 'unchanged' ELSE 'changed' END
+    FROM asset_versions
+    UNION ALL
+    SELECT 'prior_pin', target_type, target_id, COALESCE(prior_version::text, ''), selected_version::text,
+           CASE WHEN prior_version IS NULL THEN 'added'
+                WHEN prior_version = selected_version THEN 'unchanged' ELSE 'changed' END
+    FROM object_versions
+    UNION ALL
+    SELECT 'current_registry', target_type, target_id, registry_version::text, selected_version::text,
+           CASE WHEN registry_version = selected_version THEN 'unchanged' ELSE 'changed' END
+    FROM object_versions
+)
+SELECT comparison_kind, target_type, target_id, baseline_version, selected_version, change
+FROM diffs
+ORDER BY comparison_kind, target_type, target_id
+LIMIT 4002;
 
 -- name: GetAssetRevisionOwnership :one
 SELECT asset_id FROM asset_revisions

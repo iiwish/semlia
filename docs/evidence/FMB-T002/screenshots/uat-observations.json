@@ -1,0 +1,93 @@
+{
+  "baseURL": "http://127.0.0.1:18081",
+  "servedMode": "server-mode local UAT; VITE_CATALOG_FIXTURE is not enabled",
+  "capturedAt": "2026-09-04T21:44:15.539Z",
+  "observations": [
+    {
+      "viewport": "1440x900",
+      "workspaceId": "wsp_01m1nsffrgew9tce0cqcr2k42v",
+      "actor": "local-author",
+      "attentionId": "ati_01m1q54q7deahb8ewkdet9hdr4",
+      "assetId": "ast_01m1nsffs0ewabg3jxf54hp4wx",
+      "revisionId": "rev_01m1nsffs0ewav5t3x02g8xba6",
+      "releaseId": "rls_01m1nsfhh1ewjb9w79vjw6r5j7",
+      "releasedRevisionId": "rev_01m1nsfhh4ewn9yejweyzw3ezc",
+      "workbenchChecks": {
+        "reducedMotion": true,
+        "globalOverflow": false,
+        "targetOverflow": false,
+        "focus": {
+          "tag": "BUTTON",
+          "label": "返回语义问答"
+        }
+      },
+      "assetChecks": {
+        "reducedMotion": true,
+        "globalOverflow": false,
+        "targetOverflow": false,
+        "focus": {
+          "tag": "BUTTON",
+          "label": "返回语义问答"
+        }
+      },
+      "releaseChecks": {
+        "reducedMotion": true,
+        "globalOverflow": false,
+        "targetOverflow": false,
+        "focus": {
+          "tag": "BUTTON",
+          "label": "返回语义问答"
+        }
+      },
+      "deepLinkReload": {
+        "workbench": true,
+        "asset": true,
+        "release": true
+      },
+      "finalURL": "http://127.0.0.1:18081/governance?release=rls_01m1nsfhh1ewjb9w79vjw6r5j7"
+    },
+    {
+      "viewport": "1024x768",
+      "workspaceId": "wsp_01m1nsffrgew9tce0cqcr2k42v",
+      "actor": "local-author",
+      "attentionId": "ati_01m1q54q7deahb8ewkdet9hdr4",
+      "assetId": "ast_01m1nsffs0ewabg3jxf54hp4wx",
+      "revisionId": "rev_01m1nsffs0ewav5t3x02g8xba6",
+      "releaseId": "rls_01m1nsfhh1ewjb9w79vjw6r5j7",
+      "releasedRevisionId": "rev_01m1nsfhh4ewn9yejweyzw3ezc",
+      "workbenchChecks": {
+        "reducedMotion": true,
+        "globalOverflow": false,
+        "targetOverflow": false,
+        "focus": {
+          "tag": "BUTTON",
+          "label": "返回语义问答"
+        }
+      },
+      "assetChecks": {
+        "reducedMotion": true,
+        "globalOverflow": false,
+        "targetOverflow": false,
+        "focus": {
+          "tag": "BUTTON",
+          "label": "返回语义问答"
+        }
+      },
+      "releaseChecks": {
+        "reducedMotion": true,
+        "globalOverflow": false,
+        "targetOverflow": false,
+        "focus": {
+          "tag": "BUTTON",
+          "label": "返回语义问答"
+        }
+      },
+      "deepLinkReload": {
+        "workbench": true,
+        "asset": true,
+        "release": true
+      },
+      "finalURL": "http://127.0.0.1:18081/governance?release=rls_01m1nsfhh1ewjb9w79vjw6r5j7"
+    }
+  ]
+}

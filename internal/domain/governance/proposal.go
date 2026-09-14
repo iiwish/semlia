@@ -189,24 +189,35 @@ const (
 // policy_decision_id are filled by the recomputable policy decision;
 // agent_run_id links the AI write to its §8.6 agent run.
 type Proposal struct {
-	ID               identity.ProposalID
-	WorkspaceID      identity.WorkspaceID
-	AssetID          *identity.AssetID
-	BaseRevisionID   *identity.RevisionID
-	TargetObjectType TargetObjectType
-	TargetObjectID   string
-	State            ProposalState
-	Title            string
-	Summary          string
-	Reason           string
-	RiskLevel        RiskLevel
-	PolicyDecisionID *identity.PolicyDecisionID
-	AgentRunID       *identity.AgentRunID
-	CreatedBy        string
-	SubmittedAt      *time.Time
-	DecidedAt        *time.Time
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
+	ID                              identity.ProposalID
+	WorkspaceID                     identity.WorkspaceID
+	AssetID                         *identity.AssetID
+	BaseRevisionID                  *identity.RevisionID
+	TargetObjectType                TargetObjectType
+	TargetObjectID                  string
+	State                           ProposalState
+	Title                           string
+	Summary                         string
+	Reason                          string
+	RiskLevel                       RiskLevel
+	PolicyDecisionID                *identity.PolicyDecisionID
+	AgentRunID                      *identity.AgentRunID
+	CreatedBy                       string
+	Intent                          string
+	CreationContent                 json.RawMessage
+	BaseObjectVersion               *int
+	ProductionOperationID           *identity.ProductionOperationID
+	ProductionVersion               *int
+	ReintroductionCreationReleaseID *string
+	ReintroductionAbsenceReleaseID  *string
+	SubmittedAt                     *time.Time
+	DecidedAt                       *time.Time
+	CreatedAt                       time.Time
+	UpdatedAt                       time.Time
+}
+
+func (p Proposal) IsProductionMember() bool {
+	return p.ProductionOperationID != nil
 }
 
 type ReviewChannel string

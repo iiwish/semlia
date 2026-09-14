@@ -39,6 +39,11 @@ func TestGovernanceProposalJourneyOverHTTP(t *testing.T) {
 	}
 	assertJSONField(t, created.Body.Bytes(), "state", "draft")
 	assertJSONField(t, created.Body.Bytes(), "targetObjectId", assetID.String())
+	author, err := environment.store.LoadDefaultPrincipal(context.Background(), workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertJSONField(t, created.Body.Bytes(), "createdBy", author.ID.String())
 	changeSet, ok := proposal["changeSet"].([]any)
 	if !ok || len(changeSet) != 1 {
 		t.Fatalf("created change-set = %v", proposal["changeSet"])
@@ -167,6 +172,20 @@ func TestGovernanceProposalOverJoinContractTarget(t *testing.T) {
 	}
 	assertJSONField(t, submitted.Body.Bytes(), "state", "validating")
 	assertJSONField(t, submitted.Body.Bytes(), "targetObjectId", contractID.String())
+	environment.runValidationWorker(t)
+	proposalTyped, err := identity.ParseProposalID(proposalID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var targetType, targetID string
+	if err := environment.pool.QueryRow(context.Background(), `
+		SELECT target_type,target_id FROM attention_items WHERE workspace_id=$1 AND dedupe_key=$2`,
+		workspace.UUID(), "review:"+proposalTyped.UUID()).Scan(&targetType, &targetID); err != nil {
+		t.Fatal(err)
+	}
+	if targetType != "workspace" || targetID != workspace.String() {
+		t.Fatalf("assetless join attention target = %s/%s, want workspace/%s", targetType, targetID, workspace)
+	}
 }
 
 func TestMalformedAgentPayloadIsRejectedWithZeroDomainWrites(t *testing.T) {

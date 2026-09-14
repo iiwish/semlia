@@ -1,0 +1,24 @@
+{
+  "command": [
+    "go",
+    "test",
+    "-count=1",
+    "-timeout=10m",
+    "./tests/integration/db",
+    "-run",
+    "^TestSemanticProductionMigration",
+    "-v"
+  ],
+  "clearedEnvironment": [
+    "SEMLIA_INGESTION_TEST_DATABASE_URL",
+    "SEMLIA_EXECUTION_CRASH_HELPER",
+    "SEMLIA_EXECUTION_TEST_DB",
+    "SEMLIA_DATABASE_URL"
+  ],
+  "start": "2026-09-09T06:04:05.591Z",
+  "end": "2026-09-09T06:04:13.047Z",
+  "exitStatus": 1,
+  "signal": null,
+  "stdout": "2026/09/09 14:04:09 github.com/testcontainers/testcontainers-go - Connected to docker: \n  Server Version: 29.4.0\n  API Version: 1.54\n  Operating System: OrbStack\n  Total Memory: 16040 MB\n  Testcontainers for Go Version: v0.44.0\n  Resolved Docker Host: unix:///var/run/docker.sock\n  Resolved Docker Socket Path: /var/run/docker.sock\n  Test SessionID: 1e827b80e1c1d2e39af46238ce08a83dee6a60be215dbb7dd19d9cb8beb37929\n  Test ProcessID: e65c98c9-a76c-454d-b6a4-eb97503653b7\n2026/09/09 14:04:09 🐳 Creating container for image postgres:18-alpine\n2026/09/09 14:04:09 🐳 Creating container for image testcontainers/ryuk:0.14.0\n2026/09/09 14:04:09 ✅ Container created: b149af56ba64\n2026/09/09 14:04:09 🐳 Starting container: b149af56ba64\n2026/09/09 14:04:09 ✅ Container started: b149af56ba64\n2026/09/09 14:04:09 ⏳ Waiting for container id b149af56ba64 image: testcontainers/ryuk:0.14.0. Waiting for: all of: [log message \"Started\", port 8080/tcp to be listening]\n2026/09/09 14:04:09 Shell not found in container\n2026/09/09 14:04:09 🔔 Container is ready: b149af56ba64\n2026/09/09 14:04:09 ✅ Container created: c6024796a962\n2026/09/09 14:04:09 🐳 Starting container: c6024796a962\n2026/09/09 14:04:09 ✅ Container started: c6024796a962\n2026/09/09 14:04:09 ⏳ Waiting for container id c6024796a962 image: postgres:18-alpine. Waiting for: all of: [log message \"database system is ready to accept connections\" (occurrence: 2), port 5432/tcp to be listening]\n2026/09/09 14:04:11 🔔 Container is ready: c6024796a962\n=== RUN   TestSemanticProductionMigrationEmptyRollback\n--- PASS: TestSemanticProductionMigrationEmptyRollback (0.55s)\n=== RUN   TestSemanticProductionMigrationLegacyQualityAndAtomicRollbackRefusal\n--- PASS: TestSemanticProductionMigrationLegacyQualityAndAtomicRollbackRefusal (0.51s)\n=== RUN   TestSemanticProductionMigrationRejectsIncompleteVerifiedSeal\n    semantic_production_migrations_test.go:61: verified complete snapshot sealed without any declared coverage\n--- FAIL: TestSemanticProductionMigrationRejectsIncompleteVerifiedSeal (0.48s)\nFAIL\n2026/09/09 14:04:12 🐳 Stopping container: c6024796a962\n2026/09/09 14:04:12 ✅ Container stopped: c6024796a962\n2026/09/09 14:04:12 🐳 Terminating container: c6024796a962\n2026/09/09 14:04:12 🚫 Container terminated: c6024796a962\nFAIL\tgithub.com/iiwish/semlia/tests/integration/db\t5.549s\nFAIL\n",
+  "stderr": ""
+}

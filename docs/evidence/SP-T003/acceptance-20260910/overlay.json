@@ -1,0 +1,5 @@
+{
+  "Replace": {
+    "/workspace/tests/integration/governance/acceptance_20260910_test.go": "/workspace/docs/evidence/SP-T003/acceptance-20260910/acceptance_probe_test.go.txt"
+  }
+}

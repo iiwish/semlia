@@ -64,7 +64,7 @@ func TestMigrationLifecycleAndTenantSchema(t *testing.T) {
 	if err := migrator.Up(); err != nil {
 		t.Fatalf("upgrade empty database: %v", err)
 	}
-	assertVersion(t, migrator, 11, true)
+	assertVersion(t, migrator, 29, true)
 	if err := migrator.Up(); err != nil {
 		t.Fatalf("repeat upgrade: %v", err)
 	}
@@ -72,21 +72,27 @@ func TestMigrationLifecycleAndTenantSchema(t *testing.T) {
 	pool := openPool(t)
 	firstInventory := tableInventory(t, pool)
 	wantTables := []string{
-		"actions", "agent_runs", "agent_steps", "asset_revisions", "audit_events", "authorization_events",
-		"code_artifacts", "discovery_findings", "discovery_runs", "entity_keys", "evidence_artifacts", "jobs",
-		"join_contracts", "lineage_edges", "model_grains", "model_providers", "model_settings",
-		"ontology_revision_relations", "ontology_revisions",
+		"local_password_credentials", "password_login_budgets",
+		"actions", "agent_runs", "agent_steps", "artifact_object_retention", "artifact_objects", "asset_revisions", "attention_items", "audit_event_targets", "audit_events", "audit_exports", "authorization_events",
+		"client_credentials", "code_artifacts", "consumer_bindings", "consumer_machine_principals", "consumers", "custom_role_version_actions", "custom_role_versions", "discovery_findings", "discovery_run_artifacts", "discovery_runs", "embedding_index_versions", "embedding_items", "entity_keys", "evidence_artifacts", "external_identities", "jobs",
+		"join_contracts", "join_observations", "knowledge_chunks", "lineage_edges", "model_grains", "model_providers", "model_settings",
+		"oidc_login_attempts", "ontology_revision_relations", "ontology_revisions",
 		"outbox_events", "physical_bindings", "physical_dataset_revisions", "physical_datasets",
-		"physical_field_revisions", "physical_fields", "policy_decisions", "policy_rules", "principals", "proposal_changes",
-		"proposals", "relation_type_policies", "release_assets", "release_objects", "releases", "resource_aliases", "review_batch_members",
-		"review_batches", "reviews", "revision_evidence_links", "role_actions", "role_bindings", "roles", "schema_migrations",
-		"semantic_assets", "semantic_relations", "source_connections", "source_revisions", "usage_events",
-		"validation_results", "validation_runs", "workspaces",
+		"physical_field_revisions", "physical_fields", "physical_key_observations", "policy_decisions", "policy_rules", "principals", "proposal_changes",
+		"proposals", "query_execution_runs", "query_validation_results", "query_validation_runs", "relation_type_policies", "release_assets", "release_execution_binding_pins", "release_execution_relations", "release_object_snapshots", "release_objects", "releases", "resolved_semantic_plans", "resource_aliases", "review_batch_members",
+		"review_batches", "reviews", "revision_evidence_links", "role_actions", "role_bindings", "roles", "runtime_run_events", "runtime_runs", "runtime_settings", "schema_migrations",
+		"semantic_assets", "semantic_candidate_decisions", "semantic_candidates", "semantic_queries", "semantic_refusals", "semantic_relations", "semantic_resolution_events", "sessions", "source_artifact_set_members", "source_artifact_sets", "source_artifacts", "source_connections", "source_credentials", "source_revision_artifact_sets", "source_revision_artifacts", "source_revisions", "source_schedule_command_receipts", "source_schedule_occurrences", "source_schedules", "usage_events", "user_accounts",
+		"validation_results", "validation_runs", "webhook_deliveries", "webhook_fanout_receipts", "webhook_signing_secrets", "webhook_subscriptions", "workspace_artifact_usage", "workspace_invitations", "workspace_memberships", "workspaces",
+		"source_snapshots", "source_snapshot_runs", "source_snapshot_scope", "source_snapshot_members", "source_snapshot_diagnostics", "source_code_revisions", "source_lineage_revisions", "source_effective_snapshots", "source_coverage_heads",
+		"production_operations", "production_versions", "production_targets", "production_candidate_links", "production_contributors", "production_identity_reservations", "production_commands", "production_request_claims", "production_generation_links", "production_generation_outputs", "production_generation_applications",
+		"production_validation_attempts", "production_validation_bindings", "production_review_bindings", "release_proposals", "production_release_manifests", "production_release_before_pins", "production_release_binding_inputs",
+		"production_validation_seals", "production_release_integrity", "production_generation_requests", "production_business_rule_events",
 	}
+	sort.Strings(wantTables)
 	if strings.Join(firstInventory, ",") != strings.Join(wantTables, ",") {
 		t.Fatalf("table inventory = %v, want %v", firstInventory, wantTables)
 	}
-	t.Logf("%s migration version 11 inventory: %v", postgresImage, firstInventory)
+	t.Logf("%s migration version 29 inventory: %v", postgresImage, firstInventory)
 	assertTenantForeignKeys(t, pool)
 
 	if err := migrator.Down(); err != nil {
@@ -150,10 +156,10 @@ func TestPopulatedM0UpgradeAndRollbackPreserveFoundationRows(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := migrator.Steps(10); err != nil {
+	if err := migrator.Steps(16); err != nil {
 		t.Fatalf("upgrade populated M0: %v", err)
 	}
-	assertVersion(t, migrator, 11, true)
+	assertVersion(t, migrator, 17, true)
 
 	for _, table := range []string{"workspaces", "audit_events", "jobs", "outbox_events"} {
 		var count int
@@ -208,6 +214,24 @@ func TestPopulatedM0UpgradeAndRollbackPreserveFoundationRows(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	if err := migrator.Steps(-1); err != nil {
+		t.Fatalf("remove operations runtime schema: %v", err)
+	}
+	if err := migrator.Steps(-1); err != nil {
+		t.Fatalf("remove Full-Menu authorization schema: %v", err)
+	}
+	if err := migrator.Steps(-1); err != nil {
+		t.Fatalf("remove semantic distribution schema: %v", err)
+	}
+	if err := migrator.Steps(-1); err != nil {
+		t.Fatalf("remove source discovery schema: %v", err)
+	}
+	if err := migrator.Steps(-1); err != nil {
+		t.Fatalf("remove identity sessions: %v", err)
+	}
+	if err := migrator.Steps(-1); err != nil {
+		t.Fatalf("remove local UAT identities: %v", err)
+	}
 	if err := migrator.Steps(-1); err != nil {
 		t.Fatalf("remove model config schema: %v", err)
 	}
@@ -307,7 +331,7 @@ func TestPostgres17MigrationLifecycle(t *testing.T) {
 	if err := migrator.Up(); err != nil {
 		t.Fatalf("PostgreSQL 17 upgrade: %v", err)
 	}
-	assertVersion(t, migrator, 11, true)
+	assertVersion(t, migrator, 29, true)
 	pool, err := pgstore.Open(ctx, url)
 	if err != nil {
 		t.Fatal(err)
@@ -330,6 +354,318 @@ func TestPostgres17MigrationLifecycle(t *testing.T) {
 	}
 	if err := migrator.Up(); err != nil {
 		t.Fatalf("PostgreSQL 17 re-upgrade: %v", err)
+	}
+}
+
+func TestAuthorizationMigrationRollbackDropsTemporaryGrantsWithoutChangingDurablePermissions(t *testing.T) {
+	migrator := newMigrator(t)
+	if err := migrator.Down(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := migrator.Up(); err != nil {
+			t.Errorf("restore latest schema: %v", err)
+		}
+	})
+	if err := migrator.Steps(15); err != nil {
+		t.Fatalf("install migration 15: %v", err)
+	}
+	pool := openPool(t)
+	ctx := context.Background()
+	workspaceID := newWorkspaceID(t)
+	createRegistryWorkspace(t, pool, workspaceID, "authorization-rollback")
+	if err := migrator.Steps(1); err != nil {
+		t.Fatalf("upgrade 15 to 16: %v", err)
+	}
+	principalID, err := identity.NewPrincipalID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	bindingID, err := identity.NewBindingID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO principals (id, workspace_id, kind, display_name, status)
+		VALUES ($1, $2, 'human', 'Temporary Consumer', 'active')`,
+		principalID.UUID(), workspaceID.UUID()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO role_bindings (
+			id, workspace_id, principal_id, role_id, role_version, scope_type, scope_id, expires_at
+		) VALUES ($3, $2::uuid, $1, 'consumer_developer', 1, 'workspace', $2::uuid::text, CURRENT_TIMESTAMP + interval '24 hours')`,
+		principalID.UUID(), workspaceID.UUID(), bindingID.UUID()); err != nil {
+		t.Fatal(err)
+	}
+	assertReviewerPermission := func(stage string) {
+		t.Helper()
+		var allowed bool
+		if err := pool.QueryRow(ctx, `
+			SELECT EXISTS (
+				SELECT 1 FROM role_bindings AS binding
+				JOIN role_actions AS action ON action.role_id = binding.role_id
+				WHERE binding.scope_id = $1 AND binding.role_id = 'reviewer'
+				  AND action.action = 'proposal.review'
+			)`, workspaceID.UUID()).Scan(&allowed); err != nil {
+			t.Fatal(err)
+		}
+		if !allowed {
+			t.Fatalf("reviewer permission missing %s", stage)
+		}
+	}
+	assertReviewerPermission("after 15 to 16 upgrade")
+	if err := migrator.Steps(-1); err != nil {
+		t.Fatalf("rollback 16 to 15: %v", err)
+	}
+	assertReviewerPermission("after rollback to 15")
+	var temporary int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM role_bindings WHERE id = $1`, bindingID.UUID()).Scan(&temporary); err != nil {
+		t.Fatal(err)
+	}
+	if temporary != 0 {
+		t.Fatal("future-expiring authorization became permanent during rollback")
+	}
+	if err := migrator.Steps(1); err != nil {
+		t.Fatalf("reapply migration 16: %v", err)
+	}
+	assertReviewerPermission("after reapplying 16")
+}
+
+func TestOperationsRuntimeMigrationPopulatedDownUpPreservesOwningRows(t *testing.T) {
+	migrator := newMigrator(t)
+	if err := migrator.Down(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := migrator.Up(); err != nil {
+			t.Errorf("restore latest schema: %v", err)
+		}
+	})
+	if err := migrator.Steps(16); err != nil {
+		t.Fatalf("install version 16: %v", err)
+	}
+	assertVersion(t, migrator, 16, true)
+
+	pool := openPool(t)
+	ctx := context.Background()
+	workspaceID := newWorkspaceID(t)
+	principalID, err := identity.NewPrincipalID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	jobID := newRunID(t)
+	auditID := newEventID(t)
+	sourceID := newRunID(t)
+	discoveryID := newRunID(t)
+	assetID := newRunID(t)
+	revisionID := newRunID(t)
+	proposalID := newRunID(t)
+	validationID := newRunID(t)
+	agentID := newRunID(t)
+	queryID := newRunID(t)
+	runtimeID := newRunID(t)
+	runtimeEventID := newEventID(t)
+	attentionID := newEventID(t)
+	now := time.Date(2026, 9, 5, 9, 0, 0, 0, time.UTC)
+	traceID := "4bf92f3577b34da6a3ce929d0e0e4736"
+
+	createRegistryWorkspace(t, pool, workspaceID, "operations-rollback")
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO principals (id, workspace_id, kind, display_name, status, created_at)
+		VALUES ($1, $2, 'human', 'Operations Owner', 'active', $3)`,
+		principalID.UUID(), workspaceID.UUID(), now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO jobs (id, workspace_id, job_type, payload, status, max_attempts, idempotency_key, trace_id, created_at, updated_at)
+		VALUES ($1, $2, 'semantic.resolve', '{}'::jsonb, 'queued', 3, 'operations-owner-job', $3, $4, $4)`,
+		jobID.UUID(), workspaceID.UUID(), traceID, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO source_connections (id, workspace_id, adapter_kind, name, normalized_locator, created_at, updated_at)
+		VALUES ($1, $2, 'postgresql_catalog', 'History source', 'postgresql://history', $3, $3)`,
+		sourceID.UUID(), workspaceID.UUID(), now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO discovery_runs (
+			id, workspace_id, source_connection_id, adapter_version, status, job_id, requested_by,
+			trace_id, started_at, completed_at, created_at, updated_at
+		) VALUES ($1, $2, $3, '1.0.0', 'succeeded', $4, $5, $6, $7, $7, $7, $7)`,
+		discoveryID.UUID(), workspaceID.UUID(), sourceID.UUID(), jobID.UUID(), principalID.String(), traceID, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO semantic_assets (id, workspace_id, namespace, key, asset_type, lifecycle_state, created_at, updated_at)
+		VALUES ($1, $2, 'history', 'history_metric', 'metric', 'draft', $3, $3)`,
+		assetID.UUID(), workspaceID.UUID(), now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO asset_revisions (
+			id, workspace_id, asset_id, sequence, schema_version, content_digest, content, created_by, created_at
+		) VALUES ($1, $2, $3, 1, '1.0.0', $4, '{}'::jsonb, $5, $6)`,
+		revisionID.UUID(), workspaceID.UUID(), assetID.UUID(), "sha256:"+strings.Repeat("1", 64), principalID.String(), now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE semantic_assets SET current_revision_id = $1 WHERE id = $2`, revisionID.UUID(), assetID.UUID()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO proposals (
+			id, workspace_id, asset_id, base_revision_id, target_object_type, target_object_id,
+			state, title, created_by, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, 'semantic_asset', $3, 'draft', 'History proposal', $5, $6, $6)`,
+		proposalID.UUID(), workspaceID.UUID(), assetID.UUID(), revisionID.UUID(), principalID.String(), now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO validation_runs (
+			id, workspace_id, proposal_id, validator_id, validator_version, status, started_at, finished_at
+		) VALUES ($1, $2, $3, 'schema.validation', '1.0.0', 'succeeded', $4, $4)`,
+		validationID.UUID(), workspaceID.UUID(), proposalID.UUID(), now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO agent_runs (
+			id, workspace_id, principal_id, model, config_revision, input_hash, status,
+			output_digest, started_at, finished_at, duration_ms, created_at
+		) VALUES ($1, $2, $3, 'history-model', '1', $4, 'succeeded', $5, $6, $6, 0, $6)`,
+		agentID.UUID(), workspaceID.UUID(), principalID.UUID(), "sha256:"+strings.Repeat("2", 64), "sha256:"+strings.Repeat("3", 64), now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO semantic_queries (
+			id, workspace_id, principal_ref, schema_version, resolver_version, canonical_request,
+			request_digest, channel, trace_id, idempotency_key, outcome, created_at, finalized_at
+		) VALUES ($1, $2, $3, '1.0.0', '1.0.0', '{}'::jsonb, $4, 'api', $5, 'history-query', 'resolved', $6, $6)`,
+		queryID.UUID(), workspaceID.UUID(), principalID.String(), "sha256:"+strings.Repeat("4", 64), traceID, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO audit_events (id, workspace_id, event_type, actor_id, payload, trace_id, created_at)
+		VALUES ($1, $2, 'operations.owner.created', $3, jsonb_build_object('sourceId', $4::text, 'outcome', 'succeeded'), $5, $6)`,
+		auditID.UUID(), workspaceID.UUID(), principalID.String(), sourceID.UUID(), traceID, now); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := migrator.Steps(1); err != nil {
+		t.Fatalf("upgrade populated 16 to 17: %v", err)
+	}
+	assertVersion(t, migrator, 17, true)
+	assertHistoricalRuntimeBackfill(t, pool, workspaceID, sourceID.UUID())
+	if _, err := pool.Exec(ctx, `INSERT INTO runtime_settings (workspace_id, updated_at) VALUES ($1, $2)`,
+		workspaceID.UUID(), now); err != nil {
+		t.Fatalf("populate runtime settings: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO runtime_runs (
+			id, workspace_id, kind, source_type, source_id, source_version_digest,
+			trace_id, idempotency_key, requested_by_principal_id, state, max_attempts, created_at, updated_at
+		) VALUES ($3, $1, 'semantic_resolution', 'job', $4::uuid::text, $5, $6, 'runtime-owner-job', $7, 'queued', 3, $2, $2)`,
+		workspaceID.UUID(), now, runtimeID.UUID(), jobID.UUID(), strings.Repeat("a", 64), traceID,
+		principalID.UUID()); err != nil {
+		t.Fatalf("populate runtime run: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO runtime_run_events (
+			id, workspace_id, runtime_run_id, event_key, sequence, event_type, state, summary, created_at
+		) VALUES ($3, $1, $4, 'queued', 1, 'state', 'queued', 'Queued', $2)`,
+		workspaceID.UUID(), now, runtimeEventID.UUID(), runtimeID.UUID()); err != nil {
+		t.Fatalf("populate runtime event: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO attention_items (
+			id, workspace_id, kind, dedupe_key, state, priority, risk, target_type, target_id,
+			target_route, initiator_principal_id, rule_version, title, summary, reason_code, trace_id,
+			opened_at, updated_at
+		) VALUES ($3, $1, 'runtime', 'runtime-owner-attention', 'open', 'high', 'high', 'runtime_run',
+			$4::text, '/operations/runs/' || $4::text, $5, '1', 'Runtime needs attention',
+			'Runtime needs attention', 'RUN_REVIEW_REQUIRED', $6, $2, $2)`,
+		workspaceID.UUID(), now, attentionID.UUID(), runtimeID.UUID(), principalID.UUID(), traceID); err != nil {
+		t.Fatalf("populate attention item: %v", err)
+	}
+
+	if err := migrator.Steps(-1); err != nil {
+		t.Fatalf("rollback 17 to 16 with populated operations state: %v", err)
+	}
+	assertVersion(t, migrator, 16, true)
+	for name, check := range map[string]struct {
+		query string
+		id    string
+	}{
+		"workspace":  {`SELECT count(*) FROM workspaces WHERE id = $1`, workspaceID.UUID()},
+		"principal":  {`SELECT count(*) FROM principals WHERE id = $1`, principalID.UUID()},
+		"job":        {`SELECT count(*) FROM jobs WHERE id = $1`, jobID.UUID()},
+		"audit":      {`SELECT count(*) FROM audit_events WHERE id = $1`, auditID.UUID()},
+		"source":     {`SELECT count(*) FROM source_connections WHERE id = $1`, sourceID.UUID()},
+		"discovery":  {`SELECT count(*) FROM discovery_runs WHERE id = $1`, discoveryID.UUID()},
+		"validation": {`SELECT count(*) FROM validation_runs WHERE id = $1`, validationID.UUID()},
+		"agent":      {`SELECT count(*) FROM agent_runs WHERE id = $1`, agentID.UUID()},
+		"query":      {`SELECT count(*) FROM semantic_queries WHERE id = $1`, queryID.UUID()},
+	} {
+		var count int
+		if err := pool.QueryRow(ctx, check.query, check.id).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		if count != 1 {
+			t.Fatalf("%s owning row count after operations rollback = %d", name, count)
+		}
+	}
+	var operationsTables int
+	if err := pool.QueryRow(ctx, `
+		SELECT count(*) FROM pg_class
+		WHERE relname IN ('runtime_settings', 'runtime_runs', 'runtime_run_events', 'audit_event_targets', 'audit_exports', 'attention_items')
+		  AND relnamespace = 'public'::regnamespace`).Scan(&operationsTables); err != nil {
+		t.Fatal(err)
+	}
+	if operationsTables != 0 {
+		t.Fatalf("operations tables remaining after rollback = %d", operationsTables)
+	}
+	if err := migrator.Steps(1); err != nil {
+		t.Fatalf("reapply migration 17: %v", err)
+	}
+	assertVersion(t, migrator, 17, true)
+	assertHistoricalRuntimeBackfill(t, pool, workspaceID, sourceID.UUID())
+	if _, err := pool.Exec(ctx, `INSERT INTO runtime_settings (workspace_id, updated_at) VALUES ($1, $2)`, workspaceID.UUID(), now); err != nil {
+		t.Fatalf("write operations settings after reapply: %v", err)
+	}
+}
+
+func assertHistoricalRuntimeBackfill(t *testing.T, pool *pgstore.Pool, workspaceID identity.WorkspaceID, sourceID string) {
+	t.Helper()
+	ctx := context.Background()
+	var runs int
+	if err := pool.QueryRow(ctx, `
+		SELECT count(*) FROM runtime_runs
+		WHERE workspace_id = $1
+		  AND kind IN ('discovery', 'validation', 'agent', 'semantic_resolution')`, workspaceID.UUID()).Scan(&runs); err != nil {
+		t.Fatal(err)
+	}
+	if runs != 4 {
+		t.Fatalf("historical runtime run count = %d, want 4", runs)
+	}
+	var events int
+	if err := pool.QueryRow(ctx, `
+		SELECT count(*) FROM runtime_run_events AS event
+		JOIN runtime_runs AS run ON run.workspace_id = event.workspace_id AND run.id = event.runtime_run_id
+		WHERE run.workspace_id = $1
+		  AND run.kind IN ('discovery', 'validation', 'agent', 'semantic_resolution')`, workspaceID.UUID()).Scan(&events); err != nil {
+		t.Fatal(err)
+	}
+	if events != 4 {
+		t.Fatalf("historical runtime event count = %d, want 4", events)
+	}
+	var targets int
+	if err := pool.QueryRow(ctx, `
+		SELECT count(*) FROM audit_event_targets
+		WHERE workspace_id = $1 AND object_type = 'source' AND object_id = $2`, workspaceID.UUID(), sourceID).Scan(&targets); err != nil {
+		t.Fatal(err)
+	}
+	if targets != 1 {
+		t.Fatalf("historical audit target count = %d, want 1", targets)
 	}
 }
 
@@ -385,10 +721,10 @@ func TestPopulatedM1UpgradeAndRollbackPreserveRegistryRows(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := migrator.Steps(8); err != nil {
+	if err := migrator.Steps(14); err != nil {
 		t.Fatalf("upgrade populated M1 through M2: %v", err)
 	}
-	assertVersion(t, migrator, 11, true)
+	assertVersion(t, migrator, 17, true)
 
 	proposalID, err := identity.NewProposalID()
 	if err != nil {
@@ -407,6 +743,24 @@ func TestPopulatedM1UpgradeAndRollbackPreserveRegistryRows(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	if err := migrator.Steps(-1); err != nil {
+		t.Fatalf("remove operations runtime schema: %v", err)
+	}
+	if err := migrator.Steps(-1); err != nil {
+		t.Fatalf("remove Full-Menu authorization schema: %v", err)
+	}
+	if err := migrator.Steps(-1); err != nil {
+		t.Fatalf("remove semantic distribution schema: %v", err)
+	}
+	if err := migrator.Steps(-1); err != nil {
+		t.Fatalf("remove source discovery schema: %v", err)
+	}
+	if err := migrator.Steps(-1); err != nil {
+		t.Fatalf("remove identity sessions: %v", err)
+	}
+	if err := migrator.Steps(-1); err != nil {
+		t.Fatalf("remove local UAT identities: %v", err)
+	}
 	if err := migrator.Steps(-1); err != nil {
 		t.Fatalf("remove model config schema: %v", err)
 	}
@@ -452,7 +806,7 @@ func TestPopulatedM1UpgradeAndRollbackPreserveRegistryRows(t *testing.T) {
 	if err := migrator.Up(); err != nil {
 		t.Fatalf("re-upgrade populated M1: %v", err)
 	}
-	assertVersion(t, migrator, 11, true)
+	assertVersion(t, migrator, 29, true)
 	store := pgstore.NewStore(pool)
 	detail, err := store.GetCatalogAsset(ctx, workspaceID, assetID)
 	if err != nil {
@@ -546,6 +900,184 @@ func TestAuditEventsAreImmutable(t *testing.T) {
 	}
 }
 
+func TestOperationsRuntimeRejectsCrossWorkspaceLinksAndInconsistentErrors(t *testing.T) {
+	resetSchema(t)
+	pool := openPool(t)
+	ctx := context.Background()
+	workspaceA, workspaceB := newWorkspaceID(t), newWorkspaceID(t)
+	principalA, _ := identity.NewPrincipalID()
+	principalB, _ := identity.NewPrincipalID()
+	jobB := newRunID(t)
+	now := time.Date(2026, 9, 5, 10, 0, 0, 0, time.UTC)
+	createRegistryWorkspace(t, pool, workspaceA, "runtime-fk-a")
+	createRegistryWorkspace(t, pool, workspaceB, "runtime-fk-b")
+	for _, principal := range []struct {
+		id        identity.PrincipalID
+		workspace identity.WorkspaceID
+	}{
+		{id: principalA, workspace: workspaceA},
+		{id: principalB, workspace: workspaceB},
+	} {
+		if _, err := pool.Exec(ctx, `
+			INSERT INTO principals (id, workspace_id, kind, display_name, status, created_at)
+			VALUES ($1, $2, 'human', 'Runtime principal', 'active', $3)`, principal.id.UUID(), principal.workspace.UUID(), now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO jobs (id, workspace_id, job_type, payload, status, max_attempts, idempotency_key, trace_id, created_at, updated_at)
+		VALUES ($1, $2, 'runtime.test', '{}'::jsonb, 'queued', 1, 'runtime-fk-job', $3, $4, $4)`,
+		jobB.UUID(), workspaceB.UUID(), strings.Repeat("a", 32), now); err != nil {
+		t.Fatal(err)
+	}
+	insertRun := func(id identity.RunID, jobID, principalID any, state string, finishedAt any, errorCode any) error {
+		_, err := pool.Exec(ctx, `
+			INSERT INTO runtime_runs (
+				id, workspace_id, kind, source_type, source_id, source_version_digest, job_id,
+				idempotency_key, requested_by_principal_id, state, max_attempts, finished_at,
+				error_code, created_at, updated_at
+			) VALUES ($1, $2, 'validation', 'validation_run', $1::text, $3, $4, $5, $6, $7, 1, $8, $9, $10, $10)`,
+			id.UUID(), workspaceA.UUID(), strings.Repeat("b", 64), jobID, "runtime-fk-"+id.UUID(), principalID,
+			state, finishedAt, errorCode, now)
+		return err
+	}
+	if err := insertRun(newRunID(t), jobB.UUID(), principalA.UUID(), "queued", nil, nil); err == nil {
+		t.Fatal("cross-workspace job link was accepted")
+	}
+	if err := insertRun(newRunID(t), nil, principalB.UUID(), "queued", nil, nil); err == nil {
+		t.Fatal("cross-workspace principal link was accepted")
+	}
+	if err := insertRun(newRunID(t), nil, principalA.UUID(), "succeeded", now, "SHOULD_BE_EMPTY"); err == nil {
+		t.Fatal("successful runtime with error code was accepted")
+	}
+	if err := insertRun(newRunID(t), nil, principalA.UUID(), "failed", now, nil); err == nil {
+		t.Fatal("failed runtime without error code was accepted")
+	}
+}
+
+func TestMigration18ProjectsAndRollsBackIngestionAuditTargets(t *testing.T) {
+	resetSchema(t)
+	migrator := newMigrator(t)
+	if err := migrator.Down(); err != nil {
+		t.Fatal(err)
+	}
+	if err := migrator.Steps(17); err != nil {
+		t.Fatal(err)
+	}
+	assertVersion(t, migrator, 17, true)
+	pool := openPool(t)
+	ctx := context.Background()
+	workspace := newWorkspaceID(t)
+	event := newEventID(t)
+	createRegistryWorkspace(t, pool, workspace, "ingestion-audit-migration")
+	payload := `{"artifactId":"art_test","artifactSetId":"ars_test","scheduleId":"sch_test","occurrenceId":"occ_test"}`
+	if _, err := pool.Exec(ctx, `INSERT INTO audit_events(id,workspace_id,event_type,actor_id,payload,trace_id)
+VALUES($1,$2,'artifact.test','system',$3::jsonb,$4)`, event.UUID(), workspace.UUID(), payload, strings.Repeat("a", 32)); err != nil {
+		t.Fatal(err)
+	}
+	if err := migrator.Steps(1); err != nil {
+		t.Fatal(err)
+	}
+	assertIngestionAuditTargetCount(t, pool, event, 4)
+	if err := migrator.Steps(-1); err != nil {
+		t.Fatalf("rollback migration 18 with immutable targets: %v", err)
+	}
+	assertVersion(t, migrator, 17, true)
+	assertIngestionAuditTargetCount(t, pool, event, 0)
+	if err := migrator.Steps(1); err != nil {
+		t.Fatalf("reapply migration 18: %v", err)
+	}
+	assertIngestionAuditTargetCount(t, pool, event, 4)
+}
+
+func TestMigration18PreservesPopulatedVersion17PostgreSQLSourceAndRunAcrossRoundTrip(t *testing.T) {
+	resetSchema(t)
+	migrator := newMigrator(t)
+	if err := migrator.Down(); err != nil {
+		t.Fatal(err)
+	}
+	if err := migrator.Steps(17); err != nil {
+		t.Fatal(err)
+	}
+	assertVersion(t, migrator, 17, true)
+	pool := openPool(t)
+	ctx := context.Background()
+	workspace := newWorkspaceID(t)
+	source, err := identity.NewSourceConnectionID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := newRunID(t)
+	createRegistryWorkspace(t, pool, workspace, "ingestion-v17-roundtrip")
+	if _, err := pool.Exec(ctx, `INSERT INTO source_connections
+(id,workspace_id,adapter_kind,name,normalized_locator,status,metadata,artifact_paths)
+VALUES($1,$2,'postgresql_catalog','Version 17 source','postgresql://db.example.test/warehouse','paused','{"schema":"analytics"}'::jsonb,'["analytics"]'::jsonb)`,
+		source.UUID(), workspace.UUID()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO discovery_runs
+(id,workspace_id,source_connection_id,adapter_version,status,stats)
+VALUES($1,$2,$3,'postgresql-catalog/1','queued','{}'::jsonb)`, run.UUID(), workspace.UUID(), source.UUID()); err != nil {
+		t.Fatal(err)
+	}
+
+	assertRoundTrip := func(stage string) {
+		t.Helper()
+		var sourceKind string
+		var version int64
+		var sourceConfig string
+		var artifactSet, requestFingerprint, sourceFingerprint *string
+		if err := pool.QueryRow(ctx, `SELECT source_kind,version,active_artifact_set_id::text
+FROM source_connections WHERE workspace_id=$1 AND id=$2`, workspace.UUID(), source.UUID()).Scan(&sourceKind, &version, &artifactSet); err != nil {
+			t.Fatalf("%s source: %v", stage, err)
+		}
+		if err := pool.QueryRow(ctx, `SELECT source_config::text,artifact_set_id::text,request_fingerprint,source_input_fingerprint
+FROM discovery_runs WHERE workspace_id=$1 AND id=$2`, workspace.UUID(), run.UUID()).Scan(&sourceConfig, &artifactSet, &requestFingerprint, &sourceFingerprint); err != nil {
+			t.Fatalf("%s run: %v", stage, err)
+		}
+		if sourceKind != "postgresql" || version != 1 || artifactSet != nil || requestFingerprint != nil || sourceFingerprint != nil ||
+			!strings.Contains(sourceConfig, `"sourceVersion": 1`) || !strings.Contains(sourceConfig, `"artifactPaths": ["analytics"]`) {
+			t.Fatalf("%s sourceKind=%s version=%d set=%v request=%v source=%v config=%s", stage,
+				sourceKind, version, artifactSet, requestFingerprint, sourceFingerprint, sourceConfig)
+		}
+	}
+
+	if err := migrator.Steps(1); err != nil {
+		t.Fatal(err)
+	}
+	assertRoundTrip("first upgrade")
+	if err := migrator.Steps(-1); err != nil {
+		t.Fatal(err)
+	}
+	assertVersion(t, migrator, 17, true)
+	var sourceCount, runCount int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM source_connections WHERE id=$1`, source.UUID()).Scan(&sourceCount); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM discovery_runs WHERE id=$1`, run.UUID()).Scan(&runCount); err != nil {
+		t.Fatal(err)
+	}
+	if sourceCount != 1 || runCount != 1 {
+		t.Fatalf("version 17 source count=%d run count=%d", sourceCount, runCount)
+	}
+	if err := migrator.Steps(1); err != nil {
+		t.Fatal(err)
+	}
+	assertRoundTrip("reapplied upgrade")
+}
+
+func assertIngestionAuditTargetCount(t *testing.T, pool *pgstore.Pool, event identity.EventID, want int) {
+	t.Helper()
+	var count int
+	if err := pool.QueryRow(context.Background(), `SELECT count(*) FROM audit_event_targets
+WHERE audit_event_id=$1 AND object_type IN('artifact','artifact_set','source_schedule','schedule_occurrence')`, event.UUID()).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != want {
+		t.Fatalf("ingestion audit target count=%d, want %d", count, want)
+	}
+}
+
 func TestWorkerStartupDoesNotRunMigrations(t *testing.T) {
 	migrator := newMigrator(t)
 	if err := migrator.Down(); err != nil {
@@ -566,6 +1098,8 @@ func TestWorkerStartupDoesNotRunMigrations(t *testing.T) {
 	command.Env = append(os.Environ(),
 		"SEMLIA_ENV=test",
 		"SEMLIA_DATABASE_URL="+databaseURL,
+		"SEMLIA_SECRET_KEY="+strings.Repeat("s", 64),
+		"SEMLIA_ALLOWED_ORIGINS=http://127.0.0.1:18081",
 	)
 	output, err := command.CombinedOutput()
 	if err == nil {
@@ -691,11 +1225,11 @@ func assertTenantForeignKeys(t *testing.T, pool *pgstore.Pool) {
 		tables = append(tables, table)
 	}
 	want := []string{
-		"agent_runs", "audit_events", "authorization_events", "entity_keys", "evidence_artifacts", "jobs",
+		"agent_runs", "artifact_objects", "attention_items", "audit_events", "audit_exports", "authorization_events", "client_credentials", "consumer_bindings", "consumers", "custom_role_versions", "embedding_index_versions", "entity_keys", "evidence_artifacts", "jobs",
 		"join_contracts", "model_grains", "model_providers", "ontology_revisions", "outbox_events", "physical_bindings",
-		"principals", "proposals", "releases", "review_batch_members", "review_batches", "reviews",
-		"semantic_assets", "semantic_relations",
-		"source_connections", "usage_events",
+		"principals", "production_operations", "production_release_before_pins", "production_release_binding_inputs", "production_release_manifests", "production_review_bindings", "production_validation_attempts", "production_validation_bindings", "proposals", "query_validation_runs", "release_proposals", "releases", "resolved_semantic_plans", "review_batch_members", "review_batches", "reviews", "role_bindings", "runtime_run_events", "runtime_runs", "runtime_settings",
+		"semantic_assets", "semantic_queries", "semantic_refusals", "semantic_relations", "semantic_resolution_events",
+		"source_artifacts", "source_connections", "usage_events", "webhook_deliveries", "webhook_subscriptions", "workspace_artifact_usage", "workspace_invitations", "workspace_memberships",
 	}
 	if strings.Join(tables, ",") != strings.Join(want, ",") {
 		t.Fatalf("workspace foreign keys = %v, want %v", tables, want)

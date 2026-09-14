@@ -296,7 +296,7 @@ INSERT INTO source_connections (
     $1, $2, $3, $4,
     $5, $6, $7, $8
 )
-RETURNING id, workspace_id, adapter_kind, name, normalized_locator, credential_ref, status, metadata, created_at, updated_at
+RETURNING id, workspace_id, adapter_kind, name, normalized_locator, credential_ref, status, metadata, created_at, updated_at, active_credential_version, artifact_paths, disabled_at, source_kind, active_artifact_set_id, version
 `
 
 type CreateSourceConnectionParams struct {
@@ -333,6 +333,12 @@ func (q *Queries) CreateSourceConnection(ctx context.Context, arg CreateSourceCo
 		&i.Metadata,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ActiveCredentialVersion,
+		&i.ArtifactPaths,
+		&i.DisabledAt,
+		&i.SourceKind,
+		&i.ActiveArtifactSetID,
+		&i.Version,
 	)
 	return i, err
 }

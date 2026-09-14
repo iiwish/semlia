@@ -15,21 +15,29 @@ const assetTypes: Array<{ value: SemanticAssetType; label: string }> = [
 ];
 
 export function CatalogWorkspaceControl() {
-  const { workspaces, workspaceId, workspace, setWorkspaceId, loading, refresh } = useCatalogRuntime();
+  const { workspaces, workspaceId, workspace, setWorkspaceId, loading } = useCatalogRuntime();
   return (
     <div className="catalog-workspace-control">
       <label>
-        <span className="sr-only">工作区</span>
+        <span>验收数据</span>
         <select aria-label="工作区" value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)}>
           {workspaces.map((item) => <option key={item.id} value={item.id}>{item.displayName}</option>)}
         </select>
       </label>
       <span className="catalog-connection-state"><i data-loading={loading || undefined} />{loading ? "同步中" : workspace ? "Registry 已连接" : "未配置"}</span>
-      <button className="icon-button" type="button" title="刷新真实目录" aria-label="刷新真实目录" onClick={refresh} disabled={loading}>
-        <RefreshCw size={15} />
-      </button>
     </div>
   );
+}
+
+export function CatalogRefreshButton() {
+  const { loading, refresh } = useCatalogRuntime();
+  return <button className="icon-button" type="button" title="刷新知识目录" aria-label="刷新知识目录" onClick={refresh} disabled={loading}><RefreshCw size={15} className={loading ? "is-spinning" : undefined} /></button>;
+}
+
+export function CatalogDataNotice() {
+  const { workspace } = useCatalogRuntime();
+  const simulated = workspace?.displayName.includes("模拟数据");
+  return simulated ? <span className="catalog-data-notice">模拟数据</span> : null;
 }
 
 export function CreateCatalogAssetButton({ onCreated, compact = true }: { onCreated?: (assetId: string) => void; compact?: boolean }) {

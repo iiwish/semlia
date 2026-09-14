@@ -53,12 +53,44 @@ type PublishingRepository interface {
 	ListReleaseAssets(ctx context.Context, workspace identity.WorkspaceID, release identity.ReleaseID) ([]domain.ManifestEntry, error)
 	ListReleaseObjects(ctx context.Context, workspace identity.WorkspaceID, release identity.ReleaseID) ([]domain.ObjectManifestEntry, error)
 	ListReleases(ctx context.Context, workspace identity.WorkspaceID, limit int, cursor *ReleaseCursor) ([]domain.Release, error)
+	CountReleases(ctx context.Context, workspace identity.WorkspaceID) (int64, error)
 	CountRollbacksFor(ctx context.Context, workspace identity.WorkspaceID, release identity.ReleaseID) (int, error)
 	MaxReleaseSequence(ctx context.Context, workspace identity.WorkspaceID) (int64, error)
 	LatestAssetPinBefore(ctx context.Context, workspace identity.WorkspaceID, asset identity.AssetID, sequence int64) (identity.RevisionID, bool, error)
 	PublishRelease(ctx context.Context, command PublishReleaseCommand) (domain.Release, error)
 	RestoreRelease(ctx context.Context, command RestoreReleaseCommand) (domain.Release, error)
 	RecordReleaseDenial(ctx context.Context, denial ReleaseDenialRecord) error
+}
+
+type ReleaseDetailRepository interface {
+	GetReleaseConsumerImpact(ctx context.Context, workspace identity.WorkspaceID, release identity.ReleaseID) (ReleaseConsumerImpact, error)
+	ListReleaseStableDiff(ctx context.Context, workspace identity.WorkspaceID, release identity.ReleaseID) ([]ReleaseDiffEntry, error)
+}
+
+type ReleaseConsumerImpact struct {
+	Current int64
+	Pinned  int64
+}
+
+type ReleaseDiffEntry struct {
+	ComparisonKind  string
+	TargetType      string
+	TargetID        string
+	Change          string
+	BaselineVersion string
+	SelectedVersion string
+}
+
+type ReleaseDetail struct {
+	Release                    domain.Release
+	Authority                  string
+	Availability               string
+	ObjectAvailability         string
+	ConsumerImpactAvailability string
+	DiffAvailability           string
+	ConsumerImpact             *ReleaseConsumerImpact
+	PriorPinDiff               []ReleaseDiffEntry
+	CurrentRegistryDiff        []ReleaseDiffEntry
 }
 
 // ReleaseCursor is the decoded keyset position of a releases page.
@@ -89,6 +121,7 @@ type ListReleasesRequest struct {
 type ReleasePage struct {
 	Items      []domain.Release
 	Limit      int
+	Total      int64
 	NextCursor string
 }
 
@@ -219,6 +252,9 @@ func (service *PublishingService) PublishProposal(ctx context.Context, request P
 	if err != nil {
 		return domain.Release{}, err
 	}
+	if proposal.IsProductionMember() {
+		return domain.Release{}, domain.ErrProductionSetRequired
+	}
 	if proposal.State != domain.ProposalInReview {
 		denialErr := &ReleaseRefusalError{
 			Code:    "PROPOSAL_NOT_IN_REVIEW",
@@ -341,6 +377,9 @@ func (service *PublishingService) RollbackRelease(ctx context.Context, request R
 	if err != nil {
 		return domain.Release{}, err
 	}
+	if target.IsProductionProtected() {
+		return domain.Release{}, domain.ErrProductionSetRequired
+	}
 	if target.Entries, err = service.repository.ListReleaseAssets(ctx, request.WorkspaceID, target.ID); err != nil {
 		return domain.Release{}, err
 	}
@@ -383,11 +422,13 @@ func (service *PublishingService) RollbackRelease(ctx context.Context, request R
 		return domain.Release{}, service.refuse(ctx, request.WorkspaceID, request.PrincipalRef, denialErr, nil, &target.ID, request.TraceID)
 	}
 	var changes []domain.ChangeSetItem
+	var originTarget domain.Proposal
 	if target.OriginProposalID != nil {
 		origin, proposalErr := service.repository.GetProposal(ctx, request.WorkspaceID, *target.OriginProposalID)
 		if proposalErr != nil {
 			return domain.Release{}, proposalErr
 		}
+		originTarget = origin
 		if origin.CreatedBy == publisher {
 			return domain.Release{}, service.refuseDuty(ctx, request.WorkspaceID, publisher, RefusalPublisherIsAuthor,
 				"the publisher cannot roll back the release of their own proposal", nil, &target.ID, request.TraceID,
@@ -415,13 +456,13 @@ func (service *PublishingService) RollbackRelease(ctx context.Context, request R
 		ReleaseID: releaseID, TraceID: request.TraceID, AppliedAt: service.clock.Now().UTC(),
 		ReleaseEvents: releaseEvents, AssetRestores: restores, Entries: entries, Objects: objects,
 	}
-	if len(objects) > 0 {
+	if len(objects) > 0 && originTarget.TargetObjectType.IsGovernedObject() {
 		auditID, auditErr := identity.NewEventID()
 		if auditErr != nil {
 			return domain.Release{}, auditErr
 		}
 		command.ObjectRestore = &ObjectRestore{
-			ObjectType: target.Objects[0].ObjectType, ObjectID: target.Objects[0].ObjectID,
+			ObjectType: originTarget.TargetObjectType, ObjectID: originTarget.TargetObjectID,
 			AuditID: auditID,
 			ApplyUpdate: func(content json.RawMessage) (json.RawMessage, error) {
 				return domain.ApplyInverseChangeSet(content, changes)
@@ -446,7 +487,19 @@ func (service *PublishingService) planRestore(
 	restores := make([]AssetRestore, 0, len(target.Entries))
 	var refusal *ReleaseRefusalError
 	entries := make([]domain.ManifestEntry, 0, len(target.Entries))
+	var origin domain.Proposal
+	if target.OriginProposalID != nil {
+		var err error
+		origin, err = service.repository.GetProposal(ctx, workspace, *target.OriginProposalID)
+		if err != nil {
+			return nil, nil, nil, refusalError(RefusalPriorStateUnknown, "originating proposal is unavailable", 422, target.ID)
+		}
+	}
 	for _, entry := range target.Entries {
+		if target.OriginProposalID != nil && (origin.AssetID == nil || *origin.AssetID != entry.AssetID) {
+			entries = append(entries, entry)
+			continue
+		}
 		prior, found, err := service.repository.LatestAssetPinBefore(ctx, workspace, entry.AssetID, target.Sequence)
 		if err != nil {
 			return nil, nil, nil, refusalError(RefusalPriorStateUnknown, "prior revision pin lookup failed", 500, target.ID)
@@ -473,6 +526,10 @@ func (service *PublishingService) planRestore(
 	}
 	objects := make([]domain.ObjectManifestEntry, 0, len(target.Objects))
 	for _, entry := range target.Objects {
+		if target.OriginProposalID != nil && (origin.TargetObjectType != entry.ObjectType || origin.TargetObjectID != entry.ObjectID) {
+			objects = append(objects, entry)
+			continue
+		}
 		if len(changes) == 0 {
 			refusal = refusalError(RefusalPriorStateUnknown,
 				"the originating proposal change-set is required to restore governed-object content", 422, target.ID)
@@ -496,17 +553,115 @@ func refusalError(code, message string, status int, release identity.ReleaseID) 
 // GetRelease reads one release with its manifest entries and object pins.
 // Read surface: the same workspace-scoped asset.read capability proposal
 // reads use.
-func (service *PublishingService) GetRelease(ctx context.Context, request GetReleaseRequest) (domain.Release, error) {
+func (service *PublishingService) GetRelease(ctx context.Context, request GetReleaseRequest) (ReleaseDetail, error) {
 	if err := service.supported(); err != nil {
-		return domain.Release{}, err
+		return ReleaseDetail{}, err
 	}
 	if request.WorkspaceID.IsZero() || request.ReleaseID.IsZero() {
-		return domain.Release{}, domain.ErrInvalidArgument
+		return ReleaseDetail{}, domain.ErrInvalidArgument
 	}
-	if err := service.authorizeRead(ctx, request.WorkspaceID, request.PrincipalRef, request.TraceID); err != nil {
-		return domain.Release{}, err
+	access, err := service.authorizeRead(ctx, request.WorkspaceID, request.PrincipalRef, request.TraceID)
+	if err != nil {
+		return ReleaseDetail{}, err
 	}
-	return service.loadRelease(ctx, request.WorkspaceID, request.ReleaseID)
+	return service.loadReleaseDetail(ctx, request.WorkspaceID, request.ReleaseID, access.BindingRead)
+}
+
+// CommittedReleaseDetail enriches the result of an already-authorized publish
+// or rollback. Sensitive object pins, impact, and diffs remain independently
+// gated by binding.read; release commands do not imply that capability.
+func (service *PublishingService) CommittedReleaseDetail(
+	ctx context.Context, workspace identity.WorkspaceID, releaseID identity.ReleaseID, principalRef, traceID string,
+) (ReleaseDetail, error) {
+	if err := service.supported(); err != nil {
+		return ReleaseDetail{}, err
+	}
+	bindingRead, err := service.authorizeCommittedBindingRead(ctx, workspace, principalRef, traceID)
+	if err != nil {
+		return ReleaseDetail{}, err
+	}
+	return service.loadReleaseDetail(ctx, workspace, releaseID, bindingRead)
+}
+
+func (service *PublishingService) authorizeCommittedBindingRead(
+	ctx context.Context, workspace identity.WorkspaceID, principalRef, traceID string,
+) (bool, error) {
+	if service.authorizer == nil {
+		return true, nil
+	}
+	evaluation, err := service.authorizer.Evaluate(ctx, authorizationapp.EvaluationRequest{
+		PrincipalRef: principalRef, WorkspaceID: workspace,
+		Action:   authorization.ActionBindingRead,
+		Resource: authorization.Resource{Type: authorization.ScopeWorkspace, ID: workspace.UUID()},
+		TraceID:  traceID,
+	})
+	if err != nil {
+		return false, err
+	}
+	if !evaluation.Allowed {
+		return false, nil
+	}
+	snapshotEvaluator, ok := service.authorizer.(authorizationapp.SnapshotEvaluator)
+	if !ok {
+		return false, nil
+	}
+	if evaluation.PrincipalID.IsZero() {
+		return false, nil
+	}
+	snapshot, err := snapshotEvaluator.Snapshot(ctx, workspace, evaluation.PrincipalID)
+	if err != nil {
+		return false, err
+	}
+	return snapshot.Allows(authorization.ActionBindingRead,
+		authorization.Resource{Type: authorization.ScopeWorkspace, ID: workspace.UUID()}), nil
+}
+
+func (service *PublishingService) loadReleaseDetail(
+	ctx context.Context, workspace identity.WorkspaceID, releaseID identity.ReleaseID, bindingRead bool,
+) (ReleaseDetail, error) {
+	release, err := service.loadRelease(ctx, workspace, releaseID)
+	if err != nil {
+		return ReleaseDetail{}, err
+	}
+	detail := ReleaseDetail{Release: release, Authority: "releases/release_assets/release_object_snapshots",
+		Availability: "available", ObjectAvailability: "forbidden", ConsumerImpactAvailability: "forbidden",
+		DiffAvailability: "forbidden", PriorPinDiff: []ReleaseDiffEntry{}, CurrentRegistryDiff: []ReleaseDiffEntry{}}
+	if !bindingRead {
+		detail.Release.Objects = []domain.ObjectManifestEntry{}
+		return detail, nil
+	}
+	detail.ObjectAvailability = "available"
+	repository, ok := service.repository.(ReleaseDetailRepository)
+	if !ok {
+		detail.ConsumerImpactAvailability = "not_configured"
+		detail.DiffAvailability = "not_configured"
+		return detail, nil
+	}
+	impact, err := repository.GetReleaseConsumerImpact(ctx, workspace, releaseID)
+	if err != nil {
+		return ReleaseDetail{}, err
+	}
+	detail.ConsumerImpact = &impact
+	detail.ConsumerImpactAvailability = "available"
+	diff, err := repository.ListReleaseStableDiff(ctx, workspace, releaseID)
+	if err != nil {
+		return ReleaseDetail{}, err
+	}
+	for _, entry := range diff {
+		switch entry.ComparisonKind {
+		case "prior_pin":
+			detail.PriorPinDiff = append(detail.PriorPinDiff, entry)
+		case "current_registry":
+			detail.CurrentRegistryDiff = append(detail.CurrentRegistryDiff, entry)
+		default:
+			return ReleaseDetail{}, domain.ErrInvariant
+		}
+	}
+	if len(detail.PriorPinDiff) > 2000 || len(detail.CurrentRegistryDiff) > 2000 {
+		return ReleaseDetail{}, domain.ErrInvariant
+	}
+	detail.DiffAvailability = "available"
+	return detail, nil
 }
 
 // ListReleases pages workspace releases newest first with the T003-style
@@ -518,7 +673,7 @@ func (service *PublishingService) ListReleases(ctx context.Context, request List
 	if request.WorkspaceID.IsZero() {
 		return ReleasePage{}, domain.ErrInvalidArgument
 	}
-	if err := service.authorizeRead(ctx, request.WorkspaceID, request.PrincipalRef, request.TraceID); err != nil {
+	if _, err := service.authorizeRead(ctx, request.WorkspaceID, request.PrincipalRef, request.TraceID); err != nil {
 		return ReleasePage{}, err
 	}
 	limit, err := normalizeReleaseLimit(request.Limit)
@@ -533,7 +688,11 @@ func (service *PublishingService) ListReleases(ctx context.Context, request List
 	if err != nil {
 		return ReleasePage{}, err
 	}
-	page := ReleasePage{Limit: limit}
+	total, err := service.repository.CountReleases(ctx, request.WorkspaceID)
+	if err != nil {
+		return ReleasePage{}, err
+	}
+	page := ReleasePage{Limit: limit, Total: total}
 	if len(items) > limit {
 		last := items[limit-1]
 		page.NextCursor, err = encodeReleaseCursor(last)
@@ -542,14 +701,7 @@ func (service *PublishingService) ListReleases(ctx context.Context, request List
 		}
 		items = items[:limit]
 	}
-	page.Items = make([]domain.Release, 0, len(items))
-	for _, item := range items {
-		loaded, loadErr := service.loadRelease(ctx, request.WorkspaceID, item.ID)
-		if loadErr != nil {
-			return ReleasePage{}, loadErr
-		}
-		page.Items = append(page.Items, loaded)
-	}
+	page.Items = items
 	return page, nil
 }
 
@@ -570,14 +722,19 @@ func (service *PublishingService) loadRelease(
 		return domain.Release{}, err
 	}
 	releaseRow.Objects = objects
+	if len(entries) > 1000 || len(objects) > 1000 {
+		return domain.Release{}, domain.ErrInvariant
+	}
 	return releaseRow, nil
 }
 
+type releaseReadAccess struct{ BindingRead bool }
+
 func (service *PublishingService) authorizeRead(
 	ctx context.Context, workspace identity.WorkspaceID, principalRef, traceID string,
-) error {
+) (releaseReadAccess, error) {
 	if service.authorizer == nil {
-		return nil
+		return releaseReadAccess{BindingRead: true}, nil
 	}
 	evaluation, err := service.authorizer.Evaluate(ctx, authorizationapp.EvaluationRequest{
 		PrincipalRef: principalRef, WorkspaceID: workspace,
@@ -586,12 +743,27 @@ func (service *PublishingService) authorizeRead(
 		TraceID:  traceID,
 	})
 	if err != nil {
-		return err
+		return releaseReadAccess{}, err
 	}
 	if !evaluation.Allowed {
-		return &authorization.DenialError{Decision: evaluation}
+		return releaseReadAccess{}, &authorization.DenialError{Decision: evaluation}
 	}
-	return nil
+	snapshotEvaluator, ok := service.authorizer.(authorizationapp.SnapshotEvaluator)
+	if !ok || evaluation.PrincipalID.IsZero() {
+		return releaseReadAccess{}, nil
+	}
+	snapshot, err := snapshotEvaluator.Snapshot(ctx, workspace, evaluation.PrincipalID)
+	if err != nil {
+		return releaseReadAccess{}, err
+	}
+	workspaceResource := authorization.Resource{Type: authorization.ScopeWorkspace, ID: workspace.UUID()}
+	if !snapshot.Allows(authorization.ActionAssetRead, workspaceResource) {
+		return releaseReadAccess{}, &authorization.DenialError{Decision: authorization.Decision{
+			Action: authorization.ActionAssetRead, PrincipalID: evaluation.PrincipalID,
+			ReasonCode: authorization.ReasonNoMatchingGrant, AuthorizationVersion: snapshot.AuthorizationVersion,
+		}}
+	}
+	return releaseReadAccess{BindingRead: snapshot.Allows(authorization.ActionBindingRead, workspaceResource)}, nil
 }
 
 func normalizeReleaseLimit(limit int) (int, error) {

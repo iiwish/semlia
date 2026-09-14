@@ -43,7 +43,9 @@ func TestGovernedLoopPublishesAndRollsBackWithAppendOnlyProjection(t *testing.T)
 
 	// Governed-loop services: authoring (with publishing composed), review and
 	// the production validation handler.
-	authorizer := authorizationapp.NewService(store, authorizationapp.ClockFunc(clockTime))
+	authorizer := authorizationapp.NewService(
+		store, authorizationapp.ClockFunc(clockTime), authorizationapp.WithLocalUATIdentities(),
+	)
 	governancePolicy := governanceapp.NewPolicyService(store, clock, governanceapp.WithRuleSource(store))
 	authoring := governanceapp.NewAuthoringService(
 		store,
@@ -82,7 +84,7 @@ func TestGovernedLoopPublishesAndRollsBackWithAppendOnlyProjection(t *testing.T)
 			BeforeDigest: sha256Of(`"Revenue less refunds"`), AfterDigest: sha256Of(`"Revenue less refunds and chargebacks"`),
 			BeforeValue: json.RawMessage(`"Revenue less refunds"`), AfterValue: json.RawMessage(`"Revenue less refunds and chargebacks"`),
 		}},
-		CreatedBy: author.String(), TraceID: traceID,
+		CreatedBy: author.String(), PrincipalRef: author.String(), TraceID: traceID,
 	})
 	if err != nil {
 		t.Fatal(err)

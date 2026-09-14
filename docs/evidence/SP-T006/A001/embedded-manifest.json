@@ -1,0 +1,14 @@
+[
+  {
+    "path": "internal/platform/web/static/index.html",
+    "sha256": "e8ab5d057d630df94f09474365c0e955bc63c7a041b4e4a4f99d517ca4902b7b"
+  },
+  {
+    "path": "internal/platform/web/static/assets/index-BIxFZMdi.css",
+    "sha256": "0e6d3fba3bfc31a9e01e820c195dde581facd242b4d406243b7f89ef274e5d65"
+  },
+  {
+    "path": "internal/platform/web/static/assets/index-DAPscR2B.js",
+    "sha256": "8525f810dd470ccc4a28b14e8923d020d0f4d178bdc1d4717bb258fa2d48d6d4"
+  }
+]

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	authorizationapp "github.com/iiwish/semlia/internal/application/authorization"
 	governanceapp "github.com/iiwish/semlia/internal/application/governance"
 	"github.com/iiwish/semlia/internal/domain/authorization"
 	"github.com/iiwish/semlia/internal/domain/governance"
@@ -250,7 +251,7 @@ func TestExpertApprovalRecordsImmutableReviewAndKeepsProposalInReview(t *testing
 	changeSet := validatedChangeItem("definition", "Revenue after refunds", "Revenue after refunds and chargebacks")
 	path, proposalID := submitValidatedProposal(t, environment, workspace, changeSet)
 
-	created := environment.request(t, http.MethodPost, reviewPath(t, environment, workspace, proposalID), "",
+	created := environment.request(t, http.MethodPost, reviewPath(t, environment, workspace, proposalID), authorizationapp.LocalUATReviewerPrincipalRef,
 		reviewBody("approve", "Definition change verified against the revenue runbook"))
 	if created.Code != http.StatusCreated {
 		t.Fatalf("expert approve status = %d, body = %s", created.Code, created.Body.String())
@@ -275,12 +276,30 @@ func TestExpertApprovalRecordsImmutableReviewAndKeepsProposalInReview(t *testing
 		review.Note != "Definition change verified against the revenue runbook" || review.CreatedAt == "" {
 		t.Fatalf("review record = %+v", review)
 	}
+	listed := environment.request(t, http.MethodGet, reviewPath(t, environment, workspace, proposalID), "", "")
+	if listed.Code != http.StatusOK {
+		t.Fatalf("review list status = %d, body = %s", listed.Code, listed.Body.String())
+	}
+	var page struct {
+		Items []struct {
+			ID         string `json:"id"`
+			ProposalID string `json:"proposalId"`
+			Decision   string `json:"decision"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(listed.Body.Bytes(), &page); err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Items) != 1 || page.Items[0].ID != review.ID ||
+		page.Items[0].ProposalID != proposalID || page.Items[0].Decision != "approved" {
+		t.Fatalf("review page = %+v", page.Items)
+	}
 	assertProposalState(t, environment, workspace, path, proposalID, "in_review")
 	if decidedAt := proposalDecidedAt(t, environment, workspace, proposalID); decidedAt != nil {
 		t.Fatalf("approval must not transition the proposal: decided_at = %v", decidedAt)
 	}
 
-	duplicate := environment.request(t, http.MethodPost, reviewPath(t, environment, workspace, proposalID), "",
+	duplicate := environment.request(t, http.MethodPost, reviewPath(t, environment, workspace, proposalID), authorizationapp.LocalUATReviewerPrincipalRef,
 		reviewBody("approve", "second review of the same stage"))
 	if duplicate.Code != http.StatusConflict {
 		t.Fatalf("duplicate review status = %d, want 409, body = %s", duplicate.Code, duplicate.Body.String())
@@ -297,7 +316,7 @@ func TestExpertRejectionTransitionsProposalToRejected(t *testing.T) {
 	changeSet := validatedChangeItem("definition", "Revenue after refunds", "Revenue after refunds and chargebacks")
 	path, proposalID := submitValidatedProposal(t, environment, workspace, changeSet)
 
-	rejected := environment.request(t, http.MethodPost, reviewPath(t, environment, workspace, proposalID), "",
+	rejected := environment.request(t, http.MethodPost, reviewPath(t, environment, workspace, proposalID), authorizationapp.LocalUATReviewerPrincipalRef,
 		reviewBody("reject", "The change conflicts with the finance definition of record"))
 	if rejected.Code != http.StatusCreated {
 		t.Fatalf("expert reject status = %d, body = %s", rejected.Code, rejected.Body.String())
@@ -309,7 +328,7 @@ func TestExpertRejectionTransitionsProposalToRejected(t *testing.T) {
 	if countReviews(t, environment, proposalID) != 1 {
 		t.Fatal("rejection must record exactly one review row")
 	}
-	followUp := environment.request(t, http.MethodPost, reviewPath(t, environment, workspace, proposalID), "",
+	followUp := environment.request(t, http.MethodPost, reviewPath(t, environment, workspace, proposalID), authorizationapp.LocalUATReviewerPrincipalRef,
 		reviewBody("approve", "too late"))
 	if followUp.Code != http.StatusConflict {
 		t.Fatalf("review of a rejected proposal status = %d, want 409", followUp.Code)
@@ -364,6 +383,7 @@ func TestProposalAuthorCannotReviewTheirOwnProposal(t *testing.T) {
 	if created.Code != http.StatusCreated {
 		t.Fatalf("author proposal create status = %d, body = %s", created.Code, created.Body.String())
 	}
+	assertJSONField(t, created.Body.Bytes(), "createdBy", author.String())
 	proposalID, _ := decodeProposalDetail(t, created.Body.Bytes())["id"].(string)
 	submitted := environment.request(t, http.MethodPost, path+"/"+proposalID+"/submit", author.String(), "")
 	if submitted.Code != http.StatusOK {
@@ -575,7 +595,7 @@ func TestBatchConfirmAppliesDecisionAndAutoSplitsEscalatedMember(t *testing.T) {
 	seedBlockerFinding(t, environment, workspace, escalatedMember)
 
 	confirmed := environment.request(t, http.MethodPost, reviewBatchesPath(t, workspace)+"/"+batchID+"/confirm",
-		"", reviewBody("approve", "Representative diffs verified"))
+		authorizationapp.LocalUATReviewerPrincipalRef, reviewBody("approve", "Representative diffs verified"))
 	if confirmed.Code != http.StatusOK {
 		t.Fatalf("batch confirm status = %d, body = %s", confirmed.Code, confirmed.Body.String())
 	}
@@ -651,7 +671,7 @@ func TestBatchConfirmAppliesDecisionAndAutoSplitsEscalatedMember(t *testing.T) {
 		t.Fatalf("double confirm status = %d, want 409", double.Code)
 	}
 
-	individual := environment.request(t, http.MethodPost, reviewPath(t, environment, workspace, escalatedMember), "",
+	individual := environment.request(t, http.MethodPost, reviewPath(t, environment, workspace, escalatedMember), authorizationapp.LocalUATReviewerPrincipalRef,
 		reviewBody("approve", "handled individually after the split"))
 	if individual.Code != http.StatusCreated {
 		t.Fatalf("individual review after split status = %d, body = %s", individual.Code, individual.Body.String())
@@ -669,7 +689,7 @@ func TestBatchConfirmRejectionTransitionsMembersToRejected(t *testing.T) {
 	assembled := environment.request(t, http.MethodPost, reviewBatchesPath(t, workspace), "", "")
 	batchID := decodeBatchID(t, assembled.Body.Bytes())
 	rejected := environment.request(t, http.MethodPost, reviewBatchesPath(t, workspace)+"/"+batchID+"/confirm",
-		"", reviewBody("reject", "The family of changes is withdrawn"))
+		authorizationapp.LocalUATReviewerPrincipalRef, reviewBody("reject", "The family of changes is withdrawn"))
 	if rejected.Code != http.StatusOK {
 		t.Fatalf("batch reject status = %d, body = %s", rejected.Code, rejected.Body.String())
 	}
@@ -681,6 +701,19 @@ func TestBatchConfirmRejectionTransitionsMembersToRejected(t *testing.T) {
 		}
 		if countReviews(t, environment, proposalID) != 1 {
 			t.Fatalf("rejected member %s without its immutable review row", proposalID)
+		}
+		proposalTyped, err := identity.ParseProposalID(proposalID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var attentionState string
+		if err := environment.pool.QueryRow(context.Background(), `
+			SELECT state FROM attention_items WHERE workspace_id=$1 AND dedupe_key=$2`,
+			workspace.UUID(), "review:"+proposalTyped.UUID()).Scan(&attentionState); err != nil {
+			t.Fatalf("load rejected member attention: %v", err)
+		}
+		if attentionState != "resolved" {
+			t.Fatalf("rejected member %s attention state = %s", proposalID, attentionState)
 		}
 	}
 	empty := environment.request(t, http.MethodGet, reviewBatchesPath(t, workspace), "", "")

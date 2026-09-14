@@ -1,15 +1,21 @@
 package dbt
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
+	"path"
 	"sort"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/iiwish/semlia/internal/domain/discovery"
+	ingestiondomain "github.com/iiwish/semlia/internal/domain/ingestion"
 )
 
 const (
@@ -17,12 +23,26 @@ const (
 	adapterVersion    = "1.0.0"
 	manifestSchemaV12 = "https://schemas.getdbt.com/dbt/manifest/v12.json"
 	catalogSchemaV1   = "https://schemas.getdbt.com/dbt/catalog/v1.json"
+	maxDBTNodes       = 10_000
+	maxDBTJSONTokens  = 500_000
+	maxDBTDepth       = 64
+	maxDBTIdentity    = 512
+	maxDBTText        = 1024
+	maxDBTPath        = 1024
+	maxDBTRawCode     = 10 << 20
 )
 
 type Adapter struct{}
 
+type CatalogAdapter struct{}
+
+func Catalog() CatalogAdapter { return CatalogAdapter{} }
+
 func (Adapter) Kind() string    { return adapterKind }
 func (Adapter) Version() string { return adapterVersion }
+
+func (CatalogAdapter) Kind() string    { return "dbt_catalog_validation" }
+func (CatalogAdapter) Version() string { return adapterVersion }
 
 type metadata struct {
 	SchemaVersion string `json:"dbt_schema_version"`
@@ -66,8 +86,11 @@ type catalogColumn struct {
 	Type  string `json:"type"`
 }
 
-func (Adapter) Discover(_ context.Context, input discovery.Input) (discovery.Snapshot, error) {
-	if err := input.Validate("manifest.json", "catalog.json"); err != nil {
+func (Adapter) Discover(ctx context.Context, input discovery.Input) (discovery.Snapshot, error) {
+	if err := input.Validate("manifest.json"); err != nil || ctx.Err() != nil {
+		return discovery.Snapshot{}, err
+	}
+	if err := preflightDBTJSON(ctx, input.Files["manifest.json"]); err != nil {
 		return discovery.Snapshot{}, err
 	}
 	var manifest manifest
@@ -75,15 +98,21 @@ func (Adapter) Discover(_ context.Context, input discovery.Input) (discovery.Sna
 		return discovery.Snapshot{}, fmt.Errorf("%w: dbt manifest JSON", discovery.ErrInvalidInput)
 	}
 	var catalog catalog
-	if err := json.Unmarshal(input.Files["catalog.json"], &catalog); err != nil {
-		return discovery.Snapshot{}, fmt.Errorf("%w: dbt catalog JSON", discovery.ErrInvalidInput)
+	catalogJSON, hasCatalog := input.Files["catalog.json"]
+	if hasCatalog {
+		if err := preflightDBTJSON(ctx, catalogJSON); err != nil {
+			return discovery.Snapshot{}, err
+		}
+		if err := json.Unmarshal(catalogJSON, &catalog); err != nil {
+			return discovery.Snapshot{}, fmt.Errorf("%w: dbt catalog JSON", discovery.ErrInvalidInput)
+		}
 	}
 	snapshot := discovery.Snapshot{
 		AdapterKind: adapterKind, AdapterVersion: adapterVersion,
 		ExternalRevision: input.ExternalRevision, Locator: input.Locator,
 		ContentDigest: input.ContentDigest(), ObservedAt: input.ObservedAt,
 	}
-	if manifest.Metadata.SchemaVersion != manifestSchemaV12 || catalog.Metadata.SchemaVersion != catalogSchemaV1 {
+	if manifest.Metadata.SchemaVersion != manifestSchemaV12 || (hasCatalog && catalog.Metadata.SchemaVersion != catalogSchemaV1) {
 		snapshot.Findings = []discovery.Finding{{
 			Code: "UNSUPPORTED_DBT_SCHEMA", Severity: "error", Locator: input.Locator, Terminal: true,
 			Details: map[string]any{
@@ -91,12 +120,20 @@ func (Adapter) Discover(_ context.Context, input discovery.Input) (discovery.Sna
 				"catalog_schema":  catalog.Metadata.SchemaVersion,
 			},
 		}}
+		selector := "manifest.json"
+		if hasCatalog {
+			selector = "catalog.json;manifest.json"
+		}
+		snapshot.DeclareCoverage("dbt", selector)
 		if err := snapshot.Canonicalize(); err != nil {
 			return discovery.Snapshot{}, err
 		}
 		return snapshot, nil
 	}
-	if err := validatePublishedSchemas(input.Files["manifest.json"], input.Files["catalog.json"]); err != nil {
+	if err := validateDBTModels(manifest, catalog, hasCatalog); err != nil {
+		return discovery.Snapshot{}, err
+	}
+	if err := validatePublishedSchemas(input.Files["manifest.json"], catalogJSON, hasCatalog); err != nil {
 		return discovery.Snapshot{}, err
 	}
 
@@ -117,6 +154,7 @@ func (Adapter) Discover(_ context.Context, input discovery.Input) (discovery.Sna
 			snapshot.CodeArtifacts = append(snapshot.CodeArtifacts, discovery.CodeArtifact{
 				Path: manifestNode.OriginalFilePath, Language: "sql",
 				ContentDigest: digest([]byte(manifestNode.RawCode)),
+				Content:       []byte(manifestNode.RawCode),
 			})
 		}
 	}
@@ -141,11 +179,158 @@ func (Adapter) Discover(_ context.Context, input discovery.Input) (discovery.Sna
 			})
 		}
 	}
+	selector := "manifest.json"
+	if hasCatalog {
+		selector = "catalog.json;manifest.json"
+	}
+	snapshot.DeclareCoverage("dbt", selector)
 	if err := snapshot.Canonicalize(); err != nil {
 		return discovery.Snapshot{}, err
 	}
 	return snapshot, nil
 }
+
+func (CatalogAdapter) Discover(ctx context.Context, input discovery.Input) (discovery.Snapshot, error) {
+	if err := input.Validate("catalog.json"); err != nil || ctx.Err() != nil || len(input.Files) != 1 {
+		return discovery.Snapshot{}, discovery.ErrInvalidInput
+	}
+	content := input.Files["catalog.json"]
+	if err := preflightDBTJSON(ctx, content); err != nil {
+		return discovery.Snapshot{}, err
+	}
+	var value catalog
+	if json.Unmarshal(content, &value) != nil || value.Metadata.SchemaVersion != catalogSchemaV1 {
+		return discovery.Snapshot{}, discovery.ErrInvalidInput
+	}
+	if err := validateDBTModels(manifest{}, value, true); err != nil {
+		return discovery.Snapshot{}, err
+	}
+	if err := validateCatalogSchema(content); err != nil {
+		return discovery.Snapshot{}, err
+	}
+	result := discovery.Snapshot{AdapterKind: "dbt_catalog_validation", AdapterVersion: adapterVersion,
+		ExternalRevision: input.ExternalRevision, Locator: input.Locator, ContentDigest: input.ContentDigest(), ObservedAt: input.ObservedAt}
+	if err := result.Canonicalize(); err != nil {
+		return discovery.Snapshot{}, err
+	}
+	return result, nil
+}
+
+func preflightDBTJSON(ctx context.Context, content []byte) error {
+	if len(content) == 0 || int64(len(content)) > 50<<20 || !utf8.Valid(content) || bytes.IndexByte(content, 0) >= 0 {
+		return discovery.ErrInvalidInput
+	}
+	decoder := json.NewDecoder(bytes.NewReader(content))
+	decoder.UseNumber()
+	depth, tokens := 0, 0
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		token, err := decoder.Token()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return discovery.ErrInvalidInput
+		}
+		tokens++
+		if tokens > maxDBTJSONTokens {
+			return ingestiondomain.ErrLimitExceeded
+		}
+		switch value := token.(type) {
+		case json.Delim:
+			if value == '{' || value == '[' {
+				depth++
+				if depth > maxDBTDepth {
+					return ingestiondomain.ErrLimitExceeded
+				}
+			} else {
+				depth--
+			}
+		case string:
+			if len(value) > maxDBTRawCode {
+				return ingestiondomain.ErrLimitExceeded
+			}
+		}
+	}
+	if depth != 0 || tokens == 0 {
+		return discovery.ErrInvalidInput
+	}
+	return nil
+}
+
+func validateDBTModels(document manifest, catalogDocument catalog, hasCatalog bool) error {
+	if len(document.Nodes)+len(document.Sources) > maxDBTNodes || len(catalogDocument.Nodes)+len(catalogDocument.Sources) > maxDBTNodes {
+		return ingestiondomain.ErrLimitExceeded
+	}
+	for key := range document.Nodes {
+		if _, duplicate := document.Sources[key]; duplicate {
+			return discovery.ErrInvalidInput
+		}
+	}
+	dependencies := 0
+	for key, value := range mergeNodes(document.Nodes, document.Sources) {
+		if !safeDBTIdentity(key) || (value.UniqueID != "" && value.UniqueID != key) ||
+			!safeDBTText(value.Database) || !safeDBTText(value.Schema) || !safeDBTText(value.Name) ||
+			!safeDBTText(value.Alias) || len(value.ResourceType) > 64 || len(value.RawCode) > maxDBTRawCode ||
+			(value.OriginalFilePath != "" && !safeDBTPath(value.OriginalFilePath)) || len(value.DependsOn.Nodes) > 10_000 {
+			return discovery.ErrInvalidInput
+		}
+		dependencies += len(value.DependsOn.Nodes)
+		if dependencies > 100_000 {
+			return ingestiondomain.ErrLimitExceeded
+		}
+		for _, dependency := range value.DependsOn.Nodes {
+			if !safeDBTIdentity(dependency) {
+				return discovery.ErrInvalidInput
+			}
+		}
+	}
+	if !hasCatalog {
+		return nil
+	}
+	for key := range catalogDocument.Nodes {
+		if _, duplicate := catalogDocument.Sources[key]; duplicate {
+			return discovery.ErrInvalidInput
+		}
+	}
+	columns := 0
+	for key, value := range mergeCatalogNodes(catalogDocument.Nodes, catalogDocument.Sources) {
+		if !safeDBTIdentity(key) {
+			return discovery.ErrInvalidInput
+		}
+		if len(value.Columns) > ingestiondomain.MaxColumns {
+			return ingestiondomain.ErrLimitExceeded
+		}
+		columns += len(value.Columns)
+		if columns > 100_000 {
+			return ingestiondomain.ErrLimitExceeded
+		}
+		for columnKey, column := range value.Columns {
+			if !safeDBTIdentity(columnKey) || !safeDBTText(column.Name) || !safeDBTText(column.Type) || column.Index < 0 || column.Index > 512 {
+				return discovery.ErrInvalidInput
+			}
+		}
+	}
+	return nil
+}
+
+func safeDBTIdentity(value string) bool {
+	return value != "" && len(value) <= maxDBTIdentity && strings.IndexFunc(value, unsafeDBTRune) < 0
+}
+
+func safeDBTText(value string) bool {
+	return len(value) <= maxDBTText && strings.IndexFunc(value, unsafeDBTRune) < 0
+}
+
+func safeDBTPath(value string) bool {
+	cleaned := path.Clean(value)
+	return len(value) <= maxDBTPath && cleaned == value && !path.IsAbs(value) && cleaned != "." &&
+		!strings.HasPrefix(cleaned, "../") && !strings.Contains(value, "\\") && strings.IndexFunc(value, unsafeDBTRune) < 0
+}
+
+func unsafeDBTRune(value rune) bool { return unicode.IsControl(value) || unicode.In(value, unicode.Cf) }
 
 func datasetFromNode(value node, catalogValue catalogNode) discovery.Dataset {
 	name := value.Alias

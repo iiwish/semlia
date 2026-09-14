@@ -1,0 +1,317 @@
+schema_version: 1
+packet_id: FMB-T001-A003
+task_id: FMB-T001
+feature_id: full-menu-beta
+mode: execute_one_task
+status: Completed
+adapter: agent-neutral
+
+governance_inputs:
+  constitution:
+    - AGENTS.md
+    - docs/SSOT.md
+  product_contract: docs/specs/full-menu-beta/plan.md#requirements-contract
+  feature_spec: docs/specs/full-menu-beta/plan.md
+  requirements_checklist: docs/specs/full-menu-beta/plan.md#requirements-and-gate-checklist
+  technical_decisions: docs/specs/full-menu-beta/plan.md#technical-decisions
+  feature_plan: docs/specs/full-menu-beta/plan.md
+  work_graph: docs/specs/full-menu-beta/tasks.md
+  analysis: docs/specs/full-menu-beta/plan.md#baseline-audit-and-resolutions
+  supporting_contracts:
+    - docs/specs/access-control/product-design.md
+    - docs/specs/access-control/analysis.md
+    - docs/specs/m2-governed-authoring/spec.md
+    - docs/specs/alpha-controlled-user/spec.md
+    - docs/specs/m3-headless-semantic-distribution/spec.md
+  approval_gates:
+    product_scope: Founder approved Full-Menu Beta 0.2.0 on 2026-09-04
+    technical_plan_and_work_graph: Confirmed by founder on 2026-09-04
+    continuous_execution: Approved through FMB-T007 without per-task approval pauses
+    requirements_checklist: Completed in the confirmed plan
+    planning_analysis: No unresolved Critical or High findings
+    retry_reason: Independent A002 review found remaining SoD, identity TOCTOU, logical-expiry and manage-only capability blockers
+
+work_unit:
+  title: Technical boundary and real authorization baseline
+  goal: >-
+    Publish the additive OpenAPI 0.9.0/contract-9 boundary and replace Access Control fixture state
+    and client-side authority with persisted, audited, server-evaluated system/custom roles, immutable
+    custom-role versions, scoped assignment lifecycle and effective-access inspection.
+  epic: FMB-E001
+  story: FMB-US-001
+  requirements:
+    - FR-001
+    - FR-002
+    - FMB-NFR-001
+    - FMB-NFR-002
+    - FMB-NFR-005
+  priority: P0
+  depends_on:
+    - Full-Menu Beta 0.2.0 plan and work graph Confirmed
+    - Alpha identity/session foundation present
+    - M2 server-side authorization foundation present
+    - Existing Alpha/M3 working-tree changes preserved as the implementation baseline
+  blocks:
+    - FMB-T002
+    - FMB-T003
+    - FMB-T006
+  parallel: false
+  conflicts_with:
+    - Any active attempt editing api/openapi/semlia.v1.yaml
+    - Any active attempt regenerating API or sqlc artifacts
+    - Any active attempt editing authorization repositories, HTTP routing, readiness or AccessControlView
+
+codebase_context:
+  local_instructions:
+    - AGENTS.md
+  relevant_files:
+    - api/openapi/semlia.v1.yaml
+    - api/gen/go/types.gen.go
+    - migrations/000005_m2_authorization_foundation.up.sql
+    - migrations/000013_alpha_identity_sessions.up.sql
+    - db/queries/authorization.sql
+    - internal/domain/authorization/model.go
+    - internal/application/authorization/service.go
+    - internal/adapters/postgres/authorization.go
+    - internal/platform/http/handler.go
+    - internal/platform/http/authorization_test.go
+    - internal/platform/http/identity.go
+    - internal/platform/http/identity_test.go
+    - cmd/semlia/readiness.go
+    - sdk/typescript/src/client.ts
+    - sdk/typescript/src/schema.gen.ts
+    - web/src/AccessControlView.tsx
+    - web/src/authorization.tsx
+    - web/src/sessionRuntime.tsx
+    - web/src/ProductApp.tsx
+    - docs/evidence/ALPHA-T006/route-disclosure-inventory.md
+  existing_patterns:
+    - Actions, not role names, authorize protected commands.
+    - Authorization evaluation is server-side and produces immutable decision audit facts.
+    - Workspace authorization_version is monotonic and is checked on each protected request.
+    - System roles are seeded and immutable; TypeIDs and UUIDv7 storage identities follow repository conventions.
+    - PostgreSQL commands use sqlc/pgx transactions and preserve domain plus audit/outbox atomicity.
+    - OpenAPI generates committed Go and TypeScript contract artifacts.
+    - Cookie-authenticated Web writes use the shared session-aware client and CSRF/Origin enforcement.
+  interfaces_or_contracts:
+    - OpenAPI info.version becomes 0.9.0 and x-semlia-contract-version becomes 9.
+    - All endpoints remain additive under /api/v1.
+    - System-role reads require role.read; custom-role writes require role.manage.
+    - Assignment writes require role.assign; inspection requires authorization.inspect.
+    - Effective-access inspection calls the same evaluator as protected commands and has no mutation side effect.
+    - Assignment state includes active, expired and revoked; expiration and revocation deny the next request.
+  schema_contract:
+    migration: migrations/000016_fmb_authorization_admin.up.sql
+    rollback: migrations/000016_fmb_authorization_admin.down.sql
+    responsibilities:
+      - Workspace-scoped custom roles and immutable custom-role versions
+      - Active version pointer and optimistic version constraint
+      - Role-binding expiry and revocation metadata
+      - Workspace/principal/scope query indexes and database invariants
+    invariants:
+      - Historical migrations remain unchanged.
+      - System role IDs and action vocabulary remain compatible.
+      - Custom role/action changes and authorization_version bump commit atomically.
+      - Role-binding lifecycle and authorization_version bump commit atomically.
+      - Cross-workspace role, version, principal and scope references are rejected.
+
+execution_constraints:
+  branch_or_worktree: current shared worktree
+  coordination: >-
+    Work with the existing uncommitted Alpha/M3 baseline. Do not stop solely because the worktree is
+    dirty; first inventory relevant pre-existing changes and preserve them. Stop before editing a
+    file owned by another active attempt or when provenance makes a safe merge impossible.
+  allowed_files:
+    - api/openapi/semlia.v1.yaml
+    - api/gen/go/types.gen.go
+    - migrations/000016_fmb_authorization_admin.up.sql
+    - migrations/000016_fmb_authorization_admin.down.sql
+    - db/sqlc.yaml
+    - db/queries/authorization.sql
+    - db/queries/identity.sql
+    - internal/adapters/postgres/authorization.go
+    - internal/adapters/postgres/identity.go
+    - internal/adapters/postgres/sqlc/**
+    - internal/domain/authorization/**
+    - internal/application/authorization/**
+    - internal/application/identity/**
+    - internal/platform/http/handler.go
+    - internal/platform/http/handler_test.go
+    - internal/platform/http/authorization_test.go
+    - internal/platform/http/identity.go
+    - internal/platform/http/identity_test.go
+    - cmd/semlia/main.go
+    - cmd/semlia/readiness.go
+    - cmd/semlia/readiness_test.go
+    - sdk/typescript/src/client.ts
+    - sdk/typescript/src/client.test.ts
+    - sdk/typescript/src/schema.gen.ts
+    - sdk/typescript/src/index.ts
+    - web/src/AccessControlView.tsx
+    - web/src/AccessControlView.test.tsx
+    - web/src/authorization.tsx
+    - web/src/authorization.test.tsx
+    - web/src/authorizationAdmin.ts
+    - web/src/authorizationAdmin.test.tsx
+    - web/src/authorizationAdminRuntime.tsx
+    - web/src/authorizationAdminRuntime.test.tsx
+    - web/src/sessionRuntime.tsx
+    - web/src/sessionRuntime.test.tsx
+    - web/src/ProductApp.tsx
+    - web/src/ProductApp.test.tsx
+    - web/src/types.ts
+    - web/src/styles.css
+    - internal/platform/web/static/**
+    - tests/contracts/**
+    - tests/integration/authorization/**
+    - tests/integration/db/**
+    - tests/integration/identity/**
+    - docs/SSOT.md
+    - docs/operations/**
+    - docs/evidence/ALPHA-T006/route-disclosure-inventory.md
+    - docs/evidence/FMB-T001/**
+  test_targets:
+    - internal/domain/authorization/**
+    - internal/application/authorization/**
+    - internal/platform/http/authorization_test.go
+    - tests/integration/authorization/**
+    - tests/integration/db/**
+    - web/src/AccessControlView.test.tsx
+    - web/src/authorization.test.tsx
+    - web/src/sessionRuntime.test.tsx
+  ownership_notes:
+    - The orchestrator owns task-status transitions and packet changes; the worker does not edit plan.md, tasks.md or packets/T001.yaml.
+    - Globs cover generated sqlc output, focused module tests and evidence because generation and test file names are tool-controlled.
+    - Do not revert, reformat or rewrite unrelated user or parallel-agent changes.
+
+forbidden_changes:
+  - Do not trust client-side capability calculations or inspection results as authorization.
+  - Do not authorize by display name, role name or email address; actions and scoped bindings are authoritative.
+  - Do not make system roles editable or deletable.
+  - Do not mutate a custom-role version in place.
+  - Do not permit a grantor to assign actions outside the grantor's effective authorization ceiling.
+  - Do not weaken human-only actions, separation of duties, final-administrator protection, CSRF or Origin checks.
+  - Do not expose cross-workspace principal, role, binding, scope or decision existence.
+  - Do not place session tokens, provider credentials or authorization-sensitive payloads in API responses, logs or audit.
+  - Do not modify historical migrations 000001 through 000015.
+  - Do not implement FMB-T002 through FMB-T007 behavior in this attempt.
+  - Do not mark FMB-T001 Accepted or change another task status.
+
+tdd_plan:
+  required: true
+  exception: null
+  red:
+    command: >-
+      go test ./internal/domain/authorization/... ./internal/application/authorization/... ./internal/platform/http/...
+      ./tests/integration/authorization/... ./tests/integration/db/... &&
+      pnpm --dir web test -- AccessControlView authorization sessionRuntime
+    expected_failure: >-
+      Tests demonstrate that fixture-only custom-role and assignment writes are not durable, that the
+      API lacks the management/inspection contract, and that expiry, revocation, version conflict,
+      authorization-ceiling, separation-of-duty and cross-workspace cases are not yet satisfied.
+  green:
+    command: >-
+      go test ./internal/domain/authorization/... ./internal/application/authorization/... ./internal/platform/http/...
+      ./tests/integration/authorization/... ./tests/integration/db/... &&
+      pnpm --dir web test -- AccessControlView authorization sessionRuntime
+    expected_signal: >-
+      Focused domain, application, HTTP, PostgreSQL and Web tests pass against real persisted roles,
+      versions, assignments and server inspection with no production fixture fallback.
+  refactor:
+    command: make contracts-check && make db-generate-check && make check-source && git diff --check
+    expected_signal: >-
+      Generated artifacts are current, the complete source gate stays green, formatting is clean and
+      authorization continues to have one server-authoritative evaluation path.
+
+validation_loop:
+  commands:
+    - go test ./internal/domain/authorization/... ./internal/application/authorization/... ./internal/platform/http/...
+    - go test ./tests/integration/authorization/... ./tests/integration/db/... ./tests/integration/identity/...
+    - pnpm --dir web test -- AccessControlView authorization sessionRuntime ProductApp
+    - pnpm --dir web lint
+    - pnpm --dir web typecheck
+    - make contracts-check
+    - make db-generate-check
+    - make check-source
+    - git diff --check
+  migration_proof:
+    - Apply migrations 000001 through 000016 to an empty PostgreSQL database.
+    - Upgrade a populated migration-15 fixture to 000016.
+    - Revert 000016 on populated data, reapply it, and verify system roles/bindings and authorization decisions remain valid.
+    - Verify readiness requires schema version 16 for this execution head.
+  security_proof:
+    - Allow and deny decisions for each new endpoint.
+    - Cross-workspace non-disclosure for roles, principals, bindings and inspect.
+    - Grantor authorization ceiling and human-only action denial.
+    - Separation-of-duty conflict and final active administrator denial.
+    - Expiry and revocation effective on the next protected request.
+    - Logs, audit and API payload scanned for session, token and provider-secret leakage.
+  retry_budget: 2
+  failure_policy:
+    first_failure: Fix only behavior directly owned by FMB-T001 and rerun the smallest failing layer before broadening.
+    second_failure: Determine whether the failure is a scope, existing-baseline, migration, contract or environment blocker and report it to the orchestrator.
+    beyond_budget: Stop the attempt and produce blocked evidence without deleting tests, weakening assertions or widening allowed files.
+
+acceptance:
+  - OpenAPI is 0.9.0/contract 9 and remains additive under /api/v1.
+  - Role catalogue, custom-role create/edit, assignment lifecycle and effective-access inspection survive refresh and process/database restart.
+  - System roles remain immutable and custom-role edits create immutable versions with optimistic concurrency.
+  - Authorization-ceiling, human-only action, separation-of-duty and final-admin rules fail closed and are audited.
+  - Assignment expiration/revocation bumps authorization version and denies the next protected request.
+  - Access Control contains no production fixture authority or session-only success disclosure.
+  - Empty and populated migration lifecycle, generated drift and focused Web accessibility checks pass.
+
+evidence_contract:
+  summary: docs/evidence/FMB-T001/summary.md
+  diff: docs/evidence/FMB-T001/diff.patch
+  test_results: docs/evidence/FMB-T001/test-results.md
+  required:
+    - Relevant pre-existing worktree inventory and preservation statement
+    - Exact changed files inside allowed scope
+    - RED failure command and expected failure explanation
+    - GREEN and REFACTOR command results
+    - Empty and populated migration up/down/up results
+    - OpenAPI and sqlc generation drift results
+    - Authorization allow/deny, SoD, ceiling, expiry, revocation and cross-workspace results
+    - Web refresh, keyboard/focus and no-fixture evidence
+    - Diff summary and residual risks
+
+review_contract:
+  required_passes:
+    - spec_compliance
+    - bug_code_quality
+    - security_privacy
+    - qa_acceptance
+  blocking_findings:
+    - Any client-authoritative permission decision
+    - Any plaintext secret or cross-workspace disclosure
+    - Any editable system role or in-place custom-role version mutation
+    - Any privilege grant outside the grantor ceiling or bypass of human/SoD/final-admin policy
+    - Any fake persisted-success path in Access Control
+    - Any missing migration rollback or generated-contract drift
+  acceptance_rule: >-
+    The worker returns evidence to the orchestrator. The orchestrator may mark FMB-T001 Needs_Review
+    after all required passes; only explicit release acceptance can make it Accepted.
+
+handoff:
+  attempt_owner: delegated worker selected by the delivery orchestrator
+  external_issue: null
+  pull_request: null
+  next_ready_candidates:
+    - FMB-T002 after FMB-T001 evidence passes and T002 packet exists
+    - FMB-T003 after FMB-T001 evidence passes and T003 packet exists
+    - FMB-T006 also requires FMB-T003 evidence before it becomes Ready
+  finish_options:
+    - integrate reviewed evidence and mark Needs_Review
+    - create FMB-T001-A002 for scoped fixes
+    - mark Blocked with a named technical or ownership condition
+
+stop_conditions:
+  - The confirmed plan or work graph is missing or no longer Confirmed.
+  - Migration 000016 is already owned by a different active attempt or has incompatible unreviewed content.
+  - Another active attempt owns an allowed shared file.
+  - Relevant dirty changes cannot be attributed or preserved safely.
+  - The implementation requires editing outside allowed files.
+  - A required validation command is unavailable and no equivalent approved command exists.
+  - Tests reveal a required change to the action vocabulary, OIDC/session contract or separation-of-duty policy outside this approved scope.
+  - Validation would need deleted tests, weakened assertions, skipped security checks or fabricated evidence to pass.

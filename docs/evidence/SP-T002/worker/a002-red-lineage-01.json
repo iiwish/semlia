@@ -1,0 +1,25 @@
+{
+  "command": [
+    "go",
+    "test",
+    "-p=1",
+    "-count=1",
+    "-timeout=10m",
+    "./tests/integration/discovery",
+    "-run",
+    "^TestSourceSnapshotUnresolvedLineageKeepsUnitAndMaximumSeverity$",
+    "-v"
+  ],
+  "clearedEnvironment": [
+    "SEMLIA_INGESTION_TEST_DATABASE_URL",
+    "SEMLIA_EXECUTION_CRASH_HELPER",
+    "SEMLIA_EXECUTION_TEST_DB",
+    "SEMLIA_DATABASE_URL"
+  ],
+  "start": "2026-09-09T07:34:12.531Z",
+  "end": "2026-09-09T07:34:20.706Z",
+  "exitStatus": 1,
+  "signal": null,
+  "stdout": "2026/09/09 15:34:16 github.com/testcontainers/testcontainers-go - Connected to docker: \n  Server Version: 29.4.0\n  API Version: 1.54\n  Operating System: OrbStack\n  Total Memory: 16040 MB\n  Testcontainers for Go Version: v0.44.0\n  Resolved Docker Host: unix:///var/run/docker.sock\n  Resolved Docker Socket Path: /var/run/docker.sock\n  Test SessionID: 049d6fc11ed708524baa99c8c3240718ff91de7409034028353d375ac13fe2aa\n  Test ProcessID: 70e02495-0dbf-4e2e-b407-bf3271fb4615\n2026/09/09 15:34:16 🐳 Creating container for image postgres:18-alpine\n2026/09/09 15:34:16 🐳 Creating container for image testcontainers/ryuk:0.14.0\n2026/09/09 15:34:17 ✅ Container created: d4f302753c12\n2026/09/09 15:34:17 🐳 Starting container: d4f302753c12\n2026/09/09 15:34:17 ✅ Container started: d4f302753c12\n2026/09/09 15:34:17 ⏳ Waiting for container id d4f302753c12 image: testcontainers/ryuk:0.14.0. Waiting for: all of: [log message \"Started\", port 8080/tcp to be listening]\n2026/09/09 15:34:17 Shell not found in container\n2026/09/09 15:34:17 🔔 Container is ready: d4f302753c12\n2026/09/09 15:34:17 ✅ Container created: a02cf84f8fcd\n2026/09/09 15:34:17 🐳 Starting container: a02cf84f8fcd\n2026/09/09 15:34:17 ✅ Container started: a02cf84f8fcd\n2026/09/09 15:34:17 ⏳ Waiting for container id a02cf84f8fcd image: postgres:18-alpine. Waiting for: all of: [log message \"database system is ready to accept connections\" (occurrence: 2), port 5432/tcp to be listening]\n2026/09/09 15:34:19 🔔 Container is ready: a02cf84f8fcd\n=== RUN   TestSourceSnapshotUnresolvedLineageKeepsUnitAndMaximumSeverity\n=== RUN   TestSourceSnapshotUnresolvedLineageKeepsUnitAndMaximumSeverity/adapter-only\n    source_snapshot_test.go:561: lineage safety quality=verified overall=complete good=complete bad=complete diagnostic=sql:a_good.sql/warning count=1 effective=1 goodVerified=1 lineage=0\n=== RUN   TestSourceSnapshotUnresolvedLineageKeepsUnitAndMaximumSeverity/warning-first\n    source_snapshot_test.go:561: lineage safety quality=verified overall=complete good=complete bad=complete diagnostic=sql:a_good.sql/warning count=1 effective=1 goodVerified=1 lineage=0\n=== RUN   TestSourceSnapshotUnresolvedLineageKeepsUnitAndMaximumSeverity/error-first\n    source_snapshot_test.go:561: lineage safety quality=verified overall=partial good=partial bad=complete diagnostic=sql:a_good.sql/blocker count=1 effective=0 goodVerified=0 lineage=0\n--- FAIL: TestSourceSnapshotUnresolvedLineageKeepsUnitAndMaximumSeverity (0.87s)\n    --- FAIL: TestSourceSnapshotUnresolvedLineageKeepsUnitAndMaximumSeverity/adapter-only (0.60s)\n    --- FAIL: TestSourceSnapshotUnresolvedLineageKeepsUnitAndMaximumSeverity/warning-first (0.15s)\n    --- FAIL: TestSourceSnapshotUnresolvedLineageKeepsUnitAndMaximumSeverity/error-first (0.12s)\nFAIL\n2026/09/09 15:34:20 🐳 Stopping container: a02cf84f8fcd\n2026/09/09 15:34:20 ✅ Container stopped: a02cf84f8fcd\n2026/09/09 15:34:20 🐳 Terminating container: a02cf84f8fcd\n2026/09/09 15:34:20 🚫 Container terminated: a02cf84f8fcd\nFAIL\tgithub.com/iiwish/semlia/tests/integration/discovery\t5.315s\nFAIL\n",
+  "stderr": ""
+}

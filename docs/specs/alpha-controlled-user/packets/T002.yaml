@@ -1,0 +1,109 @@
+schema_version: 1
+packet_id: ALPHA-T002-A001
+task_id: T002
+feature_id: alpha-controlled-user
+mode: execute_one_task
+status: Completed
+
+goal: >-
+  Connect the accepted Semlia desktop shell to the real OIDC session boundary and generated
+  membership APIs, including workspace switching, logout, invitation and membership status
+  administration, without falling back to product fixtures when authentication fails.
+
+requirements:
+  - FR-001 OIDC sign-in entry and callback outcome presentation
+  - FR-002 server-side session lifecycle and logout
+  - FR-003 workspace-scoped membership authority
+  - FR-004 controlled invitations
+  - FR-011 explicit real versus prototype UI boundaries
+  - NFR-004 desktop accessibility and viewport support
+
+dependencies:
+  - T001 is Needs_Review with source, integration and Compose evidence
+  - Controlled-User Alpha technical baseline 0.1.0 approved on 2026-09-04
+  - The accepted Semlia desktop shell and navigation remain the visual baseline
+
+allowed_files:
+  - docs/specs/alpha-controlled-user/**
+  - docs/evidence/ALPHA-T002/**
+  - sdk/typescript/**
+  - web/**
+  - internal/platform/web/static/**
+  - internal/platform/http/identity.go
+  - internal/platform/http/identity_test.go
+
+forbidden_changes:
+  - Do not add public signup, password login or browser-stored bearer/session credentials.
+  - Do not use fixture identities or fixture data after a real-session failure.
+  - Do not expose session or CSRF verifiers in rendered content, logs or local storage.
+  - Do not replace, hide or simplify the accepted primary and secondary desktop navigation.
+  - Do not present access-control editing or other unimplemented settings mutations as persisted.
+  - Do not add mobile navigation or mobile acceptance scope.
+  - Do not change T001 identity semantics or start T003-T007 implementation in this packet.
+
+design_contract:
+  classification: standard
+  audience: controlled Semlia operators working repeatedly at desktop density
+  thesis: >-
+    Authentication is a quiet gate into the existing operational workspace, while identity and
+    membership controls feel native to the same compact, trustworthy shell.
+  visual_language:
+    - Preserve the neutral canvas, white surfaces, blue operational accent and compact typography.
+    - Keep sign-in unframed and focused; avoid marketing composition, gradients and decorative art.
+    - Use the existing fingerprint mark as the first visual signal and a compact account control in
+      the top bar as the distinctive identity affordance.
+    - Render members and invitations as scan-friendly operational rows, not nested cards.
+  states:
+    - loading
+    - unauthenticated
+    - provider_or_callback_failure
+    - empty_membership
+    - authenticated
+    - authorization_denied
+    - expired_session
+    - final_admin_conflict
+  viewports:
+    - 1440x900
+    - 1024x768
+  accessibility:
+    - keyboard reachable commands and dialogs
+    - visible focus
+    - semantic alerts and status regions
+    - reduced motion compatibility
+
+tdd:
+  red:
+    - An unauthenticated response renders sign-in and never mounts Catalog or product fixtures.
+    - A session with no active workspace renders an admitted-account empty state.
+    - A 401 from any session-aware API request returns the application to sign-in.
+    - A 403 refreshes session capabilities and reports denial without discarding unrelated view state.
+    - Logout requires the session CSRF path and leaves no authenticated shell mounted.
+    - A final-admin suspension or revocation conflict remains visible and leaves the row unchanged.
+  green:
+    - The shell loads account, memberships, workspaces and capabilities from generated contracts.
+    - One shared browser client sends cookies and injects the in-memory CSRF verifier on unsafe calls.
+    - Workspace selection is validated against current memberships and survives refresh per account.
+    - Authorized operators can list, invite, suspend, reactivate and revoke members.
+  refactor:
+    - Keep session orchestration in one React runtime and identity transport in a narrow generated API adapter.
+    - Preserve fixture and development-only local-UAT paths as explicit, isolated modes.
+
+validation:
+  - pnpm --filter @semlia/sdk-typescript typecheck
+  - pnpm --filter @semlia/web test
+  - pnpm --filter @semlia/web lint
+  - pnpm --filter @semlia/web build
+  - pnpm --filter @semlia/web test:e2e
+  - desktop screenshots at 1440x900 and 1024x768
+  - git diff --check
+
+acceptance:
+  - Real-session mode has explicit loading, sign-in, callback/provider error, empty-membership and expired-session states.
+  - Account, current workspace and logout remain discoverable without displacing the accepted navigation.
+  - Member administration uses real generated endpoints and reports 401, 403 and 409 outcomes precisely.
+  - Session and CSRF material remain cookie or memory only.
+  - Fixture and local-UAT regression tests remain green while production build defaults to real-session mode.
+
+evidence:
+  summary: docs/evidence/ALPHA-T002/summary.md
+  test_results: docs/evidence/ALPHA-T002/test-results.md

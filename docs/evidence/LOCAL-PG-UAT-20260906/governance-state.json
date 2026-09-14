@@ -1,0 +1,28 @@
+{
+  "workspaceId": "wsp_01m1t6ypf8eye8yn23y0a62q9z",
+  "sourceId": "src_01m1t6yphjeyevg3g39zbe9qfv",
+  "metrics": {
+    "demo.net_revenue": {
+      "assetId": "ast_01m1t7e473fne8hjpcxv8vr4ym",
+      "bindingId": "phb_01m1t7e5jsf7ytyh806vp4b51x",
+      "datasetId": "pds_01m1t6yq9ee9eby3b548dt3fag",
+      "fieldId": "pfd_01m1t6yq9qe9hr0ezte0bn5t0h",
+      "sourceRevisionId": "srv_01m1t6yq4qe9a91g6jk7aq90b3",
+      "assetReleaseId": "rls_01m1t7e5h7fnhafb16ev8cbxtj",
+      "bindingReleaseId": "rls_01m1t7e6nrfnntex279k4a1f9n",
+      "planId": "rsp_01m1t7e90sfp2s87rzd24353b4",
+      "planDigest": "sha256:438d83461ca247cc86ac0ed12c188e3826edf0f6a4741f5a553bb8fa04f73a9d"
+    },
+    "demo.precision_total": {
+      "assetId": "ast_01m1t7e6r7fnr9gsfw32x62sjm",
+      "bindingId": "phb_01m1t7e7xjf7yr2z4ecz0pp36c",
+      "datasetId": "pds_01m1t6yq9ve9jsmwy7w6rw48n6",
+      "fieldId": "pfd_01m1t6yq9xe9ktcd56b0g15trx",
+      "sourceRevisionId": "srv_01m1t6yq4qe9a91g6jk7aq90b3",
+      "assetReleaseId": "rls_01m1t7e7whfnv9nbcmh599eayt",
+      "bindingReleaseId": "rls_01m1t7e8zbfnzr3zaxq1980a5b",
+      "planId": "rsp_01m1t7e928fp3rb19zw860wqg3",
+      "planDigest": "sha256:fe599213b692200bf44626e637d186345cd07a768899a1d2c9db84634b2a6d3e"
+    }
+  }
+}

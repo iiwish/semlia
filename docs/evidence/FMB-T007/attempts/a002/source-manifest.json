@@ -1,0 +1,310 @@
+{
+  ".env.example": {
+    "before": "20bf6019f8a802674b2215b11c2c701aaebc4c4acf17a47b863db3a4cdb3e999",
+    "after": "d337f546207f4a478754c0b2e9fe243d2fb11f3633706910498c08958aed27f6"
+  },
+  "Makefile": {
+    "before": "a5789bf81c6240cba6d0068c53547589736c2bfd6d66a553a8e9abbab098f318",
+    "after": "25c0f01a14ff02d693d32adbcabf7031d00cd4dabad5a383364f798f23efcfea"
+  },
+  "api/gen/go/types.gen.go": {
+    "before": "df5055c607d03b8694f49c27549bd21a53344aa3f4d2c665185241202ee0cc74",
+    "after": "2919214c4fc7c2f6f59e73efec3c823355ab17cb243736eb4ffc40b0a7a68e63"
+  },
+  "api/openapi/semlia.v1.yaml": {
+    "before": "ff7435e241918469e6722a1f408261352cffe4a4dc024adf8f51ff1c819292af",
+    "after": "1862ecab4410e2866dd572e776dd420531b05843bbca25e6139755f92330dce8"
+  },
+  "cmd/semlia/main.go": {
+    "before": "b0d3f80aa6627a26a452fe44f9d6eff383c2be24826480189cde8533d40e01f8",
+    "after": "180c56bcfd319c8143c8723b6bfe813622e5064f366d1f2271994ff1dc2cd31f"
+  },
+  "cmd/semlia/readiness.go": {
+    "before": "ed90c6cde534351498c2f702a80afc9ee68e44eaf5ebe8c7752cde4f12942dd5",
+    "after": "aa907ee1b50eda31e4a8edc0cdb96b26d05b9deda6534f0b7efd08adb2e2ffed"
+  },
+  "cmd/semlia/readiness_test.go": {
+    "before": "de6056775338bc3bc04af6f172ca4fd258185a43802e720dee215a7851408be7",
+    "after": "916b5361ed9120d054716cbfd93fae96df3a2506fd4424633f3a92ed7239f2a4"
+  },
+  "cmd/semlia/semantic.go": {
+    "before": "00b8670b6c1d7743189a353eeb0131006afbc3dd590faba44bce214bdcc78a27",
+    "after": "674c326fdd5b09a305594d632c88937374710d99b325d2f08ec17cf357782c37"
+  },
+  "compose.yaml": {
+    "before": "a80a5de37adc6de41f250d2ef8119a210e095532c0318e1afe4a48cdac0dcaeb",
+    "after": "adffa34227787ee8489a6a9ff767ccc756a73f3db540db2a4c4e52783c37fb72"
+  },
+  "db/queries/execution.sql": {
+    "before": "3cdb21e9cf0cc6d291cf2a230ce3a3660c151380da1b4c562aba996b7932da37",
+    "after": "884ad4f5bcdfeabdc87ef4a8bd489262c456bd4c89ec150c43c6aeb86ca3330f"
+  },
+  "deploy/local/Dockerfile": {
+    "before": "6f917c71b0bb8cfe2fedbed3c85c3815ee989355b57d77af613b56887466cc84",
+    "after": "9cec550a2f09a112b758426d9101f09a9d0d2731ddfaf24f8638d73ee2bdaf6d"
+  },
+  "docs/operations/distribution.md": {
+    "before": "a402d3a6f71fb83c712bfb9af45bae7436ec8bff3c11c6f09ccf76ee7056a8b0",
+    "after": "69e5b05d5dcab8d14009baeabe9ac7747cc8adae96d5a7f422faeb19ad16a25f"
+  },
+  "docs/specs/full-menu-beta/release-report.md": {
+    "before": "af4fdf3ce4275bf456fa1b9a8092cd9a3e8617caf529ea7dc72953cc8ac65095",
+    "after": "4ad68e5702ebe448301d0f653b7410fb107dc7419a04e7a7d45e467f32a0a342"
+  },
+  "internal/adapters/execution/postgres.go": {
+    "before": "8c10c8fcbd14d29b9cdb0fcade5e842ffa6a79482dd00d6573267c7b0a9f5669",
+    "after": "accef0f743cc83bc38f325f73d3a860441c56db9b92e366c46bb0c0888bb6b95"
+  },
+  "internal/adapters/execution/postgres_test.go": {
+    "before": null,
+    "after": "51444a6370189cd4a08106fb90e7bdb80089d4c25c9f2aa1e9dfa55f27fb17e4"
+  },
+  "internal/adapters/mcp/server.go": {
+    "before": "e1569b6e59bd11543b6557b15d3497b7ae395bb62c2a1b07fb19891abf482622",
+    "after": "845378045d494e7aca96fb37fd2bd8b50b604fc306acb55519e441e73ae555ed"
+  },
+  "internal/adapters/postgres/distribution.go": {
+    "before": "82216c0017b86e890202ae7117da16b7e39509c326dd09954049787ed39174f0",
+    "after": "52456c3eb9995679a3fb9f3b216980dcd541a9593b7d09a84a4d0d1cb9be4811"
+  },
+  "internal/adapters/postgres/distribution_execution_test.go": {
+    "before": null,
+    "after": "76b67ba1c4500bb06ed928e128c76d1dcc219432d29e6a0be7c30a1cc6b356df"
+  },
+  "internal/adapters/postgres/execution.go": {
+    "before": "ff27e7815ea01c4a4e9d6c1e84396e2cf971196de87eacae84887424af4ff623",
+    "after": "d6301ed1d6284a47b29dd9d50a3a48401fd28a045c54d81fa1b975235aa1435d"
+  },
+  "internal/adapters/postgres/release_publishing.go": {
+    "before": "b6d5981f69d74f1e437b5e75e3496c98786c142b126faa8e8a86a793be2a48a8",
+    "after": "a2926d3f6a02b2c503eec9028199e2c2427e03104161304d5cb01eb38002b007"
+  },
+  "internal/adapters/postgres/sqlc/execution.sql.go": {
+    "before": "5c215bc5020f0ddd97ab9ac052f3215bf4ac90ba9aae9874c00d22de9de76186",
+    "after": "8bd9b5c248eafb0a728871183ca208879bcca031d57bd482475f96905ad9c156"
+  },
+  "internal/adapters/postgres/sqlc/models.go": {
+    "before": "338a125444f3e76ac419df95dc2ec04f66ee65c75e23907281b027fccc556e0e",
+    "after": "563d2abb1b9f01344e00a2b460c80642c3ba52b77de8ff5a170906f37cecbf2d"
+  },
+  "internal/application/distribution/execution.go": {
+    "before": "c4ac2d2460baec2e7d99b62787e7eb2f81f8696a8f9042168ba468aa62a1e1c1",
+    "after": "adad13b52795a495bd1f9553bf2f109b7855d4721859f616433e7930935e7adf"
+  },
+  "internal/application/distribution/response.go": {
+    "before": "a73ddebc3cda77ad0dfe2cae88f9e45457424a9ecdd6587ebc06d0202f754840",
+    "after": "638b0365e69f5e9f22f908837c72fbb13ea07112a6eef83c38e66cdb543b0bbc"
+  },
+  "internal/application/distribution/service.go": {
+    "before": "15da12dd8cbf5e1d9be205c4cae6199595fd22e57b53b4fabb1b717c8da3a81b",
+    "after": "4acbb138e1fff36fad1771a8b183afaf2b8ab17093c7b584f63c9a5cd064b036"
+  },
+  "internal/application/execution/service.go": {
+    "before": "d90e314aa3bd2047e1c284ef09eb1c19c012cfc9b7e3d5b1234cfe461d457b96",
+    "after": "5267111c12a2e1f053f8f091c25d5fc1cb8625ae02887477b9a555f87eabd1e8"
+  },
+  "internal/application/governance/publishing.go": {
+    "before": "a54b9d6f7a09c99fa7015030c9a2d25e8ba0cfe164bb1051800be811ff527366",
+    "after": "07cfa48b85c09c54717ef0a7b6243bcfae5d99f8bd9f90f319929820230f6b5f"
+  },
+  "internal/domain/distribution/execution.go": {
+    "before": "a1b8e4f6ddc0db1c985cdb502169e58a2ae8b6dfb6efce20068806f2ed58088b",
+    "after": "6532904a3faa4fa9812b97c6ccc4909cf0420ac633a80dfc508e5342b1eb67cb"
+  },
+  "internal/domain/distribution/resolver.go": {
+    "before": "a24415e62ec7dff21a4fd0edd762b9b210746268126513dc1bc13193df68e808",
+    "after": "9341fd2b7b2a64e03e92eae69e1c819f12158c4485eb4f85646e5b8bddc27b33"
+  },
+  "internal/domain/execution/compiler.go": {
+    "before": "fcc75b86d057aaa0800a935126f78af96061e0b34a63919baad8dd5197ac7eef",
+    "after": "b1713d03a354e74f518ace36685cbc154b159b43957d76530f2a36afc0ea3e3b"
+  },
+  "internal/domain/execution/compiler_test.go": {
+    "before": "d1e74782511e579546e75132605892704bd4156485e52d194299199d674b6f90",
+    "after": "71ef5fda6245b5f38f20a9acd3aa9eee5754087964fa1c60a6f8c3c71a74f46c"
+  },
+  "internal/domain/execution/model.go": {
+    "before": "ea569dffa083d361827acd5229ada3143f58fc3cf901fc226090ef365cdad249",
+    "after": "220667075faf4a31e48fb03386caddebb4d7f30d61878407d17867cd3c962ad3"
+  },
+  "internal/platform/config/config.go": {
+    "before": "1309e820154e2c4a62234076718251020e033c76d6723484c449fe0dbe9e7d11",
+    "after": "290f50ff0c320aedee94aee455de22d6dadbe93c1601a55e8cb16260ece3c544"
+  },
+  "internal/platform/config/config_test.go": {
+    "before": "b2a58b1916a038420d4c6e05cafeb01481324f76c93374da1419efe09388368a",
+    "after": "2239f1c582c466a6a29913d420bffff8c8efaaeb2be06dc7a78dfd62821a008b"
+  },
+  "internal/platform/http/distribution.go": {
+    "before": "ad0e967aefbd1516442f79eaf43315edba09f1029e8893485bbe78ab415eb9bc",
+    "after": "0dede535bdb8665a8b7151bf2b4c805103301a5ba818cd6bc3c3565432d8173d"
+  },
+  "internal/platform/http/execution.go": {
+    "before": null,
+    "after": "9772326046e3b8370192dca482db63fa7771b25d16000f1d093e95ed582595b7"
+  },
+  "internal/platform/http/handler.go": {
+    "before": "70ae674b3728dcaa3881a140558beabd5c97a8b2db22e5876b7699418ce99644",
+    "after": "0b3e4480f636bbbad526763e357dd307fac0dc995e66b82740cab42e6359be61"
+  },
+  "internal/platform/http/machine.go": {
+    "before": "3314473bb7286c1da3da90f8126a526c38bdd833046d5cc7f4e04d6869cefe8b",
+    "after": "ee3739318baf9078c8800e0c1c48eb606984cf347bf865df6c033968ad8bb615"
+  },
+  "internal/platform/web/static/assets/index-BAfm1xQG.js": {
+    "before": "67be72cc9ee9a0ca6004f6329f9a163a4c9f58700543588d768bb1d1af6101a0",
+    "after": null
+  },
+  "internal/platform/web/static/assets/index-BOJEH1q5.css": {
+    "before": null,
+    "after": "60b257af55fa58247dd7073443a747134ccf80cf61b4f1c536a5e91d6af142b9"
+  },
+  "internal/platform/web/static/assets/index-DkezSR2B.js": {
+    "before": null,
+    "after": "7e9d37db450f0f976eb480ea0448fc196f2663c7d82c00aa9471441cf0f7e654"
+  },
+  "internal/platform/web/static/assets/index-Dz5m6ycn.css": {
+    "before": "157c1a0a3c66cce7b3b0394e1a1d76e0c847cd6eb568ee2f73a9d49450345ee3",
+    "after": null
+  },
+  "internal/platform/web/static/index.html": {
+    "before": "119547ccc055b606df44e139dff00138a38d230e736fdbd6c725541d4487de2f",
+    "after": "128f6615d2d5629577313295cb145a0097009e830e61c60a99a6fd6c0a39d97e"
+  },
+  "migrations/000021_fmb_query_execution.down.sql": {
+    "before": "56c938fe681e09a88e73f86ec4fa645eb5ec8f25a2f35e7b2e8b2105ba04c0c0",
+    "after": "039e36b61cd3227c8dbd87036e456dab86c8e40d71a6aa1fe23e198283b1ac0b"
+  },
+  "migrations/000021_fmb_query_execution.up.sql": {
+    "before": "32a80156787f6578ee493ff043e1e1fad6a36d0c6d4d22fc72733b937d8fb165",
+    "after": "21074e0f74e1257d2904b70f9749a064bde1f366bc6672701964f1fab45f0392"
+  },
+  "scripts/release/build.sh": {
+    "before": "4fbed58186dd35684fb13d9002b7feedb7009b1ff631a938d51117c04ec23e94",
+    "after": "4da4349ac8a1ce707011184799546c03b11a494aace7c41ca39a69a511f11868"
+  },
+  "scripts/release/manifest.go": {
+    "before": "263b7bb2e33ecfb82a60343dbb8b34c033405bc8d21bc208b2756acb96d6c36e",
+    "after": "496ec231ec71cfd56360471f331346a4dae6a990af1957360e1ba456a4cd272c"
+  },
+  "scripts/release/manifest_test.go": {
+    "before": null,
+    "after": "befe64cc354c5f38441a5625fe0d89c0a5e545f1da5d2973ef6b4edb6d77ba85"
+  },
+  "scripts/release/sbom.sh": {
+    "before": "7268aaa3c4a5488d1227df7d199b2180a2cb7c5a7da1764a22f313e1b717c2e8",
+    "after": "bd7c59f97b1666b3c8310f4ac95b0f9ca58fd88170e7a95f29073bda884fada0"
+  },
+  "sdk/typescript/src/client.ts": {
+    "before": "c9c15ebe68fe5e3f55e6394e83a3d11c36aeb50ba92ab26b4ca496a81ab63a25",
+    "after": "9245aca5bc817cac595abccf098102877cafb1b6b8102e0ca14a6f1ec67fd7e7"
+  },
+  "sdk/typescript/src/schema.gen.ts": {
+    "before": "a3c13dd6971c6c8020a02df3675db7f2de69037187a7d7a437a148ef5ae14fcc",
+    "after": "ad31f70a029deefb8e4f70824c9a7737b3ef29973756fd98f76424f0476a9f23"
+  },
+  "tests/integration/db/database_test.go": {
+    "before": "3d039562ed07c06a27c0e63fe6aed9ec991f41b7477295baf5ba879008a8c047",
+    "after": "ce95df2a99613874ab25aa6f2c7f454d88e1a8956326a0aeb4ba5f82db5a8548"
+  },
+  "tests/integration/db/execution_test.go": {
+    "before": null,
+    "after": "f9a3acc3d995309d4e4cf2b7e80767f2a77924853fd8af896792f2e941a82b61"
+  },
+  "tests/integration/db/webhook_interfaces_test.go": {
+    "before": "5f32e143f57175ae3d7afb6138816fa04888725865c19ab63ef1a6fc94739a0c",
+    "after": "59cb219a04e44fb22d01bf566469a8b864a9ff1b6d738b6ca0270fa4e9fdf62e"
+  },
+  "tests/integration/governance/execution_browser_test.go": {
+    "before": null,
+    "after": "c08adf37e26e8373aedeea2066ee30ed0bfda287acb2b792b9714f14239f602c"
+  },
+  "tests/integration/governance/execution_channels_test.go": {
+    "before": null,
+    "after": "f16f17866b3b737dac1492c6b41ddd6107ebbebdc860d48ac2ac50abb22b7397"
+  },
+  "tests/integration/governance/execution_rollback_test.go": {
+    "before": null,
+    "after": "fbc3ce98037600548772790e7db259530b8d69f189306c015aab6341a1938d07"
+  },
+  "tests/integration/governance/execution_test.go": {
+    "before": null,
+    "after": "97e809a2220bf82c5e512002e16f41bc689cc08c85fd8e7ec933ed360b6b8ccc"
+  },
+  "tests/integration/governance/governance_http_test.go": {
+    "before": "00cd9a249a86ece7be23a1f08f9dcb867a2abbb80613071a260340a9883ac516",
+    "after": "f2b8e6523785cab07ea4d6348a6565f7d0b9be31ec190676f0b3cd85bdbccee0"
+  },
+  "tests/repository/ci_contract_test.go": {
+    "before": "902a5b1b81e5655d04ec7c7aee3dceeb16e562b9097a2b46b18d1b832ec8996b",
+    "after": "856e0aaf7c4dbe8f4bb5570ae68df7709b6d7f7aeb9e0eb7e7fb920781183cd6"
+  },
+  "web/e2e-auth/session-membership.spec.ts": {
+    "before": "unavailable: preflight glob capture omission",
+    "after": "fefa50fb4a0386facc3f2a397fda8badc570df537a30cc15b53930e84b854738"
+  },
+  "web/e2e-live/distribution-live.spec.ts": {
+    "before": "unavailable: preflight glob capture omission",
+    "after": "a4c52a5b69c1279adec69fe93d44b831aeede1812993518f9bb76f4a4554bbd7"
+  },
+  "web/e2e-live/embedding-live.spec.ts": {
+    "before": "unavailable: preflight glob capture omission",
+    "after": "b9f3a54c4afc2866b6caa7d7aebbee5d73fa1a0017f0ec4be63d7886c741857f"
+  },
+  "web/e2e-live/execution-browser.mjs": {
+    "before": null,
+    "after": "7b7acd4e3059f791c63f8ad0d60b39f38d0222ce0d143570ce0f92cb1e5a8b44"
+  },
+  "web/e2e-live/execution-harness.html": {
+    "before": null,
+    "after": "df6d1ff6cb17e573683e05e63a409588ad37014747747f2ed7d980dfe0edb3f4"
+  },
+  "web/e2e-live/execution-harness.tsx": {
+    "before": null,
+    "after": "a58dc6d56f5458b01cc938a838d3231f324d022aebd2d10acbbbc76dbde128d0"
+  },
+  "web/e2e-live/governance-live.spec.ts": {
+    "before": "unavailable: preflight glob capture omission",
+    "after": "03fcb9262e419d370b06c46f81db64b8dad589fc51d088677c3124dc96b03049"
+  },
+  "web/e2e-live/source-live.spec.ts": {
+    "before": "unavailable: preflight glob capture omission",
+    "after": "b05e8dea08653636c7242d277bb5ea1de655b36aa454cb8fdd5b931bbd835013"
+  },
+  "web/e2e/product-journey.spec.ts": {
+    "before": "unavailable: preflight glob capture omission",
+    "after": "3d2dd294282b7370626ef9bd3269ccad9c5c4fdcaa6e1993b98892efa4a45026"
+  },
+  "web/e2e/system-status.spec.ts": {
+    "before": null,
+    "after": "80d048307f313462aaff41869f32c4af596fdebf5df79c8583bb778bb751b5cc"
+  },
+  "web/src/AskExecutionPanel.test.tsx": {
+    "before": null,
+    "after": "80d9e9d9dd69536c3ebbbc35327d9cdb401a74255d0e9d9e8475df97e08fefc6"
+  },
+  "web/src/AskExecutionPanel.tsx": {
+    "before": null,
+    "after": "d3357d33f7b9256faa04d0c8ec40646eac63aa985f9178a39a614fe5e55a03b1"
+  },
+  "web/src/AuditRuntimeView.tsx": {
+    "before": "c8ec457fe2a5c3f4a029d24baa87ed6bb6c6c45f0fdef98adac875c34d51e592",
+    "after": "2ac347b6e45f1693cb0fb87a3fae9db30aa1e474281cc67791104fa6ef2eec3f"
+  },
+  "web/src/IntegrationSettingsView.tsx": {
+    "before": "e94f8dbc0abb59bb086f0d9f30e15634a8cbb71cdb423da13266d117d3fb14f5",
+    "after": "4c1c7862ea0fa9bc186c234d4a7181fbabff449d5fdfd12edae03ec8b67617be"
+  },
+  "web/src/KnowledgeViews.tsx": {
+    "before": "fe1cde543680be8bae1e4acaf601ff80a55842cc2d1e1b89ccc09621c273c67c",
+    "after": "c0216c78cce4d7b5d6d9883cdd2932bf08593748b181f3b43ee1bf0d10fe5883"
+  },
+  "web/src/execution.ts": {
+    "before": null,
+    "after": "b21b5ebea9a77524de6a7205f29321c2bd07bb7b6ce055134a00e394133dcc69"
+  },
+  "web/src/styles.css": {
+    "before": "8dd3aeaa3d77cc1991109ec3b2b51fd56b47210245ad638e9d8f5cd85caaf257",
+    "after": "61992fc29f0e0887f8a21115fd98a6203d909e754005ac528e22205c1c5b7894"
+  }
+}

@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	dbgen "github.com/iiwish/semlia/internal/adapters/postgres/sqlc"
 	"github.com/iiwish/semlia/internal/application/jobs"
+	operationsdomain "github.com/iiwish/semlia/internal/domain/operations"
 	"github.com/iiwish/semlia/pkg/identity"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -59,14 +61,39 @@ func (store *Store) EnqueueJob(ctx context.Context, input jobs.EnqueueJobParams)
 }
 
 func (store *Store) ReapExpiredJobs(ctx context.Context, now time.Time) error {
-	if _, err := store.queries.ReapExpiredJobs(ctx, timestamp(now)); err != nil {
+	tx, err := store.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("begin reap expired job leases: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	queries := dbgen.New(tx)
+	reaped, err := queries.ReapExpiredJobs(ctx, timestamp(now))
+	if err != nil {
 		return fmt.Errorf("reap expired job leases: %w", err)
+	}
+	for _, job := range reaped {
+		state := operationsdomain.RunQueued
+		if job.Status == "dead_letter" {
+			state = operationsdomain.RunDeadLetter
+		}
+		if err := projectJobTerminalState(ctx, queries, job.WorkspaceID, job.ID, state, "LEASE_EXPIRED", now); err != nil {
+			return err
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit expired job leases: %w", err)
 	}
 	return nil
 }
 
 func (store *Store) ClaimJob(ctx context.Context, owner string, now time.Time, leaseDuration time.Duration) (*jobs.Job, error) {
-	row, err := store.queries.ClaimJob(ctx, dbgen.ClaimJobParams{
+	tx, err := store.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("begin claim job lease: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	queries := dbgen.New(tx)
+	row, err := queries.ClaimJob(ctx, dbgen.ClaimJobParams{
 		LeasedUntil: timestamp(now.Add(leaseDuration)),
 		LeaseOwner:  textValue(owner),
 		ClaimedAt:   timestamp(now),
@@ -81,7 +108,39 @@ func (store *Store) ClaimJob(ctx context.Context, owner string, now time.Time, l
 	if err != nil {
 		return nil, fmt.Errorf("decode claimed job: %w", err)
 	}
+	if err := projectJobTerminalState(ctx, queries, row.WorkspaceID, row.ID, operationsdomain.RunRunning, "", now); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit claimed job lease: %w", err)
+	}
 	return &job, nil
+}
+
+func (store *Store) ExtendJobLease(
+	ctx context.Context,
+	id identity.RunID,
+	owner string,
+	renewedAt time.Time,
+	leaseDuration time.Duration,
+) error {
+	if strings.TrimSpace(owner) == "" || leaseDuration <= 0 {
+		return ErrLeaseLost
+	}
+	databaseID, err := uuidValue(id)
+	if err != nil {
+		return fmt.Errorf("encode job ID: %w", err)
+	}
+	rows, err := store.queries.ExtendJobLease(ctx, dbgen.ExtendJobLeaseParams{
+		LeasedUntil: timestamp(renewedAt.Add(leaseDuration)),
+		RenewedAt:   timestamp(renewedAt),
+		ID:          databaseID,
+		LeaseOwner:  textValue(owner),
+	})
+	if err != nil {
+		return fmt.Errorf("extend job lease: %w", err)
+	}
+	return requireLease(rows)
 }
 
 func (store *Store) MarkJobSucceeded(ctx context.Context, id identity.RunID, owner string, completedAt time.Time) error {
@@ -89,7 +148,17 @@ func (store *Store) MarkJobSucceeded(ctx context.Context, id identity.RunID, own
 	if err != nil {
 		return fmt.Errorf("encode job ID: %w", err)
 	}
-	rows, err := store.queries.MarkJobSucceeded(ctx, dbgen.MarkJobSucceededParams{
+	tx, err := store.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("begin job success: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	queries := dbgen.New(tx)
+	var workspaceID pgtype.UUID
+	if err := tx.QueryRow(ctx, `SELECT workspace_id FROM jobs WHERE id=$1 FOR UPDATE`, databaseID).Scan(&workspaceID); err != nil {
+		return fmt.Errorf("load job workspace: %w", err)
+	}
+	rows, err := queries.MarkJobSucceeded(ctx, dbgen.MarkJobSucceededParams{
 		CompletedAt: timestamp(completedAt),
 		ID:          databaseID,
 		LeaseOwner:  textValue(owner),
@@ -97,7 +166,16 @@ func (store *Store) MarkJobSucceeded(ctx context.Context, id identity.RunID, own
 	if err != nil {
 		return fmt.Errorf("complete job: %w", err)
 	}
-	return requireLease(rows)
+	if err := requireLease(rows); err != nil {
+		return err
+	}
+	if err := projectJobTerminalState(ctx, queries, workspaceID, databaseID, operationsdomain.RunSucceeded, "", completedAt); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit job success: %w", err)
+	}
+	return nil
 }
 
 func (store *Store) MarkJobFailed(
@@ -105,21 +183,57 @@ func (store *Store) MarkJobFailed(
 	id identity.RunID, owner, errorCode string,
 	availableAt, failedAt time.Time,
 ) error {
+	return store.MarkJobFailedWithDisposition(ctx, id, owner, errorCode, false, availableAt, failedAt)
+}
+
+func (store *Store) MarkJobFailedWithDisposition(
+	ctx context.Context,
+	id identity.RunID, owner, errorCode string, permanent bool,
+	availableAt, failedAt time.Time,
+) error {
 	databaseID, err := uuidValue(id)
 	if err != nil {
 		return fmt.Errorf("encode job ID: %w", err)
 	}
-	rows, err := store.queries.MarkJobFailed(ctx, dbgen.MarkJobFailedParams{
+	tx, err := store.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("begin job failure: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	queries := dbgen.New(tx)
+	var workspaceID pgtype.UUID
+	if err := tx.QueryRow(ctx, `SELECT workspace_id FROM jobs WHERE id=$1 FOR UPDATE`, databaseID).Scan(&workspaceID); err != nil {
+		return fmt.Errorf("load job workspace: %w", err)
+	}
+	rows, err := queries.MarkJobFailed(ctx, dbgen.MarkJobFailedParams{
 		AvailableAt: timestamp(availableAt),
 		ErrorCode:   textValue(errorCode),
 		FailedAt:    timestamp(failedAt),
+		Permanent:   permanent,
 		ID:          databaseID,
 		LeaseOwner:  textValue(owner),
 	})
 	if err != nil {
 		return fmt.Errorf("fail job: %w", err)
 	}
-	return requireLease(rows)
+	if err := requireLease(rows); err != nil {
+		return err
+	}
+	var status string
+	if err := tx.QueryRow(ctx, `SELECT status FROM jobs WHERE id=$1`, databaseID).Scan(&status); err != nil {
+		return fmt.Errorf("load failed job status: %w", err)
+	}
+	state := operationsdomain.RunQueued
+	if status == "dead_letter" {
+		state = operationsdomain.RunDeadLetter
+	}
+	if err := projectJobTerminalState(ctx, queries, workspaceID, databaseID, state, errorCode, failedAt); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit job failure: %w", err)
+	}
+	return nil
 }
 
 func (store *Store) ReapExpiredOutboxEvents(ctx context.Context, now time.Time) error {

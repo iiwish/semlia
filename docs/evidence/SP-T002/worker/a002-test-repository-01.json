@@ -1,0 +1,18 @@
+{
+  "command": [
+    "make",
+    "test-repository"
+  ],
+  "clearedEnvironment": [
+    "SEMLIA_INGESTION_TEST_DATABASE_URL",
+    "SEMLIA_EXECUTION_CRASH_HELPER",
+    "SEMLIA_EXECUTION_TEST_DB",
+    "SEMLIA_DATABASE_URL"
+  ],
+  "start": "2026-09-09T08:17:25.008Z",
+  "end": "2026-09-09T08:17:30.502Z",
+  "exitStatus": 0,
+  "signal": null,
+  "stdout": "go test ./tests/repository\nok  \tgithub.com/iiwish/semlia/tests/repository\t4.960s\n",
+  "stderr": ""
+}

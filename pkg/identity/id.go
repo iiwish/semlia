@@ -44,6 +44,10 @@ const (
 	JoinContract            Prefix = "jct"
 	SourceConnection        Prefix = "src"
 	SourceRevision          Prefix = "srv"
+	SourceSnapshot          Prefix = "ssnp"
+	SourceCodeRevision      Prefix = "codrev"
+	SourceLineageRevision   Prefix = "linrev"
+	ProductionOperation     Prefix = "prodop"
 	PhysicalDataset         Prefix = "pds"
 	PhysicalDatasetRevision Prefix = "pdr"
 	PhysicalField           Prefix = "pfd"
@@ -52,6 +56,23 @@ const (
 	LineageEdge             Prefix = "lin"
 	ModelProvider           Prefix = "prv"
 	ModelSetting            Prefix = "mdl"
+	UserAccount             Prefix = "usr"
+	ExternalIdentity        Prefix = "ext"
+	Session                 Prefix = "ses"
+	Invitation              Prefix = "ivn"
+	Membership              Prefix = "mbr"
+	SourceCredential        Prefix = "scr"
+	SemanticCandidate       Prefix = "scd"
+	Consumer                Prefix = "csm"
+	ConsumerBinding         Prefix = "cbd"
+	SemanticQuery           Prefix = "smq"
+	ResolvedSemanticPlan    Prefix = "rsp"
+	QueryValidationRun      Prefix = "qvr"
+	AttentionItem           Prefix = "ati"
+	Artifact                Prefix = "art"
+	ArtifactSet             Prefix = "ars"
+	SourceSchedule          Prefix = "sch"
+	ScheduleOccurrence      Prefix = "occ"
 )
 
 var registeredPrefixes = []Prefix{
@@ -81,6 +102,10 @@ var registeredPrefixes = []Prefix{
 	JoinContract,
 	SourceConnection,
 	SourceRevision,
+	SourceSnapshot,
+	SourceCodeRevision,
+	SourceLineageRevision,
+	ProductionOperation,
 	PhysicalDataset,
 	PhysicalDatasetRevision,
 	PhysicalField,
@@ -89,6 +114,23 @@ var registeredPrefixes = []Prefix{
 	LineageEdge,
 	ModelProvider,
 	ModelSetting,
+	UserAccount,
+	ExternalIdentity,
+	Session,
+	Invitation,
+	Membership,
+	SourceCredential,
+	SemanticCandidate,
+	Consumer,
+	ConsumerBinding,
+	SemanticQuery,
+	ResolvedSemanticPlan,
+	QueryValidationRun,
+	AttentionItem,
+	Artifact,
+	ArtifactSet,
+	SourceSchedule,
+	ScheduleOccurrence,
 }
 
 type ID struct {
@@ -280,6 +322,10 @@ type entityKeyKind struct{}
 type joinContractKind struct{}
 type sourceConnectionKind struct{}
 type sourceRevisionKind struct{}
+type sourceSnapshotKind struct{}
+type sourceCodeRevisionKind struct{}
+type sourceLineageRevisionKind struct{}
+type productionOperationKind struct{}
 type physicalDatasetKind struct{}
 type physicalDatasetRevisionKind struct{}
 type physicalFieldKind struct{}
@@ -288,6 +334,23 @@ type codeArtifactKind struct{}
 type lineageEdgeKind struct{}
 type modelProviderKind struct{}
 type modelSettingKind struct{}
+type userAccountKind struct{}
+type externalIdentityKind struct{}
+type sessionKind struct{}
+type invitationKind struct{}
+type membershipKind struct{}
+type sourceCredentialKind struct{}
+type semanticCandidateKind struct{}
+type consumerKind struct{}
+type consumerBindingKind struct{}
+type semanticQueryKind struct{}
+type resolvedSemanticPlanKind struct{}
+type queryValidationRunKind struct{}
+type attentionItemKind struct{}
+type artifactKind struct{}
+type artifactSetKind struct{}
+type sourceScheduleKind struct{}
+type scheduleOccurrenceKind struct{}
 
 func (workspaceKind) resourcePrefix() Prefix               { return Workspace }
 func (assetKind) resourcePrefix() Prefix                   { return Asset }
@@ -315,6 +378,10 @@ func (entityKeyKind) resourcePrefix() Prefix               { return EntityKey }
 func (joinContractKind) resourcePrefix() Prefix            { return JoinContract }
 func (sourceConnectionKind) resourcePrefix() Prefix        { return SourceConnection }
 func (sourceRevisionKind) resourcePrefix() Prefix          { return SourceRevision }
+func (sourceSnapshotKind) resourcePrefix() Prefix          { return SourceSnapshot }
+func (sourceCodeRevisionKind) resourcePrefix() Prefix      { return SourceCodeRevision }
+func (sourceLineageRevisionKind) resourcePrefix() Prefix   { return SourceLineageRevision }
+func (productionOperationKind) resourcePrefix() Prefix     { return ProductionOperation }
 func (physicalDatasetKind) resourcePrefix() Prefix         { return PhysicalDataset }
 func (physicalDatasetRevisionKind) resourcePrefix() Prefix { return PhysicalDatasetRevision }
 func (physicalFieldKind) resourcePrefix() Prefix           { return PhysicalField }
@@ -323,6 +390,23 @@ func (codeArtifactKind) resourcePrefix() Prefix            { return CodeArtifact
 func (lineageEdgeKind) resourcePrefix() Prefix             { return LineageEdge }
 func (modelProviderKind) resourcePrefix() Prefix           { return ModelProvider }
 func (modelSettingKind) resourcePrefix() Prefix            { return ModelSetting }
+func (userAccountKind) resourcePrefix() Prefix             { return UserAccount }
+func (externalIdentityKind) resourcePrefix() Prefix        { return ExternalIdentity }
+func (sessionKind) resourcePrefix() Prefix                 { return Session }
+func (invitationKind) resourcePrefix() Prefix              { return Invitation }
+func (membershipKind) resourcePrefix() Prefix              { return Membership }
+func (sourceCredentialKind) resourcePrefix() Prefix        { return SourceCredential }
+func (semanticCandidateKind) resourcePrefix() Prefix       { return SemanticCandidate }
+func (consumerKind) resourcePrefix() Prefix                { return Consumer }
+func (consumerBindingKind) resourcePrefix() Prefix         { return ConsumerBinding }
+func (semanticQueryKind) resourcePrefix() Prefix           { return SemanticQuery }
+func (resolvedSemanticPlanKind) resourcePrefix() Prefix    { return ResolvedSemanticPlan }
+func (queryValidationRunKind) resourcePrefix() Prefix      { return QueryValidationRun }
+func (attentionItemKind) resourcePrefix() Prefix           { return AttentionItem }
+func (artifactKind) resourcePrefix() Prefix                { return Artifact }
+func (artifactSetKind) resourcePrefix() Prefix             { return ArtifactSet }
+func (sourceScheduleKind) resourcePrefix() Prefix          { return SourceSchedule }
+func (scheduleOccurrenceKind) resourcePrefix() Prefix      { return ScheduleOccurrence }
 
 type WorkspaceID = TypedID[workspaceKind]
 type AssetID = TypedID[assetKind]
@@ -350,6 +434,10 @@ type EntityKeyID = TypedID[entityKeyKind]
 type JoinContractID = TypedID[joinContractKind]
 type SourceConnectionID = TypedID[sourceConnectionKind]
 type SourceRevisionID = TypedID[sourceRevisionKind]
+type SourceSnapshotID = TypedID[sourceSnapshotKind]
+type SourceCodeRevisionID = TypedID[sourceCodeRevisionKind]
+type SourceLineageRevisionID = TypedID[sourceLineageRevisionKind]
+type ProductionOperationID = TypedID[productionOperationKind]
 type PhysicalDatasetID = TypedID[physicalDatasetKind]
 type PhysicalDatasetRevisionID = TypedID[physicalDatasetRevisionKind]
 type PhysicalFieldID = TypedID[physicalFieldKind]
@@ -358,6 +446,23 @@ type CodeArtifactID = TypedID[codeArtifactKind]
 type LineageEdgeID = TypedID[lineageEdgeKind]
 type ModelProviderID = TypedID[modelProviderKind]
 type ModelSettingID = TypedID[modelSettingKind]
+type UserAccountID = TypedID[userAccountKind]
+type ExternalIdentityID = TypedID[externalIdentityKind]
+type SessionID = TypedID[sessionKind]
+type InvitationID = TypedID[invitationKind]
+type MembershipID = TypedID[membershipKind]
+type SourceCredentialID = TypedID[sourceCredentialKind]
+type SemanticCandidateID = TypedID[semanticCandidateKind]
+type ConsumerID = TypedID[consumerKind]
+type ConsumerBindingID = TypedID[consumerBindingKind]
+type SemanticQueryID = TypedID[semanticQueryKind]
+type ResolvedSemanticPlanID = TypedID[resolvedSemanticPlanKind]
+type QueryValidationRunID = TypedID[queryValidationRunKind]
+type AttentionItemID = TypedID[attentionItemKind]
+type ArtifactID = TypedID[artifactKind]
+type ArtifactSetID = TypedID[artifactSetKind]
+type SourceScheduleID = TypedID[sourceScheduleKind]
+type ScheduleOccurrenceID = TypedID[scheduleOccurrenceKind]
 
 func NewWorkspaceID() (WorkspaceID, error)               { return newTypedID[workspaceKind]() }
 func NewAssetID() (AssetID, error)                       { return newTypedID[assetKind]() }
@@ -385,7 +490,17 @@ func NewEntityKeyID() (EntityKeyID, error)               { return newTypedID[ent
 func NewJoinContractID() (JoinContractID, error)         { return newTypedID[joinContractKind]() }
 func NewSourceConnectionID() (SourceConnectionID, error) { return newTypedID[sourceConnectionKind]() }
 func NewSourceRevisionID() (SourceRevisionID, error)     { return newTypedID[sourceRevisionKind]() }
-func NewPhysicalDatasetID() (PhysicalDatasetID, error)   { return newTypedID[physicalDatasetKind]() }
+func NewSourceSnapshotID() (SourceSnapshotID, error)     { return newTypedID[sourceSnapshotKind]() }
+func NewSourceCodeRevisionID() (SourceCodeRevisionID, error) {
+	return newTypedID[sourceCodeRevisionKind]()
+}
+func NewSourceLineageRevisionID() (SourceLineageRevisionID, error) {
+	return newTypedID[sourceLineageRevisionKind]()
+}
+func NewProductionOperationID() (ProductionOperationID, error) {
+	return newTypedID[productionOperationKind]()
+}
+func NewPhysicalDatasetID() (PhysicalDatasetID, error) { return newTypedID[physicalDatasetKind]() }
 func NewPhysicalDatasetRevisionID() (PhysicalDatasetRevisionID, error) {
 	return newTypedID[physicalDatasetRevisionKind]()
 }
@@ -399,6 +514,37 @@ func NewModelProviderID() (ModelProviderID, error) {
 	return newTypedID[modelProviderKind]()
 }
 func NewModelSettingID() (ModelSettingID, error) { return newTypedID[modelSettingKind]() }
+func NewUserAccountID() (UserAccountID, error)   { return newTypedID[userAccountKind]() }
+func NewExternalIdentityID() (ExternalIdentityID, error) {
+	return newTypedID[externalIdentityKind]()
+}
+func NewSessionID() (SessionID, error)       { return newTypedID[sessionKind]() }
+func NewInvitationID() (InvitationID, error) { return newTypedID[invitationKind]() }
+func NewMembershipID() (MembershipID, error) { return newTypedID[membershipKind]() }
+func NewSourceCredentialID() (SourceCredentialID, error) {
+	return newTypedID[sourceCredentialKind]()
+}
+func NewSemanticCandidateID() (SemanticCandidateID, error) {
+	return newTypedID[semanticCandidateKind]()
+}
+func NewConsumerID() (ConsumerID, error) { return newTypedID[consumerKind]() }
+func NewConsumerBindingID() (ConsumerBindingID, error) {
+	return newTypedID[consumerBindingKind]()
+}
+func NewSemanticQueryID() (SemanticQueryID, error) { return newTypedID[semanticQueryKind]() }
+func NewResolvedSemanticPlanID() (ResolvedSemanticPlanID, error) {
+	return newTypedID[resolvedSemanticPlanKind]()
+}
+func NewQueryValidationRunID() (QueryValidationRunID, error) {
+	return newTypedID[queryValidationRunKind]()
+}
+func NewAttentionItemID() (AttentionItemID, error)   { return newTypedID[attentionItemKind]() }
+func NewArtifactID() (ArtifactID, error)             { return newTypedID[artifactKind]() }
+func NewArtifactSetID() (ArtifactSetID, error)       { return newTypedID[artifactSetKind]() }
+func NewSourceScheduleID() (SourceScheduleID, error) { return newTypedID[sourceScheduleKind]() }
+func NewScheduleOccurrenceID() (ScheduleOccurrenceID, error) {
+	return newTypedID[scheduleOccurrenceKind]()
+}
 
 func ParseWorkspaceID(value string) (WorkspaceID, error) { return parseTypedID[workspaceKind](value) }
 func ParseAssetID(value string) (AssetID, error)         { return parseTypedID[assetKind](value) }
@@ -474,6 +620,53 @@ func ParseModelProviderID(value string) (ModelProviderID, error) {
 func ParseModelSettingID(value string) (ModelSettingID, error) {
 	return parseTypedID[modelSettingKind](value)
 }
+func ParseUserAccountID(value string) (UserAccountID, error) {
+	return parseTypedID[userAccountKind](value)
+}
+func ParseExternalIdentityID(value string) (ExternalIdentityID, error) {
+	return parseTypedID[externalIdentityKind](value)
+}
+func ParseSessionID(value string) (SessionID, error) {
+	return parseTypedID[sessionKind](value)
+}
+func ParseInvitationID(value string) (InvitationID, error) {
+	return parseTypedID[invitationKind](value)
+}
+func ParseMembershipID(value string) (MembershipID, error) {
+	return parseTypedID[membershipKind](value)
+}
+func ParseSourceCredentialID(value string) (SourceCredentialID, error) {
+	return parseTypedID[sourceCredentialKind](value)
+}
+func ParseSemanticCandidateID(value string) (SemanticCandidateID, error) {
+	return parseTypedID[semanticCandidateKind](value)
+}
+func ParseConsumerID(value string) (ConsumerID, error) { return parseTypedID[consumerKind](value) }
+func ParseConsumerBindingID(value string) (ConsumerBindingID, error) {
+	return parseTypedID[consumerBindingKind](value)
+}
+func ParseSemanticQueryID(value string) (SemanticQueryID, error) {
+	return parseTypedID[semanticQueryKind](value)
+}
+func ParseResolvedSemanticPlanID(value string) (ResolvedSemanticPlanID, error) {
+	return parseTypedID[resolvedSemanticPlanKind](value)
+}
+func ParseQueryValidationRunID(value string) (QueryValidationRunID, error) {
+	return parseTypedID[queryValidationRunKind](value)
+}
+func ParseAttentionItemID(value string) (AttentionItemID, error) {
+	return parseTypedID[attentionItemKind](value)
+}
+func ParseArtifactID(value string) (ArtifactID, error) { return parseTypedID[artifactKind](value) }
+func ParseArtifactSetID(value string) (ArtifactSetID, error) {
+	return parseTypedID[artifactSetKind](value)
+}
+func ParseSourceScheduleID(value string) (SourceScheduleID, error) {
+	return parseTypedID[sourceScheduleKind](value)
+}
+func ParseScheduleOccurrenceID(value string) (ScheduleOccurrenceID, error) {
+	return parseTypedID[scheduleOccurrenceKind](value)
+}
 
 func WorkspaceIDFromUUIDBytes(value [16]byte) (WorkspaceID, error) {
 	return typedIDFromUUIDBytes[workspaceKind](value)
@@ -484,6 +677,21 @@ func ReleaseIDFromUUIDBytes(value [16]byte) (ReleaseID, error) {
 }
 func EventIDFromUUIDBytes(value [16]byte) (EventID, error) {
 	return typedIDFromUUIDBytes[eventKind](value)
+}
+func AttentionItemIDFromUUIDBytes(value [16]byte) (AttentionItemID, error) {
+	return typedIDFromUUIDBytes[attentionItemKind](value)
+}
+func ArtifactIDFromUUIDBytes(value [16]byte) (ArtifactID, error) {
+	return typedIDFromUUIDBytes[artifactKind](value)
+}
+func ArtifactSetIDFromUUIDBytes(value [16]byte) (ArtifactSetID, error) {
+	return typedIDFromUUIDBytes[artifactSetKind](value)
+}
+func SourceScheduleIDFromUUIDBytes(value [16]byte) (SourceScheduleID, error) {
+	return typedIDFromUUIDBytes[sourceScheduleKind](value)
+}
+func ScheduleOccurrenceIDFromUUIDBytes(value [16]byte) (ScheduleOccurrenceID, error) {
+	return typedIDFromUUIDBytes[scheduleOccurrenceKind](value)
 }
 func AssetIDFromUUIDBytes(value [16]byte) (AssetID, error) {
 	return typedIDFromUUIDBytes[assetKind](value)
@@ -551,6 +759,30 @@ func SourceConnectionIDFromUUIDBytes(value [16]byte) (SourceConnectionID, error)
 func SourceRevisionIDFromUUIDBytes(value [16]byte) (SourceRevisionID, error) {
 	return typedIDFromUUIDBytes[sourceRevisionKind](value)
 }
+func SourceSnapshotIDFromUUIDBytes(value [16]byte) (SourceSnapshotID, error) {
+	return typedIDFromUUIDBytes[sourceSnapshotKind](value)
+}
+func SourceCodeRevisionIDFromUUIDBytes(value [16]byte) (SourceCodeRevisionID, error) {
+	return typedIDFromUUIDBytes[sourceCodeRevisionKind](value)
+}
+func SourceLineageRevisionIDFromUUIDBytes(value [16]byte) (SourceLineageRevisionID, error) {
+	return typedIDFromUUIDBytes[sourceLineageRevisionKind](value)
+}
+func ParseSourceSnapshotID(value string) (SourceSnapshotID, error) {
+	return parseTypedID[sourceSnapshotKind](value)
+}
+func ParseSourceCodeRevisionID(value string) (SourceCodeRevisionID, error) {
+	return parseTypedID[sourceCodeRevisionKind](value)
+}
+func ParseSourceLineageRevisionID(value string) (SourceLineageRevisionID, error) {
+	return parseTypedID[sourceLineageRevisionKind](value)
+}
+func ParseProductionOperationID(value string) (ProductionOperationID, error) {
+	return parseTypedID[productionOperationKind](value)
+}
+func ProductionOperationIDFromUUIDBytes(value [16]byte) (ProductionOperationID, error) {
+	return typedIDFromUUIDBytes[productionOperationKind](value)
+}
 func PhysicalDatasetIDFromUUIDBytes(value [16]byte) (PhysicalDatasetID, error) {
 	return typedIDFromUUIDBytes[physicalDatasetKind](value)
 }
@@ -574,6 +806,42 @@ func ModelProviderIDFromUUIDBytes(value [16]byte) (ModelProviderID, error) {
 }
 func ModelSettingIDFromUUIDBytes(value [16]byte) (ModelSettingID, error) {
 	return typedIDFromUUIDBytes[modelSettingKind](value)
+}
+func UserAccountIDFromUUIDBytes(value [16]byte) (UserAccountID, error) {
+	return typedIDFromUUIDBytes[userAccountKind](value)
+}
+func ExternalIdentityIDFromUUIDBytes(value [16]byte) (ExternalIdentityID, error) {
+	return typedIDFromUUIDBytes[externalIdentityKind](value)
+}
+func SessionIDFromUUIDBytes(value [16]byte) (SessionID, error) {
+	return typedIDFromUUIDBytes[sessionKind](value)
+}
+func InvitationIDFromUUIDBytes(value [16]byte) (InvitationID, error) {
+	return typedIDFromUUIDBytes[invitationKind](value)
+}
+func MembershipIDFromUUIDBytes(value [16]byte) (MembershipID, error) {
+	return typedIDFromUUIDBytes[membershipKind](value)
+}
+func SourceCredentialIDFromUUIDBytes(value [16]byte) (SourceCredentialID, error) {
+	return typedIDFromUUIDBytes[sourceCredentialKind](value)
+}
+func SemanticCandidateIDFromUUIDBytes(value [16]byte) (SemanticCandidateID, error) {
+	return typedIDFromUUIDBytes[semanticCandidateKind](value)
+}
+func ConsumerIDFromUUIDBytes(value [16]byte) (ConsumerID, error) {
+	return typedIDFromUUIDBytes[consumerKind](value)
+}
+func ConsumerBindingIDFromUUIDBytes(value [16]byte) (ConsumerBindingID, error) {
+	return typedIDFromUUIDBytes[consumerBindingKind](value)
+}
+func SemanticQueryIDFromUUIDBytes(value [16]byte) (SemanticQueryID, error) {
+	return typedIDFromUUIDBytes[semanticQueryKind](value)
+}
+func ResolvedSemanticPlanIDFromUUIDBytes(value [16]byte) (ResolvedSemanticPlanID, error) {
+	return typedIDFromUUIDBytes[resolvedSemanticPlanKind](value)
+}
+func QueryValidationRunIDFromUUIDBytes(value [16]byte) (QueryValidationRunID, error) {
+	return typedIDFromUUIDBytes[queryValidationRunKind](value)
 }
 
 func isRegistered(prefix Prefix) bool {

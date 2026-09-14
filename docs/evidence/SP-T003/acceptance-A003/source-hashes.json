@@ -1,0 +1,21 @@
+{
+  "checkedAt": "2026-09-10T10:15:36.627Z",
+  "files": [
+    {
+      "file": "internal/domain/governance/production_canonical.go",
+      "sha256": "89da133937985ff3ad679e4374547c38537fb96c6914c58e603ec777331cbfd0"
+    },
+    {
+      "file": "internal/domain/governance/production_authoring_test.go",
+      "sha256": "290a831ffae6e7c46f2292641b1706ec69c55b60f3b3948cf538e9719358a637"
+    },
+    {
+      "file": "internal/platform/http/semantic_production.go",
+      "sha256": "f757bdb2eae1c5b94ee9cfc67346915bed4d4430849c38f1b89f03f75d3abb42"
+    },
+    {
+      "file": "internal/platform/http/production_list_revision_test.go",
+      "sha256": "df703305f470295aa9c49e687e9e3fca528f0c0ea949d1f4bd4ef409ccd46129"
+    }
+  ]
+}

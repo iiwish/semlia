@@ -1,0 +1,56 @@
+--- a/web/src/styles.css
++++ b/web/src/styles.css
+@@ -21679,6 +21679,12 @@
+   display: flex;
+   flex-direction: column;
+   gap: 12px;
++  animation-name: memberAdministrationEnter;
++}
++
++@keyframes memberAdministrationEnter {
++  from { transform: translateY(4px); }
++  to { transform: translateY(0); }
+ }
+ 
+ .member-admin-toolbar {
+--- a/web/e2e-auth/session-membership.spec.ts
++++ b/web/e2e-auth/session-membership.spec.ts
+@@ -38,17 +38,38 @@
+ 
+   const clipped = await page.locator(".topbar, .member-admin-toolbar, .member-admin-table").evaluateAll((elements) => elements.filter((element) => element.scrollWidth > element.clientWidth + 1).length);
+   expect(clipped).toBe(0);
++  // Sample the actual entry animation rather than letting a fast fade evade Axe.
++  const entryStyles = await page.locator(".member-state-active").evaluate((badge) => {
++    const ancestors = [];
++    for (let element: Element | null = badge; element; element = element.parentElement) {
++      for (const animation of element.getAnimations()) {
++        const duration = animation.effect?.getTiming().duration;
++        if (typeof duration === "number" && duration > 0) {
++          animation.pause();
++          animation.currentTime = duration / 3;
++        }
++      }
++      const style = getComputedStyle(element);
++      ancestors.push({ className: element.className, opacity: style.opacity, color: style.color, backgroundColor: style.backgroundColor, animationName: style.animationName, animationDuration: style.animationDuration });
++    }
++    return ancestors;
++  });
++  await testInfo.attach("member-entry-computed-styles", { body: JSON.stringify(entryStyles, null, 2), contentType: "application/json" });
+   const accessibility = await new AxeBuilder({ page }).include(".member-administration-view").analyze();
+   expect(accessibility.violations).toEqual([]);
++  expect(entryStyles.every((style) => style.opacity === "1")).toBe(true);
+   await page.screenshot({ path: resolve(evidenceDirectory, `${testInfo.project.name}-member-admin.png`), fullPage: true });
+ 
+   roleId = "auditor";
++  await page.emulateMedia({ reducedMotion: "reduce" });
+   await page.reload();
+   await page.getByRole("button", { name: "系统设置" }).click();
+   await expect(page.getByRole("region", { name: "工作区成员列表" })).toBeVisible();
+   await expect(page.getByRole("button", { name: "邀请成员" })).toHaveCount(0);
+   await expect(page.getByRole("button", { name: "停用 Alpha Admin" })).toHaveCount(0);
+   await expect(page.getByLabel("Semlia 主功能")).toBeVisible();
++  const reducedDuration = await page.locator(".member-administration-view").evaluate((element) => Number.parseFloat(getComputedStyle(element).animationDuration));
++  expect(reducedDuration).toBeLessThanOrEqual(0.00001);
+ });
+ 
+ test("an administrator can invite a member and logout with the session CSRF verifier", async ({ page }) => {

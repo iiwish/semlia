@@ -11,11 +11,15 @@ import (
 )
 
 var (
-	ErrInvalidArgument = errors.New("invalid authorization argument")
-	ErrNotFound        = errors.New("authorization resource not found")
-	ErrConflict        = errors.New("authorization state conflict")
-	ErrInvariant       = errors.New("authorization invariant violated")
-	ErrRolesImmutable  = errors.New("system roles cannot be edited or deleted")
+	ErrInvalidArgument      = errors.New("invalid authorization argument")
+	ErrNotFound             = errors.New("authorization resource not found")
+	ErrConflict             = errors.New("authorization state conflict")
+	ErrVersionConflict      = errors.New("authorization version conflict")
+	ErrInvariant            = errors.New("authorization invariant violated")
+	ErrRolesImmutable       = errors.New("system roles cannot be edited or deleted")
+	ErrAuthorizationCeiling = errors.New("authorization grant exceeds the grantor ceiling")
+	ErrSeparationOfDuties   = errors.New("authorization binding violates separation of duties")
+	ErrFinalAdministrator   = errors.New("the final workspace administrator cannot be removed")
 )
 
 // Action is a stable FR-003 permission identifier. Role names never authorize;
@@ -191,22 +195,134 @@ func (principal Principal) Validate() error {
 }
 
 type Role struct {
+	WorkspaceID identity.WorkspaceID
 	ID          string
 	Name        string
 	Description string
 	Category    string
 	Actions     []Action
+	Version     int64
+	CreatedAt   time.Time
 }
 
 type RoleBinding struct {
-	ID          identity.BindingID
-	PrincipalID identity.PrincipalID
-	RoleID      string
-	ScopeType   ScopeType
-	ScopeID     string
-	GrantedBy   *identity.PrincipalID
-	GrantedAt   time.Time
-	Actions     []Action
+	WorkspaceID  identity.WorkspaceID
+	ID           identity.BindingID
+	PrincipalID  identity.PrincipalID
+	RoleID       string
+	RoleVersion  int64
+	ScopeType    ScopeType
+	ScopeID      string
+	GrantedBy    *identity.PrincipalID
+	GrantedAt    time.Time
+	ExpiresAt    *time.Time
+	ExpiredAt    *time.Time
+	RevokedAt    *time.Time
+	RevokedBy    *identity.PrincipalID
+	RevokeReason string
+	Version      int64
+	Actions      []Action
+}
+
+type BindingStatus string
+
+const (
+	BindingActive  BindingStatus = "active"
+	BindingExpired BindingStatus = "expired"
+	BindingRevoked BindingStatus = "revoked"
+)
+
+func (binding RoleBinding) StatusAt(now time.Time) BindingStatus {
+	if binding.RevokedAt != nil {
+		return BindingRevoked
+	}
+	if binding.ExpiredAt != nil || binding.ExpiresAt != nil && !now.Before(*binding.ExpiresAt) {
+		return BindingExpired
+	}
+	return BindingActive
+}
+
+func (role Role) Validate() error {
+	if role.ID == "" || role.Name == "" || role.Description == "" || len(role.Actions) == 0 {
+		return ErrInvalidArgument
+	}
+	switch role.Category {
+	case "system":
+		if !role.WorkspaceID.IsZero() || role.Version != 1 {
+			return ErrInvalidArgument
+		}
+	case "custom":
+		if role.WorkspaceID.IsZero() || role.Version < 1 {
+			return ErrInvalidArgument
+		}
+	default:
+		return ErrInvalidArgument
+	}
+	seen := make(map[Action]struct{}, len(role.Actions))
+	for _, action := range role.Actions {
+		if !IsKnownAction(action) {
+			return ErrInvalidArgument
+		}
+		if _, duplicate := seen[action]; duplicate {
+			return ErrInvalidArgument
+		}
+		seen[action] = struct{}{}
+	}
+	return nil
+}
+
+func (binding RoleBinding) Validate(now time.Time) error {
+	if binding.WorkspaceID.IsZero() || binding.ID.IsZero() || binding.PrincipalID.IsZero() ||
+		binding.RoleID == "" || binding.RoleVersion < 1 || !binding.ScopeType.Valid() ||
+		binding.ScopeID == "" || binding.GrantedAt.IsZero() || binding.Version < 1 {
+		return ErrInvalidArgument
+	}
+	if binding.ScopeType == ScopeWorkspace && binding.ScopeID != binding.WorkspaceID.UUID() {
+		return ErrInvalidArgument
+	}
+	if binding.ExpiresAt != nil && !binding.ExpiresAt.After(binding.GrantedAt) {
+		return ErrInvalidArgument
+	}
+	if binding.ExpiredAt != nil && binding.ExpiresAt == nil {
+		return ErrInvalidArgument
+	}
+	if binding.RevokedAt != nil && binding.RevokedAt.Before(binding.GrantedAt) {
+		return ErrInvalidArgument
+	}
+	if binding.StatusAt(now) == BindingRevoked && binding.RevokedBy == nil {
+		return ErrInvalidArgument
+	}
+	return nil
+}
+
+// ActionsConflict expresses the protected review/publish separation without
+// depending on role display names, so custom roles cannot bypass the rule.
+func ActionsConflict(left, right []Action) bool {
+	leftReviews, leftPublishes := actionDuties(left)
+	rightReviews, rightPublishes := actionDuties(right)
+	return leftReviews && rightPublishes || leftPublishes && rightReviews
+}
+
+func actionDuties(actions []Action) (reviews, publishes bool) {
+	for _, action := range actions {
+		switch action {
+		case ActionProposalReview:
+			reviews = true
+		case ActionReleasePublish, ActionReleaseRollback:
+			publishes = true
+		}
+	}
+	return reviews, publishes
+}
+
+// BindingsOverlap is intentionally conservative. Workspace grants overlap
+// every narrower resource in that workspace; otherwise exact scopes overlap.
+func BindingsOverlap(left, right RoleBinding, workspaceID string) bool {
+	if left.ScopeType == ScopeWorkspace && left.ScopeID == workspaceID ||
+		right.ScopeType == ScopeWorkspace && right.ScopeID == workspaceID {
+		return true
+	}
+	return left.ScopeType == right.ScopeType && left.ScopeID == right.ScopeID
 }
 
 // Resource is the target a command acts on, expressed in scope coordinates.

@@ -47,9 +47,133 @@ type AssetSummary struct {
 
 type AssetDetail struct {
 	AssetSummary
-	CreatedAt       time.Time
-	CurrentRevision *Revision
-	RelationCount   int
+	CreatedAt         time.Time
+	CurrentRevision   *Revision
+	RelationCount     int
+	AuthoritySections []AuthoritySection
+}
+
+type Availability string
+
+const (
+	AvailabilityAvailable     Availability = "available"
+	AvailabilityNotConfigured Availability = "not_configured"
+	AvailabilityNotReleased   Availability = "not_released"
+	AvailabilityForbidden     Availability = "forbidden"
+	AvailabilityFailed        Availability = "failed"
+)
+
+type AuthoritySection struct {
+	Kind              string
+	Authority         string
+	Availability      Availability
+	RevisionID        *identity.RevisionID
+	ReleaseID         *identity.ReleaseID
+	ReleaseSequence   *int64
+	Relation          *RelationAuthority
+	Values            map[string]int64
+	Records           []AuthorityRecord
+	RecordsLimit      int
+	RecordsTotal      int64
+	RecordsNextCursor string
+}
+
+type RelationAuthority struct {
+	Direction      string
+	Predicate      string
+	Plane          string
+	AssertionState string
+	SubjectAssetID identity.AssetID
+	ObjectAssetID  identity.AssetID
+}
+
+type AuthorityRecord struct {
+	Kind            string
+	ID              string
+	Authority       string
+	Status          string
+	Label           string
+	RelatedID       string
+	Version         int
+	ReleaseID       *identity.ReleaseID
+	ReleaseSequence *int64
+	Relation        *RelationAuthority
+	PhysicalBinding *PhysicalBindingAuthority
+	ModelGrain      *ModelGrainAuthority
+	EntityKey       *EntityKeyAuthority
+	JoinContract    *JoinContractAuthority
+	Lineage         *LineageAuthority
+	ConsumerBinding *ConsumerBindingAuthority
+}
+
+type PhysicalBindingAuthority struct {
+	AssetID   identity.AssetID
+	DatasetID identity.PhysicalDatasetID
+	FieldID   *identity.PhysicalFieldID
+	Transform string
+}
+
+type ModelGrainAuthority struct {
+	AssetID         identity.AssetID
+	GrainExpression string
+	GrainFieldRefs  []identity.PhysicalFieldID
+	DocumentedBy    *identity.EvidenceID
+}
+
+type EntityKeyAuthority struct {
+	AssetID             identity.AssetID
+	KeyFieldRefs        []identity.PhysicalFieldID
+	UniquenessSemantics string
+}
+
+type JoinContractAuthority struct {
+	Direction      string
+	LeftDatasetID  identity.PhysicalDatasetID
+	RightDatasetID identity.PhysicalDatasetID
+	LeftFieldRefs  []identity.PhysicalFieldID
+	RightFieldRefs []identity.PhysicalFieldID
+	JoinType       string
+	Cardinality    string
+	JoinExpression string
+}
+
+type LineageAuthority struct {
+	Direction           string
+	UpstreamDatasetID   identity.PhysicalDatasetID
+	DownstreamDatasetID identity.PhysicalDatasetID
+	EdgeKind            string
+	SourceRevisionID    identity.SourceRevisionID
+	CodeArtifactID      *identity.CodeArtifactID
+	Confidence          float64
+}
+
+type ConsumerBindingAuthority struct {
+	ConsumerID              identity.ConsumerID
+	EffectiveReleaseID      identity.ReleaseID
+	Environment             string
+	Purpose                 string
+	Mode                    string
+	Status                  string
+	CompatibilityConstraint json.RawMessage
+	ExpiresAt               *time.Time
+}
+
+type AuthorityRecordCursor struct {
+	Kind string
+	ID   string
+}
+
+type ListAuthorityRecordsQuery struct {
+	WorkspaceID identity.WorkspaceID
+	AssetID     identity.AssetID
+	Section     string
+	Limit       int
+	Cursor      *AuthorityRecordCursor
+}
+
+type AuthorityRecordResult struct {
+	Items []AuthorityRecord
+	Total int64
 }
 
 type Revision struct {
@@ -148,6 +272,7 @@ type ListRelationsQuery struct {
 	Direction   string
 	Plane       semantic.RelationPlane
 	Depth       int
+	Limit       int
 }
 
 type CreateAssetCommand struct {

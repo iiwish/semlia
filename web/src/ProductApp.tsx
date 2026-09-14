@@ -41,12 +41,13 @@ import {
 } from "lucide-react";
 import { LoaderCircle } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import type { components } from "@semlia/sdk-typescript";
 
+import { apiClient } from "./apiClient";
 import { useCatalogRuntime } from "./catalogRuntime";
-import { CatalogWorkspaceControl, CreateCatalogAssetButton } from "./CatalogControls";
+import { CatalogDataNotice, CatalogRefreshButton, CreateCatalogAssetButton } from "./CatalogControls";
 import { CapabilityProvider, useCan } from "./authorization";
 import { AIProposalDialog } from "./AIProposalDialog";
-import { assetVersionReleases as previewAssetReleases } from "./data";
 import {
   GOVERNANCE_ERROR_CODES,
   type GovernancePolicyDecision,
@@ -61,15 +62,33 @@ import {
 } from "./governance";
 import { GovernanceRuntimeProvider, useGovernanceRuntime } from "./governanceRuntime";
 import { AccessControlView } from "./AccessControlView";
+import { AuthorizationAdminRuntimeProvider } from "./authorizationAdminRuntime";
+import { MemberAdministrationView } from "./MemberAdministrationView";
+import { SessionAccountControl, SessionAuthorizationNotice, useOptionalSessionRuntime } from "./sessionRuntime";
 import { assetTypeProfileFor, evaluateAssetTypeRules, type AssetEmptyStateConfig } from "./assetTypeProfiles";
 import { AuditRuntimeView } from "./AuditRuntimeView";
-import { SourcesView } from "./JourneyViews";
+import { OperationsRuntimeProvider } from "./operationsRuntime";
+import {
+  WorkbenchRuntimeProvider,
+  useWorkbenchRuntime,
+} from "./workbenchRuntime";
+import type {
+  WorkbenchAttentionItem,
+  WorkbenchAttentionKind,
+  WorkbenchAttentionState,
+  WorkbenchFilter,
+  WorkbenchPriority,
+  WorkbenchSort,
+  WorkbenchView,
+} from "./workbench";
+import { LiveSourcesView } from "./LiveSourcesView";
+import { SemanticProductionWorkspace } from "./SemanticProductionPanel";
 import { IntegrationSettingsView } from "./IntegrationSettingsView";
 import { AskView } from "./KnowledgeViews";
 import { KnowledgeRevisionWorkbench } from "./KnowledgeRevisionWorkbench";
-import { ModelConfigurationView, type EmbeddingRebuildRun } from "./ModelConfigurationView";
+import { ModelConfigurationView } from "./ModelConfigurationView";
 import { SemanticGraph, type OntologyPerspective } from "./SemanticGraph";
-import type { Asset, AssetType, CapabilitySession, KnowledgeRevisionRequest, KnowledgeRevisionSubmission, NavigateToView, Proposal, ValidationState, ViewId } from "./types";
+import type { Asset, AssetAuthoritySectionKind, AssetType, CapabilitySession, KnowledgeRevisionRequest, KnowledgeRevisionSubmission, NavigateToView, Proposal, ValidationState, ViewId } from "./types";
 
 interface NavigationItem {
   id: ViewId;
@@ -96,6 +115,7 @@ const assetTabs = ["概览", "定义", "本体关系", "实现", "可信度", "�
 type AssetTab = (typeof assetTabs)[number];
 
 function assetTabsFor(asset: Asset): AssetTab[] {
+  if (asset.authoritySections) return [...assetTabs];
   const profile = assetTypeProfileFor(asset);
   const hasExecutableImplementation = profile.implementationMode !== "not_applicable" || asset.bindings.length > 0 || asset.joinContracts.length > 0;
   return hasExecutableImplementation ? [...assetTabs] : assetTabs.filter((tab) => tab !== "实现");
@@ -154,12 +174,11 @@ function CatalogTypeMark({ type }: { type: CatalogObjectType }) {
   return <span className={`catalog-type-mark catalog-type-${type}`}>{createElement(Icon, { size: 16 })}</span>;
 }
 
-function AssetEmptyState({ config, icon: Icon, assetName, onAction }: { config: AssetEmptyStateConfig; icon: LucideIcon; assetName: string; onAction?: (message: string) => void }) {
+function AssetEmptyState({ config, icon: Icon }: { config: AssetEmptyStateConfig; icon: LucideIcon; assetName: string; onAction?: (message: string) => void }) {
   return (
     <div className={`asset-inline-empty asset-empty-${config.kind}`}>
       <Icon size={21} />
       <span><strong>{config.title}</strong><small>{config.detail}</small></span>
-      {config.action && onAction && <button type="button" onClick={() => onAction(`${assetName}：${config.action}已进入原型待办。`)}>{config.action}</button>}
     </div>
   );
 }
@@ -199,8 +218,8 @@ function assetContractFields(asset: Asset) {
     { label: unit, value: spec.unit, fieldPath: "spec.unit" },
     { label: aggregation, value: spec.aggregation, fieldPath: "spec.aggregation" },
   ];
-  if (spec.kind === "metric") fields.push({ label: "指标类型与维度", value: `${spec.metricKind} · ${spec.allowedDimensions.join(" / ")}`, fieldPath: "spec.allowed_dimensions" });
-  else if (spec.kind === "measure") fields.push({ label: "可加性与空值", value: `${spec.additivity} · ${spec.nullHandling}`, fieldPath: "spec.additivity" });
+  if (spec.kind === "metric") fields.push({ label: "指标类型与维度", value: `${spec.metricKind === "undeclared" ? "未声明" : spec.metricKind} · ${spec.allowedDimensions.join(" / ") || "未声明"}`, fieldPath: "spec.allowed_dimensions" });
+  else if (spec.kind === "measure") fields.push({ label: "可加性与空值", value: `${spec.additivity === "undeclared" ? "未声明" : spec.additivity} · ${spec.nullHandling}`, fieldPath: "spec.additivity" });
   else if (spec.kind === "dimension") fields.push({ label: "值域语义", value: `${spec.valueType} · ${spec.nullSemantics}`, fieldPath: "spec.value_semantics" });
   else if (spec.kind === "entity") fields.push({ label: "身份策略", value: spec.identityPolicy, fieldPath: "spec.identity_policy" });
   else if (spec.kind === "model") fields.push({ label: "公开成员", value: spec.publicMembers.join(" · "), fieldPath: "spec.public_members" });
@@ -210,9 +229,15 @@ function assetContractFields(asset: Asset) {
 }
 
 function deploymentLabel(asset: Asset) {
+  if (asset.deployment.state === "unknown") return "待加载";
+  if (asset.deployment.revisionId && asset.deployment.revisionId !== asset.revisionRecord.revisionId) return "当前草稿";
   if (asset.deployment.state === "production") return "生产";
   if (asset.deployment.state === "staging") return "预发布";
   return "未发布";
+}
+
+function isCurrentRevisionReleased(asset: Asset) {
+  return asset.deployment.state === "production" && asset.deployment.revisionId === asset.revisionRecord.revisionId;
 }
 
 function compatibilityLabel(state: Asset["consumerBindings"][number]["compatibility"]) {
@@ -311,31 +336,33 @@ function StatusBadge({ tone, children }: { tone: "success" | "warning" | "danger
   return <span className={`status-badge status-${tone}`}>{children}</span>;
 }
 
+function SurfaceBoundaryNotice({ title, detail }: { title: string; detail: string }) {
+  return <aside className="surface-boundary-notice" role="note" aria-label="功能边界"><CircleAlert size={15} /><span><strong>{title}</strong>{detail}</span></aside>;
+}
+
 const changeReleaseContextItems = [
   { label: "资产版本", meta: "3 个候选 · 6 条已发布", tone: "warning" as const },
 ];
 
 const contextItems: Record<ViewId, Array<{ label: string; meta: string; tone?: "warning" | "danger" }>> = {
   ask: [
-    { label: "新会话", meta: "开始提问" },
-    { label: "8 月收入诊断", meta: "刚刚" },
-    { label: "客单价口径", meta: "昨天" },
-    { label: "知识覆盖检查", meta: "3 天前" },
+    { label: "新会话", meta: "当前会话 · 仅本次页面" },
   ],
   sources: [
-    { label: "数据来源", meta: "1 库 · 1 文件" },
-    { label: "接入自动化", meta: "3 项策略", tone: "warning" },
-    { label: "接入运行", meta: "1 条异常" },
+    { label: "数据来源", meta: "PostgreSQL · SQL · dbt · 文件" },
+    { label: "接入自动化", meta: "Cron · 时区 · 执行记录" },
+    { label: "接入运行", meta: "真实运行与候选" },
   ],
   overview: [],
   assets: [],
   releases: changeReleaseContextItems,
   settings: [
-    { label: "成员", meta: "24 名成员" },
+    { label: "成员", meta: "账号与成员管理" },
     { label: "访问控制", meta: "9 个系统角色" },
     { label: "模型配置", meta: "LLM · Embedding" },
     { label: "接口与集成", meta: "4 种接口" },
     { label: "审计与运行", meta: "全局记录" },
+    { label: "本机验收", meta: "验收数据" },
   ],
 };
 
@@ -350,9 +377,6 @@ const contextTitles: Record<ViewId, string> = {
 
 const initialAskConversationTitles: Record<number, string> = {
   0: "新会话",
-  1: "8 月收入诊断",
-  2: "客单价口径",
-  3: "知识覆盖检查",
 };
 
 const contextSectionLabels: Record<ViewId, string> = {
@@ -377,7 +401,7 @@ function initialContextPanelWidth() {
   return 264;
 }
 
-function ActivityRail({ view, onChange }: { view: ViewId; onChange: (view: ViewId) => void }) {
+function ActivityRail({ view, workbenchCount, onChange }: { view: ViewId; workbenchCount?: number; onChange: (view: ViewId) => void }) {
   const renderItem = (item: (typeof navigation)[number]) => {
     const Icon = item.icon;
     const active = item.activeViews?.includes(view) ?? view === item.id;
@@ -393,7 +417,7 @@ function ActivityRail({ view, onChange }: { view: ViewId; onChange: (view: ViewI
       >
         <Icon size={18} strokeWidth={1.8} />
         <span className="rail-label">{item.label}</span>
-        {item.id === "overview" && <span className="rail-count">3</span>}
+        {item.id === "overview" && typeof workbenchCount === "number" && workbenchCount > 0 && <span className="rail-count">{workbenchCount > 99 ? "99+" : workbenchCount}</span>}
       </button>
     );
   };
@@ -414,13 +438,19 @@ function ActivityRail({ view, onChange }: { view: ViewId; onChange: (view: ViewI
   );
 }
 
-function ContextPanel({ view, activeIndex, width, recentAssets, activeAssetId, assetDetailOpen, activeWorkbenchTask, askConversationTitles, conversationSearchRequestEpoch, releasesItems, onSelect, onOpenRecentAsset, onOpenWorkbenchTask, onOpenCatalogSearch, onOpenWorkbenchSearch, onCollapse, onResize }: { view: ViewId; activeIndex: number; width: number; recentAssets: Asset[]; activeAssetId: string; assetDetailOpen: boolean; activeWorkbenchTask: WorkbenchTask | null; askConversationTitles: Record<number, string>; conversationSearchRequestEpoch: number; releasesItems: Array<{ label: string; meta: string; tone?: "warning" | "danger" }>; onSelect: (index: number) => void; onOpenRecentAsset: (id: string) => void; onOpenWorkbenchTask: (task: WorkbenchTask) => void; onOpenCatalogSearch: () => void; onOpenWorkbenchSearch: () => void; onCollapse: () => void; onResize: (width: number) => void }) {
+function ContextPanel({ view, activeIndex, width, recentAssets, activeAssetId, assetDetailOpen, activeWorkbenchTask, workbenchItems, askConversationTitles, conversationSearchRequestEpoch, releasesItems, onSelect, onOpenRecentAsset, onOpenWorkbenchTask, onOpenCatalogSearch, onOpenWorkbenchSearch, onCollapse, onResize }: { view: ViewId; activeIndex: number; width: number; recentAssets: Asset[]; activeAssetId: string; assetDetailOpen: boolean; activeWorkbenchTask: WorkbenchAttentionItem | null; workbenchItems: WorkbenchAttentionItem[]; askConversationTitles: Record<number, string>; conversationSearchRequestEpoch: number; releasesItems: Array<{ label: string; meta: string; tone?: "warning" | "danger" }>; onSelect: (index: number) => void; onOpenRecentAsset: (id: string) => void; onOpenWorkbenchTask: (item: WorkbenchAttentionItem) => void; onOpenCatalogSearch: () => void; onOpenWorkbenchSearch: () => void; onCollapse: () => void; onResize: (width: number) => void }) {
+  const sessionRuntime = useOptionalSessionRuntime();
   const isAssetCatalog = view === "assets";
   const hasContextSearch = view !== "sources" && view !== "releases" && view !== "settings";
   const canReadRoles = useCan("role.read");
+  const canManageRoles = useCan("role.manage");
   const canAssignRoles = useCan("role.assign");
   const canInspectAuthorization = useCan("authorization.inspect");
-  const canViewAccessControl = canReadRoles || canAssignRoles || canInspectAuthorization;
+  const canViewAccessControl = canReadRoles || canManageRoles || canAssignRoles || canInspectAuthorization;
+  const canReadAudit = useCan("audit.read");
+  const canReadRuntime = useCan("runtime.read");
+  const canManageRuntime = useCan("runtime.manage");
+  const canViewOperations = canReadAudit || canReadRuntime || canManageRuntime;
   const resizeState = useRef<{ pointerId: number; startX: number; startWidth: number } | null>(null);
   const contextListRef = useRef<HTMLDivElement>(null);
   const conversationSearchRef = useRef<HTMLInputElement>(null);
@@ -484,10 +514,10 @@ function ContextPanel({ view, activeIndex, width, recentAssets, activeAssetId, a
             <span><strong>{asset.name}</strong><small>{asset.type} · {asset.domain}</small></span>
             <ChevronRight size={14} />
           </button>
-        )) : view === "overview" ? workbenchTasks.filter((task) => task.scope === "mine").sort((left, right) => ({ P0: 0, P1: 1, P2: 2 }[left.priority] - { P0: 0, P1: 1, P2: 2 }[right.priority]) || right.ageMinutes - left.ageMinutes).map((task) => (
+        )) : view === "overview" ? workbenchItems.slice(0, 12).map((task) => (
           <button className={activeWorkbenchTask?.id === task.id ? "context-item context-workbench-task context-item-active" : "context-item context-workbench-task"} type="button" key={task.id} aria-label={`打开待办详情 ${task.title}`} aria-current={activeWorkbenchTask?.id === task.id ? "page" : undefined} onClick={() => onOpenWorkbenchTask(task)}>
-            <span className={`context-task-mark context-task-mark-${task.priority.toLowerCase()}`} title={`${task.priority} · ${task.risk}`}>{task.priority === "P0" ? <AlertTriangle size={14} /> : <CircleAlert size={14} />}</span>
-            <span><strong>{task.title}</strong><small><code>{task.id}</code> · {task.state}</small></span>
+            <span className={`context-task-mark context-task-mark-${task.priority}`} title={`${workbenchPriorityLabel(task.priority)} · ${workbenchPriorityLabel(task.risk)}`}>{task.priority === "critical" ? <AlertTriangle size={14} /> : <CircleAlert size={14} />}</span>
+            <span><strong>{task.title}</strong><small><code>{task.id}</code> · {workbenchStateLabel(task.state)}</small></span>
             <ChevronRight size={14} />
           </button>
         )) : view === "ask" ? visibleConversations.length > 0 ? visibleConversations.map(({ item, index, title }) => (
@@ -496,7 +526,7 @@ function ContextPanel({ view, activeIndex, width, recentAssets, activeAssetId, a
             <span><strong>{title}</strong><small>{item.meta}</small></span>
             <ChevronRight size={14} />
           </button>
-        )) : <div className="context-search-empty"><Search size={16} /><strong>没有匹配会话</strong><span>尝试搜索其他会话标题。</span></div> : (view === "releases" ? releasesItems : contextItems[view]).map((item, index) => ({ item, index })).filter(({ index }) => view !== "settings" || index !== 1 || canViewAccessControl).map(({ item, index }) => (
+        )) : <div className="context-search-empty"><Search size={16} /><strong>没有匹配会话</strong><span>尝试搜索其他会话标题。</span></div> : (view === "releases" ? releasesItems : contextItems[view]).map((item, index) => ({ item: sessionRuntime && view === "settings" && index === 0 ? { ...item, meta: "工作区成员与邀请" } : item, index })).filter(({ index }) => view !== "settings" || (index !== 1 || canViewAccessControl) && (index !== 4 || canViewOperations) && index !== 5).map(({ item, index }) => (
           <button className={index === activeIndex ? "context-item context-item-active" : "context-item"} type="button" key={item.label} onClick={() => onSelect(index)}>
             <span className={`context-dot${item.tone ? ` context-dot-${item.tone}` : ""}`} />
             <span><strong>{item.label}</strong><small>{item.meta}</small></span>
@@ -511,11 +541,21 @@ function ContextPanel({ view, activeIndex, width, recentAssets, activeAssetId, a
 
 function AccessControlGate({ children }: { children: ReactNode }) {
   const canReadRoles = useCan("role.read");
+  const canManageRoles = useCan("role.manage");
   const canAssignRoles = useCan("role.assign");
   const canInspectAuthorization = useCan("authorization.inspect");
-  const allowed = canReadRoles || canAssignRoles || canInspectAuthorization;
+  const allowed = canReadRoles || canManageRoles || canAssignRoles || canInspectAuthorization;
   if (allowed) return children;
-  return <section className="view settings-view access-control-view" aria-label="访问控制"><div className="access-inspector-empty"><LockKeyhole size={22} /><strong>没有访问控制权限</strong><span>需要角色读取、角色分配或有效权限检查能力。</span></div></section>;
+  return <section className="view settings-view access-control-view" aria-label="访问控制"><div className="access-inspector-empty"><LockKeyhole size={22} /><strong>没有访问控制权限</strong><span>需要角色读取、角色管理、角色分配或有效权限检查能力。</span></div></section>;
+}
+
+function OperationsGate({ children }: { children: ReactNode }) {
+  const canReadAudit = useCan("audit.read");
+  const canReadRuntime = useCan("runtime.read");
+  const canManageRuntime = useCan("runtime.manage");
+  const allowed = canReadAudit || canReadRuntime || canManageRuntime;
+  if (allowed) return children;
+  return <section className="view settings-view audit-runtime-view" aria-label="审计与运行"><div className="operations-access-boundary"><LockKeyhole size={22} /><span><strong>没有审计与运行权限</strong>需要审计读取、运行读取或运行管理能力。</span></div></section>;
 }
 
 function Topbar({ view, contextLabel, onNewConversation, onRenameContext, onBack, backLabel = "返回" }: { view: ViewId; contextLabel?: string; onNewConversation: () => void; onRenameContext?: (title: string) => void; onBack?: () => void; backLabel?: string }) {
@@ -541,158 +581,264 @@ function Topbar({ view, contextLabel, onNewConversation, onRenameContext, onBack
 
   return (
     <header className="topbar">
-      <div className="workspace-breadcrumb">{onBack && <button className="topbar-back-button" type="button" aria-label={backLabel} title={backLabel} onClick={onBack}><ArrowLeft size={16} /></button>}{contextLabel && (onRenameContext ? (isEditingTitle ? <input ref={titleInputRef} className="workspace-title-input" aria-label="编辑会话标题" value={draftTitle} onChange={(event) => setDraftTitle(event.target.value)} onBlur={commitTitle} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); commitTitle(); } if (event.key === "Escape") { event.preventDefault(); cancelTitle(); } }} /> : <button className="workspace-title-button" type="button" aria-label={`编辑会话标题：${contextLabel}`} onClick={() => setIsEditingTitle(true)}>{contextLabel}</button>) : <strong>{contextLabel}</strong>)}</div>
+      <div className="workspace-breadcrumb">{onBack && <button className="topbar-back-button" type="button" aria-label={backLabel} title={backLabel} onClick={onBack}><ArrowLeft size={16} /></button>}{contextLabel && (onRenameContext ? (isEditingTitle ? <input ref={titleInputRef} className="workspace-title-input" aria-label="编辑会话标题" value={draftTitle} onChange={(event) => setDraftTitle(event.target.value)} onBlur={commitTitle} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); commitTitle(); } if (event.key === "Escape") { event.preventDefault(); cancelTitle(); } }} /> : <button className="workspace-title-button" type="button" aria-label={`编辑会话标题：${contextLabel}`} onClick={() => setIsEditingTitle(true)}>{contextLabel}</button>) : <strong>{contextLabel}</strong>)}{view === "ask" && <span className="session-only-label">仅本次会话</span>}</div>
       <div className="topbar-actions">
-        <CatalogWorkspaceControl />
+        <CatalogDataNotice />
+        <SessionAccountControl />
         {view === "ask" && <button className="primary-button" type="button" onClick={onNewConversation}><MessageSquareText size={16} />新建会话</button>}
       </div>
     </header>
   );
 }
 
-type WorkbenchScope = "mine" | "created" | "team";
-type WorkbenchTaskKind = "版本审核" | "运行诊断" | "迁移确认";
-type WorkbenchRisk = "高风险" | "中风险" | "低风险";
+const workbenchKindLabels: Record<WorkbenchAttentionKind, string> = {
+  review: "版本审核",
+  validation: "验证处理",
+  source: "数据来源",
+  runtime: "运行诊断",
+  compatibility: "兼容性处理",
+};
 
-interface WorkbenchTask {
-  id: string;
-  title: string;
-  source: string;
-  object: string;
-  objectType: string;
-  action: string;
-  kind: WorkbenchTaskKind;
-  priority: "P0" | "P1" | "P2";
-  risk: WorkbenchRisk;
-  owner: string;
-  timing: string;
-  ageMinutes: number;
-  state: "验证阻塞" | "待审核" | "待诊断" | "等待他人";
-  scope: Exclude<WorkbenchScope, "team">;
-  target: "candidate-region" | "candidate-aov" | "candidate-revenue" | "source-run";
+const workbenchStateLabels: Record<WorkbenchAttentionState, string> = {
+  open: "待处理",
+  in_progress: "处理中",
+  resolved: "已解决",
+  dismissed: "已忽略",
+};
+
+const workbenchPriorityLabels: Record<WorkbenchPriority, string> = {
+  low: "低",
+  medium: "中",
+  high: "高",
+  critical: "紧急",
+};
+
+function workbenchPriorityLabel(value: WorkbenchPriority) {
+  return workbenchPriorityLabels[value];
 }
 
-const workbenchTasks: WorkbenchTask[] = [
-  { id: "WB-104", title: "旧区域别名无法安全废弃", source: "解析反馈", object: "业务区域 @4", objectType: "候选资产版本", action: "确认 3 个消费者迁移", kind: "迁移确认", priority: "P0", risk: "高风险", owner: "我", timing: "已逾期 2 小时", ageMinutes: 1080, state: "验证阻塞", scope: "mine", target: "candidate-region" },
-  { id: "WB-103", title: "确认客单价退款订单口径", source: "RUN-240824-1432", object: "客单价 @9", objectType: "候选资产版本", action: "审核结构化差异", kind: "版本审核", priority: "P1", risk: "中风险", owner: "我", timing: "等待 12 分钟", ageMinutes: 12, state: "待审核", scope: "mine", target: "candidate-aov" },
-  { id: "WB-102", title: "检查客户增长域运行异常", source: "PostgreSQL Analytics", object: "RUN-240823-1844", objectType: "接入自动化运行", action: "诊断字段变化", kind: "运行诊断", priority: "P1", risk: "中风险", owner: "我", timing: "今天到期", ageMinutes: 244, state: "待诊断", scope: "mine", target: "source-run" },
-  { id: "WB-101", title: "补充净收入财务口径证据", source: "RUN-240824-1432", object: "净收入 @13", objectType: "候选资产版本", action: "等待财务负责人审核", kind: "版本审核", priority: "P2", risk: "低风险", owner: "林悦", timing: "等待 1 小时", ageMinutes: 61, state: "等待他人", scope: "created", target: "candidate-revenue" },
-];
+function workbenchStateLabel(value: WorkbenchAttentionState) {
+  return workbenchStateLabels[value];
+}
 
-function OverviewView({ onOpenTask, discoveryState, focusSearchRequestEpoch }: { onOpenTask: (task: WorkbenchTask) => void; discoveryState: "ready" | "running" | "complete"; focusSearchRequestEpoch: number }) {
-  const [taskScope, setTaskScope] = useState<WorkbenchScope>("mine");
-  const [taskKind, setTaskKind] = useState<"全部类型" | WorkbenchTaskKind>("全部类型");
-  const [taskRisk, setTaskRisk] = useState<"全部风险" | WorkbenchRisk>("全部风险");
-  const [taskSort, setTaskSort] = useState<"风险优先" | "等待最久">("风险优先");
-  const [taskSearch, setTaskSearch] = useState("");
+function workbenchActionLabel(action: WorkbenchAttentionItem["nextActions"][number]) {
+  return ({ review: "进入审核", run_validation: "运行验证", manage_source: "管理数据来源", publish: "处理兼容性", assign: "分配", dismiss: "忽略", open_target: "打开目标" } as const)[action];
+}
+
+function workbenchDate(value?: string) {
+  if (!value) return "未设置";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(date);
+}
+
+function OverviewView({ onOpenTask, focusSearchRequestEpoch }: { onOpenTask: (task: WorkbenchAttentionItem) => void; focusSearchRequestEpoch: number }) {
+  const runtime = useWorkbenchRuntime();
+  const [taskSearch, setTaskSearch] = useState(runtime.filter.search ?? "");
   const taskSearchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (focusSearchRequestEpoch > 0) taskSearchRef.current?.focus();
   }, [focusSearchRequestEpoch]);
 
-  const normalizedTaskSearch = taskSearch.trim().toLowerCase();
-  const visibleTasks = workbenchTasks
-    .filter((task) => taskScope === "team" || task.scope === taskScope)
-    .filter((task) => taskKind === "全部类型" || task.kind === taskKind)
-    .filter((task) => taskRisk === "全部风险" || task.risk === taskRisk)
-    .filter((task) => !normalizedTaskSearch || `${task.title} ${task.id} ${task.source} ${task.object} ${task.action} ${task.owner}`.toLowerCase().includes(normalizedTaskSearch))
-    .sort((left, right) => taskSort === "等待最久" ? right.ageMinutes - left.ageMinutes : ({ P0: 0, P1: 1, P2: 2 }[left.priority] - { P0: 0, P1: 1, P2: 2 }[right.priority]) || right.ageMinutes - left.ageMinutes);
-  const mineCount = workbenchTasks.filter((task) => task.scope === "mine").length;
-  const createdCount = workbenchTasks.filter((task) => task.scope === "created").length;
+  const applyFilter = (patch: Partial<WorkbenchFilter>) => {
+    void runtime.applyFilter({ ...runtime.filter, ...patch });
+  };
+  const countFor = (view: WorkbenchView) => runtime.countsByView[view]?.total;
+  const countBadge = (view: WorkbenchView) => typeof countFor(view) === "number" ? <span>{countFor(view)}</span> : null;
 
   return (
     <section className="view view-overview">
       <div className="workbench-commandbar">
         <div className="segment-control" aria-label="待办范围">
-          <button type="button" aria-pressed={taskScope === "mine"} onClick={() => setTaskScope("mine")}>待我处理 <span>{mineCount}</span></button>
-          <button type="button" aria-pressed={taskScope === "created"} onClick={() => setTaskScope("created")}>我发起 <span>{createdCount}</span></button>
-          <button type="button" aria-pressed={taskScope === "team"} onClick={() => setTaskScope("team")}>团队 <span>{workbenchTasks.length}</span></button>
+          <button type="button" aria-pressed={runtime.filter.view === "mine"} onClick={() => applyFilter({ view: "mine" })}>待我处理 {countBadge("mine")}</button>
+          <button type="button" aria-pressed={runtime.filter.view === "initiated"} onClick={() => applyFilter({ view: "initiated" })}>我发起 {countBadge("initiated")}</button>
+          <button type="button" aria-pressed={runtime.filter.view === "team"} onClick={() => applyFilter({ view: "team" })}>团队 {countBadge("team")}</button>
         </div>
-        <label className="workbench-search"><Search size={15} /><input ref={taskSearchRef} type="search" aria-label="搜索待办" placeholder="搜索工作项、资产或运行" value={taskSearch} onChange={(event) => setTaskSearch(event.target.value)} /></label>
-        <label className="workbench-select"><span>类型</span><select aria-label="筛选待办类型" value={taskKind} onChange={(event) => setTaskKind(event.target.value as "全部类型" | WorkbenchTaskKind)}><option>全部类型</option><option>版本审核</option><option>运行诊断</option><option>迁移确认</option></select></label>
-        <label className="workbench-select"><span>风险</span><select aria-label="筛选待办风险" value={taskRisk} onChange={(event) => setTaskRisk(event.target.value as "全部风险" | WorkbenchRisk)}><option>全部风险</option><option>高风险</option><option>中风险</option><option>低风险</option></select></label>
+        <form className="workbench-search" role="search" onSubmit={(event) => { event.preventDefault(); applyFilter({ search: taskSearch.trim() || undefined }); }}><Search size={15} /><input ref={taskSearchRef} type="search" aria-label="搜索待办" placeholder="搜索服务端工作项或目标" value={taskSearch} onChange={(event) => setTaskSearch(event.target.value)} /><button type="submit">搜索</button></form>
+        <label className="workbench-select"><span>类型</span><select aria-label="筛选待办类型" value={runtime.filter.kind ?? ""} onChange={(event) => applyFilter({ kind: event.target.value ? event.target.value as WorkbenchAttentionKind : undefined })}><option value="">全部类型</option>{Object.entries(workbenchKindLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+        <label className="workbench-select"><span>风险</span><select aria-label="筛选待办风险" value={runtime.filter.risk ?? ""} onChange={(event) => applyFilter({ risk: event.target.value ? event.target.value as WorkbenchPriority : undefined })}><option value="">全部风险</option>{Object.entries(workbenchPriorityLabels).reverse().map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
       </div>
-      <div className="workbench-queue-meta"><span>显示 <strong>{visibleTasks.length}</strong> / {taskScope === "team" ? workbenchTasks.length : taskScope === "mine" ? mineCount : createdCount} 项</span><label>排序<select aria-label="待办排序" value={taskSort} onChange={(event) => setTaskSort(event.target.value as "风险优先" | "等待最久")}><option>风险优先</option><option>等待最久</option></select></label></div>
+      <div className="workbench-queue-meta"><span>服务端返回 <strong>{runtime.items.length}</strong>{runtime.counts ? ` / ${runtime.counts.total} 项` : ""}{runtime.counts ? ` · 待处理 ${runtime.counts.open} · 处理中 ${runtime.counts.inProgress} · 紧急 ${runtime.counts.critical}` : ""}</span><label>排序<select aria-label="待办排序" value={runtime.filter.sort} onChange={(event) => applyFilter({ sort: event.target.value as WorkbenchSort })}><option value="priority_desc">优先级</option><option value="updated_desc">最近更新</option><option value="due_asc">最早到期</option></select></label></div>
       <section className="workbench-task-table" aria-label="工作台待办队列">
-        <div className="workbench-task-head" aria-hidden="true"><span>工作项</span><span>关联对象</span><span>需要的动作</span><span>风险</span><span>负责人 / 时限</span><span>状态</span><span /></div>
+        <div className="workbench-task-head" aria-hidden="true"><span>工作项</span><span>目标</span><span>服务端原因</span><span>优先级 / 风险</span><span>负责人 / 到期</span><span>状态</span><span /></div>
         <div className="workbench-task-body">
-          {visibleTasks.map((task) => <button className={`workbench-task-row${task.priority === "P0" ? " workbench-task-row-critical" : ""}`} type="button" key={task.id} onClick={() => onOpenTask(task)} aria-label={`打开待办 ${task.title}`}>
-            <span className="task-primary"><strong>{task.title}</strong><small className="task-source"><code>{task.id}</code> · {task.source}</small><small className="task-compact-action">{task.action}</small></span>
-            <span className="task-cell"><strong>{task.object}</strong><small>{task.objectType}</small></span>
-            <span className="task-cell"><strong>{task.action}</strong><small>{task.kind}</small></span>
-            <span><span className={`task-risk task-risk-${task.priority.toLowerCase()}`}>{task.priority} · {task.risk.replace("风险", "")}</span></span>
-            <span className="task-cell task-owner"><strong>{task.owner}</strong><small>{task.timing}</small></span>
-            <span><StatusBadge tone={task.state === "验证阻塞" ? "danger" : task.state === "等待他人" ? "neutral" : "warning"}>{discoveryState === "running" && task.target === "source-run" ? "诊断中" : task.state}</StatusBadge></span>
+          {(runtime.state === "ready" || runtime.state === "empty") && runtime.items.map((task) => <button className={`workbench-task-row${task.priority === "critical" ? " workbench-task-row-critical" : ""}`} type="button" key={task.id} onClick={() => onOpenTask(task)} aria-label={`打开待办 ${task.title}`}>
+            <span className="task-primary"><strong>{task.title}</strong><small className="task-source"><code>{task.id}</code> · {workbenchKindLabels[task.kind]}</small><small className="task-compact-action">{task.reasonCode}</small></span>
+            <span className="task-cell"><strong>{task.targetId}</strong><small>{task.targetType}</small></span>
+            <span className="task-cell"><strong>{task.reasonCode}</strong><small>{task.ruleVersion}</small></span>
+            <span><span className={`task-risk task-risk-${task.priority}`}>{workbenchPriorityLabel(task.priority)} · {workbenchPriorityLabel(task.risk)}</span></span>
+            <span className="task-cell task-owner"><strong>{task.assigneePrincipalId ?? "未分配"}</strong><small>{workbenchDate(task.dueAt)}</small></span>
+            <span><StatusBadge tone={task.state === "resolved" ? "success" : task.state === "dismissed" ? "neutral" : task.priority === "critical" ? "danger" : "warning"}>{workbenchStateLabel(task.state)}</StatusBadge></span>
             <ChevronRight size={15} />
           </button>)}
-          {visibleTasks.length === 0 && <div className="workbench-empty"><ListFilter size={20} /><strong>没有匹配的待办</strong><span>调整范围、类型、风险或搜索条件。</span><button type="button" onClick={() => { setTaskScope("mine"); setTaskKind("全部类型"); setTaskRisk("全部风险"); setTaskSearch(""); }}>清除筛选</button></div>}
+          {runtime.state === "loading" && <div className="workbench-empty" role="status"><LoaderCircle className="spin" size={20} /><strong>正在读取工作台</strong><span>待办、计数和下一步动作均以服务端响应为准。</span></div>}
+          {runtime.state === "forbidden" && <div className="workbench-empty workbench-state-error" role="alert"><LockKeyhole size={20} /><strong>没有工作台读取权限</strong><span>{runtime.error}</span></div>}
+          {runtime.state === "error" && <div className="workbench-empty workbench-state-error" role="alert"><CircleAlert size={20} /><strong>工作台读取失败</strong><span>{runtime.error}{runtime.errorCode ? `（${runtime.errorCode}）` : ""}</span><button type="button" onClick={() => void runtime.refresh()}>重试</button></div>}
+          {runtime.state === "empty" && <div className="workbench-empty"><ListFilter size={20} /><strong>服务端没有匹配待办</strong><span>当前范围和筛选条件未返回工作项。</span><button type="button" onClick={() => { setTaskSearch(""); void runtime.applyFilter({ ...defaultWorkbenchFilter(runtime.filter.view) }); }}>清除筛选</button></div>}
         </div>
       </section>
+      {runtime.nextCursor && <div className="workbench-pagination"><button type="button" disabled={runtime.loadingMore} onClick={() => void runtime.loadMore()}>{runtime.loadingMore ? "正在读取…" : "加载更多"}</button>{runtime.appendError && <span role="alert">{runtime.appendError}</span>}</div>}
     </section>
   );
 }
 
-const memberDirectory = [
-  { id: "EMP-10001", name: "林悦", email: "yue.lin@semlia.example", department: "收入分析", title: "语义产品经理" },
-  { id: "EMP-10002", name: "陈嘉", email: "jia.chen@semlia.example", department: "客户运营", title: "业务分析师" },
-  { id: "EMP-10003", name: "周澄", email: "cheng.zhou@semlia.example", department: "数据平台", title: "数据工程师" },
-  { id: "EMP-10004", name: "宋宁", email: "ning.song@semlia.example", department: "电商经营", title: "经营分析师" },
-  { id: "EMP-10005", name: "许言", email: "yan.xu@semlia.example", department: "语义平台", title: "本体工程师" },
-  { id: "EMP-10006", name: "魏然", email: "ran.wei@semlia.example", department: "客户运营", title: "增长策略专家" },
-  { id: "EMP-10007", name: "顾清", email: "qing.gu@semlia.example", department: "财务分析", title: "财务分析师" },
-  { id: "EMP-10008", name: "沈舟", email: "zhou.shen@semlia.example", department: "数据平台", title: "平台工程师" },
-  { id: "EMP-10009", name: "叶岚", email: "lan.ye@semlia.example", department: "电商经营", title: "指标负责人" },
-  { id: "EMP-10010", name: "唐可", email: "ke.tang@semlia.example", department: "语义平台", title: "知识运营" },
-  { id: "EMP-10011", name: "贺川", email: "chuan.he@semlia.example", department: "收入分析", title: "高级分析师" },
-  { id: "EMP-10012", name: "陆遥", email: "yao.lu@semlia.example", department: "客户运营", title: "用户研究员" },
-  { id: "EMP-10013", name: "方衡", email: "heng.fang@semlia.example", department: "数据平台", title: "数据架构师" },
-  { id: "EMP-10014", name: "韩知", email: "zhi.han@semlia.example", department: "财务分析", title: "经营规划" },
-  { id: "EMP-10015", name: "余青", email: "qing.yu@semlia.example", department: "语义平台", title: "语义工程师" },
-  { id: "EMP-10016", name: "姜禾", email: "he.jiang@semlia.example", department: "电商经营", title: "业务运营" },
-  { id: "EMP-10017", name: "程屿", email: "yu.cheng@semlia.example", department: "收入分析", title: "数据科学家" },
-  { id: "EMP-10018", name: "邵真", email: "zhen.shao@semlia.example", department: "客户运营", title: "增长分析师" },
-  { id: "EMP-10019", name: "罗一", email: "yi.luo@semlia.example", department: "数据平台", title: "可靠性工程师" },
-  { id: "EMP-10020", name: "梁简", email: "jian.liang@semlia.example", department: "语义平台", title: "质量工程师" },
-  { id: "EMP-10021", name: "秦舒", email: "shu.qin@semlia.example", department: "财务分析", title: "财务数据专员" },
-  { id: "EMP-10022", name: "夏安", email: "an.xia@semlia.example", department: "电商经营", title: "商品分析师" },
-  { id: "EMP-10023", name: "白璟", email: "jing.bai@semlia.example", department: "收入分析", title: "商业分析师" },
-  { id: "EMP-10024", name: "吴桐", email: "tong.wu@semlia.example", department: "语义平台", title: "知识工程师" },
-] as const;
-
-function MembersSettingsView() {
-  const [searchQuery, setSearchQuery] = useState("");
-  const normalizedQuery = searchQuery.trim().toLowerCase();
-  const visibleMembers = memberDirectory.filter((member) => !normalizedQuery || `${member.id} ${member.name} ${member.email} ${member.department} ${member.title}`.toLowerCase().includes(normalizedQuery));
-
-  return (
-    <section className="view settings-view member-directory-view" aria-label="成员目录">
-      <div className="member-directory-toolbar">
-        <span><strong>{visibleMembers.length}</strong><small>{searchQuery ? `匹配成员 · 共 ${memberDirectory.length} 名` : "成员"}</small></span>
-        <label><Search size={14} /><input type="search" aria-label="搜索成员" placeholder="搜索员工 ID、姓名或邮箱" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} />{searchQuery && <button type="button" aria-label="清除成员搜索" title="清除搜索" onClick={() => setSearchQuery("")}><X size={13} /></button>}</label>
-      </div>
-      <section className="member-directory-table" aria-label="成员列表">
-        <div className="member-directory-head" role="row"><span>员工 ID</span><span>姓名</span><span>邮箱</span><span>部门</span><span>职位</span><span>授权角色</span><span>状态</span></div>
-        <div className="member-directory-body">
-          {visibleMembers.map((member) => {
-            const role = member.id === "EMP-10001" ? "Workspace Admin" : member.id === "EMP-10009" ? "Reviewer" : "未分配";
-            const suspended = member.id === "EMP-10008";
-            return <div className="member-directory-row" role="row" key={member.id}><code>{member.id}</code><strong>{member.name}</strong><span className="member-email">{member.email}</span><span>{member.department}</span><span>{member.title}</span><span className={role === "未分配" ? "member-role member-role-empty" : "member-role"}>{role}</span><span className={suspended ? "member-state member-state-suspended" : "member-state"}>{suspended ? "已停用" : "在职"}</span></div>;
-          })}
-          {visibleMembers.length === 0 && <div className="member-directory-empty"><Users size={19} /><strong>没有匹配成员</strong><span>尝试搜索其他员工 ID、姓名、邮箱或部门。</span><button type="button" onClick={() => setSearchQuery("")}>清除搜索</button></div>}
-        </div>
-      </section>
-      <div className="member-directory-disclosure">业务职位与授权角色分别维护 · 原型授权数据仅用于演示</div>
-    </section>
-  );
+function defaultWorkbenchFilter(view: WorkbenchView): WorkbenchFilter {
+  return { view, sort: "priority_desc", limit: 50 };
 }
 
-function SettingsView({ focusIndex, rebuildRun, auditRunRequestId, onAuditRunRequestHandled, onStartEmbeddingRebuild, onOpenRebuildRun, onNotify }: { focusIndex: number; rebuildRun: EmbeddingRebuildRun | null; auditRunRequestId?: string; onAuditRunRequestHandled: () => void; onStartEmbeddingRebuild: (modelId: string) => void; onOpenRebuildRun: () => void; onNotify: (message: string) => void }) {
-  if (focusIndex === 0) return <MembersSettingsView />;
-  if (focusIndex === 1) return <AccessControlGate><AccessControlView onNotify={onNotify} /></AccessControlGate>;
-  if (focusIndex === 2) return <ModelConfigurationView rebuildRun={rebuildRun} onStartEmbeddingRebuild={onStartEmbeddingRebuild} onOpenRebuildRun={onOpenRebuildRun} onNotify={onNotify} />;
-  if (focusIndex === 3) return <IntegrationSettingsView onNotify={onNotify} />;
-  return <AuditRuntimeView embeddingRebuildRun={rebuildRun} initialRunId={auditRunRequestId} onInitialRunHandled={onAuditRunRequestHandled} onNotify={onNotify} />;
+function WorkbenchDetailView({ onOpenTarget }: { onOpenTarget: (item: WorkbenchAttentionItem) => void }) {
+  const runtime = useWorkbenchRuntime();
+  const item = runtime.selectedItem;
+  const [assigneeDraft, setAssigneeDraft] = useState<{ itemId: string; value: string } | null>(null);
+  const assignee = item && assigneeDraft?.itemId === item.id ? assigneeDraft.value : item?.assigneePrincipalId ?? "";
+
+  const update = (input: Parameters<typeof runtime.updateItem>[0]) => {
+    void runtime.updateItem(input).catch(() => undefined);
+  };
+
+  if (runtime.detailState === "loading") return <section className="view view-overview workbench-detail-view"><div className="workbench-detail-state" role="status"><LoaderCircle className="spin" size={20} /><strong>正在读取待办详情</strong><span>服务端将返回当前版本和可执行动作。</span></div></section>;
+  if (runtime.detailState === "forbidden") return <section className="view view-overview workbench-detail-view"><div className="workbench-detail-state" role="alert"><LockKeyhole size={20} /><strong>没有待办读取权限</strong><span>{runtime.detailError}</span></div></section>;
+  if (runtime.detailState === "error" || !item) return <section className="view view-overview workbench-detail-view"><div className="workbench-detail-state" role="alert"><CircleAlert size={20} /><strong>待办详情不可用</strong><span>{runtime.detailError || "服务端未返回待办详情。"}{runtime.detailErrorCode ? `（${runtime.detailErrorCode}）` : ""}</span>{runtime.selectedItemId && <button type="button" onClick={() => void runtime.openItem(runtime.selectedItemId!)}>重试</button>}</div></section>;
+
+  const targetActions = item.nextActions.filter((action) => action === "review" || action === "run_validation" || action === "manage_source" || action === "publish" || action === "open_target");
+  const primaryTargetAction = targetActions.find((action) => action !== "open_target") ?? targetActions[0];
+  const canAssign = runtime.access.manage && item.nextActions.includes("assign");
+  const canDismiss = runtime.access.manage && item.nextActions.includes("dismiss");
+
+  return <section className="view view-overview workbench-detail-view" aria-label="工作台待办详情">
+    <header className="workbench-detail-header">
+      <div><span className="panel-kicker">{workbenchKindLabels[item.kind]} · 服务端版本 {item.version}</span><h2>{item.title}</h2><p>{item.summary}</p></div>
+      <div className="workbench-detail-actions">{primaryTargetAction && <button className="primary-button" type="button" onClick={() => onOpenTarget(item)}><ArrowRight size={15} />{workbenchActionLabel(primaryTargetAction)}</button>}</div>
+    </header>
+    <div className="workbench-detail-facts" role="region" aria-label="服务端待办事实">
+      <article><span>状态</span><strong>{workbenchStateLabel(item.state)}</strong><small>{workbenchPriorityLabel(item.priority)}优先级 · {workbenchPriorityLabel(item.risk)}风险</small></article>
+      <article><span>目标</span><strong>{item.targetId}</strong><small>{item.targetType}</small></article>
+      <article><span>服务端原因</span><strong>{item.reasonCode}</strong><small>{item.ruleVersion}</small></article>
+      <article><span>更新时间</span><strong>{workbenchDate(item.updatedAt)}</strong><small>打开于 {workbenchDate(item.openedAt)}</small></article>
+    </div>
+    <div className="workbench-detail-layout">
+      <section className="workbench-detail-section" aria-label="工作项上下文">
+        <h3>工作项上下文</h3>
+        <dl><div><dt>待办 ID</dt><dd><code>{item.id}</code></dd></div><div><dt>目标路由</dt><dd><code>{item.targetRoute}</code></dd></div><div><dt>负责人</dt><dd>{item.assigneePrincipalId ?? "未分配"}</dd></div><div><dt>发起人</dt><dd>{item.initiatorPrincipalId ?? "未记录"}</dd></div><div><dt>到期时间</dt><dd>{workbenchDate(item.dueAt)}</dd></div><div><dt>Trace ID</dt><dd><code>{item.traceId}</code></dd></div>{item.evidenceRef && <div><dt>证据引用</dt><dd><code>{item.evidenceRef}</code></dd></div>}</dl>
+      </section>
+      <section className="workbench-detail-section" aria-label="待办操作">
+        <h3>待办操作</h3>
+        {runtime.access.manage ? <>
+          <div className="workbench-state-actions"><button type="button" disabled={runtime.commandState === "pending" || item.state === "in_progress" || item.state === "resolved" || item.state === "dismissed"} onClick={() => update({ setAssignee: false, state: "in_progress" })}>标记处理中</button>{canDismiss && <button type="button" disabled={runtime.commandState === "pending"} onClick={() => update({ setAssignee: false, state: "dismissed" })}>忽略待办</button>}</div>
+          {canAssign && <form className="workbench-assignment" onSubmit={(event) => { event.preventDefault(); void runtime.updateItem({ setAssignee: true, assigneePrincipalId: assignee.trim() || null }).then(() => setAssigneeDraft(null)).catch(() => undefined); }}><label>负责人 Principal ID<input aria-label="负责人 Principal ID" value={assignee} onChange={(event) => setAssigneeDraft({ itemId: item.id, value: event.target.value })} placeholder="prn_…" /></label><button type="submit" disabled={runtime.commandState === "pending"}>{assignee.trim() ? "确认分配" : "清除分配"}</button></form>}
+        </> : <div className="workbench-readonly"><LockKeyhole size={16} /><span><strong>当前会话只读</strong>更新状态或负责人需要 workspace.manage，目标操作仍由目标页面与服务端复核。</span></div>}
+        {runtime.commandState === "pending" && <div className="workbench-command-status" role="status"><LoaderCircle className="spin" size={15} />正在等待服务端确认…</div>}
+        {runtime.commandState === "confirmed" && <div className="workbench-command-status workbench-command-confirmed" role="status"><CheckCircle2 size={15} />服务端已确认待办版本 {item.version}。</div>}
+        {(runtime.commandState === "forbidden" || runtime.commandState === "conflict" || runtime.commandState === "error") && <div className="workbench-command-status workbench-command-error" role="alert"><CircleAlert size={15} />{runtime.commandError}{runtime.commandErrorCode ? `（${runtime.commandErrorCode}）` : ""}</div>}
+        {runtime.refreshWarning && <div className="workbench-command-status workbench-command-warning" role="alert"><AlertTriangle size={15} />{runtime.refreshWarning}</div>}
+      </section>
+    </div>
+  </section>;
+}
+
+type CompatibilityConsumer = components["schemas"]["Consumer"];
+type CompatibilityBinding = components["schemas"]["ConsumerBinding"];
+type CompatibilityResolution = components["schemas"]["SemanticResolution"];
+type CompatibilityReadState<T> = { state: "loading" | "ready" | "forbidden" | "error"; value?: T; message: string };
+
+class CompatibilityReadError extends Error {
+  constructor(readonly status: number, message: string) {
+    super(message);
+  }
+}
+
+function compatibilityMessage(value: unknown, fallback: string) {
+  if (value && typeof value === "object" && "message" in value && typeof value.message === "string") return value.message;
+  return fallback;
+}
+
+function compatibilityConstraintValue(value: unknown) {
+  return typeof value === "string" ? value : JSON.stringify(value);
+}
+
+async function readCompatibilityConsumer(workspaceId: string, consumerId: string, signal: AbortSignal) {
+  const response = await apiClient.GET("/api/v1/workspaces/{workspaceId}/consumers/{consumerId}", { params: { path: { workspaceId, consumerId } }, signal });
+  if (response.data) return response.data;
+  throw new CompatibilityReadError(response.response.status, compatibilityMessage(response.error, "消费者详情读取失败。"));
+}
+
+async function readCompatibilityBinding(workspaceId: string, bindingId: string, signal: AbortSignal) {
+  const response = await apiClient.GET("/api/v1/workspaces/{workspaceId}/consumer-bindings/{bindingId}", { params: { path: { workspaceId, bindingId } }, signal });
+  if (response.data) return response.data;
+  throw new CompatibilityReadError(response.response.status, compatibilityMessage(response.error, "消费绑定读取失败。"));
+}
+
+async function readCompatibilityResolution(workspaceId: string, queryId: string, signal: AbortSignal) {
+  const response = await apiClient.GET("/api/v1/workspaces/{workspaceId}/semantic-queries/{queryId}", { params: { path: { workspaceId, queryId } }, signal });
+  if (response.data) return response.data;
+  throw new CompatibilityReadError(response.response.status, compatibilityMessage(response.error, "语义查询记录读取失败。"));
+}
+
+function compatibilityFailure<T>(reason: unknown): CompatibilityReadState<T> {
+  if (reason instanceof CompatibilityReadError && reason.status === 403) return { state: "forbidden", message: reason.message };
+  return { state: "error", message: reason instanceof Error ? reason.message : "服务端记录读取失败。" };
+}
+
+function CompatibilityRecordState({ state, label }: { state: CompatibilityReadState<unknown>; label: string }) {
+  if (state.state === "loading") return <div className="compatibility-record-state" role="status"><LoaderCircle className="spin" size={17} />正在读取{label}</div>;
+  return <div className="compatibility-record-state is-error" role="alert">{state.state === "forbidden" ? <LockKeyhole size={17} /> : <CircleAlert size={17} />}<span><strong>{state.state === "forbidden" ? `无权读取${label}` : `${label}读取失败`}</strong>{state.message}</span></div>;
+}
+
+export function CompatibilityImpactView({ workspaceId, consumerId, bindingId, queryId }: { workspaceId: string; consumerId?: string; bindingId: string; queryId: string }) {
+  const canReadBinding = useCan("binding.read");
+  const canResolve = useCan("semantic.resolve");
+  const [consumer, setConsumer] = useState<CompatibilityReadState<CompatibilityConsumer>>({ state: canReadBinding ? "loading" : "forbidden", message: canReadBinding ? "" : "需要 binding.read 权限。" });
+  const [binding, setBinding] = useState<CompatibilityReadState<CompatibilityBinding>>({ state: canReadBinding ? "loading" : "forbidden", message: canReadBinding ? "" : "需要 binding.read 权限。" });
+  const [resolution, setResolution] = useState<CompatibilityReadState<CompatibilityResolution>>({ state: canResolve ? "loading" : "forbidden", message: canResolve ? "" : "需要 semantic.resolve 权限。" });
+
+  useEffect(() => {
+    const controller = new AbortController();
+    if (canReadBinding) {
+      if (consumerId) readCompatibilityConsumer(workspaceId, consumerId, controller.signal).then((value) => setConsumer({ state: "ready", value, message: "" })).catch((reason) => { if (!controller.signal.aborted) setConsumer(compatibilityFailure(reason)); });
+      readCompatibilityBinding(workspaceId, bindingId, controller.signal).then((value) => {
+        setBinding({ state: "ready", value, message: "" });
+        if (!consumerId) readCompatibilityConsumer(workspaceId, value.consumerId, controller.signal).then((consumerValue) => setConsumer({ state: "ready", value: consumerValue, message: "" })).catch((reason) => { if (!controller.signal.aborted) setConsumer(compatibilityFailure(reason)); });
+      }).catch((reason) => { if (!controller.signal.aborted) { setBinding(compatibilityFailure(reason)); if (!consumerId) setConsumer({ state: "error", message: "无法从未加载的绑定解析消费者。" }); } });
+    }
+    if (canResolve) readCompatibilityResolution(workspaceId, queryId, controller.signal).then((value) => setResolution({ state: "ready", value, message: "" })).catch((reason) => { if (!controller.signal.aborted) setResolution(compatibilityFailure(reason)); });
+    return () => controller.abort();
+  }, [bindingId, canReadBinding, canResolve, consumerId, queryId, workspaceId]);
+
+
+  const consumerValue = consumer.value;
+  const bindingValue = binding.value;
+  const resolutionValue = resolution.value;
+  return <section className="view compatibility-impact-view" aria-label="兼容性影响详情">
+    <header><div><span className="panel-kicker">服务端拒绝与绑定事实</span><h2>兼容性影响详情</h2><p>每个分区独立读取持久消费者、绑定和语义查询记录；无权或缺失时不会使用其他对象替代。</p></div><StatusBadge tone={resolutionValue?.outcome === "resolved" ? "success" : resolutionValue?.outcome === "refused" ? "danger" : "neutral"}>{resolutionValue?.outcome === "resolved" ? "已解析" : resolutionValue?.outcome === "refused" ? "已拒绝" : "读取中"}</StatusBadge></header>
+    <dl className="compatibility-route-facts"><div><dt>Consumer</dt><dd><code>{consumerId ?? bindingValue?.consumerId ?? "由 binding 解析中"}</code></dd></div><div><dt>Binding</dt><dd><code>{bindingId}</code></dd></div><div><dt>Query</dt><dd><code>{queryId}</code></dd></div></dl>
+    <div className="compatibility-record-grid">
+      <section aria-label="消费者事实"><h3>消费者</h3>{consumerValue ? <dl><div><dt>名称</dt><dd>{consumerValue.name}</dd></div><div><dt>稳定键</dt><dd><code>{consumerValue.stableKey}</code></dd></div><div><dt>类型 / 状态</dt><dd>{consumerValue.kind} / {consumerValue.status}</dd></div><div><dt>负责人</dt><dd><code>{consumerValue.ownerPrincipalRef}</code></dd></div></dl> : <CompatibilityRecordState state={consumer} label="消费者" />}</section>
+      <section aria-label="消费绑定事实"><h3>消费绑定</h3>{bindingValue ? <dl><div><dt>模式 / 状态</dt><dd>{bindingValue.mode} / {bindingValue.status}</dd></div><div><dt>环境</dt><dd>{bindingValue.environment}</dd></div><div><dt>用途</dt><dd>{bindingValue.purpose}</dd></div><div><dt>Release</dt><dd><code>{bindingValue.releaseId ?? "current"}</code></dd></div><div><dt>兼容约束</dt><dd>{Object.keys(bindingValue.compatibilityConstraint).length ? Object.entries(bindingValue.compatibilityConstraint).map(([key, value]) => <span key={key}><code>{key}</code> {compatibilityConstraintValue(value)}</span>) : "未声明"}</dd></div></dl> : <CompatibilityRecordState state={binding} label="消费绑定" />}</section>
+      <section aria-label="语义查询事实"><h3>语义查询</h3>{resolutionValue ? <dl><div><dt>结果 / Channel</dt><dd>{resolutionValue.outcome} / {resolutionValue.channel}</dd></div><div><dt>Release</dt><dd><code>{resolutionValue.releaseId ?? "服务端未返回"}</code></dd></div>{resolutionValue.refusal && <><div><dt>拒绝代码</dt><dd><code>{resolutionValue.refusal.code}</code></dd></div><div><dt>恢复说明</dt><dd>{resolutionValue.refusal.clarification}</dd></div></>}{resolutionValue.plan && <><div><dt>Plan</dt><dd><code>{resolutionValue.plan.id}</code></dd></div><div><dt>固定资产 / 对象</dt><dd>{resolutionValue.plan.assets.length} / {resolutionValue.plan.objects.length}</dd></div></>}</dl> : <CompatibilityRecordState state={resolution} label="语义查询" />}</section>
+    </div>
+    {resolutionValue?.validation && <section className="compatibility-validation" aria-label="查询验证"><header><h3>查询验证</h3><code>{resolutionValue.validation.validator}@{resolutionValue.validation.validatorVersion}</code></header>{resolutionValue.validation.results.length ? resolutionValue.validation.results.map((result) => <article key={`${result.code}:${result.message}`}><StatusBadge tone={result.severity === "blocker" ? "danger" : result.severity === "warning" ? "warning" : "success"}>{result.severity}</StatusBadge><span><strong>{result.code}</strong>{result.message}</span></article>) : <div className="empty-inline">服务端验证记录没有发现项。</div>}</section>}
+  </section>;
+}
+
+function SettingsView({ workspaceId, authorizationVersion, focusIndex, auditRunRequestId, onAuditRunRequestHandled, onNotify }: { workspaceId: string; authorizationVersion?: string; focusIndex: number; auditRunRequestId?: string; onAuditRunRequestHandled: () => void; onNotify: (message: string) => void }) {
+  const roleRead = useCan("role.read");
+  const roleManage = useCan("role.manage");
+  const roleAssign = useCan("role.assign");
+  const authorizationInspect = useCan("authorization.inspect");
+  const authorizationAccess = useMemo(() => ({ roleRead, roleManage, roleAssign, authorizationInspect }), [authorizationInspect, roleAssign, roleManage, roleRead]);
+  const auditRead = useCan("audit.read");
+  const runtimeRead = useCan("runtime.read");
+  const runtimeManage = useCan("runtime.manage");
+  const integrationRead = useCan("binding.read");
+  const integrationManage = useCan("binding.manage");
+  const machineCreate = useCan("member.manage");
+  const operationsAccess = useMemo(() => ({ auditRead, runtimeRead, runtimeManage }), [auditRead, runtimeManage, runtimeRead]);
+  if (focusIndex === 0) return <MemberAdministrationView />;
+  if (focusIndex === 1) return <AccessControlGate><AuthorizationAdminRuntimeProvider key={`${workspaceId}:${(authorizationVersion ?? "unknown")}`} workspaceId={workspaceId} authorizationVersion={authorizationVersion}  access={authorizationAccess}><AccessControlView onNotify={onNotify} /></AuthorizationAdminRuntimeProvider></AccessControlGate>;
+  if (focusIndex === 2) return <ModelConfigurationView onNotify={onNotify} />;
+  if (focusIndex === 3) return <IntegrationSettingsView key={`${workspaceId}:${authorizationVersion ?? "unknown"}`} workspaceId={workspaceId} canRead={integrationRead} canManage={integrationManage} canCreatePrincipal={machineCreate} canGrant={roleAssign} runtimeRead={runtimeRead} runtimeManage={runtimeManage} onNotify={onNotify} />;
+  return <OperationsGate><OperationsRuntimeProvider key={`${workspaceId}:${authorizationVersion ?? "unknown"}`} workspaceId={workspaceId} access={operationsAccess}><AuditRuntimeView initialRunId={auditRunRequestId} onInitialRunHandled={onAuditRunRequestHandled} onNotify={onNotify} /></OperationsRuntimeProvider></OperationsGate>;
 }
 
 function AssetOverview({ asset, onOpenTab }: { asset: Asset; onOpenTab: (tab: AssetTab) => void }) {
@@ -704,7 +850,7 @@ function AssetOverview({ asset, onOpenTab }: { asset: Asset; onOpenTab: (tab: As
   const typeWarnings = typeRules.filter((rule) => rule.state === "warning");
   const totalBlockingCount = asset.qualitySnapshot.blockingCount + typeBlockers.length;
   const totalWarningCount = asset.qualitySnapshot.warningCount + typeWarnings.length;
-  const isProductionReady = asset.deployment.state === "production" && asset.qualitySnapshot.state !== "blocked" && typeBlockers.length === 0;
+  const isProductionReady = isCurrentRevisionReleased(asset) && asset.qualitySnapshot.state !== "blocked" && typeBlockers.length === 0;
   return (
     <div className="asset-overview-v2">
       <section className="asset-semantic-snapshot" aria-labelledby="asset-semantic-snapshot-title">
@@ -730,6 +876,125 @@ function AssetOverview({ asset, onOpenTab }: { asset: Asset; onOpenTab: (tab: As
       </aside>
     </div>
   );
+}
+
+const assetAuthorityKindLabels: Record<AssetAuthoritySectionKind, string> = {
+  definition: "定义",
+  released_state: "发布状态",
+  relations: "语义关系",
+  physical_bindings: "物理绑定",
+  join_contracts: "JoinContract",
+  validation: "验证",
+  lineage: "数据血缘",
+  evidence: "证据",
+  trust: "可信配置",
+  consumer_impact: "消费影响",
+};
+
+function assetAuthoritySection(asset: Asset, kind: AssetAuthoritySectionKind) {
+  return asset.authoritySections?.find((section) => section.kind === kind);
+}
+
+function authorityAvailabilityLabel(value: NonNullable<Asset["authoritySections"]>[number]["availability"]) {
+  return ({ available: "可用", not_configured: "未配置", not_released: "未发布", forbidden: "无权访问", failed: "读取失败" } as const)[value];
+}
+
+function authoritativeQualityLabel(asset: Asset) {
+  const validation = assetAuthoritySection(asset, "validation");
+  if (!validation) return asset.qualitySnapshot.state === "healthy" ? "健康" : asset.qualitySnapshot.state === "blocked" ? "阻断" : "需关注";
+  if (validation.availability === "not_configured") return "验证未配置";
+  if (validation.availability === "not_released") return "验证未发布";
+  if (validation.availability === "forbidden") return "验证无权访问";
+  if (validation.availability === "failed") return "验证读取失败";
+  const runCount = validation.values.runCount;
+  const blockerCount = validation.values.blockerCount;
+  const warningCount = validation.values.warningCount;
+  const complete = Number.isSafeInteger(runCount) && runCount > 0 && Number.isSafeInteger(blockerCount) && Number.isSafeInteger(warningCount);
+  if (!complete) return "验证不完整";
+  return asset.qualitySnapshot.state === "healthy" ? "健康" : asset.qualitySnapshot.state === "blocked" ? "阻断" : "需关注";
+}
+
+function AuthorityUnavailable({ asset, kinds, children }: { asset: Asset; kinds: AssetAuthoritySectionKind[]; children: ReactNode }) {
+  if (!asset.authoritySections) return children;
+  const unavailable = kinds.map((kind) => assetAuthoritySection(asset, kind)).find((section) => !section || section.availability !== "available");
+  if (!unavailable) return children;
+  return <div className={`asset-authority-boundary asset-authority-${unavailable.availability}`} role={unavailable.availability === "failed" || unavailable.availability === "forbidden" ? "alert" : "status"}>
+    {unavailable.availability === "forbidden" ? <LockKeyhole size={20} /> : unavailable.availability === "failed" ? <CircleAlert size={20} /> : <CircleDot size={20} />}
+    <span><strong>{assetAuthorityKindLabels[unavailable.kind]}{authorityAvailabilityLabel(unavailable.availability)}</strong><small>权威来源 <code>{unavailable.authority}</code>{unavailable.releaseId ? ` · ${unavailable.releaseId}` : ""}。页面不会使用固定数据替代该分区。</small></span>
+  </div>;
+}
+
+function AssetAuthoritativeOverview({ asset, onOpenTab }: { asset: Asset; onOpenTab: (tab: AssetTab) => void }) {
+  const definition = assetAuthoritySection(asset, "definition");
+  const released = assetAuthoritySection(asset, "released_state");
+  return <div className="asset-authority-overview">
+    <section className="asset-authority-definition" aria-label="权威定义摘要">
+      <header><div><span className="content-label">当前不可变 revision</span><h2>{asset.revisionRecord.name}</h2></div><button type="button" onClick={() => onOpenTab("定义")}>查看定义<ChevronRight size={14} /></button></header>
+      <p>{asset.revisionRecord.definition}</p>
+      <dl><div><dt>Revision ID</dt><dd><code>{definition?.revisionId ?? asset.revisionRecord.revisionId}</code></dd></div><div><dt>当前 revision 状态</dt><dd>{asset.revisionRecord.workflowState === "released" ? "已发布" : "草稿"}</dd></div><div><dt>生产固定 revision</dt><dd><code>{released?.availability === "available" ? released.revisionId ?? "服务端未返回" : "尚未发布"}</code></dd></div><div><dt>Schema</dt><dd><code>{asset.revisionRecord.schemaVersion}</code></dd></div><div><dt>内容摘要</dt><dd><code>{asset.revisionRecord.contentHash}</code></dd></div><div><dt>权威来源</dt><dd><code>{definition?.authority ?? "asset_revisions"}</code></dd></div></dl>
+    </section>
+    <section className="asset-authority-grid" aria-label="资产权威分区">
+      {asset.authoritySections?.map((section) => <article key={section.kind} className={`asset-authority-card authority-${section.availability}`}><header><strong>{assetAuthorityKindLabels[section.kind]}</strong><StatusBadge tone={section.availability === "available" ? "success" : section.availability === "failed" || section.availability === "forbidden" ? "danger" : "neutral"}>{authorityAvailabilityLabel(section.availability)}</StatusBadge></header><code>{section.authority}</code><small>{section.releaseId ? `${section.releaseId} · #${section.releaseSequence}` : "无 release 基准"}{section.revisionId ? ` · revision ${section.revisionId}` : " · 无 revision 基准"}</small><dl>{Object.entries(section.values).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value}</dd></div>)}</dl></article>)}
+    </section>
+  </div>;
+}
+
+function AssetAuthoritativeDefinition({ asset, onStartRevision }: { asset: Asset; onStartRevision: (request: KnowledgeRevisionRequest) => void }) {
+  const fields = assetContractFields(asset);
+  const { ensureRevisions, loadMoreRevisions, revisionStates } = useCatalogRuntime();
+  const revisions = revisionStates[asset.id];
+  useEffect(() => { void ensureRevisions(asset.id); }, [asset.id, ensureRevisions]);
+  return <AuthorityUnavailable asset={asset} kinds={["definition"]}><div className="asset-authority-detail">
+    <section><header><div><span className="content-label">asset_revisions</span><h3>受治理定义</h3></div><button className="secondary-button" type="button" onClick={() => onStartRevision({ assetId: asset.id, fieldPath: "definition.boundary", origin: "definition" })}><GitPullRequestArrow size={15} />提出修订</button></header><p>{asset.revisionRecord.definition}</p><dl>{fields.map((field) => <div key={field.label}><dt>{field.label}</dt><dd><code>{field.value}</code></dd></div>)}</dl></section>
+    <section><h3>定义边界</h3><dl><div><dt>别名</dt><dd>{asset.aliases.join(" · ") || "未声明"}</dd></div><div><dt>包含</dt><dd>{asset.includes.join("；") || "未声明"}</dd></div><div><dt>排除</dt><dd>{asset.excludes.join("；") || "未声明"}</dd></div><div><dt>示例</dt><dd>{asset.examples.join("；") || "未声明"}</dd></div></dl></section>
+    <section className="asset-revision-history" aria-label="不可变修订历史"><header><div><span className="content-label">asset_revisions · cursor page</span><h3>不可变修订历史</h3></div><span>{revisions?.items.length ?? 0}{revisions?.total !== undefined ? ` / ${revisions.total}` : ""} 项</span></header>
+      {(!revisions || revisions.state === "loading") && <div className="empty-inline" role="status"><LoaderCircle className="spin" size={15} />正在读取修订历史</div>}
+      {revisions?.state === "error" && <div className="catalog-detail-state" role="alert"><CircleAlert size={16} /><strong>修订历史读取失败</strong><span>{revisions.error}</span><button type="button" onClick={() => void ensureRevisions(asset.id)}>重试</button></div>}
+      {revisions?.state === "ready" && revisions.items.length === 0 && <div className="empty-inline">服务端没有返回修订记录。</div>}
+      {revisions?.state === "ready" && revisions.items.length > 0 && <div className="asset-revision-history-list">{revisions.items.map((revision) => <article key={revision.id}><div><strong>@{revision.sequence}</strong><code>{revision.id}</code></div><div><span>Schema {revision.schemaVersion}</span><code>{revision.contentDigest}</code></div><small>{revision.createdBy} · {governanceTimestamp(revision.createdAt)}</small></article>)}</div>}
+      {revisions?.state === "ready" && revisions.nextCursor && <div className="catalog-pagination"><button type="button" disabled={revisions.loadingMore} onClick={() => void loadMoreRevisions(asset.id)}>{revisions.loadingMore ? "正在读取…" : "加载更多修订"}</button>{revisions.appendError && <span role="alert">{revisions.appendError}</span>}</div>}
+      {revisions?.state === "ready" && !revisions.nextCursor && revisions.appendError && <div className="catalog-pagination"><span role="alert">{revisions.appendError}</span></div>}
+    </section>
+  </div></AuthorityUnavailable>;
+}
+
+function AssetAuthoritativeImplementation({ asset }: { asset: Asset }) {
+  return <div className="asset-authority-detail"><AuthorityUnavailable asset={asset} kinds={["physical_bindings"]}><AuthorityCountSection asset={asset} kind="physical_bindings" /></AuthorityUnavailable><AuthorityUnavailable asset={asset} kinds={["join_contracts"]}><AuthorityCountSection asset={asset} kind="join_contracts" /></AuthorityUnavailable></div>;
+}
+
+function AssetAuthoritativeRelations({ asset }: { asset: Asset }) {
+  const section = assetAuthoritySection(asset, "relations");
+  const lineage = assetAuthoritySection(asset, "lineage");
+  return <div className="asset-authority-detail"><AuthorityUnavailable asset={asset} kinds={["relations"]}><section className="asset-authority-relations" aria-label="权威语义关系">
+    <header><div><span className="content-label">{section?.authority}</span><h3>语义关系</h3></div>{section?.revisionId ? <code>{section.revisionId}</code> : <span>服务端未返回 revision 基准</span>}</header>
+    <p>关系事实来自服务端游标分页的权威关系记录；页面不推导本体一致性、约束或影响结论。</p>
+    <AuthorityRecords assetId={asset.id} section={section} empty="服务端没有返回当前资产的关系记录。" />
+  </section></AuthorityUnavailable><AuthorityUnavailable asset={asset} kinds={["lineage"]}><section aria-label="权威数据血缘"><header><div><span className="content-label">{lineage?.authority}</span><h3>数据血缘</h3></div>{lineage?.revisionId ? <code>{lineage.revisionId}</code> : <span>服务端未返回 revision 基准</span>}</header><AuthorityRecords assetId={asset.id} section={lineage} empty="服务端没有返回当前资产的血缘记录。" /></section></AuthorityUnavailable></div>;
+}
+
+function AuthorityCountSection({ asset, kind }: { asset: Asset; kind: AssetAuthoritySectionKind }) {
+  const section = assetAuthoritySection(asset, kind);
+  return <section><header><div><span className="content-label">{section?.authority}</span><h3>{assetAuthorityKindLabels[kind]}</h3></div>{section?.releaseId && <code>{section.releaseId} · #{section.releaseSequence}</code>}</header>{section?.revisionId && <p>Revision 基准 <code>{section.revisionId}</code>{section.revisionId === asset.revisionRecord.revisionId ? " · 当前 revision" : " · 与当前 revision 不同"}</p>}<dl>{Object.entries(section?.values ?? {}).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value}</dd></div>)}</dl>{Object.keys(section?.values ?? {}).length === 0 && <p>服务端未返回该分区的计数事实。</p>}<AuthorityRecords assetId={asset.id} section={section} empty="服务端未返回该分区的记录明细。" /></section>;
+}
+
+const pageableAuthorityKinds = new Set<AssetAuthoritySectionKind>(["relations", "physical_bindings", "join_contracts", "validation", "lineage", "consumer_impact"]);
+
+function AuthorityRecords({ assetId, section, empty }: { assetId: string; section?: NonNullable<Asset["authoritySections"]>[number]; empty: string }) {
+  const { authorityPageStates, loadMoreAuthorityRecords } = useCatalogRuntime();
+  if (!section) return <div className="empty-inline">{empty}</div>;
+  const pageState = authorityPageStates[`${assetId}:${section.kind}`];
+  const canPage = pageableAuthorityKinds.has(section.kind);
+  const recordsPage = section.recordsPage;
+  return <div className="asset-authority-records"><div className="asset-authority-record-summary">已加载 <strong>{section.records.length}</strong>{recordsPage ? ` / ${recordsPage.total}` : ""} 项</div>{section.records.length === 0 ? <div className="empty-inline">{empty}</div> : <div className="asset-authority-record-list">{section.records.map((record) => <article key={`${record.kind}:${record.id}`}><header><div><strong>{record.label || record.kind}</strong><code>{record.id}</code></div><StatusBadge tone={record.status === "active" || record.status === "passed" ? "success" : "neutral"}>{record.status || "未声明状态"}</StatusBadge></header><dl className="asset-authority-record-facts"><div><dt>权威来源</dt><dd><code>{record.authority}</code></dd></div><div><dt>版本</dt><dd>{record.version}</dd></div>{record.relatedId && <div><dt>关联对象</dt><dd><code>{record.relatedId}</code></dd></div>}{record.releaseId && <div><dt>Release</dt><dd><code>{record.releaseId}{record.releaseSequence !== undefined ? ` · #${record.releaseSequence}` : ""}</code></dd></div>}{record.relation && <><div><dt>方向 / 谓词</dt><dd><code>{record.relation.direction} · {record.relation.predicate}</code></dd></div><div><dt>关系平面 / 状态</dt><dd><code>{record.relation.plane} · {record.relation.assertionState}</code></dd></div><div><dt>左侧资产</dt><dd><code>{record.relation.subjectAssetId}</code></dd></div><div><dt>右侧资产</dt><dd><code>{record.relation.objectAssetId}</code></dd></div></>}{record.physicalBinding && <><div><dt>数据集</dt><dd><code>{record.physicalBinding.datasetId}</code></dd></div>{record.physicalBinding.fieldId && <div><dt>字段</dt><dd><code>{record.physicalBinding.fieldId}</code></dd></div>}{record.physicalBinding.transform && <div><dt>转换表达式</dt><dd><code>{record.physicalBinding.transform}</code></dd></div>}</>}{record.modelGrain && <><div><dt>粒度表达式</dt><dd><code>{record.modelGrain.grainExpression}</code></dd></div><div><dt>粒度字段</dt><dd><code>{record.modelGrain.grainFieldRefs.join(" · ") || "空集合"}</code></dd></div>{record.modelGrain.documentedBy && <div><dt>记录证据</dt><dd><code>{record.modelGrain.documentedBy}</code></dd></div>}</>}{record.entityKey && <><div><dt>实体键字段</dt><dd><code>{record.entityKey.keyFieldRefs.join(" · ") || "空集合"}</code></dd></div><div><dt>唯一性语义</dt><dd><code>{record.entityKey.uniquenessSemantics}</code></dd></div></>}{record.joinContract && <><div><dt>方向 / Join 类型</dt><dd><code>{record.joinContract.direction} · {record.joinContract.joinType}</code></dd></div><div><dt>左侧数据集 / 字段</dt><dd><code>{record.joinContract.leftDatasetId} · {record.joinContract.leftFieldRefs.join(" · ") || "空集合"}</code></dd></div><div><dt>右侧数据集 / 字段</dt><dd><code>{record.joinContract.rightDatasetId} · {record.joinContract.rightFieldRefs.join(" · ") || "空集合"}</code></dd></div><div><dt>基数</dt><dd><code>{record.joinContract.cardinality}</code></dd></div><div><dt>Join 表达式</dt><dd><code>{record.joinContract.joinExpression}</code></dd></div></>}{record.lineage && <><div><dt>方向 / 边类型</dt><dd><code>{record.lineage.direction} · {record.lineage.edgeKind}</code></dd></div><div><dt>上游数据集</dt><dd><code>{record.lineage.upstreamDatasetId}</code></dd></div><div><dt>下游数据集</dt><dd><code>{record.lineage.downstreamDatasetId}</code></dd></div><div><dt>来源修订</dt><dd><code>{record.lineage.sourceRevisionId}</code></dd></div>{record.lineage.codeArtifactId && <div><dt>代码工件</dt><dd><code>{record.lineage.codeArtifactId}</code></dd></div>}<div><dt>置信度</dt><dd>{record.lineage.confidence}</dd></div></>}{record.consumerBinding && <><div><dt>消费者 / 模式</dt><dd><code>{record.consumerBinding.consumerId} · {record.consumerBinding.mode}</code></dd></div><div><dt>生效 Release</dt><dd><code>{record.consumerBinding.effectiveReleaseId}</code></dd></div><div><dt>环境 / 用途</dt><dd>{record.consumerBinding.environment} · {record.consumerBinding.purpose}</dd></div><div><dt>状态</dt><dd><code>{record.consumerBinding.status}</code></dd></div><div><dt>兼容约束</dt><dd><code>{JSON.stringify(record.consumerBinding.compatibilityConstraint)}</code></dd></div>{record.consumerBinding.expiresAt && <div><dt>到期时间</dt><dd>{record.consumerBinding.expiresAt}</dd></div>}</>}</dl>{!record.releaseId && <small>服务端未返回 release 基准</small>}</article>)}</div>}{canPage && recordsPage?.nextCursor && <div className="catalog-pagination"><button type="button" disabled={pageState?.loadingMore} onClick={() => void loadMoreAuthorityRecords(assetId, section.kind as "relations" | "physical_bindings" | "join_contracts" | "validation" | "lineage" | "consumer_impact")}>{pageState?.loadingMore ? "正在读取…" : "加载更多权威记录"}</button>{pageState?.appendError && <span role="alert">{pageState.appendError}</span>}</div>}{canPage && !recordsPage?.nextCursor && pageState?.appendError && <div className="catalog-pagination"><span role="alert">{pageState.appendError}</span></div>}</div>;
+}
+
+function AssetAuthoritativeTrust({ asset }: { asset: Asset }) {
+  const evidence = assetAuthoritySection(asset, "evidence");
+  return <div className="asset-authority-detail"><AuthorityUnavailable asset={asset} kinds={["validation"]}><AuthorityCountSection asset={asset} kind="validation" /></AuthorityUnavailable><AuthorityUnavailable asset={asset} kinds={["evidence"]}><section><header><div><span className="content-label">{evidence?.authority}</span><h3>不可变证据</h3></div><code>{evidence?.values.evidenceCount ?? asset.evidence.length} 项</code></header>{asset.evidence.length > 0 ? <div className="asset-authority-evidence">{asset.evidence.map((item) => <article key={item.id}><strong>{item.label}</strong><code>{item.id}</code><span>{item.authority} · {item.supports}</span></article>)}</div> : <p>当前 revision 没有返回证据明细。</p>}</section></AuthorityUnavailable><AuthorityUnavailable asset={asset} kinds={["trust"]}><AuthorityCountSection asset={asset} kind="trust" /></AuthorityUnavailable></div>;
+}
+
+function AssetAuthoritativeUsage({ asset }: { asset: Asset }) {
+  return <div className="asset-authority-detail"><AuthorityUnavailable asset={asset} kinds={["released_state"]}><AuthorityCountSection asset={asset} kind="released_state" /></AuthorityUnavailable><AuthorityUnavailable asset={asset} kinds={["consumer_impact"]}><AuthorityCountSection asset={asset} kind="consumer_impact" /></AuthorityUnavailable></div>;
 }
 
 function AssetDefinition({ asset, onNotify, onStartRevision }: { asset: Asset; onNotify: (message: string) => void; onStartRevision: (request: KnowledgeRevisionRequest) => void }) {
@@ -907,12 +1172,12 @@ function AssetUsage({ asset, onNotify }: { asset: Asset; onNotify: (message: str
   return (
     <div className="asset-usage-layout">
       <section className="asset-delivery-summary" aria-labelledby="asset-delivery-title">
-        <header className="asset-section-heading"><div><span className="content-label">稳定交付面</span><h3 id="asset-delivery-title">交付地址与消费状态</h3></div><StatusBadge tone={asset.deployment.state === "production" ? "success" : "warning"}>{deploymentLabel(asset)}</StatusBadge></header>
+        <header className="asset-section-heading"><div><span className="content-label">稳定交付面</span><h3 id="asset-delivery-title">交付地址与消费状态</h3></div><StatusBadge tone={isCurrentRevisionReleased(asset) ? "success" : "warning"}>{deploymentLabel(asset)}</StatusBadge></header>
         <p className="asset-view-focus">{profile.deliveryFocus}</p>
         <div className="asset-delivery-endpoints"><div><span>REST</span><code title={`/v1/semantic/assets/${asset.identity.key}`}>/v1/semantic/assets/{asset.identity.key}</code></div><div><span>MCP</span><code>semlia.resolve_asset</code></div><div><span>CLI</span><code title={`semlia query ${asset.identity.key}`}>semlia query {asset.identity.key}</code></div><div><span>SDK</span><code title={`client.assets.resolve("${asset.identity.key}")`}>client.assets.resolve(...)</code></div></div>
         <dl className="asset-delivery-facts"><div><dt>生产消费者</dt><dd>{asset.consumerBindings.length} 个</dd></div><div><dt>最近解析</dt><dd>{latestConsumerResolution}</dd></div><div><dt>默认版本约束</dt><dd><code>{asset.consumerBindings[0]?.versionConstraint ?? asset.revision}</code></dd></div><div><dt>兼容性</dt><dd>{compatibilityLabel(asset.consumerBindings[0]?.compatibility ?? "not_evaluated")}</dd></div></dl>
       </section>
-      <section className="asset-release-contract" aria-labelledby="asset-release-title"><header className="asset-section-heading"><div><span className="content-label">环境部署</span><h3 id="asset-release-title">当前生产指针</h3></div><StatusBadge tone={asset.deployment.state === "production" ? "success" : "warning"}>{deploymentLabel(asset)}</StatusBadge></header><dl><div><dt>稳定资产 ID</dt><dd><code title={asset.identity.assetId}>{asset.identity.assetId}</code></dd></div><div><dt>消费 key</dt><dd><code title={asset.identity.key}>{asset.identity.key}</code></dd></div><div><dt>已部署 revision</dt><dd><code>{asset.deployment.revisionId ?? "未部署"}</code></dd></div><div><dt>发布批次</dt><dd><code title={asset.deployment.releaseId}>{asset.deployment.releaseId ?? "尚未发布"}</code></dd></div></dl><p><ShieldCheck size={15} />生产指针只引用不可变 revision；release 记录发布来源，二者不共享版本身份。</p></section>
+      <section className="asset-release-contract" aria-labelledby="asset-release-title"><header className="asset-section-heading"><div><span className="content-label">环境部署</span><h3 id="asset-release-title">当前生产指针</h3></div><StatusBadge tone={isCurrentRevisionReleased(asset) ? "success" : "warning"}>{deploymentLabel(asset)}</StatusBadge></header><dl><div><dt>稳定资产 ID</dt><dd><code title={asset.identity.assetId}>{asset.identity.assetId}</code></dd></div><div><dt>消费 key</dt><dd><code title={asset.identity.key}>{asset.identity.key}</code></dd></div><div><dt>已部署 revision</dt><dd><code>{asset.deployment.revisionId ?? "未部署"}</code></dd></div><div><dt>发布批次</dt><dd><code title={asset.deployment.releaseId}>{asset.deployment.releaseId ?? "尚未发布"}</code></dd></div></dl><p><ShieldCheck size={15} />生产指针只引用不可变 revision；release 记录发布来源，二者不共享版本身份。</p></section>
       <section aria-labelledby="asset-consumers-title"><header className="asset-section-heading"><div><span className="content-label">已注册使用方</span><h3 id="asset-consumers-title">消费者绑定</h3></div><span>{asset.consumerBindings.length} 个契约</span></header>{asset.consumers.length === 0 ? <AssetEmptyState config={profile.emptyStates.consumers} icon={Users} assetName={asset.name} onAction={onNotify} /> : <div className="asset-consumer-table" role="table" aria-label="消费者绑定"><div className="asset-consumer-table-head" role="row"><span role="columnheader">使用方</span><span role="columnheader">接口类型</span><span role="columnheader">版本约束</span><span role="columnheader">最近解析</span><span role="columnheader">兼容性</span></div>{asset.consumers.map((consumer, index) => { const binding = asset.consumerBindings[index]; return <article role="row" key={binding?.bindingId ?? consumer.name}><div role="cell" className="asset-consumer-primary"><span><Box size={15} /></span><strong>{consumer.name}</strong></div><span role="cell">{consumer.kind}</span><code role="cell">{binding?.versionConstraint ?? consumer.binding}</code><span role="cell">{consumer.lastResolved}</span><span role="cell"><StatusBadge tone={binding?.compatibility === "compatible" ? "success" : binding?.compatibility === "breaking" ? "danger" : "warning"}>{compatibilityLabel(binding?.compatibility ?? "not_evaluated")}</StatusBadge></span></article>; })}</div>}</section>
     </div>
   );
@@ -963,7 +1228,7 @@ function KnowledgeRevisionLauncher({ asset, active, onStart }: { asset: Asset; a
 
   return (
     <div className="asset-revision-launcher" ref={launcherRef}>
-      <button ref={triggerRef} className={`primary-button asset-revision-trigger${active ? " asset-revision-trigger-active" : ""}`} type="button" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen((current) => !current)}>
+      <button ref={triggerRef} className={`primary-button asset-revision-trigger${active ? " asset-revision-trigger-active" : ""}`} type="button" aria-haspopup="dialog" aria-expanded={open} disabled={asset.detailLoaded === false} title={asset.detailLoaded === false ? "正在加载资产详情" : undefined} onClick={() => setOpen((current) => !current)}>
         <GitPullRequestArrow size={15} />修订知识<ChevronDown size={13} />
       </button>
       {open && <section className="asset-revision-menu" role="dialog" aria-label="选择知识修订对象">
@@ -981,8 +1246,13 @@ function KnowledgeRevisionLauncher({ asset, active, onStart }: { asset: Asset; a
 }
 
 function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, requestedCatalogType, requestedRevision, focusSearchRequestEpoch, detailBackRequestEpoch, onSelect, onDetailChange, onNotify, onRevisionSubmit, onStartAIGeneration }: { selectedId: string; domainFilter: string; requestedTab: AssetTab; requestedDetail: boolean; requestedCatalogType: CatalogObjectType | "全部"; requestedRevision: KnowledgeRevisionRequest | null; focusSearchRequestEpoch: number; detailBackRequestEpoch: number; onSelect: (id: string) => void; onDetailChange: (open: boolean) => void; onNotify: (message: string) => void; onRevisionSubmit: (submission: KnowledgeRevisionSubmission) => Promise<void>; onStartAIGeneration: (assetId: string, fieldPath: string) => void }) {
-  const { assets, ensureAsset, error: catalogError, setQuery: setCatalogQuery } = useCatalogRuntime();
-  const knowledgeCatalogItems = useMemo(() => knowledgeCatalogItemsFor(assets), [assets]);
+  const { assets, catalogAssetIds, detailStates, ensureAsset, error: catalogError, setQuery: setCatalogQuery, total: catalogTotal, nextCursor: catalogNextCursor, loadingMore: catalogLoadingMore, appendError: catalogAppendError, loadMoreAssets } = useCatalogRuntime();
+  const catalogAssets = useMemo(() => catalogAssetIds.flatMap((assetId) => {
+    const asset = assets.find((candidate) => candidate.id === assetId);
+    return asset ? [asset] : [];
+  }), [assets, catalogAssetIds]);
+  const catalogKnowledgeItems = useMemo(() => knowledgeCatalogItemsFor(catalogAssets), [catalogAssets]);
+  const detailKnowledgeItems = useMemo(() => knowledgeCatalogItemsFor(assets), [assets]);
   const [query, setQuery] = useState("");
   const [type, setType] = useState<CatalogObjectType | "全部">(requestedCatalogType);
   const [assetStatus, setAssetStatus] = useState<Asset["status"] | "全部">("全部");
@@ -997,14 +1267,14 @@ function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, r
   const [selectedDetailBackEpoch, setSelectedDetailBackEpoch] = useState(detailBackRequestEpoch);
   const catalogScrollPosition = useRef(0);
   const catalogSearchRef = useRef<HTMLInputElement>(null);
-  const domains = useMemo(() => Array.from(new Set(assets.map((asset) => asset.domain))), [assets]);
+  const domains = useMemo(() => Array.from(new Set(catalogAssets.map((asset) => asset.domain))), [catalogAssets]);
   const normalizedQuery = query.trim().toLowerCase();
   const isGovernedObjectType = type === "语义关系" || type === "物理绑定" || type === "JoinContract";
   const catalogGroups = useMemo(() => {
     const matchesText = (item: KnowledgeCatalogItem) => `${item.name} ${item.key} ${item.aliases.join(" ")} ${item.domain} ${item.scope} ${item.detail}`.toLowerCase().includes(normalizedQuery);
-    const groups = assets.flatMap((asset) => {
-      const assetItem = knowledgeCatalogItems.find((item) => item.id === asset.id)!;
-      const children = knowledgeCatalogItems.filter((item) => item.assetId === asset.id && item.id !== asset.id);
+    const groups = catalogAssets.flatMap((asset) => {
+      const assetItem = catalogKnowledgeItems.find((item) => item.id === asset.id)!;
+      const children = catalogKnowledgeItems.filter((item) => item.assetId === asset.id && item.id !== asset.id);
       const typedChildren = isGovernedObjectType ? children.filter((item) => item.type === type) : children;
       const matchingChildren = normalizedQuery.length > 0 ? typedChildren.filter(matchesText) : typedChildren;
       const matchesAssetType = type === "全部" || isGovernedObjectType || asset.type === type;
@@ -1019,17 +1289,17 @@ function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, r
     return groups.sort((left, right) => {
       if (sort === "name") return left.asset.name.localeCompare(right.asset.name, "zh-CN");
       if (sort === "type") return left.asset.type.localeCompare(right.asset.type, "zh-CN") || left.asset.name.localeCompare(right.asset.name, "zh-CN");
-      const statusOrder: Record<Asset["status"], number> = { "需关注": 0, "草稿": 1, "已发布": 2 };
+      const statusOrder: Record<Asset["status"], number> = { "需关注": 0, "待确认": 1, "草稿": 2, "已发布": 3 };
       const statusDelta = statusOrder[left.asset.status] - statusOrder[right.asset.status];
       if (statusDelta !== 0) return statusDelta;
       const readinessDelta = readinessSummary(right.asset).warnings - readinessSummary(left.asset).warnings;
       if (readinessDelta !== 0) return readinessDelta;
       return left.asset.name.localeCompare(right.asset.name, "zh-CN");
     });
-  }, [assetStatus, assets, domain, isGovernedObjectType, knowledgeCatalogItems, normalizedQuery, sort, type]);
+  }, [assetStatus, catalogAssets, catalogKnowledgeItems, domain, isGovernedObjectType, normalizedQuery, sort, type]);
   const visibleChildCount = catalogGroups.reduce((total, group) => total + group.visibleChildren.length, 0);
-  const selected = assets.find((asset) => asset.id === selectedId) ?? assets[0];
-  const focusedObject = focusedObjectId ? knowledgeCatalogItems.find((item) => item.key === focusedObjectId) : undefined;
+  const selected = assets.find((asset) => asset.id === selectedId) ?? (requestedDetail ? undefined : assets[0]);
+  const focusedObject = focusedObjectId ? detailKnowledgeItems.find((item) => item.key === focusedObjectId) : undefined;
   const hasFilters = normalizedQuery.length > 0 || type !== "全部" || assetStatus !== "全部" || domain !== "全部";
 
   useEffect(() => {
@@ -1086,15 +1356,24 @@ function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, r
 
   const activeMode = selectedDetailBackEpoch === detailBackRequestEpoch ? mode : "catalog";
 
+  useEffect(() => {
+    if (activeMode === "detail" && selected?.detailLoaded === false && (!detailStates[selected.id] || detailStates[selected.id]?.state === "idle")) void ensureAsset(selected.id);
+    if (activeMode === "detail" && !selected && selectedId && (!detailStates[selectedId] || detailStates[selectedId]?.state === "idle")) void ensureAsset(selectedId);
+  }, [activeMode, detailStates, ensureAsset, selected, selectedId]);
+
   if (activeMode === "detail" && selected) {
     const openAssetTab = (nextTab: AssetTab) => { setTab(nextTab); setFocusedObjectId(undefined); scrollWorkspaceTo(0); };
     const visibleAssetTabs = assetTabsFor(selected);
     const activeTab = visibleAssetTabs.includes(tab) ? tab : "概览";
+    const detailState = detailStates[selected.id];
+    if (selected.detailLoaded === false && detailState?.state === "error") return <section className="view view-assets asset-detail-page"><div className="catalog-detail-state" role="alert"><CircleAlert size={20} /><strong>资产详情读取失败</strong><span>{detailState.error}</span><button type="button" onClick={() => void ensureAsset(selected.id)}>重试</button></div></section>;
+    if (selected.detailLoaded === false) return <section className="view view-assets asset-detail-page"><div className="catalog-detail-state" role="status"><LoaderCircle className="spin" size={20} /><strong>正在读取资产权威详情</strong><span>定义、发布状态和各分区可用性均由服务端返回。</span></div></section>;
+    const authoritativeDetail = Boolean(selected.authoritySections);
     return (
       <section className="view view-assets asset-detail-page">
         <section className="asset-detail" aria-label="语义资产详情">
           <header className="asset-detail-header">
-            <div className="asset-header-main"><AssetTypeMark type={selected.identity.type} size={19} /><div className="asset-title-copy"><span className="panel-kicker">{selected.identity.type} · <code>{selected.identity.key}</code></span><h1>{selected.revisionRecord.name}</h1><p>{selected.revisionRecord.definition}</p></div><div className="asset-header-side"><div className="asset-header-state"><div><span>当前 revision</span><strong>{selected.revision}</strong></div><span className="asset-header-release"><StatusBadge tone={selected.deployment.state === "production" ? "success" : "warning"}>{deploymentLabel(selected)}</StatusBadge><span className={`asset-health-state asset-health-${selected.qualitySnapshot.state}`}>{selected.qualitySnapshot.state === "healthy" ? "健康" : selected.qualitySnapshot.state === "blocked" ? "阻断" : "需关注"}</span><code>{selected.deployment.releaseId ?? "尚未发布"}</code></span></div><KnowledgeRevisionLauncher asset={selected} active={Boolean(revisionRequest)} onStart={setRevisionRequest} /></div></div>
+            <div className="asset-header-main"><AssetTypeMark type={selected.identity.type} size={19} /><div className="asset-title-copy"><span className="panel-kicker">{selected.identity.type} · <code>{selected.identity.key}</code></span><h1>{selected.revisionRecord.name}</h1><p>{selected.revisionRecord.definition}</p></div><div className="asset-header-side"><div className="asset-header-state"><div><span>当前 revision</span><strong>{selected.revision}</strong></div><span className="asset-header-release"><StatusBadge tone={isCurrentRevisionReleased(selected) ? "success" : "warning"}>{deploymentLabel(selected)}</StatusBadge><span className={`asset-health-state asset-health-${selected.qualitySnapshot.state}`}>{authoritativeDetail ? authoritativeQualityLabel(selected) : selected.qualitySnapshot.state === "healthy" ? "健康" : selected.qualitySnapshot.state === "blocked" ? "阻断" : "需关注"}</span><code>{selected.deployment.releaseId ?? "尚未发布"}</code></span></div><KnowledgeRevisionLauncher asset={selected} active={Boolean(revisionRequest)} onStart={setRevisionRequest} /></div></div>
           </header>
           {revisionRequest ? <KnowledgeRevisionWorkbench key={`${revisionRequest.assetId}:${revisionRequest.fieldPath}:${revisionRequest.claimId ?? "new"}`} asset={selected} request={revisionRequest} onCancel={() => setRevisionRequest(null)} onNotify={onNotify} onSubmit={onRevisionSubmit} onStartAIGeneration={() => onStartAIGeneration(selected.id, revisionRequest.fieldPath)} /> : <>
             <div className="asset-tabs" role="tablist" aria-label="资产详情视图">
@@ -1103,17 +1382,22 @@ function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, r
               ))}
             </div>
             <div className="asset-tab-content" role="tabpanel">
-              {activeTab === "概览" && <AssetOverview asset={selected} onOpenTab={openAssetTab} />}
-              {activeTab === "定义" && <AssetDefinition asset={selected} onNotify={onNotify} onStartRevision={setRevisionRequest} />}
-              {activeTab === "本体关系" && <AssetOntology asset={selected} focusedObject={focusedObject} onNotify={onNotify} onStartRevision={setRevisionRequest} />}
-              {activeTab === "实现" && <AssetExecution asset={selected} focusedObject={focusedObject} onNotify={onNotify} />}
-              {activeTab === "可信度" && <AssetEvidence asset={selected} onNotify={onNotify} onStartRevision={setRevisionRequest} />}
-              {activeTab === "交付与影响" && <AssetUsage asset={selected} onNotify={onNotify} />}
+              {activeTab === "概览" && (authoritativeDetail ? <AssetAuthoritativeOverview asset={selected} onOpenTab={openAssetTab} /> : <AssetOverview asset={selected} onOpenTab={openAssetTab} />)}
+              {activeTab === "定义" && (authoritativeDetail ? <AssetAuthoritativeDefinition asset={selected} onStartRevision={setRevisionRequest} /> : <AssetDefinition asset={selected} onNotify={onNotify} onStartRevision={setRevisionRequest} />)}
+              {activeTab === "本体关系" && (authoritativeDetail ? <AssetAuthoritativeRelations asset={selected} /> : <AssetOntology asset={selected} focusedObject={focusedObject} onNotify={onNotify} onStartRevision={setRevisionRequest} />)}
+              {activeTab === "实现" && (authoritativeDetail ? <AssetAuthoritativeImplementation asset={selected} /> : <AssetExecution asset={selected} focusedObject={focusedObject} onNotify={onNotify} />)}
+              {activeTab === "可信度" && (authoritativeDetail ? <AssetAuthoritativeTrust asset={selected} /> : <AssetEvidence asset={selected} onNotify={onNotify} onStartRevision={setRevisionRequest} />)}
+              {activeTab === "交付与影响" && (authoritativeDetail ? <AssetAuthoritativeUsage asset={selected} /> : <AssetUsage asset={selected} onNotify={onNotify} />)}
             </div>
           </>}
         </section>
       </section>
     );
+  }
+
+  if (activeMode === "detail" && !selected) {
+    const deepLinkError = detailStates[selectedId]?.state === "error" ? detailStates[selectedId].error : catalogError;
+    return <section className="view view-assets asset-detail-page"><div className="catalog-detail-state" role={deepLinkError ? "alert" : "status"}>{deepLinkError ? <CircleAlert size={20} /> : <LoaderCircle className="spin" size={20} />}<strong>{deepLinkError ? "资产深链加载失败" : "正在解析资产深链"}</strong><span>{deepLinkError || `正在按 ID 读取 ${selectedId}。`}</span>{deepLinkError && <button type="button" onClick={() => void ensureAsset(selectedId)}>重试</button>}</div></section>;
   }
 
   return (
@@ -1127,13 +1411,14 @@ function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, r
             <kbd>⌘ K</kbd>
           </label>
           <label className="catalog-filter"><span>对象</span><select aria-label="筛选知识对象类型" value={type} onChange={(event) => setType(event.target.value as CatalogObjectType | "全部")}><option value="全部">全部对象</option><optgroup label="语义资产">{assetTypes.map((item) => <option key={item} value={item}>{item}</option>)}</optgroup><optgroup label="治理对象">{catalogObjectTypes.filter((item) => !assetTypes.includes(item as AssetType)).map((item) => <option key={item} value={item}>{item}</option>)}</optgroup></select></label>
-          <label className="catalog-filter"><span>资产状态</span><select aria-label="筛选资产发布状态" value={assetStatus} onChange={(event) => setAssetStatus(event.target.value as Asset["status"] | "全部")}><option value="全部">全部状态</option><option value="已发布">已发布</option><option value="需关注">需关注</option><option value="草稿">草稿</option></select></label>
+          <label className="catalog-filter"><span>资产状态</span><select aria-label="筛选资产发布状态" value={assetStatus} onChange={(event) => setAssetStatus(event.target.value as Asset["status"] | "全部")}><option value="全部">全部状态</option><option value="已发布">已发布</option><option value="需关注">需关注</option><option value="草稿">草稿</option><option value="待确认">待确认</option></select></label>
           <label className="catalog-filter"><span>语义域</span><select aria-label="筛选语义域" value={domain} onChange={(event) => setDomain(event.target.value)}><option value="全部">全部语义域</option>{domains.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
           <button className="catalog-clear-button" type="button" aria-label="清除全部筛选" title="清除全部筛选" disabled={!hasFilters} onClick={() => { setQuery(""); setType("全部"); setAssetStatus("全部"); setDomain("全部"); }}><X size={15} /></button>
           <CreateCatalogAssetButton onCreated={(assetId) => { onSelect(assetId); void ensureAsset(assetId); onDetailChange(true); setMode("detail"); }} />
         </div>
         <div className="catalog-summary">
-          <span>显示 <strong>{catalogGroups.length}</strong> / {assets.length} 个语义资产{isGovernedObjectType && <> · {visibleChildCount} 个{type}</>}</span>
+          <span>显示 <strong>{catalogGroups.length}</strong> · 已加载 {catalogAssetIds.length}{catalogTotal !== undefined ? ` / ${catalogTotal}` : ""} 个语义资产{isGovernedObjectType && <> · {visibleChildCount} 个{type}</>}</span>
+          <CatalogRefreshButton />
           <label className="catalog-sort"><ArrowUpDown size={14} /><span className="visually-hidden">排序</span><select aria-label="知识目录排序" value={sort} onChange={(event) => setSort(event.target.value as "attention" | "name" | "type")}><option value="attention">需关注优先</option><option value="name">按名称</option><option value="type">按类型</option></select></label>
         </div>
         <div className="asset-table-head" aria-hidden="true"><span /><span>语义资产</span><span>类型与语义域</span><span>关系与实现</span><span>负责人</span><span>就绪度</span><span>发布状态</span><span /></div>
@@ -1172,6 +1457,8 @@ function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, r
           })}
           {catalogGroups.length === 0 && <div className="catalog-empty"><Search size={24} /><strong>没有匹配知识资产</strong><span>调整关键词、对象类型、资产状态或语义域。</span><button type="button" onClick={() => { setQuery(""); setType("全部"); setAssetStatus("全部"); setDomain("全部"); }}>清除筛选</button></div>}
         </div>
+        {catalogNextCursor && <div className="catalog-pagination"><button type="button" disabled={catalogLoadingMore} onClick={() => void loadMoreAssets()}>{catalogLoadingMore ? "正在读取…" : "加载更多资产"}</button>{catalogAppendError && <span role="alert">{catalogAppendError}</span>}</div>}
+        {!catalogNextCursor && catalogAppendError && <div className="catalog-pagination"><span role="alert">{catalogAppendError}</span></div>}
       </section>
     </section>
   );
@@ -1366,7 +1653,7 @@ function GovernanceCandidateDetail({ candidate, publishedRelease, onReview, onPu
               <div className="candidate-card-heading"><div><span className="panel-kicker">版本来源</span><h3 id="candidate-change-title">包含的变更事项</h3><p>候选版本由以下变更事项生成。</p></div><span className="candidate-card-count">1 项</span></div>
               <article className="candidate-change-record">
                 <span><GitPullRequestArrow size={17} /></span>
-                <div><strong>{proposal.title}</strong><small><code>{proposal.id}</code> · {author} · {governanceTimestamp(proposal.createdAt)}</small><p>{proposal.agentRunId ? "AI 归因提案 · agentRun " + proposal.agentRunId : "人工知识修订"}</p></div>
+                <div><strong>{proposal.title}</strong><small><code>{proposal.id}</code> · {author} · {governanceTimestamp(proposal.createdAt)}</small><p>{proposal.agentRunId ? "AI 归因提案 · agentRun " + proposal.agentRunId : proposal.title.startsWith("发现候选：") ? proposal.summary : "人工知识修订"}</p></div>
                 <StatusBadge tone={riskTone(risk)}>{risk}</StatusBadge>
               </article>
             </section>}
@@ -1416,14 +1703,7 @@ function GovernanceCandidateDetail({ candidate, publishedRelease, onReview, onPu
   );
 }
 
-function previewAssetConsumersFor(release: GovernanceReleaseDetail) {
-  const assetId = release.manifest.assets[0]?.assetId;
-  if (!assetId) return [];
-  const match = previewAssetReleases.find((item) => item.assetId === assetId && item.consumers.length > 0);
-  return match?.consumers ?? [];
-}
-
-function ReleaseInspectorDialog({ mode, release, revisionLabel, onClose }: { mode: "compare" | "manifest" | "policy"; release: GovernanceReleaseDetail; revisionLabel: string; onClose: () => void }) {
+function ReleaseInspectorDialog({ mode, release, onClose }: { mode: "compare" | "manifest" | "policy"; release: GovernanceReleaseDetail; onClose: () => void }) {
   const closeRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
@@ -1432,14 +1712,14 @@ function ReleaseInspectorDialog({ mode, release, revisionLabel, onClose }: { mod
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
 
-  const title = mode === "compare" ? "发布与注册表比较" : mode === "manifest" ? `发布 #${release.sequence} 清单` : "审核与发布规则";
+  const title = mode === "compare" ? "发布差异基准" : mode === "manifest" ? `发布 #${release.sequence} 清单` : "审核与发布规则";
   return (
     <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <section className="review-dialog compact-dialog inspector-dialog" role="dialog" aria-modal="true" aria-labelledby="inspector-dialog-title">
         <header><div><span className="panel-kicker">发布检查</span><h2 id="inspector-dialog-title">{title}</h2></div><button ref={closeRef} className="icon-button" type="button" aria-label={`关闭${title}`} onClick={onClose}><X size={18} /></button></header>
         <div className="dialog-body">
-          {mode === "compare" && <div className="release-compare"><div><span>注册表当前 revision</span><strong>{revisionLabel}</strong><small>当前注册表指针</small></div><ArrowRight size={18} /><div><span>发布固定的 revision</span><strong>{revisionLabel}</strong><small>{release.id} · #{release.sequence}</small></div><ul>{release.manifest.assets.map((asset) => <li key={`${asset.assetId}:${asset.revisionId}`}><code title={asset.revisionId}>{asset.revisionId}</code></li>)}</ul></div>}
-          {mode === "manifest" && <div className="manifest-preview"><p>该清单固定发布产生的资产修订与治理对象版本；清单摘要是发布内容的规范化摘要。</p><pre>{JSON.stringify({ release_id: release.id, sequence: release.sequence, state: release.state, manifest_digest: release.manifestDigest, origin_proposal_id: release.originProposalId ?? null, rolled_back_to_release_id: release.rolledBackToReleaseId ?? null, published_by: release.publishedBy, assets: release.manifest.assets.map((asset) => ({ asset_id: asset.assetId, revision_id: asset.revisionId, position: asset.position })), objects: release.manifest.objects.map((object) => ({ object_type: object.objectType, object_id: object.objectId, version: object.version, position: object.position })) }, null, 2)}</pre></div>}
+          {mode === "compare" && <div className="release-diff-authority"><header><span>权威差异来源</span><code>{release.authority}</code></header>{release.diffAvailability !== "available" ? <div className={`asset-authority-boundary asset-authority-${release.diffAvailability}`} role={release.diffAvailability === "forbidden" || release.diffAvailability === "failed" ? "alert" : "status"}><CircleAlert size={18} /><span><strong>差异记录{authorityAvailabilityLabel(release.diffAvailability)}</strong><small>页面不会将前一发布固定版本与当前注册表混为同一个比较基准。</small></span></div> : <><ReleaseDiffEntries title="与前一发布固定版本比较" description="所选发布的固定版本，对比同一目标最近一次更早的发布固定版本。" baselineLabel="前一发布固定版本" entries={release.priorPinDiff} /><ReleaseDiffEntries title="与当前注册表比较" description="所选发布的固定版本，独立对比服务端当前注册表指针或版本。" baselineLabel="当前注册表版本" entries={release.currentRegistryDiff} /></>}</div>}
+          {mode === "manifest" && <div className="manifest-preview"><p>该清单固定发布产生的资产修订与治理对象版本；清单摘要是发布内容的规范化摘要。</p><pre>{JSON.stringify({ release_id: release.id, sequence: release.sequence, state: release.state, manifest_digest: release.manifestDigest, origin_proposal_id: release.originProposalId ?? null, rolled_back_to_release_id: release.rolledBackToReleaseId ?? null, published_by: release.publishedBy, assets: release.manifest.assets.map((asset) => ({ asset_id: asset.assetId, revision_id: asset.revisionId, position: asset.position })), objects: release.objectAvailability === "available" ? release.manifest.objects.map((object) => ({ object_type: object.objectType, object_id: object.objectId, version: object.version, position: object.position })) : authorityAvailabilityLabel(release.objectAvailability) }, null, 2)}</pre></div>}
           {mode === "policy" && <div className="policy-list"><div><ShieldCheck size={18} /><span><strong>至少一个变更事项通过验证</strong><small>存在阻断发现的事项不能进入发布。</small></span></div><div><Users size={18} /><span><strong>独立主体完成审核与发布</strong><small>发布者不能是提案作者，也不能是唯一批准评审人（服务端强制）。</small></span></div><div><PackageCheck size={18} /><span><strong>发布生成不可变版本</strong><small>后续变更必须创建新版本，回滚以新发布记录表达。</small></span></div></div>}
         </div>
         <footer><span /><button className="primary-button" type="button" onClick={onClose}>完成</button></footer>
@@ -1448,20 +1728,26 @@ function ReleaseInspectorDialog({ mode, release, revisionLabel, onClose }: { mod
   );
 }
 
+function ReleaseDiffEntries({ title, description, baselineLabel, entries }: { title: string; description: string; baselineLabel: string; entries: GovernanceReleaseDetail["priorPinDiff"] }) {
+  return <section className="release-diff-group" aria-label={title}><div className="release-diff-group-heading"><strong>{title}</strong><small>{description}</small></div>{entries.map((entry) => <article key={`${entry.targetType}:${entry.targetId}`}><div><span>{entry.targetType}</span><code>{entry.targetId}</code></div><div><small>{baselineLabel}</small><strong>{entry.baselineVersion ?? "服务端未返回基准版本"}</strong></div><ArrowRight size={16} /><div><small>所选发布固定版本</small><strong>{entry.selectedVersion}</strong></div><StatusBadge tone={entry.change === "unchanged" ? "neutral" : "info"}>{entry.change}</StatusBadge></article>)}{entries.length === 0 && <div className="empty-inline">服务端返回的此比较集为空。</div>}</section>;
+}
+
 function ReleaseDetail({ release, originProposal, revisionLabels, isLatest, rolledBackByReleaseId, onManifest, onCompare, onRollback }: { release: GovernanceReleaseDetail; originProposal: GovernanceProposalDetail | null; revisionLabels: Record<string, string>; isLatest: boolean; rolledBackByReleaseId: string | null; onManifest: () => void; onCompare: () => void; onRollback: (releaseId: string) => void }) {
   const canRollback = useCan("release.rollback");
   const primaryAsset = release.manifest.assets[0];
   const assetLabel = primaryAsset ? revisionLabels[primaryAsset.revisionId] ?? primaryAsset.revisionId : release.id;
-  const previewConsumers = previewAssetConsumersFor(release);
   const isRollbackRelease = Boolean(release.rolledBackToReleaseId);
   return (
     <section className="release-detail governance-release-detail asset-version-detail-v2" aria-label={`发布 #${release.sequence} 详情`}>
       <header className="release-detail-header">
         <div className="release-seal"><PackageCheck size={24} /></div>
         <div><span className="panel-kicker">不可变发布记录 · <code>{release.id}</code></span><h2>{originProposal?.title ?? "发布记录"} · {assetLabel}</h2><p>发布序列 #{release.sequence} · {isRollbackRelease ? "回滚发布" : "标准发布"} · 由治理服务原子提交。</p></div>
-        <div className="release-detail-header-actions"><StatusBadge tone={isLatest ? "success" : "neutral"}><BadgeCheck size={13} />{isLatest ? "当前版本" : "历史版本"}</StatusBadge><button className="text-button" type="button" onClick={onManifest}><FileCheck2 size={14} />发布清单</button><button className="text-button" type="button" onClick={onCompare}><RotateCcw size={14} />与注册表比较</button></div>
+        <div className="release-detail-header-actions"><StatusBadge tone={isLatest ? "success" : "neutral"}><BadgeCheck size={13} />{isLatest ? "当前版本" : "历史版本"}</StatusBadge><button className="text-button" type="button" onClick={onManifest}><FileCheck2 size={14} />发布清单</button><button className="text-button" type="button" onClick={onCompare}><RotateCcw size={14} />查看差异基准</button></div>
       </header>
       <div className="manifest-strip"><div><span>发布序列</span><strong>#{release.sequence}</strong></div><div><span>状态</span><strong>{release.state === "published" ? "已发布" : "已回滚"}</strong></div><div><span>发布批次</span><code>{release.id}</code></div><div><span>发布者 · 时间</span><strong>{release.publishedBy} · {governanceTimestamp(release.publishedAt)}</strong></div></div>
+      <div className={`release-authority-status authority-${release.availability}`} role={release.availability === "failed" || release.availability === "forbidden" ? "alert" : "status"}><ShieldCheck size={16} /><span><strong>{authorityAvailabilityLabel(release.availability)}</strong>权威来源 <code>{release.authority}</code> · 已显示清单固定 {release.manifest.assets.length + (release.objectAvailability === "available" ? release.manifest.objects.length : 0)} 项</span></div>
+      {release.availability !== "available" && <div className="asset-authority-boundary" role="alert"><CircleAlert size={20} /><span><strong>发布权威详情不可用</strong><small>服务端状态为 {release.availability}，页面不会显示推测的差异、绑定或消费方。</small></span></div>}
+      {release.availability === "available" && <>
       {release.rolledBackToReleaseId && <div className="rollback-reference" role="status"><RotateCcw size={15} /><span>此发布回滚了 <code>{release.rolledBackToReleaseId}</code>；目标发布记录保持不变，回滚以新发布表达（P-003）。</span></div>}
       {rolledBackByReleaseId && <div className="rollback-reference" role="status"><RotateCcw size={15} /><span>此发布已被 <code>{rolledBackByReleaseId}</code> 回滚；注册表指针已由回滚发布切回。</span></div>}
       <div className="asset-version-detail-grid">
@@ -1479,7 +1765,7 @@ function ReleaseDetail({ release, originProposal, revisionLabels, isLatest, roll
               <StatusBadge tone="info">已固定</StatusBadge>
             </article>
           ))}
-          {release.manifest.objects.map((object) => (
+          {release.objectAvailability === "available" && release.manifest.objects.map((object) => (
             <article key={`${object.objectId}:${object.version}`}>
               <span className="consumer-mark"><Link2 size={18} /></span>
               <div><strong><code title={object.objectId}>{object.objectId}</code></strong><small>{object.objectType} 治理对象</small></div>
@@ -1487,10 +1773,12 @@ function ReleaseDetail({ release, originProposal, revisionLabels, isLatest, roll
               <StatusBadge tone="info">已固定</StatusBadge>
             </article>
           ))}
-          {release.manifest.assets.length === 0 && release.manifest.objects.length === 0 && <div className="empty-inline">该发布没有固定内容。</div>}</div>
-          {previewConsumers.length > 0 && <div className="release-consumers-preview"><span className="content-label">消费绑定 · 原型数据</span>{previewConsumers.map((consumer) => <article key={consumer.name}><span className="consumer-mark"><Box size={16} /></span><div><strong>{consumer.name}</strong><small>{consumer.kind} · 最近解析 {consumer.lastResolved}</small></div><code>{consumer.binding}</code></article>)}<small>真实消费绑定属于 M3 交付里程碑。</small></div>}
+          {release.objectAvailability !== "available" && <div className={`asset-authority-boundary asset-authority-${release.objectAvailability}`} role={release.objectAvailability === "forbidden" || release.objectAvailability === "failed" ? "alert" : "status"}><CircleAlert size={17} /><span><strong>治理对象清单{authorityAvailabilityLabel(release.objectAvailability)}</strong><small>资产修订固定仍按服务端清单显示；治理对象固定不使用推测值。</small></span></div>}
+          {release.manifest.assets.length === 0 && release.objectAvailability === "available" && release.manifest.objects.length === 0 && <div className="empty-inline">该发布没有固定内容。</div>}</div>
+          {release.consumerImpactAvailability === "available" && release.consumerImpact ? <div className="release-consumer-impact"><span className="content-label">服务端消费影响</span><dl><div><dt>当前消费者</dt><dd>{release.consumerImpact.current}</dd></div><div><dt>固定版本消费者</dt><dd>{release.consumerImpact.pinned}</dd></div></dl><small>当前合同提供权威计数，不提供消费者明细。</small></div> : <div className={`asset-authority-boundary asset-authority-${release.consumerImpactAvailability}`} role={release.consumerImpactAvailability === "forbidden" || release.consumerImpactAvailability === "failed" ? "alert" : "status"}><CircleAlert size={17} /><span><strong>消费影响{authorityAvailabilityLabel(release.consumerImpactAvailability)}</strong><small>服务端没有提供可显示的消费影响计数，页面不会补零。</small></span></div>}
         </section>
       </div>
+      </>}
       <footer className="release-actions"><div><strong>回滚以新发布记录表达</strong><span>目标发布保持不变；回滚会恢复其固定修订之前的注册表指针。</span></div><button className="secondary-button" type="button" onClick={() => onRollback(release.id)} disabled={!canRollback || !isLatest || isRollbackRelease || Boolean(rolledBackByReleaseId)}><RotateCcw size={16} />回滚此发布</button></footer>
     </section>
   );
@@ -1500,7 +1788,7 @@ type AssetVersionFilter = "全部" | "待处理" | "当前版本" | "历史版�
 
 function ReleasesView({ initialSelectedKey, initialSourceRun, detailBackRequestEpoch, rollbackNotice, onDetailOpenChange, onReview, onPublish, onRollback, onAssembleBatches, onConfirmBatch }: { initialSelectedKey: string | null; initialSourceRun: string | null; detailBackRequestEpoch: number; rollbackNotice: GovernanceReleaseDetail | null; onDetailOpenChange: (open: boolean) => void; onReview: (candidate: GovernanceCandidate) => void; onPublish: (candidate: GovernanceCandidate) => void; onRollback: (releaseId: string) => void; onAssembleBatches: () => void; onConfirmBatch: (batch: GovernanceReviewBatchDetail) => void }) {
   const governance = useGovernanceRuntime();
-  const { assets } = useCatalogRuntime();
+  const { assets, ensureAsset } = useCatalogRuntime();
   const canReview = useCan("proposal.review");
   const [selectedKey, setSelectedKey] = useState<string | null>(initialSelectedKey);
   const [selectedDetailBackEpoch, setSelectedDetailBackEpoch] = useState(detailBackRequestEpoch);
@@ -1515,24 +1803,42 @@ function ReleasesView({ initialSelectedKey, initialSourceRun, detailBackRequestE
   const [releaseDetailError, setReleaseDetailError] = useState("");
   const [originProposal, setOriginProposal] = useState<GovernanceProposalDetail | null>(null);
   const [revisionLabels, setRevisionLabels] = useState<Record<string, string>>({});
+  const [directProposalError, setDirectProposalError] = useState("");
 
   const candidates = useMemo(() => governance.proposals
     .filter((proposal) => proposal.state !== "draft")
     .map((proposal) => governanceCandidateFor(proposal, assets, governance.decisions, governance.reviews)), [assets, governance.decisions, governance.proposals, governance.reviews]);
   const candidateRows = useMemo(() => candidates.filter((candidate) => candidate.proposal.state !== "released"), [candidates]);
   const activeSelectedKey = selectedDetailBackEpoch === detailBackRequestEpoch ? selectedKey : null;
-  const selectedCandidate = candidates.find((candidate) => candidate.key === activeSelectedKey);
+  const selectedProposalId = activeSelectedKey?.startsWith("candidate:") ? activeSelectedKey.slice("candidate:".length) : null;
+  const listedCandidate = candidates.find((candidate) => candidate.key === activeSelectedKey);
+  const directProposal = selectedProposalId ? governance.proposalDetails[selectedProposalId] : undefined;
+  const selectedCandidate = listedCandidate ?? (directProposal ? governanceCandidateFor(directProposal, assets, governance.decisions, governance.reviews) : undefined);
+  const selectedReleaseId = activeSelectedKey?.startsWith("release:") ? activeSelectedKey.slice("release:".length) : null;
   const selectedRelease = governance.releases.find((release) => `release:${release.id}` === activeSelectedKey) ?? null;
   const latestSequence = governance.releases.reduce((max, release) => Math.max(max, release.sequence), 0);
   const inspectorReleaseSource = selectedRelease ?? governance.releases[0] ?? null;
-  const inspectorRelease = inspectorReleaseSource ? governance.releaseDetails[inspectorReleaseSource.id] ?? null : null;
+  const inspectorRelease = selectedReleaseId ? releaseDetail : inspectorReleaseSource ? governance.releaseDetails[inspectorReleaseSource.id] ?? null : null;
 
   useEffect(() => {
-    onDetailOpenChange(Boolean(selectedCandidate || selectedRelease));
+    onDetailOpenChange(Boolean(selectedProposalId || selectedReleaseId));
     return () => onDetailOpenChange(false);
-  }, [onDetailOpenChange, selectedCandidate, selectedRelease]);
+  }, [onDetailOpenChange, selectedProposalId, selectedReleaseId]);
 
-  const { decisions, loadPolicyDecision } = governance;
+  const { decisions, loadPolicyDecision, loadProposal } = governance;
+  useEffect(() => {
+    if (!selectedProposalId || selectedCandidate) return;
+    let cancelled = false;
+    loadProposal(selectedProposalId)
+      .then((proposal) => {
+        if (cancelled) return;
+        setDirectProposalError("");
+        if (proposal.assetId) void ensureAsset(proposal.assetId);
+      })
+      .catch((reason: Error) => { if (!cancelled) setDirectProposalError(reason.message); });
+    return () => { cancelled = true; };
+  }, [ensureAsset, loadProposal, selectedCandidate, selectedProposalId]);
+
   useEffect(() => {
     for (const candidate of candidates) {
       if (candidate.proposal.state === "rejected") continue;
@@ -1541,7 +1847,7 @@ function ReleasesView({ initialSelectedKey, initialSourceRun, detailBackRequestE
     }
   }, [candidates, decisions, loadPolicyDecision]);
 
-  const { releaseDetails, releases, resolveRevisionLabel } = governance;
+  const { releaseDetails, releases, resolveRevisionLabel, loadReleaseDetail } = governance;
   useEffect(() => {
     for (const release of releases) {
       const detail = releaseDetails[release.id];
@@ -1556,23 +1862,23 @@ function ReleasesView({ initialSelectedKey, initialSourceRun, detailBackRequestE
   }, [assets, releaseDetails, releases, resolveRevisionLabel, revisionLabels]);
 
   useEffect(() => {
-    if (!selectedRelease || loadedReleaseId === selectedRelease.id) return;
+    if (!selectedReleaseId || loadedReleaseId === selectedReleaseId) return;
     let cancelled = false;
-    governance.loadReleaseDetail(selectedRelease.id)
+    loadReleaseDetail(selectedReleaseId)
       .then((detail) => {
         if (cancelled) return;
         setReleaseDetail(detail);
         setLoadedReleaseId(detail.id);
         setReleaseDetailError("");
         if (detail.originProposalId) {
-          governance.loadProposal(detail.originProposalId)
+          loadProposal(detail.originProposalId)
             .then((proposal) => { if (!cancelled) setOriginProposal(proposal); })
             .catch(() => undefined);
         } else setOriginProposal(null);
       })
       .catch((reason: Error) => { if (!cancelled) setReleaseDetailError(reason.message); });
     return () => { cancelled = true; };
-  }, [governance, loadedReleaseId, selectedRelease]);
+  }, [loadProposal, loadReleaseDetail, loadedReleaseId, selectedReleaseId]);
 
   const toggleBatch = (batchId: string) => {
     if (expandedBatchId === batchId) { setExpandedBatchId(null); setBatchDetail(null); return; }
@@ -1593,17 +1899,21 @@ function ReleasesView({ initialSelectedKey, initialSourceRun, detailBackRequestE
     );
   }
 
-  if (selectedRelease) {
+  if (selectedProposalId) {
+    return <section className="view view-releases governance-detail-view"><div className="governance-load-error" role={directProposalError ? "alert" : "status"}>{directProposalError ? <CircleAlert size={18} /> : <LoaderCircle className="spin" size={16} />}<span><strong>{directProposalError ? "提案深链加载失败" : "正在读取提案"}</strong>{directProposalError || selectedProposalId}</span></div></section>;
+  }
+
+  if (selectedReleaseId) {
     if (releaseDetailError) {
       return <section className="view view-releases governance-detail-view"><div className="governance-load-error" role="alert"><CircleAlert size={18} /><span><strong>发布记录加载失败</strong>{releaseDetailError}</span></div></section>;
     }
-    if (!releaseDetail || loadedReleaseId !== selectedRelease.id) {
+    if (!releaseDetail || loadedReleaseId !== selectedReleaseId) {
       return <section className="view view-releases governance-detail-view"><div className="governance-load-error" role="status"><LoaderCircle className="spin" size={16} />正在加载发布记录</div></section>;
     }
     return (
       <section className="view view-releases governance-detail-view">
         <ReleaseDetail release={releaseDetail} originProposal={originProposal} revisionLabels={revisionLabels} isLatest={releaseDetail.sequence === latestSequence} rolledBackByReleaseId={governance.releases.find((item) => item.rolledBackToReleaseId === releaseDetail.id)?.id ?? null} onManifest={() => setInspector("manifest")} onCompare={() => setInspector("compare")} onRollback={onRollback} />
-        {inspector && inspectorRelease && <ReleaseInspectorDialog mode={inspector} release={inspectorRelease} revisionLabel={(() => { const pin = governance.releaseDetails[inspectorRelease.id]?.manifest.assets[0]; return pin ? revisionLabels[pin.revisionId] ?? pin.revisionId : "当前注册表"; })()} onClose={() => setInspector(null)} />}
+        {inspector && inspectorRelease && <ReleaseInspectorDialog mode={inspector} release={inspectorRelease} onClose={() => setInspector(null)} />}
       </section>
     );
   }
@@ -1666,13 +1976,13 @@ function ReleasesView({ initialSelectedKey, initialSourceRun, detailBackRequestE
           <div className="segment-control governance-filter" aria-label="资产版本筛选">{(["全部", "待处理", "当前版本", "历史版本"] as AssetVersionFilter[]).map((item) => <button key={item} type="button" aria-pressed={filter === item} onClick={() => setFilter(item)}>{item === "全部" ? `全部 ${candidates.length + governance.releases.length}` : item === "待处理" ? `待处理 ${candidates.filter((candidate) => candidate.proposal.state !== "released" && candidate.proposal.state !== "rejected").length}` : item}</button>)}</div>
           <label className="governance-search"><Search size={16} /><input type="search" aria-label="搜索资产版本" placeholder="搜索资产、提案、发布批次或清单摘要" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
         </div>
-        <div className="governance-list-summary"><span>显示 <strong>{visibleCount}</strong> / {rowCount} 条版本</span><span><ArrowUpDown size={14} />待处理优先，其次按发布序列</span></div>
+        <div className="governance-list-summary"><span>显示 <strong>{visibleCount}</strong> / 已加载 {rowCount} 条版本{governance.releasesTotal !== undefined ? ` · 发布记录总计 ${governance.releasesTotal}` : ""}</span><span><ArrowUpDown size={14} />待处理优先，其次按发布序列</span></div>
         <div className="governance-table release-table">
           <div className="governance-list-head release-compact-grid" aria-hidden="true"><span>语义资产</span><span>版本</span><span>版本内容</span><span>发布批次</span><span>状态</span><span>责任人</span><span /></div>
           <div className="governance-list-body">
             {visibleCandidates.map((candidate) => {
               const status = candidateStatusFor(candidate);
-              return <button key={candidate.key} type="button" className="governance-list-row release-compact-grid candidate-version-row" aria-label={`查看候选资产版本 ${candidate.asset?.name ?? candidate.proposal.title} ${candidate.targetRevision}`} onClick={() => { setSelectedKey(candidate.key); setSelectedDetailBackEpoch(detailBackRequestEpoch); }}>
+              return <button key={candidate.key} type="button" className="governance-list-row release-compact-grid candidate-version-row" aria-label={`查看候选资产版本 ${candidate.asset?.name ?? candidate.proposal.title} ${candidate.targetRevision}`} onClick={() => { setSelectedKey(candidate.key); setSelectedDetailBackEpoch(detailBackRequestEpoch); writeProductRoute(`/governance?proposal=${encodeURIComponent(candidate.proposal.id)}`); }}>
                 <span className="governance-primary governance-primary-compact"><strong>{candidate.asset?.name ?? candidate.proposal.title}</strong><small><code>{candidate.asset?.key ?? candidate.proposal.targetObjectId}</code><span>{candidate.asset?.type ?? "治理对象"}</span></small></span>
                 <span className="governance-metric"><strong>{candidate.targetRevision}</strong><small>基于 {candidate.baseRevision}</small></span>
                 <span className="governance-context"><strong>{candidate.proposal.title}</strong><small><code>{candidate.proposal.id}</code> · {candidate.decision ? `${routingLabels[candidate.decision.routing] ?? candidate.decision.routing}` : "决策生成中"}</small></span>
@@ -1684,13 +1994,14 @@ function ReleasesView({ initialSelectedKey, initialSourceRun, detailBackRequestE
             })}
             {visibleReleases.map((release) => {
               const detail = governance.releaseDetails[release.id];
+              const detailState = governance.releaseDetailStates[release.id];
               const isCurrent = release.sequence === latestSequence;
               const primaryPin = detail?.manifest.assets[0];
               const label = primaryPin ? revisionLabels[primaryPin.revisionId] ?? primaryPin.revisionId : `#${release.sequence}`;
-              return <button key={release.id} type="button" className="governance-list-row release-compact-grid" aria-label={`查看发布记录 ${label} #${release.sequence}`} onClick={() => { setSelectedKey(`release:${release.id}`); setSelectedDetailBackEpoch(detailBackRequestEpoch); }}>
+              return <button key={release.id} type="button" className="governance-list-row release-compact-grid" aria-label={`查看发布记录 ${label} #${release.sequence}`} onClick={() => { setSelectedKey(`release:${release.id}`); setSelectedDetailBackEpoch(detailBackRequestEpoch); writeProductRoute(`/governance?release=${encodeURIComponent(release.id)}`); }}>
                 <span className="governance-primary governance-primary-compact"><strong>{primaryPin ? assets.find((asset) => asset.id === primaryPin.assetId)?.name ?? primaryPin.assetId : `发布 #${release.sequence}`}</strong><small><code>{primaryPin ? assets.find((asset) => asset.id === primaryPin.assetId)?.identity.key ?? primaryPin.assetId : release.id}</code><span>{release.rolledBackToReleaseId ? "回滚发布" : "标准发布"}</span></small></span>
                 <span className="governance-metric"><strong>{label}</strong><small>序列 #{release.sequence}</small></span>
-                <span className="governance-context"><strong>{detail ? `${detail.manifest.assets.length + detail.manifest.objects.length} 项清单固定` : "清单加载中"}</strong><small><code title={release.manifestDigest}>{release.manifestDigest.slice(0, 16)}…</code></small></span>
+                <span className="governance-context"><strong>{detail ? `${detail.manifest.assets.length + (detail.objectAvailability === "available" ? detail.manifest.objects.length : 0)} 项已显示清单固定` : detailState?.state === "error" ? "清单读取失败" : detailState?.state === "loading" ? "清单加载中" : "打开查看权威清单"}</strong><small>{detailState?.state === "error" ? detailState.error : <code title={release.manifestDigest}>{release.manifestDigest.slice(0, 16)}…</code>}</small></span>
                 <span className="governance-row-owner"><code>{release.id}</code><small>{governanceTimestamp(release.publishedAt)}</small></span>
                 <StatusBadge tone={isCurrent ? "success" : "neutral"}>{isCurrent ? "当前版本" : "历史版本"}</StatusBadge>
                 <span className="governance-row-owner"><strong>{release.publishedBy}</strong><small>已签名发布</small></span>
@@ -1701,8 +2012,10 @@ function ReleasesView({ initialSelectedKey, initialSourceRun, detailBackRequestE
             {(governance.proposalsState === "idle" || governance.releasesState === "idle") && <div className="governance-list-empty" role="status"><LoaderCircle className="spin" size={18} />正在加载治理数据</div>}
           </div>
         </div>
+        {governance.releasesNextCursor && <div className="catalog-pagination"><button type="button" disabled={governance.releasesLoadingMore} onClick={() => void governance.loadMoreReleases()}>{governance.releasesLoadingMore ? "正在读取…" : "加载更多发布记录"}</button>{governance.releasesAppendError && <span role="alert">{governance.releasesAppendError}</span>}</div>}
+        {!governance.releasesNextCursor && governance.releasesAppendError && <div className="catalog-pagination"><span role="alert">{governance.releasesAppendError}</span></div>}
       </section>
-      {inspector && inspectorRelease && <ReleaseInspectorDialog mode={inspector} release={inspectorRelease} revisionLabel={(() => { const pin = governance.releaseDetails[inspectorRelease.id]?.manifest.assets[0]; return pin ? revisionLabels[pin.revisionId] ?? pin.revisionId : "当前注册表"; })()} onClose={() => setInspector(null)} />}
+      {inspector && inspectorRelease && <ReleaseInspectorDialog mode={inspector} release={inspectorRelease} onClose={() => setInspector(null)} />}
     </section>
   );
 }
@@ -1969,63 +2282,82 @@ function CommandPalette({ proposals, onClose, onNavigate, onSelectAsset, onSelec
   );
 }
 
-export function ProductApp({ fixtureGovernance = false, session }: { fixtureGovernance?: boolean; session?: CapabilitySession }) {
+export function ProductApp({ session }: { session?: CapabilitySession }) {
   const { workspaceId } = useCatalogRuntime();
+  const canReviewBatches = !session || session.capabilities.includes("proposal.review");
+  const workbenchAccess = {
+    read: (Boolean(session?.capabilities.includes("workspace.read"))),
+    manage: (Boolean(session?.capabilities.includes("workspace.manage"))),
+  };
   return (
-    <GovernanceRuntimeProvider workspaceId={workspaceId} fixture={fixtureGovernance}>
-      <ProductApplication session={session} />
+    <GovernanceRuntimeProvider workspaceId={workspaceId} reviewBatchesEnabled={(canReviewBatches)}>
+      <WorkbenchRuntimeProvider workspaceId={workspaceId} access={workbenchAccess}>
+        <ProductApplication  session={session} />
+      </WorkbenchRuntimeProvider>
     </GovernanceRuntimeProvider>
   );
 }
 
-const workbenchTaskProposalIds: Record<Exclude<WorkbenchTask["target"], "source-run">, string> = {
-  "candidate-region": "PROP-121",
-  "candidate-aov": "PROP-128",
-  "candidate-revenue": "PROP-126",
-};
+function readProductDeepLink() {
+  if (typeof window === "undefined") return { view: undefined as ViewId | undefined, attentionItemId: null, proposalId: null, releaseId: null, runId: null, assetId: null, sourceId: null, compatibility: null as { consumerId?: string; bindingId: string; queryId: string } | null };
+  const query = new URLSearchParams(window.location.search);
+  const path = window.location.pathname;
+  const compatibility = path === "/delivery/compatibility" && query.get("binding") && query.get("query")
+    ? { ...(query.get("consumer") ? { consumerId: query.get("consumer")! } : {}), bindingId: query.get("binding")!, queryId: query.get("query")! }
+    : null;
+  if (compatibility) return { view: "overview" as ViewId, attentionItemId: null, proposalId: null, releaseId: null, runId: null, assetId: null, sourceId: null, compatibility };
+  if (path === "/governance" && (query.get("production") || query.get("productionList"))) return { view: "releases" as ViewId, productionId: query.get("production"), productionList: true, attentionItemId: null, proposalId: null, releaseId: null, runId: null, assetId: null, sourceId: null, compatibility: null };
+  if (path === "/governance" && query.get("proposal")) return { view: "releases" as ViewId, attentionItemId: null, proposalId: query.get("proposal"), releaseId: null, runId: null, assetId: null, sourceId: null, compatibility: null };
+  if (path === "/governance" && query.get("release")) return { view: "releases" as ViewId, attentionItemId: null, proposalId: null, releaseId: query.get("release"), runId: null, assetId: null, sourceId: null, compatibility: null };
+  if (path === "/sources") return { view: "sources" as ViewId, attentionItemId: null, proposalId: null, releaseId: null, runId: null, assetId: null, sourceId: query.get("source"), compatibility: null };
+  if (path === "/operations/runtime" && query.get("run")) return { view: "settings" as ViewId, attentionItemId: null, proposalId: null, releaseId: null, runId: query.get("run"), assetId: null, sourceId: null, compatibility: null };
+  if (path === "/assets" && query.get("asset")) return { view: "assets" as ViewId, attentionItemId: null, proposalId: null, releaseId: null, runId: null, assetId: query.get("asset"), sourceId: null, compatibility: null };
+  const attentionItemId = query.get("attentionItem");
+  return { view: attentionItemId || query.get("view") === "overview" ? "overview" as ViewId : undefined, attentionItemId, proposalId: null, releaseId: null, runId: null, assetId: null, sourceId: null, compatibility: null };
+}
+
+function writeProductRoute(path: string, replace = false) {
+  if (typeof window === "undefined") return;
+  window.history[replace ? "replaceState" : "pushState"]({}, "", path);
+}
 
 function ProductApplication({ session }: { session?: CapabilitySession }) {
-  const { assets, setWorkflowStateOverlay } = useCatalogRuntime();
+  const { assets, workspaceId } = useCatalogRuntime();
   const governance = useGovernanceRuntime();
-  const preferredRecentAssetIds = [
-    "metric_01J4NETREVENUE8W4Q9D7K2",
-    "model_01J4ORDERS7K8M2Q5N9P",
-    "segment_01J4HIGHVALUE4X7P2K9M6N",
-  ];
-  const initialRecentAssetIds = [
-    ...preferredRecentAssetIds.filter((id) => assets.some((asset) => asset.id === id)),
-    ...assets.map((asset) => asset.id),
-  ].filter((id, index, values) => values.indexOf(id) === index).slice(0, 3);
-  const [view, setView] = useState<ViewId>("ask");
+  const workbench = useWorkbenchRuntime();
+  const initialRecentAssetIds = assets.map((asset) => asset.id)
+    .filter((id, index, values) => values.indexOf(id) === index).slice(0, 3);
+  const initialDeepLink = useMemo(() => readProductDeepLink(), []);
+  const [view, setView] = useState<ViewId>(initialDeepLink.view ?? ("ask"));
   const [contextPanelOpen, setContextPanelOpen] = useState(true);
   const [contextPanelWidth, setContextPanelWidth] = useState(initialContextPanelWidth);
   const [askSessionKey, setAskSessionKey] = useState(0);
-  const [contextIndex, setContextIndex] = useState(1);
+  const [contextIndex, setContextIndex] = useState(initialDeepLink.productionList ? 1 : initialDeepLink.runId ? 4 : 0);
+  const [productionId, setProductionId] = useState(initialDeepLink.productionId ?? undefined);
   const [contextSelectionEpoch, setContextSelectionEpoch] = useState(0);
   const [sourceRunDetailOpen, setSourceRunDetailOpen] = useState(false);
   const [sourceRunBackRequestEpoch, setSourceRunBackRequestEpoch] = useState(0);
   const [sourceInitialRunId, setSourceInitialRunId] = useState<string | undefined>();
-  const [embeddingRebuildRun, setEmbeddingRebuildRun] = useState<EmbeddingRebuildRun | null>(null);
-  const [auditRunRequestId, setAuditRunRequestId] = useState<string | undefined>();
+  const [sourceInitialSourceId, setSourceInitialSourceId] = useState<string | undefined>(initialDeepLink.sourceId ?? undefined);
+  const [compatibilityTarget, setCompatibilityTarget] = useState(initialDeepLink.compatibility);
+  const [auditRunRequestId, setAuditRunRequestId] = useState<string | undefined>(initialDeepLink.runId ?? undefined);
   const [releaseDetailOpen, setReleaseDetailOpen] = useState(false);
   const [releaseDetailBackRequestEpoch, setReleaseDetailBackRequestEpoch] = useState(0);
-  const [selectedAssetId, setSelectedAssetId] = useState(assets[0]?.id ?? "");
+  const [selectedAssetId, setSelectedAssetId] = useState(initialDeepLink.assetId ?? assets[0]?.id ?? "");
   const [recentAssetIds, setRecentAssetIds] = useState(initialRecentAssetIds);
   const recentAssetOpenSequence = useRef(initialRecentAssetIds.length);
   const recentAssetOpenedAt = useRef<Record<string, number>>(Object.fromEntries(initialRecentAssetIds.map((id, index) => [id, initialRecentAssetIds.length - index])));
   const [assetTabRequest, setAssetTabRequest] = useState<AssetTab>("概览");
-  const [assetDetailRequest, setAssetDetailRequest] = useState(false);
+  const [assetDetailRequest, setAssetDetailRequest] = useState(Boolean(initialDeepLink.assetId));
   const [assetTabRequestEpoch, setAssetTabRequestEpoch] = useState(0);
   const [assetDetailBackRequestEpoch, setAssetDetailBackRequestEpoch] = useState(0);
-  const [activeWorkbenchTask, setActiveWorkbenchTask] = useState<WorkbenchTask | null>(null);
   const [knowledgeRevisionRequest, setKnowledgeRevisionRequest] = useState<KnowledgeRevisionRequest | null>(null);
   const [assetCatalogTypeRequest, setAssetCatalogTypeRequest] = useState<CatalogObjectType | "全部">("全部");
   const [askConversationTitles, setAskConversationTitles] = useState(initialAskConversationTitles);
-  const [versionDetailRequest, setVersionDetailRequest] = useState<{ key: string | null; epoch: number }>({ key: null, epoch: 0 });
+  const [versionDetailRequest, setVersionDetailRequest] = useState<{ key: string | null; epoch: number }>({ key: initialDeepLink.proposalId ? `candidate:${initialDeepLink.proposalId}` : initialDeepLink.releaseId ? `release:${initialDeepLink.releaseId}` : null, epoch: 0 });
   const [versionSourceRun, setVersionSourceRun] = useState<string | null>(null);
   const [reviewing, setReviewing] = useState<GovernanceCandidate | null>(null);
-  const [discoveryState, setDiscoveryState] = useState<"ready" | "running" | "complete">("ready");
-  const [publishedRelease, setPublishedRelease] = useState<GovernanceReleaseDetail | null>(null);
+
   const [rollbackNotice, setRollbackNotice] = useState<GovernanceReleaseDetail | null>(null);
   const [creatingProposal, setCreatingProposal] = useState(false);
   const [publishing, setPublishing] = useState<GovernanceCandidate | null>(null);
@@ -2036,12 +2368,13 @@ function ProductApplication({ session }: { session?: CapabilitySession }) {
   const [workbenchSearchRequestEpoch, setWorkbenchSearchRequestEpoch] = useState(0);
   const [conversationSearchRequestEpoch, setConversationSearchRequestEpoch] = useState(0);
   const [toast, setToast] = useState("");
-  const discoveryTimer = useRef<number | null>(null);
-  const workspaceRef = useRef<HTMLElement>(null);
+  const [toastTimer, setToastTimer] = useState<number | null>(null);
 
-  useEffect(() => {
-    setWorkflowStateOverlay(governance.workflowStateByAsset);
-  }, [governance.workflowStateByAsset, setWorkflowStateOverlay]);
+  const workspaceRef = useRef<HTMLElement>(null);
+  const closeWorkbenchRuntimeItem = workbench.closeItem;
+  const openWorkbenchRuntimeItem = workbench.openItem;
+  const selectedWorkbenchItemId = workbench.selectedItemId;
+
 
   const settleRecentAssets = useCallback(() => {
     setRecentAssetIds((current) => [...current].sort((left, right) => (recentAssetOpenedAt.current[right] ?? 0) - (recentAssetOpenedAt.current[left] ?? 0)));
@@ -2064,13 +2397,85 @@ function ProductApplication({ session }: { session?: CapabilitySession }) {
 
   const openWorkbenchSearch = useCallback(() => {
     setCommandOpen(false);
-    if (view !== "overview" || activeWorkbenchTask) {
+    if (view !== "overview" || selectedWorkbenchItemId) {
       setView("overview");
       setContextIndex(0);
-      setActiveWorkbenchTask(null);
+      closeWorkbenchRuntimeItem();
+      writeProductRoute("/?view=overview");
     }
     setWorkbenchSearchRequestEpoch((epoch) => epoch + 1);
-  }, [activeWorkbenchTask, view]);
+  }, [closeWorkbenchRuntimeItem, selectedWorkbenchItemId, view]);
+
+  const openWorkbenchItem = useCallback((item: WorkbenchAttentionItem, replace = false) => {
+    setContextPanelOpen(true);
+    setView("overview");
+    setContextIndex(0);
+    writeProductRoute(`/?view=overview&attentionItem=${encodeURIComponent(item.id)}`, replace);
+    void openWorkbenchRuntimeItem(item.id);
+  }, [openWorkbenchRuntimeItem]);
+
+  const closeWorkbenchItem = useCallback((replace = false) => {
+    closeWorkbenchRuntimeItem();
+    writeProductRoute("/?view=overview", replace);
+  }, [closeWorkbenchRuntimeItem]);
+
+  useEffect(() => {
+    if (initialDeepLink.attentionItemId) void openWorkbenchRuntimeItem(initialDeepLink.attentionItemId);
+  }, [initialDeepLink.attentionItemId, openWorkbenchRuntimeItem]);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const route = readProductDeepLink();
+      if (route.attentionItemId) {
+        setCompatibilityTarget(null);
+        setView("overview");
+        setContextIndex(0);
+        void openWorkbenchRuntimeItem(route.attentionItemId);
+      } else if (route.view === "overview") {
+        setCompatibilityTarget(route.compatibility);
+        setView("overview");
+        setContextIndex(0);
+        closeWorkbenchRuntimeItem();
+      } else if (route.view === "sources") {
+        setCompatibilityTarget(null);
+        closeWorkbenchRuntimeItem();
+        setSourceInitialRunId(undefined);
+        setSourceInitialSourceId(route.sourceId ?? undefined);
+        setView("sources");
+        setContextIndex(0);
+      } else if (route.view === "assets" && route.assetId) {
+        setCompatibilityTarget(null);
+        closeWorkbenchRuntimeItem();
+        setSelectedAssetId(route.assetId);
+        setKnowledgeRevisionRequest(null);
+        setAssetTabRequest("概览");
+        setAssetDetailRequest(true);
+        setAssetTabRequestEpoch((epoch) => epoch + 1);
+        setView("assets");
+        setContextIndex(0);
+      } else if (route.view === "releases" && (route.proposalId || route.releaseId)) {
+        setCompatibilityTarget(null);
+        closeWorkbenchRuntimeItem();
+        setVersionSourceRun(null);
+        setVersionDetailRequest((current) => ({ key: route.proposalId ? `candidate:${route.proposalId}` : `release:${route.releaseId}`, epoch: current.epoch + 1 }));
+        setView("releases");
+        setContextIndex(0);
+      } else if (route.view === "settings" && route.runId) {
+        setCompatibilityTarget(null);
+        closeWorkbenchRuntimeItem();
+        setAuditRunRequestId(route.runId);
+        setView("settings");
+        setContextIndex(4);
+      } else {
+        setCompatibilityTarget(null);
+        closeWorkbenchRuntimeItem();
+        setView("ask");
+        setContextIndex(0);
+      }
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [closeWorkbenchRuntimeItem, openWorkbenchRuntimeItem]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -2085,78 +2490,113 @@ function ProductApplication({ session }: { session?: CapabilitySession }) {
     document.addEventListener("keydown", handleKeyDown);
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
-      if (discoveryTimer.current !== null) window.clearTimeout(discoveryTimer.current);
     };
   }, [openCatalogSearch, openWorkbenchSearch, view]);
+
+  useEffect(() => () => {
+    if (toastTimer !== null) window.clearTimeout(toastTimer);
+  }, [toastTimer]);
 
   useEffect(() => {
     if (workspaceRef.current) workspaceRef.current.scrollTop = 0;
   }, [contextIndex, view]);
 
-  const showPrototypeToast = (message: string) => {
+  const showToast = useCallback((message: string) => {
+    if (toastTimer !== null) window.clearTimeout(toastTimer);
     setToast(message);
-    window.setTimeout(() => setToast(""), 3600);
-  };
+    const timer = window.setTimeout(() => {
+      setToast("");
+      setToastTimer(null);
+    }, 3600);
+    setToastTimer(timer);
+  }, [toastTimer]);
 
   const rememberAsset = (id: string) => {
     setSelectedAssetId(id);
+    writeProductRoute(`/assets?asset=${encodeURIComponent(id)}`);
     recentAssetOpenSequence.current += 1;
     recentAssetOpenedAt.current[id] = recentAssetOpenSequence.current;
     setRecentAssetIds((current) => current.includes(id) ? current : [id, ...current].slice(0, 5));
   };
 
   const openCandidateVersionById = (proposalId: string) => {
-    setActiveWorkbenchTask(null);
+    workbench.closeItem();
+    writeProductRoute(`/governance?proposal=${encodeURIComponent(proposalId)}`);
     setVersionSourceRun(null);
     setVersionDetailRequest((current) => ({ key: `candidate:${proposalId}`, epoch: current.epoch + 1 }));
     setView("releases");
     setContextIndex(0);
   };
 
-  const openSourceActivity = () => {
-    setActiveWorkbenchTask(null);
-    setSourceInitialRunId(undefined);
-    setView("sources");
-    setContextIndex(2);
-    setContextSelectionEpoch((epoch) => epoch + 1);
-  };
+
 
   const openGlobalRun = (runId: string) => {
     setContextPanelOpen(true);
-    setActiveWorkbenchTask(null);
+    workbench.closeItem();
     setAuditRunRequestId(runId);
     setView("settings");
     setContextIndex(4);
   };
 
-  const startEmbeddingRebuild = (modelId: string) => {
-    const run: EmbeddingRebuildRun = {
-      id: "RUN-IDX-260901-1132",
-      modelId,
-      status: "运行中",
-      progress: 42,
-      phase: "生成向量",
-      startedAt: "2026-09-01 11:32:00",
-      duration: "1 分 18 秒",
-      processedItems: 1436,
-      totalItems: 3420,
-    };
-    setEmbeddingRebuildRun(run);
-    showPrototypeToast(`向量索引重建任务已创建，正在使用 ${modelId} 处理全部知识目录。`);
-  };
-
-  const openEmbeddingRebuildRun = () => {
-    if (!embeddingRebuildRun) return;
-    setContextPanelOpen(true);
-    setAuditRunRequestId(embeddingRebuildRun.id);
-    setView("settings");
-    setContextIndex(4);
+  const openWorkbenchTarget = (item: WorkbenchAttentionItem) => {
+    let target: URL;
+    try {
+      target = new URL(item.targetRoute, window.location.origin);
+    } catch {
+      showToast("服务端返回的目标路由无效，未执行跳转。");
+      return;
+    }
+    if (target.origin !== window.location.origin || !item.targetRoute.startsWith("/")) {
+      showToast("工作台目标必须是当前 Semlia 工作区内的相对路由。");
+      return;
+    }
+    if (target.pathname === "/governance" && target.searchParams.get("proposal")) {
+      openCandidateVersionById(target.searchParams.get("proposal")!);
+      return;
+    }
+    if (target.pathname === "/sources") {
+      const sourceId = target.searchParams.get("source");
+      if (!sourceId) {
+        showToast("来源目标缺少 source 标识，未执行跳转。");
+        return;
+      }
+      writeProductRoute(`${target.pathname}${target.search}`);
+      workbench.closeItem();
+      setSourceInitialRunId(undefined);
+      setSourceInitialSourceId(sourceId);
+      setView("sources");
+      setContextIndex(0);
+      return;
+    }
+    if (target.pathname === "/operations/runtime" && target.searchParams.get("run")) {
+      writeProductRoute(`${target.pathname}${target.search}`);
+      openGlobalRun(target.searchParams.get("run")!);
+      return;
+    }
+    if (target.pathname === "/delivery/compatibility") {
+      const consumerId = target.searchParams.get("consumer");
+      const bindingId = target.searchParams.get("binding");
+      const queryId = target.searchParams.get("query");
+      if (!bindingId || !queryId) {
+        showToast("兼容性目标必须包含 binding 和 query 标识，未执行跳转。");
+        return;
+      }
+      writeProductRoute(`${target.pathname}${target.search}`);
+      workbench.closeItem();
+      setCompatibilityTarget({ ...(consumerId ? { consumerId } : {}), bindingId, queryId });
+      setView("overview");
+      setContextIndex(0);
+      return;
+    }
+    showToast(`目标路由 ${item.targetRoute} 尚无可用页面；待办仍保持打开。`);
   };
 
   const handleAuditRunRequest = useCallback(() => setAuditRunRequestId(undefined), []);
 
-  const openAssetEvidence = () => {
-    rememberAsset(assets[0].id);
+  const openAssetEvidence = (assetId?: string) => {
+    const target = assets.find((asset) => asset.id === assetId) ?? assets[0];
+    if (!target) return;
+    rememberAsset(target.id);
     if (view !== "assets") settleRecentAssets();
     setKnowledgeRevisionRequest(null);
     setView("assets");
@@ -2167,13 +2607,7 @@ function ProductApplication({ session }: { session?: CapabilitySession }) {
     setAssetTabRequestEpoch((epoch) => epoch + 1);
   };
 
-  const openRunCandidates = (runId: string) => {
-    setContextPanelOpen(true);
-    setVersionSourceRun(runId);
-    setVersionDetailRequest((current) => ({ key: null, epoch: current.epoch + 1 }));
-    setView("releases");
-    setContextIndex(0);
-  };
+
 
   const openAssetDetail = (id: string) => {
     rememberAsset(id);
@@ -2220,14 +2654,18 @@ function ProductApplication({ session }: { session?: CapabilitySession }) {
     });
     setKnowledgeRevisionRequest(null);
     openCandidateVersionById(submitted.id);
-    showPrototypeToast(`${asset.name} 知识修订已提交为提案 ${submitted.id}，治理验证运行中。`);
+    showToast(`${asset.name} 知识修订已提交为提案 ${submitted.id}，治理验证运行中。`);
   };
 
   const navigate: NavigateToView = (nextView, nextContextIndex) => {
     setContextPanelOpen(true);
     setKnowledgeRevisionRequest(null);
-    setActiveWorkbenchTask(null);
+    workbench.closeItem();
+    setCompatibilityTarget(null);
+    if (nextView === "overview") writeProductRoute("/?view=overview");
+    else writeProductRoute("/");
     setView(nextView);
+    if (nextView === "sources") setSourceInitialSourceId(undefined);
     if (nextView === "assets" && view !== "assets") settleRecentAssets();
     if (nextView === "assets" && (nextContextIndex === undefined || nextContextIndex === 0)) {
       setAssetTabRequest("概览");
@@ -2241,7 +2679,7 @@ function ProductApplication({ session }: { session?: CapabilitySession }) {
       setVersionDetailRequest((current) => ({ key: null, epoch: current.epoch + 1 }));
     }
     else if (nextContextIndex !== undefined) setContextIndex(nextContextIndex);
-    else if (nextView === "ask") setContextIndex(1);
+    else if (nextView === "ask") setContextIndex(0);
     else setContextIndex(0);
   };
 
@@ -2249,7 +2687,9 @@ function ProductApplication({ session }: { session?: CapabilitySession }) {
     setContextSelectionEpoch((epoch) => epoch + 1);
     if (view === "releases") {
       setVersionSourceRun(null);
-      setContextIndex(0);
+      setContextIndex(index);
+      setProductionId(undefined);
+      writeProductRoute(index === 1 ? "/governance?productionList=1" : "/governance");
       setVersionDetailRequest((current) => ({ key: null, epoch: current.epoch + 1 }));
       return;
     }
@@ -2269,51 +2709,42 @@ function ProductApplication({ session }: { session?: CapabilitySession }) {
     }
   };
 
-  const runDiscovery = () => {
-    if (discoveryState === "running") return;
-    setDiscoveryState("running");
-    showPrototypeToast("接入运行已开始，正在读取 2 个数据来源的最新快照。");
-    discoveryTimer.current = window.setTimeout(() => {
-      setDiscoveryState("complete");
-      showPrototypeToast("接入运行已完成：识别 8 项来源变化，并已在全局运行中心触发知识增量构建。");
-    }, 450);
-  };
+
 
   const handleReviewDecided = (review: GovernanceReview) => {
     const candidate = reviewing;
     setReviewing(null);
-    showPrototypeToast(`${candidate?.asset?.name ?? candidate?.proposal.title ?? "提案"} 评审已记录：${review.decision === "approved" ? "批准" : "退回"}。`);
+    showToast(`${candidate?.asset?.name ?? candidate?.proposal.title ?? "提案"} 评审已记录：${review.decision === "approved" ? "批准" : "退回"}。`);
   };
 
   const handlePublished = (release: GovernanceReleaseDetail) => {
     setPublishing(null);
-    setPublishedRelease(release);
     setRollbackNotice(null);
-    showPrototypeToast(`发布完成：批次 ${release.id} · 序列 #${release.sequence} 已切换当前修订指针。`);
+    showToast(`发布完成：批次 ${release.id} · 序列 #${release.sequence} 已切换当前修订指针。`);
   };
 
   const handleRollback = async (releaseId: string) => {
     try {
       const release = await governance.rollback(releaseId);
       setRollbackNotice(release);
-      showPrototypeToast(`回滚完成：已创建新的不可变发布 #${release.sequence}。`);
+      showToast(`回滚完成：已创建新的不可变发布 #${release.sequence}。`);
     } catch (rollbackError) {
-      showPrototypeToast(rollbackError instanceof Error ? rollbackError.message : "回滚失败。");
+      showToast(rollbackError instanceof Error ? rollbackError.message : "回滚失败。");
     }
   };
 
   const handleAssembleBatches = async () => {
     try {
       const created = await governance.assembleBatches();
-      showPrototypeToast(created.length > 0 ? `已汇编 ${created.length} 个评审批次。` : "当前没有符合批量路由条件的提案。");
+      showToast(created.length > 0 ? `已汇编 ${created.length} 个评审批次。` : "当前没有符合批量路由条件的提案。");
     } catch (assembleError) {
-      showPrototypeToast(assembleError instanceof Error ? assembleError.message : "评审批次汇编失败。");
+      showToast(assembleError instanceof Error ? assembleError.message : "评审批次汇编失败。");
     }
   };
 
   const handleBatchConfirmed = (detail: GovernanceReviewBatchDetail) => {
     setConfirmingBatch(null);
-    showPrototypeToast(`评审批次已确认：${detail.status === "confirmed" ? "批准" : "拒绝"} · ${detail.memberCount} 个成员。`);
+    showToast(`评审批次已确认：${detail.status === "confirmed" ? "批准" : "拒绝"} · ${detail.memberCount} 个成员。`);
   };
 
   const renameConversationTitle = (title: string) => {
@@ -2323,36 +2754,35 @@ function ProductApplication({ session }: { session?: CapabilitySession }) {
 
   const recentAssets = recentAssetIds.map((id) => assets.find((asset) => asset.id === id)).filter((asset): asset is Asset => Boolean(asset));
   const selectedAsset = assets.find((asset) => asset.id === selectedAssetId);
-  const activeWorkbenchProposalId = activeWorkbenchTask && activeWorkbenchTask.target !== "source-run" ? workbenchTaskProposalIds[activeWorkbenchTask.target] : undefined;
-  const activeWorkbenchCandidate = useMemo(() => {
-    if (!activeWorkbenchProposalId) return null;
-    const proposal = governance.proposals.find((item) => item.id === activeWorkbenchProposalId);
-    return proposal ? governanceCandidateFor(proposal, assets, governance.decisions, governance.reviews) : null;
-  }, [activeWorkbenchProposalId, assets, governance.decisions, governance.proposals, governance.reviews]);
   const commandProposals = useMemo(() => governance.proposals
     .filter((proposal) => proposal.state !== "draft")
     .slice(0, 8), [governance.proposals]);
   const releaseContextItems = [
     { label: "资产版本", meta: `${governance.proposals.filter((proposal) => reviewableStates.includes(proposal.state) && proposal.state !== "rejected").length} 个候选 · ${governance.releases.length} 条已发布`, tone: "warning" as const },
+    ...(([{ label: "语义生产", meta: "建模、集合审核与恢复" }])),
   ];
-  const contextLabel = view === "overview" ? activeWorkbenchTask?.title ?? "待办" : view === "assets" ? (assetDetailRequest ? selectedAsset?.name : "知识目录") : view === "ask" ? askConversationTitles[contextIndex] ?? contextItems[view][contextIndex]?.label : contextItems[view][contextIndex]?.label;
+  const contextLabel = view === "overview" ? workbench.selectedItem?.title ?? (workbench.selectedItemId ? "待办详情" : "待办") : view === "assets" ? (assetDetailRequest ? selectedAsset?.name : "知识目录") : view === "releases" ? releaseContextItems[contextIndex]?.label : view === "ask" ? askConversationTitles[contextIndex] ?? contextItems[view][contextIndex]?.label : contextItems[view][contextIndex]?.label;
 
   return (
     <CapabilityProvider session={session}>
     <div className={contextPanelOpen ? "app-shell" : "app-shell context-panel-collapsed"} style={{ "--context-panel-width": `${contextPanelOpen ? contextPanelWidth : 0}px` } as React.CSSProperties}>
-      <ActivityRail view={view} onChange={navigate} />
-      {contextPanelOpen && <ContextPanel view={view} activeIndex={contextIndex} width={contextPanelWidth} recentAssets={recentAssets} activeAssetId={selectedAssetId} assetDetailOpen={assetDetailRequest} activeWorkbenchTask={activeWorkbenchTask} askConversationTitles={askConversationTitles} conversationSearchRequestEpoch={conversationSearchRequestEpoch} releasesItems={releaseContextItems} onSelect={selectContext} onOpenRecentAsset={openAssetDetail} onOpenWorkbenchTask={setActiveWorkbenchTask} onOpenCatalogSearch={openCatalogSearch} onOpenWorkbenchSearch={openWorkbenchSearch} onCollapse={() => setContextPanelOpen(false)} onResize={setContextPanelWidth} />}
+      <ActivityRail view={view} workbenchCount={workbench.countsByView.mine?.open} onChange={navigate} />
+      {contextPanelOpen && <ContextPanel view={view} activeIndex={contextIndex} width={contextPanelWidth} recentAssets={recentAssets} activeAssetId={selectedAssetId} assetDetailOpen={assetDetailRequest} activeWorkbenchTask={workbench.selectedItem} workbenchItems={workbench.items} askConversationTitles={askConversationTitles} conversationSearchRequestEpoch={conversationSearchRequestEpoch} releasesItems={releaseContextItems} onSelect={selectContext} onOpenRecentAsset={openAssetDetail} onOpenWorkbenchTask={openWorkbenchItem} onOpenCatalogSearch={openCatalogSearch} onOpenWorkbenchSearch={openWorkbenchSearch} onCollapse={() => setContextPanelOpen(false)} onResize={setContextPanelWidth} />}
       <div className="workspace">
-        <Topbar key={`${view}-${contextLabel ?? ""}`} view={view} contextLabel={contextLabel} onNewConversation={() => { setAskSessionKey((key) => key + 1); setContextIndex(0); }} onRenameContext={view === "ask" ? renameConversationTitle : undefined} onBack={view === "overview" && activeWorkbenchTask ? () => setActiveWorkbenchTask(null) : view === "assets" && assetDetailRequest ? () => { setKnowledgeRevisionRequest(null); setAssetDetailRequest(false); setAssetDetailBackRequestEpoch((epoch) => epoch + 1); } : view === "sources" && contextIndex === 2 && sourceRunDetailOpen ? () => setSourceRunBackRequestEpoch((epoch) => epoch + 1) : view === "releases" && releaseDetailOpen ? () => setReleaseDetailBackRequestEpoch((epoch) => epoch + 1) : undefined} backLabel={view === "overview" ? "返回待办" : view === "assets" ? "返回知识目录" : view === "releases" ? "返回资产版本列表" : "返回接入运行"} />
+        <Topbar key={`${view}-${contextLabel ?? ""}`} view={view} contextLabel={contextLabel} onNewConversation={() => { setAskSessionKey((key) => key + 1); setContextIndex(0); }} onRenameContext={view === "ask" ? renameConversationTitle : undefined} onBack={compatibilityTarget ? () => { setCompatibilityTarget(null); writeProductRoute("/?view=overview"); } : view === "overview" && workbench.selectedItemId ? () => closeWorkbenchItem() : view === "assets" && assetDetailRequest ? () => { setKnowledgeRevisionRequest(null); setAssetDetailRequest(false); setAssetDetailBackRequestEpoch((epoch) => epoch + 1); writeProductRoute("/?view=assets"); } : view === "sources" && contextIndex === 2 && sourceRunDetailOpen ? () => setSourceRunBackRequestEpoch((epoch) => epoch + 1) : view === "releases" && releaseDetailOpen ? () => { setReleaseDetailBackRequestEpoch((epoch) => epoch + 1); writeProductRoute("/"); } : undefined} backLabel={view === "overview" ? "返回待办" : view === "assets" ? "返回知识目录" : view === "releases" ? "返回资产版本列表" : "返回接入运行"} />
         <main ref={workspaceRef} className="workspace-canvas">
-          {view === "ask" && <AskView key={`${askSessionKey}-${contextIndex}`} conversationIndex={contextIndex} activeRelease={publishedRelease?.id || "当前注册表"} onOpenEvidence={openAssetEvidence} onStartRevision={(fieldPath, context) => openKnowledgeRevision({ assetId: assets[0].id, fieldPath, origin: "ask", context })} />}
-          {view === "sources" && <SourcesView discoveryState={discoveryState} focusIndex={contextIndex} navigationEpoch={contextSelectionEpoch} runDetailBackRequestEpoch={sourceRunBackRequestEpoch} initialRunId={sourceInitialRunId} onRunDetailOpenChange={setSourceRunDetailOpen} onOpenActivity={openSourceActivity} onOpenGlobalRun={openGlobalRun} onRunDiscovery={runDiscovery} onOpenGovernanceProposals={openRunCandidates} onNotify={showPrototypeToast} />}
-          {view === "overview" && !activeWorkbenchTask && <OverviewView onOpenTask={setActiveWorkbenchTask} discoveryState={discoveryState} focusSearchRequestEpoch={workbenchSearchRequestEpoch} />}
-          {view === "overview" && activeWorkbenchTask?.target === "source-run" && <SourcesView key={activeWorkbenchTask.id} discoveryState={discoveryState} focusIndex={2} navigationEpoch={0} runDetailBackRequestEpoch={0} initialRunId="RUN-240823-1844" onRunDetailOpenChange={setSourceRunDetailOpen} onOpenActivity={openSourceActivity} onOpenGlobalRun={openGlobalRun} onRunDiscovery={runDiscovery} onOpenGovernanceProposals={openRunCandidates} onNotify={showPrototypeToast} />}
-          {view === "overview" && activeWorkbenchTask && activeWorkbenchTask.target !== "source-run" && (activeWorkbenchCandidate ? <section className="view view-overview governance-detail-view workbench-detail-view"><GovernanceCandidateDetail candidate={activeWorkbenchCandidate} publishedRelease={publishedRelease?.originProposalId === activeWorkbenchCandidate.proposal.id ? publishedRelease : null} onReview={() => setReviewing(activeWorkbenchCandidate)} onPublish={() => setPublishing(activeWorkbenchCandidate)} /></section> : <section className="view view-overview governance-detail-view workbench-detail-view"><div className="governance-load-error" role="status"><CircleAlert size={18} /><span><strong>候选版本在当前工作区不可用</strong>该待办引用的候选版本不存在于治理提案列表中。</span></div></section>)}
-          {view === "assets" && <AssetsView key={assetTabRequestEpoch} selectedId={selectedAssetId} domainFilter="全部" requestedTab={assetTabRequest} requestedDetail={assetDetailRequest} requestedCatalogType={assetCatalogTypeRequest} requestedRevision={knowledgeRevisionRequest} focusSearchRequestEpoch={assetSearchRequestEpoch} detailBackRequestEpoch={assetDetailBackRequestEpoch} onSelect={rememberAsset} onDetailChange={setAssetDetailRequest} onNotify={showPrototypeToast} onRevisionSubmit={submitKnowledgeRevision} onStartAIGeneration={(assetId, fieldPath) => setAiGenerationRequest({ assetId, fieldPath })} />}
-          {view === "releases" && <ReleasesView key={versionDetailRequest.epoch} initialSelectedKey={versionDetailRequest.key} initialSourceRun={versionSourceRun} detailBackRequestEpoch={releaseDetailBackRequestEpoch} rollbackNotice={rollbackNotice} onDetailOpenChange={setReleaseDetailOpen} onReview={setReviewing} onPublish={setPublishing} onRollback={(releaseId) => void handleRollback(releaseId)} onAssembleBatches={() => void handleAssembleBatches()} onConfirmBatch={setConfirmingBatch} />}
-          {view === "settings" && <SettingsView focusIndex={contextIndex} rebuildRun={embeddingRebuildRun} auditRunRequestId={auditRunRequestId} onAuditRunRequestHandled={handleAuditRunRequest} onStartEmbeddingRebuild={startEmbeddingRebuild} onOpenRebuildRun={openEmbeddingRebuildRun} onNotify={showPrototypeToast} />}
+          <SessionAuthorizationNotice />
+
+          {(view === "settings") && contextIndex === 2 && <SurfaceBoundaryNotice title="持久化索引" detail="重建使用已发布知识与固定模型配置；完整校验后生效，失败或取消保留当前索引。" />}
+          {view === "ask" && <AskView key={`${askSessionKey}-${contextIndex}`} workspaceId={workspaceId} onOpenEvidence={openAssetEvidence} onStartRevision={(assetId, fieldPath, context) => { const target = assets.find((asset) => asset.id === assetId) ?? assets[0]; if (target) openKnowledgeRevision({ assetId: target.id, fieldPath, origin: "ask", context }); }} />}
+          {view === "sources" && ((<LiveSourcesView navigationEpoch={contextSelectionEpoch} focusIndex={contextIndex} runDetailBackRequestEpoch={sourceRunBackRequestEpoch} initialRunId={sourceInitialRunId} initialSourceId={sourceInitialSourceId} onRunDetailOpenChange={setSourceRunDetailOpen} onOpenProposal={openCandidateVersionById} />))}
+          {view === "overview" && compatibilityTarget && <CompatibilityImpactView workspaceId={workspaceId} consumerId={compatibilityTarget.consumerId} bindingId={compatibilityTarget.bindingId} queryId={compatibilityTarget.queryId} />}
+          {view === "overview" && !compatibilityTarget && !workbench.selectedItemId && <OverviewView onOpenTask={openWorkbenchItem} focusSearchRequestEpoch={workbenchSearchRequestEpoch} />}
+          {view === "overview" && !compatibilityTarget && workbench.selectedItemId && <WorkbenchDetailView onOpenTarget={openWorkbenchTarget} />}
+          {view === "assets" && <AssetsView key={assetTabRequestEpoch} selectedId={selectedAssetId} domainFilter="全部" requestedTab={assetTabRequest} requestedDetail={assetDetailRequest} requestedCatalogType={assetCatalogTypeRequest} requestedRevision={knowledgeRevisionRequest} focusSearchRequestEpoch={assetSearchRequestEpoch} detailBackRequestEpoch={assetDetailBackRequestEpoch} onSelect={rememberAsset} onDetailChange={setAssetDetailRequest} onNotify={showToast} onRevisionSubmit={submitKnowledgeRevision} onStartAIGeneration={(assetId, fieldPath) => setAiGenerationRequest({ assetId, fieldPath })} />}
+          {(view === "releases" && contextIndex === 1) && <SemanticProductionWorkspace key={`${workspaceId}:${session?.principalId}:${session?.version}:${contextSelectionEpoch}`} operationId={productionId} onOpenProposal={openCandidateVersionById} onOpenAsset={openAssetDetail} onOperationSelected={(id, releaseId) => writeProductRoute(id ? `/governance?production=${encodeURIComponent(id)}${releaseId ? `&productionRelease=${encodeURIComponent(releaseId)}` : ""}` : "/governance?productionList=1", true)} />}
+          {view === "releases" && ((contextIndex !== 1)) && <ReleasesView key={versionDetailRequest.epoch} initialSelectedKey={versionDetailRequest.key} initialSourceRun={versionSourceRun} detailBackRequestEpoch={releaseDetailBackRequestEpoch} rollbackNotice={rollbackNotice} onDetailOpenChange={setReleaseDetailOpen} onReview={setReviewing} onPublish={setPublishing} onRollback={(releaseId) => void handleRollback(releaseId)} onAssembleBatches={() => void handleAssembleBatches()} onConfirmBatch={setConfirmingBatch} />}
+          {view === "settings" && <SettingsView key={`${workspaceId}:${session?.principalId}:${session?.version}`} workspaceId={workspaceId}  authorizationVersion={session?.version} focusIndex={contextIndex} auditRunRequestId={auditRunRequestId} onAuditRunRequestHandled={handleAuditRunRequest} onNotify={showToast} />}
         </main>
       </div>
       {reviewing && <ReviewDialog candidate={reviewing} onClose={() => setReviewing(null)} onDecided={handleReviewDecided} />}
@@ -2362,7 +2792,7 @@ function ProductApplication({ session }: { session?: CapabilitySession }) {
       {aiGenerationRequest && (() => {
         const asset = assets.find((item) => item.id === aiGenerationRequest.assetId);
         if (!asset) return null;
-        return <AIProposalDialog asset={asset} fieldPath={aiGenerationRequest.fieldPath} onClose={() => setAiGenerationRequest(null)} onOpenModelSettings={() => { setAiGenerationRequest(null); navigate("settings", 2); }} onProposalSubmitted={(submitted) => { setAiGenerationRequest(null); openCandidateVersionById(submitted.id); showPrototypeToast(`AI 提案 ${submitted.id} 已提交，治理验证运行中。`); }} />;
+        return <AIProposalDialog asset={asset} fieldPath={aiGenerationRequest.fieldPath} onClose={() => setAiGenerationRequest(null)} onOpenModelSettings={() => { setAiGenerationRequest(null); navigate("settings", 2); }} onProposalSubmitted={(submitted) => { setAiGenerationRequest(null); openCandidateVersionById(submitted.id); showToast(`AI 提案 ${submitted.id} 已提交，治理验证运行中。`); }} />;
       })()}
       {commandOpen && <CommandPalette proposals={commandProposals} onClose={() => setCommandOpen(false)} onNavigate={navigate} onSelectAsset={openAssetDetail} onSelectProposal={(id) => { openCandidateVersionById(id); }} onCreateProposal={() => setCreatingProposal(true)} />}
       {toast && <div className="toast" role="status"><CheckCircle2 size={17} /><span>{toast}</span></div>}

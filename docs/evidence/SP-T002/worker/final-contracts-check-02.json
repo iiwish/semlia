@@ -1,0 +1,18 @@
+{
+  "command": [
+    "make",
+    "contracts-check"
+  ],
+  "clearedEnvironment": [
+    "SEMLIA_INGESTION_TEST_DATABASE_URL",
+    "SEMLIA_EXECUTION_CRASH_HELPER",
+    "SEMLIA_EXECUTION_TEST_DB",
+    "SEMLIA_DATABASE_URL"
+  ],
+  "start": "2026-09-09T07:11:27.524Z",
+  "end": "2026-09-09T07:11:29.061Z",
+  "exitStatus": 0,
+  "signal": null,
+  "stdout": "✨ openapi-typescript 7.13.0\n🚀 /workspace/api/openapi/semlia.v1.yaml → /var/folders/my/cfl1vvhj0jgdz48pmvgc27lw0000gn/T//semlia-contracts.Kpw4bMOj/schema.gen.ts [191.7ms]\n",
+  "stderr": ""
+}

@@ -1,0 +1,8 @@
+{
+  "Replace": {
+    "/workspace/internal/adapters/discovery/postgresql/adapter_test.go": "/workspace/docs/evidence/SP-T002/pm/long-path/probe_test.go.txt",
+    "/workspace/internal/adapters/discovery/postgresql/adapter.go": "/workspace/.semlia/evidence-work/SP-T002-baseline/internal/adapters/discovery/postgresql/adapter.go",
+    "/workspace/internal/domain/discovery/model.go": "/workspace/.semlia/evidence-work/SP-T002-baseline/internal/domain/discovery/model.go",
+    "/workspace/internal/domain/discovery/snapshot.go": "/workspace/docs/evidence/SP-T002/pm/long-path/empty_snapshot.go.txt"
+  }
+}

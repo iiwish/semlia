@@ -1,0 +1,75 @@
+{
+  "baseline_archive": ".semlia/evidence-work/SP-T003-A002-baseline.tar",
+  "files": [
+    {
+      "path": "internal/application/governance/production.go",
+      "baseline_sha256": "6c669ee11b440ba273eba9f56950507ef736f7351f3154e402b06c4d9345a2d4",
+      "current_sha256": "c9578e02dcd1c35d92f50e0c8643adfe8e66d04296731d0a87544c3d0b88b08d"
+    },
+    {
+      "path": "internal/application/governance/production_history.go",
+      "baseline_sha256": null,
+      "current_sha256": "154e121f4518bfe9b4f4c1720b736ac54ac5fce0fde6f665282ef4855b31a2cc"
+    },
+    {
+      "path": "internal/application/governance/production_test.go",
+      "baseline_sha256": "afea391dd044dd98b84f4830df777c34a675603351eb6d52a68fb4552732639c",
+      "current_sha256": "8db9326804099a2302b052e796f765efe70c2ffd8aacfdb0dbbcad75ce5315e6"
+    },
+    {
+      "path": "internal/domain/governance/production.go",
+      "baseline_sha256": "74c54e69fee8394a1af736c6eacb291703d8f252dfb06f8b855aaf9f895ef641",
+      "current_sha256": "4423cdea262b3503474c7769fc4cd7b8939ac86d406e41da94c14a7658ece34e"
+    },
+    {
+      "path": "internal/domain/governance/production_authoring_test.go",
+      "baseline_sha256": null,
+      "current_sha256": "d4d4a5fb332fa98dc983e50180693901ce706056c04d58bf6e6abc22c36fec0c"
+    },
+    {
+      "path": "internal/adapters/postgres/semantic_production.go",
+      "baseline_sha256": "a8d251ad5889a7f3d0689670c07477c17791230727b310f2e5a7669a20d4d0ff",
+      "current_sha256": "fcfe780cb9814c7d83879811031d670aabe04f185ebe9759df3bf5a5852d34f5"
+    },
+    {
+      "path": "internal/adapters/postgres/production_authoring.go",
+      "baseline_sha256": null,
+      "current_sha256": "16889775819ee8519867667f96027cc0cbd43c0c86c763562d27af1c3fca1280"
+    },
+    {
+      "path": "internal/adapters/postgres/production_input.go",
+      "baseline_sha256": null,
+      "current_sha256": "d36333e7f8c806851ccea7f0d7790e919fffd868b7159e3559ace24b22cd02fd"
+    },
+    {
+      "path": "internal/platform/http/semantic_production.go",
+      "baseline_sha256": "f036a7e4374738baf8fd7f81ab5cd596e56c8a5e4cb57f81ed32051307ea6b94",
+      "current_sha256": "399cdc0603f6d6fcdbd86daa8ff5db9f57f495e1d4c474c61523fbd8810479f1"
+    },
+    {
+      "path": "internal/platform/http/semantic_production_test.go",
+      "baseline_sha256": "c48c3626ab7e094e7768df6cfa914301131ed69e0db6f27ab977dc384ef01a66",
+      "current_sha256": "91e7a6844cfe719a07e772b50d4eecd796be77989694a92f88f8f8b9976a1fb9"
+    },
+    {
+      "path": "tests/integration/governance/production_authoring_test.go",
+      "baseline_sha256": "87df1a92924c4c6912424e95c2d593531598132be466b4f5e1559c08f6be042c",
+      "current_sha256": "8af51518cb035e61fb0a5db0b150992196e04ed83f23119bfae3fc8233a865ba"
+    },
+    {
+      "path": "tests/integration/governance/production_authoring_regression_test.go",
+      "baseline_sha256": null,
+      "current_sha256": "efe6a1a229723982a07c3aa34181b9dd823c059401a0dd731ab8f9a250a7726a"
+    },
+    {
+      "path": "tests/integration/governance/production_authoring_fixture_test.go",
+      "baseline_sha256": null,
+      "current_sha256": "d3dfa5d007ec9b8d5f268f52013fa5793612fc3da1292fb935f27cbc4a05d884"
+    },
+    {
+      "path": "tests/integration/governance/production_release_test.go",
+      "baseline_sha256": "820ca0ee12ee7dff936c1a59b98d817785b607311ad2f3cf7906eddf7c65a912",
+      "current_sha256": "36276f18cb5ee67cfd628f8304b193672ba951e7ac8f593bec342a85debfc5c6"
+    }
+  ]
+}

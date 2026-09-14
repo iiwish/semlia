@@ -370,6 +370,9 @@ func (handler *ValidationJobHandler) Handle(ctx context.Context, job jobs.Job) e
 	if err := json.Unmarshal(job.Payload, &payload); err != nil {
 		return fmt.Errorf("decode validation job payload: %w", err)
 	}
+	if payload.OperationID != "" {
+		return handler.handleProduction(ctx, job, payload)
+	}
 	proposalID, err := identity.ParseProposalID(payload.ProposalID)
 	if err != nil {
 		return fmt.Errorf("parse validation job proposal: %w", err)

@@ -194,4 +194,13 @@ type Release struct {
 	CreatedAt             time.Time
 	Entries               []ManifestEntry
 	Objects               []ObjectManifestEntry
+
+	// Production protection extensions (SP-T004)
+	ProductionRootReleaseID    *identity.ReleaseID
+	ProductionRollbackParentID *identity.ReleaseID
+	ProductionRollbackDepth    *int
+}
+
+func (r Release) IsProductionProtected() bool {
+	return r.ProductionRootReleaseID != nil
 }

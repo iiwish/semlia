@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Release inputs do not include a caller's external workspace or Go settings.
+export GOWORK=off GOENV=off GOFLAGS='' GOTOOLCHAIN=local
+
 readonly ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 readonly GO_COMMAND="${GO:-go}"
 readonly SEMLIA_VERSION="${SEMLIA_VERSION:-0.0.0-dev}"
@@ -26,25 +29,45 @@ if [[ "${TARGET_OS}" == "windows" ]]; then
 fi
 
 bundle="semlia-${SEMLIA_VERSION}-${TARGET_OS}-${TARGET_ARCH}"
-staging_root="${OUTPUT_DIR}/staging"
+mkdir -p "${OUTPUT_DIR}/staging"
+staging_root="$(mktemp -d "${OUTPUT_DIR}/staging/run.XXXXXX")"
 staging="${staging_root}/${bundle}"
 archive="${OUTPUT_DIR}/${bundle}.tar.gz"
 external_sbom="${OUTPUT_DIR}/${bundle}.sbom.cdx.json"
 
-rm -rf "${staging}"
 mkdir -p "${staging}/migrations" "${OUTPUT_DIR}"
 
 cd "${ROOT}"
+required_toolchain="$("${GO_COMMAND}" mod edit -json | node -e 'let input=""; process.stdin.on("data", chunk => input += chunk); process.stdin.on("end", () => { const version = JSON.parse(input).Toolchain; if (!version) process.exit(1); process.stdout.write(version); });')"
+if [[ "$("${GO_COMMAND}" env GOVERSION)" != "${required_toolchain}" ]]; then
+  printf 'Release requires %s; select its go executable with GO=/path/to/go.\n' "${required_toolchain}" >&2
+  exit 1
+fi
+"${ROOT}/scripts/dev/sync-web.sh"
+source_digest="$(CGO_ENABLED=0 GOOS="${HOST_OS}" GOARCH="${HOST_ARCH}" "${GO_COMMAND}" run ./scripts/release/manifest.go fingerprint -root "${ROOT}")"
+source_dirty=false
+if [[ -n "$(git status --porcelain --untracked-files=normal)" ]]; then source_dirty=true; fi
 CGO_ENABLED=0 GOOS="${TARGET_OS}" GOARCH="${TARGET_ARCH}" \
-  "${GO_COMMAND}" build -trimpath -ldflags="-s -w" -o "${staging}/${executable}" ./cmd/semlia
+  "${GO_COMMAND}" build -trimpath -ldflags="-s -w -X github.com/iiwish/semlia/internal/platform/config.DefaultBuildVersion=${SEMLIA_VERSION}" -o "${staging}/${executable}" ./cmd/semlia
 cp migrations/*.sql "${staging}/migrations/"
 cp LICENSE NOTICE docs/SECURITY.md "${staging}/"
+# The embedded frontend graph is not recoverable from a Go executable scan.
+mkdir -p "${staging}/dependency-inputs/web" "${staging}/dependency-inputs/sdk/typescript"
+cp pnpm-lock.yaml pnpm-workspace.yaml package.json "${staging}/dependency-inputs/"
+cp web/package.json "${staging}/dependency-inputs/web/"
+cp sdk/typescript/package.json "${staging}/dependency-inputs/sdk/typescript/"
+if [[ "${source_digest}" != "$(CGO_ENABLED=0 GOOS="${HOST_OS}" GOARCH="${HOST_ARCH}" "${GO_COMMAND}" run ./scripts/release/manifest.go fingerprint -root "${ROOT}")" ]]; then
+  printf 'Build inputs changed during compilation; candidate aborted.\n' >&2
+  exit 1
+fi
 
 CGO_ENABLED=0 GOOS="${HOST_OS}" GOARCH="${HOST_ARCH}" \
   "${GO_COMMAND}" run ./scripts/release/manifest.go manifest \
   -output "${staging}/release.json" \
   -version "${SEMLIA_VERSION}" \
   -commit "${SEMLIA_COMMIT}" \
+  -source-digest "${source_digest}" \
+  -source-dirty="${source_dirty}" \
   -os "${TARGET_OS}" \
   -arch "${TARGET_ARCH}" \
   -executable "${executable}"
@@ -54,7 +77,7 @@ CGO_ENABLED=0 GOOS="${HOST_OS}" GOARCH="${HOST_ARCH}" \
   "${staging#"${ROOT}/"}/SBOM.cdx.json"
 cp "${staging}/SBOM.cdx.json" "${external_sbom}"
 
-tar -czf "${archive}" -C "${staging_root}" "${bundle}"
+COPYFILE_DISABLE=1 tar -czf "${archive}" -C "${staging_root}" "${bundle}"
 tar -tzf "${archive}" "${bundle}/release.json" "${bundle}/SBOM.cdx.json" >/dev/null
 
 cd "${OUTPUT_DIR}"

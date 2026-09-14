@@ -5,10 +5,239 @@ package contract
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"time"
 
 	identity "github.com/iiwish/semlia/pkg/identity"
+	"github.com/oapi-codegen/runtime"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
+
+// Defines values for ArtifactContentAvailability.
+const (
+	ArtifactContentAvailabilityAvailable ArtifactContentAvailability = "available"
+	ArtifactContentAvailabilityExpired   ArtifactContentAvailability = "expired"
+	ArtifactContentAvailabilityNotStored ArtifactContentAvailability = "not_stored"
+)
+
+// Valid indicates whether the value is a known member of the ArtifactContentAvailability enum.
+func (e ArtifactContentAvailability) Valid() bool {
+	switch e {
+	case ArtifactContentAvailabilityAvailable:
+		return true
+	case ArtifactContentAvailabilityExpired:
+		return true
+	case ArtifactContentAvailabilityNotStored:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ArtifactKind.
+const (
+	ArtifactKindCsv         ArtifactKind = "csv"
+	ArtifactKindDbtCatalog  ArtifactKind = "dbt_catalog"
+	ArtifactKindDbtManifest ArtifactKind = "dbt_manifest"
+	ArtifactKindMarkdown    ArtifactKind = "markdown"
+	ArtifactKindSql         ArtifactKind = "sql"
+	ArtifactKindXlsx        ArtifactKind = "xlsx"
+)
+
+// Valid indicates whether the value is a known member of the ArtifactKind enum.
+func (e ArtifactKind) Valid() bool {
+	switch e {
+	case ArtifactKindCsv:
+		return true
+	case ArtifactKindDbtCatalog:
+		return true
+	case ArtifactKindDbtManifest:
+		return true
+	case ArtifactKindMarkdown:
+		return true
+	case ArtifactKindSql:
+		return true
+	case ArtifactKindXlsx:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ArtifactSetSourceKind.
+const (
+	ArtifactSetSourceKindDbtBundle ArtifactSetSourceKind = "dbt_bundle"
+	ArtifactSetSourceKindFile      ArtifactSetSourceKind = "file"
+	ArtifactSetSourceKindSqlBundle ArtifactSetSourceKind = "sql_bundle"
+)
+
+// Valid indicates whether the value is a known member of the ArtifactSetSourceKind enum.
+func (e ArtifactSetSourceKind) Valid() bool {
+	switch e {
+	case ArtifactSetSourceKindDbtBundle:
+		return true
+	case ArtifactSetSourceKindFile:
+		return true
+	case ArtifactSetSourceKindSqlBundle:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ArtifactSourceConnectionAdapterKind.
+const (
+	Dbt           ArtifactSourceConnectionAdapterKind = "dbt"
+	FileCatalog   ArtifactSourceConnectionAdapterKind = "file_catalog"
+	PostgresqlSql ArtifactSourceConnectionAdapterKind = "postgresql_sql"
+)
+
+// Valid indicates whether the value is a known member of the ArtifactSourceConnectionAdapterKind enum.
+func (e ArtifactSourceConnectionAdapterKind) Valid() bool {
+	switch e {
+	case Dbt:
+		return true
+	case FileCatalog:
+		return true
+	case PostgresqlSql:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ArtifactSourceConnectionSourceKind.
+const (
+	ArtifactSourceConnectionSourceKindDbtBundle ArtifactSourceConnectionSourceKind = "dbt_bundle"
+	ArtifactSourceConnectionSourceKindFile      ArtifactSourceConnectionSourceKind = "file"
+	ArtifactSourceConnectionSourceKindSqlBundle ArtifactSourceConnectionSourceKind = "sql_bundle"
+)
+
+// Valid indicates whether the value is a known member of the ArtifactSourceConnectionSourceKind enum.
+func (e ArtifactSourceConnectionSourceKind) Valid() bool {
+	switch e {
+	case ArtifactSourceConnectionSourceKindDbtBundle:
+		return true
+	case ArtifactSourceConnectionSourceKindFile:
+		return true
+	case ArtifactSourceConnectionSourceKindSqlBundle:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ArtifactSourceConnectionStatus.
+const (
+	ArtifactSourceConnectionStatusActive  ArtifactSourceConnectionStatus = "active"
+	ArtifactSourceConnectionStatusDeleted ArtifactSourceConnectionStatus = "deleted"
+	ArtifactSourceConnectionStatusPaused  ArtifactSourceConnectionStatus = "paused"
+)
+
+// Valid indicates whether the value is a known member of the ArtifactSourceConnectionStatus enum.
+func (e ArtifactSourceConnectionStatus) Valid() bool {
+	switch e {
+	case ArtifactSourceConnectionStatusActive:
+		return true
+	case ArtifactSourceConnectionStatusDeleted:
+		return true
+	case ArtifactSourceConnectionStatusPaused:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ArtifactStatus.
+const (
+	ArtifactStatusConsumed  ArtifactStatus = "consumed"
+	ArtifactStatusRejected  ArtifactStatus = "rejected"
+	ArtifactStatusUploaded  ArtifactStatus = "uploaded"
+	ArtifactStatusValidated ArtifactStatus = "validated"
+)
+
+// Valid indicates whether the value is a known member of the ArtifactStatus enum.
+func (e ArtifactStatus) Valid() bool {
+	switch e {
+	case ArtifactStatusConsumed:
+		return true
+	case ArtifactStatusRejected:
+		return true
+	case ArtifactStatusUploaded:
+		return true
+	case ArtifactStatusValidated:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AskInterpretationOutcome.
+const (
+	Clarification AskInterpretationOutcome = "clarification"
+	Query         AskInterpretationOutcome = "query"
+)
+
+// Valid indicates whether the value is a known member of the AskInterpretationOutcome enum.
+func (e AskInterpretationOutcome) Valid() bool {
+	switch e {
+	case Clarification:
+		return true
+	case Query:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AskInterpretationSchema.
+const (
+	SemliaAskInterpretationv1 AskInterpretationSchema = "semlia.ask-interpretation/v1"
+)
+
+// Valid indicates whether the value is a known member of the AskInterpretationSchema enum.
+func (e AskInterpretationSchema) Valid() bool {
+	switch e {
+	case SemliaAskInterpretationv1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AssetContentAssetType.
+const (
+	AssetContentAssetTypeConcept       AssetContentAssetType = "concept"
+	AssetContentAssetTypeDimension     AssetContentAssetType = "dimension"
+	AssetContentAssetTypeEntity        AssetContentAssetType = "entity"
+	AssetContentAssetTypeMeasure       AssetContentAssetType = "measure"
+	AssetContentAssetTypeMetric        AssetContentAssetType = "metric"
+	AssetContentAssetTypeSegment       AssetContentAssetType = "segment"
+	AssetContentAssetTypeSemanticModel AssetContentAssetType = "semantic_model"
+)
+
+// Valid indicates whether the value is a known member of the AssetContentAssetType enum.
+func (e AssetContentAssetType) Valid() bool {
+	switch e {
+	case AssetContentAssetTypeConcept:
+		return true
+	case AssetContentAssetTypeDimension:
+		return true
+	case AssetContentAssetTypeEntity:
+		return true
+	case AssetContentAssetTypeMeasure:
+		return true
+	case AssetContentAssetTypeMetric:
+		return true
+	case AssetContentAssetTypeSegment:
+		return true
+	case AssetContentAssetTypeSemanticModel:
+		return true
+	default:
+		return false
+	}
+}
 
 // Defines values for AssetLifecycleState.
 const (
@@ -52,6 +281,909 @@ func (e AssetRelationDirection) Valid() bool {
 	}
 }
 
+// Defines values for AuthorizationAction.
+const (
+	AuthorizationActionAssetEdit            AuthorizationAction = "asset.edit"
+	AuthorizationActionAssetPropose         AuthorizationAction = "asset.propose"
+	AuthorizationActionAssetRead            AuthorizationAction = "asset.read"
+	AuthorizationActionAuditRead            AuthorizationAction = "audit.read"
+	AuthorizationActionAuthorizationInspect AuthorizationAction = "authorization.inspect"
+	AuthorizationActionBindingManage        AuthorizationAction = "binding.manage"
+	AuthorizationActionBindingRead          AuthorizationAction = "binding.read"
+	AuthorizationActionEvidenceRead         AuthorizationAction = "evidence.read"
+	AuthorizationActionGroupManage          AuthorizationAction = "group.manage"
+	AuthorizationActionIngestionRun         AuthorizationAction = "ingestion.run"
+	AuthorizationActionMemberManage         AuthorizationAction = "member.manage"
+	AuthorizationActionMemberRead           AuthorizationAction = "member.read"
+	AuthorizationActionProposalReview       AuthorizationAction = "proposal.review"
+	AuthorizationActionReleasePublish       AuthorizationAction = "release.publish"
+	AuthorizationActionReleaseRollback      AuthorizationAction = "release.rollback"
+	AuthorizationActionRoleAssign           AuthorizationAction = "role.assign"
+	AuthorizationActionRoleManage           AuthorizationAction = "role.manage"
+	AuthorizationActionRoleRead             AuthorizationAction = "role.read"
+	AuthorizationActionRuntimeManage        AuthorizationAction = "runtime.manage"
+	AuthorizationActionRuntimeRead          AuthorizationAction = "runtime.read"
+	AuthorizationActionSemanticExecute      AuthorizationAction = "semantic.execute"
+	AuthorizationActionSemanticResolve      AuthorizationAction = "semantic.resolve"
+	AuthorizationActionSourceManage         AuthorizationAction = "source.manage"
+	AuthorizationActionSourceRead           AuthorizationAction = "source.read"
+	AuthorizationActionValidationRun        AuthorizationAction = "validation.run"
+	AuthorizationActionWorkspaceManage      AuthorizationAction = "workspace.manage"
+	AuthorizationActionWorkspaceRead        AuthorizationAction = "workspace.read"
+)
+
+// Valid indicates whether the value is a known member of the AuthorizationAction enum.
+func (e AuthorizationAction) Valid() bool {
+	switch e {
+	case AuthorizationActionAssetEdit:
+		return true
+	case AuthorizationActionAssetPropose:
+		return true
+	case AuthorizationActionAssetRead:
+		return true
+	case AuthorizationActionAuditRead:
+		return true
+	case AuthorizationActionAuthorizationInspect:
+		return true
+	case AuthorizationActionBindingManage:
+		return true
+	case AuthorizationActionBindingRead:
+		return true
+	case AuthorizationActionEvidenceRead:
+		return true
+	case AuthorizationActionGroupManage:
+		return true
+	case AuthorizationActionIngestionRun:
+		return true
+	case AuthorizationActionMemberManage:
+		return true
+	case AuthorizationActionMemberRead:
+		return true
+	case AuthorizationActionProposalReview:
+		return true
+	case AuthorizationActionReleasePublish:
+		return true
+	case AuthorizationActionReleaseRollback:
+		return true
+	case AuthorizationActionRoleAssign:
+		return true
+	case AuthorizationActionRoleManage:
+		return true
+	case AuthorizationActionRoleRead:
+		return true
+	case AuthorizationActionRuntimeManage:
+		return true
+	case AuthorizationActionRuntimeRead:
+		return true
+	case AuthorizationActionSemanticExecute:
+		return true
+	case AuthorizationActionSemanticResolve:
+		return true
+	case AuthorizationActionSourceManage:
+		return true
+	case AuthorizationActionSourceRead:
+		return true
+	case AuthorizationActionValidationRun:
+		return true
+	case AuthorizationActionWorkspaceManage:
+		return true
+	case AuthorizationActionWorkspaceRead:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AuthorizationDecisionReasonCode.
+const (
+	NOMATCHINGGRANT   AuthorizationDecisionReasonCode = "NO_MATCHING_GRANT"
+	PRINCIPALINACTIVE AuthorizationDecisionReasonCode = "PRINCIPAL_INACTIVE"
+	ROLEGRANT         AuthorizationDecisionReasonCode = "ROLE_GRANT"
+	SEPARATIONOFDUTY  AuthorizationDecisionReasonCode = "SEPARATION_OF_DUTY"
+	SESSIONCAPABILITY AuthorizationDecisionReasonCode = "SESSION_CAPABILITY"
+)
+
+// Valid indicates whether the value is a known member of the AuthorizationDecisionReasonCode enum.
+func (e AuthorizationDecisionReasonCode) Valid() bool {
+	switch e {
+	case NOMATCHINGGRANT:
+		return true
+	case PRINCIPALINACTIVE:
+		return true
+	case ROLEGRANT:
+		return true
+	case SEPARATIONOFDUTY:
+		return true
+	case SESSIONCAPABILITY:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AuthorizationRoleCategory.
+const (
+	AuthorizationRoleCategoryCustom AuthorizationRoleCategory = "custom"
+	AuthorizationRoleCategorySystem AuthorizationRoleCategory = "system"
+)
+
+// Valid indicates whether the value is a known member of the AuthorizationRoleCategory enum.
+func (e AuthorizationRoleCategory) Valid() bool {
+	switch e {
+	case AuthorizationRoleCategoryCustom:
+		return true
+	case AuthorizationRoleCategorySystem:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AuthorizationRoleBindingStatus.
+const (
+	AuthorizationRoleBindingStatusActive  AuthorizationRoleBindingStatus = "active"
+	AuthorizationRoleBindingStatusExpired AuthorizationRoleBindingStatus = "expired"
+	AuthorizationRoleBindingStatusRevoked AuthorizationRoleBindingStatus = "revoked"
+)
+
+// Valid indicates whether the value is a known member of the AuthorizationRoleBindingStatus enum.
+func (e AuthorizationRoleBindingStatus) Valid() bool {
+	switch e {
+	case AuthorizationRoleBindingStatusActive:
+		return true
+	case AuthorizationRoleBindingStatusExpired:
+		return true
+	case AuthorizationRoleBindingStatusRevoked:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AuthorizationScopeType.
+const (
+	AuthorizationScopeTypeAsset       AuthorizationScopeType = "asset"
+	AuthorizationScopeTypeConsumer    AuthorizationScopeType = "consumer"
+	AuthorizationScopeTypeDomain      AuthorizationScopeType = "domain"
+	AuthorizationScopeTypeEnvironment AuthorizationScopeType = "environment"
+	AuthorizationScopeTypeRelease     AuthorizationScopeType = "release"
+	AuthorizationScopeTypeSource      AuthorizationScopeType = "source"
+	AuthorizationScopeTypeWorkspace   AuthorizationScopeType = "workspace"
+)
+
+// Valid indicates whether the value is a known member of the AuthorizationScopeType enum.
+func (e AuthorizationScopeType) Valid() bool {
+	switch e {
+	case AuthorizationScopeTypeAsset:
+		return true
+	case AuthorizationScopeTypeConsumer:
+		return true
+	case AuthorizationScopeTypeDomain:
+		return true
+	case AuthorizationScopeTypeEnvironment:
+		return true
+	case AuthorizationScopeTypeRelease:
+		return true
+	case AuthorizationScopeTypeSource:
+		return true
+	case AuthorizationScopeTypeWorkspace:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for BeforePin0Presence.
+const (
+	BeforePin0PresenceAbsent BeforePin0Presence = "absent"
+)
+
+// Valid indicates whether the value is a known member of the BeforePin0Presence enum.
+func (e BeforePin0Presence) Valid() bool {
+	switch e {
+	case BeforePin0PresenceAbsent:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for BeforePin1Kind.
+const (
+	BeforePin1KindSemanticAsset BeforePin1Kind = "semantic_asset"
+)
+
+// Valid indicates whether the value is a known member of the BeforePin1Kind enum.
+func (e BeforePin1Kind) Valid() bool {
+	switch e {
+	case BeforePin1KindSemanticAsset:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for BeforePin1Presence.
+const (
+	BeforePin1PresencePresent BeforePin1Presence = "present"
+)
+
+// Valid indicates whether the value is a known member of the BeforePin1Presence enum.
+func (e BeforePin1Presence) Valid() bool {
+	switch e {
+	case BeforePin1PresencePresent:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for BeforePin2Presence.
+const (
+	BeforePin2PresencePresent BeforePin2Presence = "present"
+)
+
+// Valid indicates whether the value is a known member of the BeforePin2Presence enum.
+func (e BeforePin2Presence) Valid() bool {
+	switch e {
+	case BeforePin2PresencePresent:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CatalogAuthorityAvailability.
+const (
+	CatalogAuthorityAvailabilityAvailable     CatalogAuthorityAvailability = "available"
+	CatalogAuthorityAvailabilityFailed        CatalogAuthorityAvailability = "failed"
+	CatalogAuthorityAvailabilityForbidden     CatalogAuthorityAvailability = "forbidden"
+	CatalogAuthorityAvailabilityNotConfigured CatalogAuthorityAvailability = "not_configured"
+	CatalogAuthorityAvailabilityNotReleased   CatalogAuthorityAvailability = "not_released"
+)
+
+// Valid indicates whether the value is a known member of the CatalogAuthorityAvailability enum.
+func (e CatalogAuthorityAvailability) Valid() bool {
+	switch e {
+	case CatalogAuthorityAvailabilityAvailable:
+		return true
+	case CatalogAuthorityAvailabilityFailed:
+		return true
+	case CatalogAuthorityAvailabilityForbidden:
+		return true
+	case CatalogAuthorityAvailabilityNotConfigured:
+		return true
+	case CatalogAuthorityAvailabilityNotReleased:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CatalogAuthorityRecordKind.
+const (
+	CatalogAuthorityRecordKindConsumerBinding CatalogAuthorityRecordKind = "consumer_binding"
+	CatalogAuthorityRecordKindEntityKey       CatalogAuthorityRecordKind = "entity_key"
+	CatalogAuthorityRecordKindJoinContract    CatalogAuthorityRecordKind = "join_contract"
+	CatalogAuthorityRecordKindLineage         CatalogAuthorityRecordKind = "lineage"
+	CatalogAuthorityRecordKindModelGrain      CatalogAuthorityRecordKind = "model_grain"
+	CatalogAuthorityRecordKindPhysicalBinding CatalogAuthorityRecordKind = "physical_binding"
+	CatalogAuthorityRecordKindRelation        CatalogAuthorityRecordKind = "relation"
+	CatalogAuthorityRecordKindValidationRun   CatalogAuthorityRecordKind = "validation_run"
+)
+
+// Valid indicates whether the value is a known member of the CatalogAuthorityRecordKind enum.
+func (e CatalogAuthorityRecordKind) Valid() bool {
+	switch e {
+	case CatalogAuthorityRecordKindConsumerBinding:
+		return true
+	case CatalogAuthorityRecordKindEntityKey:
+		return true
+	case CatalogAuthorityRecordKindJoinContract:
+		return true
+	case CatalogAuthorityRecordKindLineage:
+		return true
+	case CatalogAuthorityRecordKindModelGrain:
+		return true
+	case CatalogAuthorityRecordKindPhysicalBinding:
+		return true
+	case CatalogAuthorityRecordKindRelation:
+		return true
+	case CatalogAuthorityRecordKindValidationRun:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CatalogAuthoritySectionKind.
+const (
+	CatalogAuthoritySectionKindConsumerImpact   CatalogAuthoritySectionKind = "consumer_impact"
+	CatalogAuthoritySectionKindDefinition       CatalogAuthoritySectionKind = "definition"
+	CatalogAuthoritySectionKindEvidence         CatalogAuthoritySectionKind = "evidence"
+	CatalogAuthoritySectionKindJoinContracts    CatalogAuthoritySectionKind = "join_contracts"
+	CatalogAuthoritySectionKindLineage          CatalogAuthoritySectionKind = "lineage"
+	CatalogAuthoritySectionKindPhysicalBindings CatalogAuthoritySectionKind = "physical_bindings"
+	CatalogAuthoritySectionKindRelations        CatalogAuthoritySectionKind = "relations"
+	CatalogAuthoritySectionKindReleasedState    CatalogAuthoritySectionKind = "released_state"
+	CatalogAuthoritySectionKindTrust            CatalogAuthoritySectionKind = "trust"
+	CatalogAuthoritySectionKindValidation       CatalogAuthoritySectionKind = "validation"
+)
+
+// Valid indicates whether the value is a known member of the CatalogAuthoritySectionKind enum.
+func (e CatalogAuthoritySectionKind) Valid() bool {
+	switch e {
+	case CatalogAuthoritySectionKindConsumerImpact:
+		return true
+	case CatalogAuthoritySectionKindDefinition:
+		return true
+	case CatalogAuthoritySectionKindEvidence:
+		return true
+	case CatalogAuthoritySectionKindJoinContracts:
+		return true
+	case CatalogAuthoritySectionKindLineage:
+		return true
+	case CatalogAuthoritySectionKindPhysicalBindings:
+		return true
+	case CatalogAuthoritySectionKindRelations:
+		return true
+	case CatalogAuthoritySectionKindReleasedState:
+		return true
+	case CatalogAuthoritySectionKindTrust:
+		return true
+	case CatalogAuthoritySectionKindValidation:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CatalogConsumerBindingAuthorityMode.
+const (
+	CatalogConsumerBindingAuthorityModeCurrent CatalogConsumerBindingAuthorityMode = "current"
+	CatalogConsumerBindingAuthorityModePinned  CatalogConsumerBindingAuthorityMode = "pinned"
+)
+
+// Valid indicates whether the value is a known member of the CatalogConsumerBindingAuthorityMode enum.
+func (e CatalogConsumerBindingAuthorityMode) Valid() bool {
+	switch e {
+	case CatalogConsumerBindingAuthorityModeCurrent:
+		return true
+	case CatalogConsumerBindingAuthorityModePinned:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CatalogConsumerBindingAuthorityStatus.
+const (
+	CatalogConsumerBindingAuthorityStatusActive    CatalogConsumerBindingAuthorityStatus = "active"
+	CatalogConsumerBindingAuthorityStatusRevoked   CatalogConsumerBindingAuthorityStatus = "revoked"
+	CatalogConsumerBindingAuthorityStatusSuspended CatalogConsumerBindingAuthorityStatus = "suspended"
+)
+
+// Valid indicates whether the value is a known member of the CatalogConsumerBindingAuthorityStatus enum.
+func (e CatalogConsumerBindingAuthorityStatus) Valid() bool {
+	switch e {
+	case CatalogConsumerBindingAuthorityStatusActive:
+		return true
+	case CatalogConsumerBindingAuthorityStatusRevoked:
+		return true
+	case CatalogConsumerBindingAuthorityStatusSuspended:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CatalogEntityKeyAuthorityUniquenessSemantics.
+const (
+	CatalogEntityKeyAuthorityUniquenessSemanticsDeduplicated CatalogEntityKeyAuthorityUniquenessSemantics = "deduplicated"
+	CatalogEntityKeyAuthorityUniquenessSemanticsExact        CatalogEntityKeyAuthorityUniquenessSemantics = "exact"
+)
+
+// Valid indicates whether the value is a known member of the CatalogEntityKeyAuthorityUniquenessSemantics enum.
+func (e CatalogEntityKeyAuthorityUniquenessSemantics) Valid() bool {
+	switch e {
+	case CatalogEntityKeyAuthorityUniquenessSemanticsDeduplicated:
+		return true
+	case CatalogEntityKeyAuthorityUniquenessSemanticsExact:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CatalogJoinContractAuthorityCardinality.
+const (
+	CatalogJoinContractAuthorityCardinalityManyToMany CatalogJoinContractAuthorityCardinality = "many_to_many"
+	CatalogJoinContractAuthorityCardinalityManyToOne  CatalogJoinContractAuthorityCardinality = "many_to_one"
+	CatalogJoinContractAuthorityCardinalityOneToMany  CatalogJoinContractAuthorityCardinality = "one_to_many"
+	CatalogJoinContractAuthorityCardinalityOneToOne   CatalogJoinContractAuthorityCardinality = "one_to_one"
+)
+
+// Valid indicates whether the value is a known member of the CatalogJoinContractAuthorityCardinality enum.
+func (e CatalogJoinContractAuthorityCardinality) Valid() bool {
+	switch e {
+	case CatalogJoinContractAuthorityCardinalityManyToMany:
+		return true
+	case CatalogJoinContractAuthorityCardinalityManyToOne:
+		return true
+	case CatalogJoinContractAuthorityCardinalityOneToMany:
+		return true
+	case CatalogJoinContractAuthorityCardinalityOneToOne:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CatalogJoinContractAuthorityDirection.
+const (
+	CatalogJoinContractAuthorityDirectionBoth     CatalogJoinContractAuthorityDirection = "both"
+	CatalogJoinContractAuthorityDirectionIncoming CatalogJoinContractAuthorityDirection = "incoming"
+	CatalogJoinContractAuthorityDirectionOutgoing CatalogJoinContractAuthorityDirection = "outgoing"
+)
+
+// Valid indicates whether the value is a known member of the CatalogJoinContractAuthorityDirection enum.
+func (e CatalogJoinContractAuthorityDirection) Valid() bool {
+	switch e {
+	case CatalogJoinContractAuthorityDirectionBoth:
+		return true
+	case CatalogJoinContractAuthorityDirectionIncoming:
+		return true
+	case CatalogJoinContractAuthorityDirectionOutgoing:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CatalogJoinContractAuthorityJoinType.
+const (
+	CatalogJoinContractAuthorityJoinTypeFull  CatalogJoinContractAuthorityJoinType = "full"
+	CatalogJoinContractAuthorityJoinTypeInner CatalogJoinContractAuthorityJoinType = "inner"
+	CatalogJoinContractAuthorityJoinTypeLeft  CatalogJoinContractAuthorityJoinType = "left"
+	CatalogJoinContractAuthorityJoinTypeRight CatalogJoinContractAuthorityJoinType = "right"
+)
+
+// Valid indicates whether the value is a known member of the CatalogJoinContractAuthorityJoinType enum.
+func (e CatalogJoinContractAuthorityJoinType) Valid() bool {
+	switch e {
+	case CatalogJoinContractAuthorityJoinTypeFull:
+		return true
+	case CatalogJoinContractAuthorityJoinTypeInner:
+		return true
+	case CatalogJoinContractAuthorityJoinTypeLeft:
+		return true
+	case CatalogJoinContractAuthorityJoinTypeRight:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CatalogLineageAuthorityDirection.
+const (
+	CatalogLineageAuthorityDirectionIncoming CatalogLineageAuthorityDirection = "incoming"
+	CatalogLineageAuthorityDirectionOutgoing CatalogLineageAuthorityDirection = "outgoing"
+)
+
+// Valid indicates whether the value is a known member of the CatalogLineageAuthorityDirection enum.
+func (e CatalogLineageAuthorityDirection) Valid() bool {
+	switch e {
+	case CatalogLineageAuthorityDirectionIncoming:
+		return true
+	case CatalogLineageAuthorityDirectionOutgoing:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CatalogLineageAuthorityEdgeKind.
+const (
+	CatalogLineageAuthorityEdgeKindDerivedFrom CatalogLineageAuthorityEdgeKind = "derived_from"
+	CatalogLineageAuthorityEdgeKindReadsFrom   CatalogLineageAuthorityEdgeKind = "reads_from"
+	CatalogLineageAuthorityEdgeKindWritesTo    CatalogLineageAuthorityEdgeKind = "writes_to"
+)
+
+// Valid indicates whether the value is a known member of the CatalogLineageAuthorityEdgeKind enum.
+func (e CatalogLineageAuthorityEdgeKind) Valid() bool {
+	switch e {
+	case CatalogLineageAuthorityEdgeKindDerivedFrom:
+		return true
+	case CatalogLineageAuthorityEdgeKindReadsFrom:
+		return true
+	case CatalogLineageAuthorityEdgeKindWritesTo:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CatalogRelationAuthorityDirection.
+const (
+	CatalogRelationAuthorityDirectionIncoming CatalogRelationAuthorityDirection = "incoming"
+	CatalogRelationAuthorityDirectionOutgoing CatalogRelationAuthorityDirection = "outgoing"
+)
+
+// Valid indicates whether the value is a known member of the CatalogRelationAuthorityDirection enum.
+func (e CatalogRelationAuthorityDirection) Valid() bool {
+	switch e {
+	case CatalogRelationAuthorityDirectionIncoming:
+		return true
+	case CatalogRelationAuthorityDirectionOutgoing:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for Change0Op.
+const (
+	Change0OpAdd Change0Op = "add"
+)
+
+// Valid indicates whether the value is a known member of the Change0Op enum.
+func (e Change0Op) Valid() bool {
+	switch e {
+	case Change0OpAdd:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for Change1Op.
+const (
+	Change1OpUpdate Change1Op = "update"
+)
+
+// Valid indicates whether the value is a known member of the Change1Op enum.
+func (e Change1Op) Valid() bool {
+	switch e {
+	case Change1OpUpdate:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for Change2Op.
+const (
+	Change2OpRemove Change2Op = "remove"
+)
+
+// Valid indicates whether the value is a known member of the Change2Op enum.
+func (e Change2Op) Valid() bool {
+	switch e {
+	case Change2OpRemove:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ClientCredentialSummaryAllowedActions.
+const (
+	ClientCredentialSummaryAllowedActionsAssetRead       ClientCredentialSummaryAllowedActions = "asset.read"
+	ClientCredentialSummaryAllowedActionsSemanticExecute ClientCredentialSummaryAllowedActions = "semantic.execute"
+	ClientCredentialSummaryAllowedActionsSemanticResolve ClientCredentialSummaryAllowedActions = "semantic.resolve"
+)
+
+// Valid indicates whether the value is a known member of the ClientCredentialSummaryAllowedActions enum.
+func (e ClientCredentialSummaryAllowedActions) Valid() bool {
+	switch e {
+	case ClientCredentialSummaryAllowedActionsAssetRead:
+		return true
+	case ClientCredentialSummaryAllowedActionsSemanticExecute:
+		return true
+	case ClientCredentialSummaryAllowedActionsSemanticResolve:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ClientCredentialSummaryScopeType.
+const (
+	ClientCredentialSummaryScopeTypeAsset     ClientCredentialSummaryScopeType = "asset"
+	ClientCredentialSummaryScopeTypeRelease   ClientCredentialSummaryScopeType = "release"
+	ClientCredentialSummaryScopeTypeWorkspace ClientCredentialSummaryScopeType = "workspace"
+)
+
+// Valid indicates whether the value is a known member of the ClientCredentialSummaryScopeType enum.
+func (e ClientCredentialSummaryScopeType) Valid() bool {
+	switch e {
+	case ClientCredentialSummaryScopeTypeAsset:
+		return true
+	case ClientCredentialSummaryScopeTypeRelease:
+		return true
+	case ClientCredentialSummaryScopeTypeWorkspace:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ConsumerKind.
+const (
+	ConsumerKindAgent       ConsumerKind = "agent"
+	ConsumerKindApplication ConsumerKind = "application"
+	ConsumerKindHuman       ConsumerKind = "human"
+)
+
+// Valid indicates whether the value is a known member of the ConsumerKind enum.
+func (e ConsumerKind) Valid() bool {
+	switch e {
+	case ConsumerKindAgent:
+		return true
+	case ConsumerKindApplication:
+		return true
+	case ConsumerKindHuman:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ConsumerStatus.
+const (
+	ConsumerStatusActive    ConsumerStatus = "active"
+	ConsumerStatusRevoked   ConsumerStatus = "revoked"
+	ConsumerStatusSuspended ConsumerStatus = "suspended"
+)
+
+// Valid indicates whether the value is a known member of the ConsumerStatus enum.
+func (e ConsumerStatus) Valid() bool {
+	switch e {
+	case ConsumerStatusActive:
+		return true
+	case ConsumerStatusRevoked:
+		return true
+	case ConsumerStatusSuspended:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ConsumerBindingMode.
+const (
+	ConsumerBindingModeCurrent ConsumerBindingMode = "current"
+	ConsumerBindingModePinned  ConsumerBindingMode = "pinned"
+)
+
+// Valid indicates whether the value is a known member of the ConsumerBindingMode enum.
+func (e ConsumerBindingMode) Valid() bool {
+	switch e {
+	case ConsumerBindingModeCurrent:
+		return true
+	case ConsumerBindingModePinned:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ConsumerBindingStatus.
+const (
+	ConsumerBindingStatusActive    ConsumerBindingStatus = "active"
+	ConsumerBindingStatusRevoked   ConsumerBindingStatus = "revoked"
+	ConsumerBindingStatusSuspended ConsumerBindingStatus = "suspended"
+)
+
+// Valid indicates whether the value is a known member of the ConsumerBindingStatus enum.
+func (e ConsumerBindingStatus) Valid() bool {
+	switch e {
+	case ConsumerBindingStatusActive:
+		return true
+	case ConsumerBindingStatusRevoked:
+		return true
+	case ConsumerBindingStatusSuspended:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CoverageUnitStatus.
+const (
+	CoverageUnitStatusComplete CoverageUnitStatus = "complete"
+	CoverageUnitStatusFailed   CoverageUnitStatus = "failed"
+	CoverageUnitStatusPartial  CoverageUnitStatus = "partial"
+)
+
+// Valid indicates whether the value is a known member of the CoverageUnitStatus enum.
+func (e CoverageUnitStatus) Valid() bool {
+	switch e {
+	case CoverageUnitStatusComplete:
+		return true
+	case CoverageUnitStatusFailed:
+		return true
+	case CoverageUnitStatusPartial:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreateConsumerBindingRequestMode.
+const (
+	CreateConsumerBindingRequestModeCurrent CreateConsumerBindingRequestMode = "current"
+	CreateConsumerBindingRequestModePinned  CreateConsumerBindingRequestMode = "pinned"
+)
+
+// Valid indicates whether the value is a known member of the CreateConsumerBindingRequestMode enum.
+func (e CreateConsumerBindingRequestMode) Valid() bool {
+	switch e {
+	case CreateConsumerBindingRequestModeCurrent:
+		return true
+	case CreateConsumerBindingRequestModePinned:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreateConsumerRequestKind.
+const (
+	CreateConsumerRequestKindAgent       CreateConsumerRequestKind = "agent"
+	CreateConsumerRequestKindApplication CreateConsumerRequestKind = "application"
+	CreateConsumerRequestKindHuman       CreateConsumerRequestKind = "human"
+)
+
+// Valid indicates whether the value is a known member of the CreateConsumerRequestKind enum.
+func (e CreateConsumerRequestKind) Valid() bool {
+	switch e {
+	case CreateConsumerRequestKindAgent:
+		return true
+	case CreateConsumerRequestKindApplication:
+		return true
+	case CreateConsumerRequestKindHuman:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreateSourceRequestSslMode.
+const (
+	CreateSourceRequestSslModeDisable    CreateSourceRequestSslMode = "disable"
+	CreateSourceRequestSslModeRequire    CreateSourceRequestSslMode = "require"
+	CreateSourceRequestSslModeVerifyCa   CreateSourceRequestSslMode = "verify-ca"
+	CreateSourceRequestSslModeVerifyFull CreateSourceRequestSslMode = "verify-full"
+)
+
+// Valid indicates whether the value is a known member of the CreateSourceRequestSslMode enum.
+func (e CreateSourceRequestSslMode) Valid() bool {
+	switch e {
+	case CreateSourceRequestSslModeDisable:
+		return true
+	case CreateSourceRequestSslModeRequire:
+		return true
+	case CreateSourceRequestSslModeVerifyCa:
+		return true
+	case CreateSourceRequestSslModeVerifyFull:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreateTargetIntent.
+const (
+	CreateTargetIntentCreate CreateTargetIntent = "create"
+)
+
+// Valid indicates whether the value is a known member of the CreateTargetIntent enum.
+func (e CreateTargetIntent) Valid() bool {
+	switch e {
+	case CreateTargetIntentCreate:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreateTarget0Kind.
+const (
+	CreateTarget0KindSemanticAsset CreateTarget0Kind = "semantic_asset"
+)
+
+// Valid indicates whether the value is a known member of the CreateTarget0Kind enum.
+func (e CreateTarget0Kind) Valid() bool {
+	switch e {
+	case CreateTarget0KindSemanticAsset:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreateTarget1Kind.
+const (
+	CreateTarget1KindPhysicalBinding CreateTarget1Kind = "physical_binding"
+)
+
+// Valid indicates whether the value is a known member of the CreateTarget1Kind enum.
+func (e CreateTarget1Kind) Valid() bool {
+	switch e {
+	case CreateTarget1KindPhysicalBinding:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreateTarget2Kind.
+const (
+	CreateTarget2KindModelGrain CreateTarget2Kind = "model_grain"
+)
+
+// Valid indicates whether the value is a known member of the CreateTarget2Kind enum.
+func (e CreateTarget2Kind) Valid() bool {
+	switch e {
+	case CreateTarget2KindModelGrain:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreateTarget3Kind.
+const (
+	CreateTarget3KindEntityKey CreateTarget3Kind = "entity_key"
+)
+
+// Valid indicates whether the value is a known member of the CreateTarget3Kind enum.
+func (e CreateTarget3Kind) Valid() bool {
+	switch e {
+	case CreateTarget3KindEntityKey:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreateTarget4Kind.
+const (
+	CreateTarget4KindJoinContract CreateTarget4Kind = "join_contract"
+)
+
+// Valid indicates whether the value is a known member of the CreateTarget4Kind enum.
+func (e CreateTarget4Kind) Valid() bool {
+	switch e {
+	case CreateTarget4KindJoinContract:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DiagnosticSeverity.
+const (
+	DiagnosticSeverityBlocker DiagnosticSeverity = "blocker"
+	DiagnosticSeverityInfo    DiagnosticSeverity = "info"
+	DiagnosticSeverityWarning DiagnosticSeverity = "warning"
+)
+
+// Valid indicates whether the value is a known member of the DiagnosticSeverity enum.
+func (e DiagnosticSeverity) Valid() bool {
+	switch e {
+	case DiagnosticSeverityBlocker:
+		return true
+	case DiagnosticSeverityInfo:
+		return true
+	case DiagnosticSeverityWarning:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for DiscoveryFindingSeverity.
 const (
 	DiscoveryFindingSeverityError   DiscoveryFindingSeverity = "error"
@@ -76,6 +1208,7 @@ func (e DiscoveryFindingSeverity) Valid() bool {
 // Defines values for DiscoveryRunStatus.
 const (
 	DiscoveryRunStatusCancelled DiscoveryRunStatus = "cancelled"
+	DiscoveryRunStatusDegraded  DiscoveryRunStatus = "degraded"
 	DiscoveryRunStatusFailed    DiscoveryRunStatus = "failed"
 	DiscoveryRunStatusQueued    DiscoveryRunStatus = "queued"
 	DiscoveryRunStatusRunning   DiscoveryRunStatus = "running"
@@ -87,6 +1220,8 @@ func (e DiscoveryRunStatus) Valid() bool {
 	switch e {
 	case DiscoveryRunStatusCancelled:
 		return true
+	case DiscoveryRunStatusDegraded:
+		return true
 	case DiscoveryRunStatusFailed:
 		return true
 	case DiscoveryRunStatusQueued:
@@ -94,6 +1229,69 @@ func (e DiscoveryRunStatus) Valid() bool {
 	case DiscoveryRunStatusRunning:
 		return true
 	case DiscoveryRunStatusSucceeded:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EmbeddingIndexVersionState.
+const (
+	EmbeddingIndexVersionStateActive    EmbeddingIndexVersionState = "active"
+	EmbeddingIndexVersionStateBuilding  EmbeddingIndexVersionState = "building"
+	EmbeddingIndexVersionStateCancelled EmbeddingIndexVersionState = "cancelled"
+	EmbeddingIndexVersionStateFailed    EmbeddingIndexVersionState = "failed"
+	EmbeddingIndexVersionStateRetired   EmbeddingIndexVersionState = "retired"
+)
+
+// Valid indicates whether the value is a known member of the EmbeddingIndexVersionState enum.
+func (e EmbeddingIndexVersionState) Valid() bool {
+	switch e {
+	case EmbeddingIndexVersionStateActive:
+		return true
+	case EmbeddingIndexVersionStateBuilding:
+		return true
+	case EmbeddingIndexVersionStateCancelled:
+		return true
+	case EmbeddingIndexVersionStateFailed:
+		return true
+	case EmbeddingIndexVersionStateRetired:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EmbeddingSearchResultMode.
+const (
+	Lexical EmbeddingSearchResultMode = "lexical"
+	Vector  EmbeddingSearchResultMode = "vector"
+)
+
+// Valid indicates whether the value is a known member of the EmbeddingSearchResultMode enum.
+func (e EmbeddingSearchResultMode) Valid() bool {
+	switch e {
+	case Lexical:
+		return true
+	case Vector:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EntityKeyContentUniqueness.
+const (
+	EntityKeyContentUniquenessDeduplicated EntityKeyContentUniqueness = "deduplicated"
+	EntityKeyContentUniquenessExact        EntityKeyContentUniqueness = "exact"
+)
+
+// Valid indicates whether the value is a known member of the EntityKeyContentUniqueness enum.
+func (e EntityKeyContentUniqueness) Valid() bool {
+	switch e {
+	case EntityKeyContentUniquenessDeduplicated:
+		return true
+	case EntityKeyContentUniquenessExact:
 		return true
 	default:
 		return false
@@ -166,6 +1364,96 @@ func (e EvidenceArtifactRole) Valid() bool {
 	}
 }
 
+// Defines values for GenerationResultProviderMode.
+const (
+	ActualModel  GenerationResultProviderMode = "actual_model"
+	ProtocolStub GenerationResultProviderMode = "protocol_stub"
+)
+
+// Valid indicates whether the value is a known member of the GenerationResultProviderMode enum.
+func (e GenerationResultProviderMode) Valid() bool {
+	switch e {
+	case ActualModel:
+		return true
+	case ProtocolStub:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GenerationResultStatus.
+const (
+	GenerationResultStatusCancelled      GenerationResultStatus = "cancelled"
+	GenerationResultStatusFailed         GenerationResultStatus = "failed"
+	GenerationResultStatusOutcomeUnknown GenerationResultStatus = "outcome_unknown"
+	GenerationResultStatusQueued         GenerationResultStatus = "queued"
+	GenerationResultStatusRunning        GenerationResultStatus = "running"
+	GenerationResultStatusSucceeded      GenerationResultStatus = "succeeded"
+)
+
+// Valid indicates whether the value is a known member of the GenerationResultStatus enum.
+func (e GenerationResultStatus) Valid() bool {
+	switch e {
+	case GenerationResultStatusCancelled:
+		return true
+	case GenerationResultStatusFailed:
+		return true
+	case GenerationResultStatusOutcomeUnknown:
+		return true
+	case GenerationResultStatusQueued:
+		return true
+	case GenerationResultStatusRunning:
+		return true
+	case GenerationResultStatusSucceeded:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GenerationResult0Status.
+const (
+	GenerationResult0StatusSucceeded GenerationResult0Status = "succeeded"
+)
+
+// Valid indicates whether the value is a known member of the GenerationResult0Status enum.
+func (e GenerationResult0Status) Valid() bool {
+	switch e {
+	case GenerationResult0StatusSucceeded:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GenerationResult1Status.
+const (
+	GenerationResult1StatusCancelled      GenerationResult1Status = "cancelled"
+	GenerationResult1StatusFailed         GenerationResult1Status = "failed"
+	GenerationResult1StatusOutcomeUnknown GenerationResult1Status = "outcome_unknown"
+	GenerationResult1StatusQueued         GenerationResult1Status = "queued"
+	GenerationResult1StatusRunning        GenerationResult1Status = "running"
+)
+
+// Valid indicates whether the value is a known member of the GenerationResult1Status enum.
+func (e GenerationResult1Status) Valid() bool {
+	switch e {
+	case GenerationResult1StatusCancelled:
+		return true
+	case GenerationResult1StatusFailed:
+		return true
+	case GenerationResult1StatusOutcomeUnknown:
+		return true
+	case GenerationResult1StatusQueued:
+		return true
+	case GenerationResult1StatusRunning:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for GovernanceAgentRunStatus.
 const (
 	GovernanceAgentRunStatusCancelled GovernanceAgentRunStatus = "cancelled"
@@ -192,19 +1480,19 @@ func (e GovernanceAgentRunStatus) Valid() bool {
 
 // Defines values for GovernanceChangeOp.
 const (
-	Add    GovernanceChangeOp = "add"
-	Remove GovernanceChangeOp = "remove"
-	Update GovernanceChangeOp = "update"
+	GovernanceChangeOpAdd    GovernanceChangeOp = "add"
+	GovernanceChangeOpRemove GovernanceChangeOp = "remove"
+	GovernanceChangeOpUpdate GovernanceChangeOp = "update"
 )
 
 // Valid indicates whether the value is a known member of the GovernanceChangeOp enum.
 func (e GovernanceChangeOp) Valid() bool {
 	switch e {
-	case Add:
+	case GovernanceChangeOpAdd:
 		return true
-	case Remove:
+	case GovernanceChangeOpRemove:
 		return true
-	case Update:
+	case GovernanceChangeOpUpdate:
 		return true
 	default:
 		return false
@@ -213,25 +1501,25 @@ func (e GovernanceChangeOp) Valid() bool {
 
 // Defines values for GovernanceDiffCategory.
 const (
-	Access      GovernanceDiffCategory = "access"
-	Computation GovernanceDiffCategory = "computation"
-	Contract    GovernanceDiffCategory = "contract"
-	Definition  GovernanceDiffCategory = "definition"
-	Relations   GovernanceDiffCategory = "relations"
+	GovernanceDiffCategoryAccess      GovernanceDiffCategory = "access"
+	GovernanceDiffCategoryComputation GovernanceDiffCategory = "computation"
+	GovernanceDiffCategoryContract    GovernanceDiffCategory = "contract"
+	GovernanceDiffCategoryDefinition  GovernanceDiffCategory = "definition"
+	GovernanceDiffCategoryRelations   GovernanceDiffCategory = "relations"
 )
 
 // Valid indicates whether the value is a known member of the GovernanceDiffCategory enum.
 func (e GovernanceDiffCategory) Valid() bool {
 	switch e {
-	case Access:
+	case GovernanceDiffCategoryAccess:
 		return true
-	case Computation:
+	case GovernanceDiffCategoryComputation:
 		return true
-	case Contract:
+	case GovernanceDiffCategoryContract:
 		return true
-	case Definition:
+	case GovernanceDiffCategoryDefinition:
 		return true
-	case Relations:
+	case GovernanceDiffCategoryRelations:
 		return true
 	default:
 		return false
@@ -280,6 +1568,24 @@ func (e GovernanceModelProtocol) Valid() bool {
 	}
 }
 
+// Defines values for GovernanceProposalDetailIntent.
+const (
+	GovernanceProposalDetailIntentCreate GovernanceProposalDetailIntent = "create"
+	GovernanceProposalDetailIntentUpdate GovernanceProposalDetailIntent = "update"
+)
+
+// Valid indicates whether the value is a known member of the GovernanceProposalDetailIntent enum.
+func (e GovernanceProposalDetailIntent) Valid() bool {
+	switch e {
+	case GovernanceProposalDetailIntentCreate:
+		return true
+	case GovernanceProposalDetailIntentUpdate:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for GovernanceProposalState.
 const (
 	GovernanceProposalStateDraft      GovernanceProposalState = "draft"
@@ -304,6 +1610,45 @@ func (e GovernanceProposalState) Valid() bool {
 	case GovernanceProposalStateReleased:
 		return true
 	case GovernanceProposalStateValidating:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GovernanceProposalSummaryIntent.
+const (
+	GovernanceProposalSummaryIntentCreate GovernanceProposalSummaryIntent = "create"
+	GovernanceProposalSummaryIntentUpdate GovernanceProposalSummaryIntent = "update"
+)
+
+// Valid indicates whether the value is a known member of the GovernanceProposalSummaryIntent enum.
+func (e GovernanceProposalSummaryIntent) Valid() bool {
+	switch e {
+	case GovernanceProposalSummaryIntentCreate:
+		return true
+	case GovernanceProposalSummaryIntentUpdate:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GovernanceReleaseDiffEntryChange.
+const (
+	Added     GovernanceReleaseDiffEntryChange = "added"
+	Changed   GovernanceReleaseDiffEntryChange = "changed"
+	Unchanged GovernanceReleaseDiffEntryChange = "unchanged"
+)
+
+// Valid indicates whether the value is a known member of the GovernanceReleaseDiffEntryChange enum.
+func (e GovernanceReleaseDiffEntryChange) Valid() bool {
+	switch e {
+	case Added:
+		return true
+	case Changed:
+		return true
+	case Unchanged:
 		return true
 	default:
 		return false
@@ -372,16 +1717,16 @@ func (e GovernanceReviewChannel) Valid() bool {
 
 // Defines values for GovernanceReviewDecision.
 const (
-	Approve GovernanceReviewDecision = "approve"
-	Reject  GovernanceReviewDecision = "reject"
+	GovernanceReviewDecisionApprove GovernanceReviewDecision = "approve"
+	GovernanceReviewDecisionReject  GovernanceReviewDecision = "reject"
 )
 
 // Valid indicates whether the value is a known member of the GovernanceReviewDecision enum.
 func (e GovernanceReviewDecision) Valid() bool {
 	switch e {
-	case Approve:
+	case GovernanceReviewDecisionApprove:
 		return true
-	case Reject:
+	case GovernanceReviewDecisionReject:
 		return true
 	default:
 		return false
@@ -411,19 +1756,19 @@ func (e GovernanceReviewRecordedDecision) Valid() bool {
 
 // Defines values for GovernanceRiskLevel.
 const (
-	High   GovernanceRiskLevel = "high"
-	Low    GovernanceRiskLevel = "low"
-	Medium GovernanceRiskLevel = "medium"
+	GovernanceRiskLevelHigh   GovernanceRiskLevel = "high"
+	GovernanceRiskLevelLow    GovernanceRiskLevel = "low"
+	GovernanceRiskLevelMedium GovernanceRiskLevel = "medium"
 )
 
 // Valid indicates whether the value is a known member of the GovernanceRiskLevel enum.
 func (e GovernanceRiskLevel) Valid() bool {
 	switch e {
-	case High:
+	case GovernanceRiskLevelHigh:
 		return true
-	case Low:
+	case GovernanceRiskLevelLow:
 		return true
-	case Medium:
+	case GovernanceRiskLevelMedium:
 		return true
 	default:
 		return false
@@ -450,25 +1795,25 @@ func (e GovernanceRoutingChannel) Valid() bool {
 
 // Defines values for GovernanceTargetObjectType.
 const (
-	EntityKey       GovernanceTargetObjectType = "entity_key"
-	JoinContract    GovernanceTargetObjectType = "join_contract"
-	ModelGrain      GovernanceTargetObjectType = "model_grain"
-	PhysicalBinding GovernanceTargetObjectType = "physical_binding"
-	SemanticAsset   GovernanceTargetObjectType = "semantic_asset"
+	GovernanceTargetObjectTypeEntityKey       GovernanceTargetObjectType = "entity_key"
+	GovernanceTargetObjectTypeJoinContract    GovernanceTargetObjectType = "join_contract"
+	GovernanceTargetObjectTypeModelGrain      GovernanceTargetObjectType = "model_grain"
+	GovernanceTargetObjectTypePhysicalBinding GovernanceTargetObjectType = "physical_binding"
+	GovernanceTargetObjectTypeSemanticAsset   GovernanceTargetObjectType = "semantic_asset"
 )
 
 // Valid indicates whether the value is a known member of the GovernanceTargetObjectType enum.
 func (e GovernanceTargetObjectType) Valid() bool {
 	switch e {
-	case EntityKey:
+	case GovernanceTargetObjectTypeEntityKey:
 		return true
-	case JoinContract:
+	case GovernanceTargetObjectTypeJoinContract:
 		return true
-	case ModelGrain:
+	case GovernanceTargetObjectTypeModelGrain:
 		return true
-	case PhysicalBinding:
+	case GovernanceTargetObjectTypePhysicalBinding:
 		return true
-	case SemanticAsset:
+	case GovernanceTargetObjectTypeSemanticAsset:
 		return true
 	default:
 		return false
@@ -523,18 +1868,861 @@ func (e GovernanceValidationStatus) Valid() bool {
 	}
 }
 
+// Defines values for HeadReference0Presence.
+const (
+	HeadReference0PresenceAbsent HeadReference0Presence = "absent"
+)
+
+// Valid indicates whether the value is a known member of the HeadReference0Presence enum.
+func (e HeadReference0Presence) Valid() bool {
+	switch e {
+	case HeadReference0PresenceAbsent:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for HealthResponseStatus.
 const (
-	Live  HealthResponseStatus = "live"
-	Ready HealthResponseStatus = "ready"
+	HealthResponseStatusLive  HealthResponseStatus = "live"
+	HealthResponseStatusReady HealthResponseStatus = "ready"
 )
 
 // Valid indicates whether the value is a known member of the HealthResponseStatus enum.
 func (e HealthResponseStatus) Valid() bool {
 	switch e {
-	case Live:
+	case HealthResponseStatusLive:
 		return true
-	case Ready:
+	case HealthResponseStatusReady:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for HistoryQuality.
+const (
+	Unverifiable HistoryQuality = "unverifiable"
+	Verified     HistoryQuality = "verified"
+)
+
+// Valid indicates whether the value is a known member of the HistoryQuality enum.
+func (e HistoryQuality) Valid() bool {
+	switch e {
+	case Unverifiable:
+		return true
+	case Verified:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for InvitationStatus.
+const (
+	InvitationStatusAccepted InvitationStatus = "accepted"
+	InvitationStatusExpired  InvitationStatus = "expired"
+	InvitationStatusPending  InvitationStatus = "pending"
+	InvitationStatusRevoked  InvitationStatus = "revoked"
+)
+
+// Valid indicates whether the value is a known member of the InvitationStatus enum.
+func (e InvitationStatus) Valid() bool {
+	switch e {
+	case InvitationStatusAccepted:
+		return true
+	case InvitationStatusExpired:
+		return true
+	case InvitationStatusPending:
+		return true
+	case InvitationStatusRevoked:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for IssueClientCredentialAllowedActions.
+const (
+	IssueClientCredentialAllowedActionsAssetRead       IssueClientCredentialAllowedActions = "asset.read"
+	IssueClientCredentialAllowedActionsSemanticExecute IssueClientCredentialAllowedActions = "semantic.execute"
+	IssueClientCredentialAllowedActionsSemanticResolve IssueClientCredentialAllowedActions = "semantic.resolve"
+)
+
+// Valid indicates whether the value is a known member of the IssueClientCredentialAllowedActions enum.
+func (e IssueClientCredentialAllowedActions) Valid() bool {
+	switch e {
+	case IssueClientCredentialAllowedActionsAssetRead:
+		return true
+	case IssueClientCredentialAllowedActionsSemanticExecute:
+		return true
+	case IssueClientCredentialAllowedActionsSemanticResolve:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for IssueClientCredentialScopeType.
+const (
+	IssueClientCredentialScopeTypeAsset     IssueClientCredentialScopeType = "asset"
+	IssueClientCredentialScopeTypeRelease   IssueClientCredentialScopeType = "release"
+	IssueClientCredentialScopeTypeWorkspace IssueClientCredentialScopeType = "workspace"
+)
+
+// Valid indicates whether the value is a known member of the IssueClientCredentialScopeType enum.
+func (e IssueClientCredentialScopeType) Valid() bool {
+	switch e {
+	case IssueClientCredentialScopeTypeAsset:
+		return true
+	case IssueClientCredentialScopeTypeRelease:
+		return true
+	case IssueClientCredentialScopeTypeWorkspace:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for JoinContentCardinality.
+const (
+	JoinContentCardinalityManyToMany JoinContentCardinality = "many_to_many"
+	JoinContentCardinalityManyToOne  JoinContentCardinality = "many_to_one"
+	JoinContentCardinalityOneToMany  JoinContentCardinality = "one_to_many"
+	JoinContentCardinalityOneToOne   JoinContentCardinality = "one_to_one"
+)
+
+// Valid indicates whether the value is a known member of the JoinContentCardinality enum.
+func (e JoinContentCardinality) Valid() bool {
+	switch e {
+	case JoinContentCardinalityManyToMany:
+		return true
+	case JoinContentCardinalityManyToOne:
+		return true
+	case JoinContentCardinalityOneToMany:
+		return true
+	case JoinContentCardinalityOneToOne:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for JoinContentJoinType.
+const (
+	JoinContentJoinTypeFull  JoinContentJoinType = "full"
+	JoinContentJoinTypeInner JoinContentJoinType = "inner"
+	JoinContentJoinTypeLeft  JoinContentJoinType = "left"
+	JoinContentJoinTypeRight JoinContentJoinType = "right"
+)
+
+// Valid indicates whether the value is a known member of the JoinContentJoinType enum.
+func (e JoinContentJoinType) Valid() bool {
+	switch e {
+	case JoinContentJoinTypeFull:
+		return true
+	case JoinContentJoinTypeInner:
+		return true
+	case JoinContentJoinTypeLeft:
+		return true
+	case JoinContentJoinTypeRight:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MemberKind.
+const (
+	MemberKindCode    MemberKind = "code"
+	MemberKindDataset MemberKind = "dataset"
+	MemberKindField   MemberKind = "field"
+	MemberKindLineage MemberKind = "lineage"
+)
+
+// Valid indicates whether the value is a known member of the MemberKind enum.
+func (e MemberKind) Valid() bool {
+	switch e {
+	case MemberKindCode:
+		return true
+	case MemberKindDataset:
+		return true
+	case MemberKindField:
+		return true
+	case MemberKindLineage:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MembershipStatus.
+const (
+	MembershipStatusActive    MembershipStatus = "active"
+	MembershipStatusRevoked   MembershipStatus = "revoked"
+	MembershipStatusSuspended MembershipStatus = "suspended"
+)
+
+// Valid indicates whether the value is a known member of the MembershipStatus enum.
+func (e MembershipStatus) Valid() bool {
+	switch e {
+	case MembershipStatusActive:
+		return true
+	case MembershipStatusRevoked:
+		return true
+	case MembershipStatusSuspended:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ObjectKind.
+const (
+	ObjectKindEntityKey       ObjectKind = "entity_key"
+	ObjectKindJoinContract    ObjectKind = "join_contract"
+	ObjectKindModelGrain      ObjectKind = "model_grain"
+	ObjectKindPhysicalBinding ObjectKind = "physical_binding"
+)
+
+// Valid indicates whether the value is a known member of the ObjectKind enum.
+func (e ObjectKind) Valid() bool {
+	switch e {
+	case ObjectKindEntityKey:
+		return true
+	case ObjectKindJoinContract:
+		return true
+	case ObjectKindModelGrain:
+		return true
+	case ObjectKindPhysicalBinding:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for OperationSummaryProgress.
+const (
+	OperationSummaryProgressDraft           OperationSummaryProgress = "draft"
+	OperationSummaryProgressInReview        OperationSummaryProgress = "in_review"
+	OperationSummaryProgressNeedsCorrection OperationSummaryProgress = "needs_correction"
+	OperationSummaryProgressNoChange        OperationSummaryProgress = "no_change"
+	OperationSummaryProgressReadyToPublish  OperationSummaryProgress = "ready_to_publish"
+	OperationSummaryProgressRejected        OperationSummaryProgress = "rejected"
+	OperationSummaryProgressReleased        OperationSummaryProgress = "released"
+	OperationSummaryProgressValidating      OperationSummaryProgress = "validating"
+)
+
+// Valid indicates whether the value is a known member of the OperationSummaryProgress enum.
+func (e OperationSummaryProgress) Valid() bool {
+	switch e {
+	case OperationSummaryProgressDraft:
+		return true
+	case OperationSummaryProgressInReview:
+		return true
+	case OperationSummaryProgressNeedsCorrection:
+		return true
+	case OperationSummaryProgressNoChange:
+		return true
+	case OperationSummaryProgressReadyToPublish:
+		return true
+	case OperationSummaryProgressRejected:
+		return true
+	case OperationSummaryProgressReleased:
+		return true
+	case OperationSummaryProgressValidating:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for OperationsAuditExportFormat.
+const (
+	Json OperationsAuditExportFormat = "json"
+)
+
+// Valid indicates whether the value is a known member of the OperationsAuditExportFormat enum.
+func (e OperationsAuditExportFormat) Valid() bool {
+	switch e {
+	case Json:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for OperationsDeploymentStatusAuditRetention.
+const (
+	DeploymentManaged OperationsDeploymentStatusAuditRetention = "deployment_managed"
+)
+
+// Valid indicates whether the value is a known member of the OperationsDeploymentStatusAuditRetention enum.
+func (e OperationsDeploymentStatusAuditRetention) Valid() bool {
+	switch e {
+	case DeploymentManaged:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for OperationsRuntimeRunEventEventType.
+const (
+	Diagnostic OperationsRuntimeRunEventEventType = "diagnostic"
+	Phase      OperationsRuntimeRunEventEventType = "phase"
+	Progress   OperationsRuntimeRunEventEventType = "progress"
+	State      OperationsRuntimeRunEventEventType = "state"
+)
+
+// Valid indicates whether the value is a known member of the OperationsRuntimeRunEventEventType enum.
+func (e OperationsRuntimeRunEventEventType) Valid() bool {
+	switch e {
+	case Diagnostic:
+		return true
+	case Phase:
+		return true
+	case Progress:
+		return true
+	case State:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for OperationsRuntimeRunKind.
+const (
+	OperationsRuntimeRunKindAgent              OperationsRuntimeRunKind = "agent"
+	OperationsRuntimeRunKindAuditExport        OperationsRuntimeRunKind = "audit_export"
+	OperationsRuntimeRunKindDiscovery          OperationsRuntimeRunKind = "discovery"
+	OperationsRuntimeRunKindEmbeddingRebuild   OperationsRuntimeRunKind = "embedding_rebuild"
+	OperationsRuntimeRunKindQueryExecution     OperationsRuntimeRunKind = "query_execution"
+	OperationsRuntimeRunKindSemanticResolution OperationsRuntimeRunKind = "semantic_resolution"
+	OperationsRuntimeRunKindValidation         OperationsRuntimeRunKind = "validation"
+	OperationsRuntimeRunKindWebhookDelivery    OperationsRuntimeRunKind = "webhook_delivery"
+)
+
+// Valid indicates whether the value is a known member of the OperationsRuntimeRunKind enum.
+func (e OperationsRuntimeRunKind) Valid() bool {
+	switch e {
+	case OperationsRuntimeRunKindAgent:
+		return true
+	case OperationsRuntimeRunKindAuditExport:
+		return true
+	case OperationsRuntimeRunKindDiscovery:
+		return true
+	case OperationsRuntimeRunKindEmbeddingRebuild:
+		return true
+	case OperationsRuntimeRunKindQueryExecution:
+		return true
+	case OperationsRuntimeRunKindSemanticResolution:
+		return true
+	case OperationsRuntimeRunKindValidation:
+		return true
+	case OperationsRuntimeRunKindWebhookDelivery:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for OperationsRuntimeRunState.
+const (
+	OperationsRuntimeRunStateCancelled  OperationsRuntimeRunState = "cancelled"
+	OperationsRuntimeRunStateDeadLetter OperationsRuntimeRunState = "dead_letter"
+	OperationsRuntimeRunStateDegraded   OperationsRuntimeRunState = "degraded"
+	OperationsRuntimeRunStateFailed     OperationsRuntimeRunState = "failed"
+	OperationsRuntimeRunStateQueued     OperationsRuntimeRunState = "queued"
+	OperationsRuntimeRunStateRunning    OperationsRuntimeRunState = "running"
+	OperationsRuntimeRunStateSucceeded  OperationsRuntimeRunState = "succeeded"
+)
+
+// Valid indicates whether the value is a known member of the OperationsRuntimeRunState enum.
+func (e OperationsRuntimeRunState) Valid() bool {
+	switch e {
+	case OperationsRuntimeRunStateCancelled:
+		return true
+	case OperationsRuntimeRunStateDeadLetter:
+		return true
+	case OperationsRuntimeRunStateDegraded:
+		return true
+	case OperationsRuntimeRunStateFailed:
+		return true
+	case OperationsRuntimeRunStateQueued:
+		return true
+	case OperationsRuntimeRunStateRunning:
+		return true
+	case OperationsRuntimeRunStateSucceeded:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PhysicalReferenceKind.
+const (
+	PhysicalReferenceKindDataset PhysicalReferenceKind = "dataset"
+	PhysicalReferenceKindField   PhysicalReferenceKind = "field"
+)
+
+// Valid indicates whether the value is a known member of the PhysicalReferenceKind enum.
+func (e PhysicalReferenceKind) Valid() bool {
+	switch e {
+	case PhysicalReferenceKindDataset:
+		return true
+	case PhysicalReferenceKindField:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PostgreSQLSourceConnectionAdapterKind.
+const (
+	PostgresqlCatalog PostgreSQLSourceConnectionAdapterKind = "postgresql_catalog"
+)
+
+// Valid indicates whether the value is a known member of the PostgreSQLSourceConnectionAdapterKind enum.
+func (e PostgreSQLSourceConnectionAdapterKind) Valid() bool {
+	switch e {
+	case PostgresqlCatalog:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PostgreSQLSourceConnectionSourceKind.
+const (
+	Postgresql PostgreSQLSourceConnectionSourceKind = "postgresql"
+)
+
+// Valid indicates whether the value is a known member of the PostgreSQLSourceConnectionSourceKind enum.
+func (e PostgreSQLSourceConnectionSourceKind) Valid() bool {
+	switch e {
+	case Postgresql:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PostgreSQLSourceConnectionSslMode.
+const (
+	PostgreSQLSourceConnectionSslModeDisable    PostgreSQLSourceConnectionSslMode = "disable"
+	PostgreSQLSourceConnectionSslModeRequire    PostgreSQLSourceConnectionSslMode = "require"
+	PostgreSQLSourceConnectionSslModeVerifyCa   PostgreSQLSourceConnectionSslMode = "verify-ca"
+	PostgreSQLSourceConnectionSslModeVerifyFull PostgreSQLSourceConnectionSslMode = "verify-full"
+)
+
+// Valid indicates whether the value is a known member of the PostgreSQLSourceConnectionSslMode enum.
+func (e PostgreSQLSourceConnectionSslMode) Valid() bool {
+	switch e {
+	case PostgreSQLSourceConnectionSslModeDisable:
+		return true
+	case PostgreSQLSourceConnectionSslModeRequire:
+		return true
+	case PostgreSQLSourceConnectionSslModeVerifyCa:
+		return true
+	case PostgreSQLSourceConnectionSslModeVerifyFull:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PostgreSQLSourceConnectionStatus.
+const (
+	PostgreSQLSourceConnectionStatusActive  PostgreSQLSourceConnectionStatus = "active"
+	PostgreSQLSourceConnectionStatusDeleted PostgreSQLSourceConnectionStatus = "deleted"
+	PostgreSQLSourceConnectionStatusPaused  PostgreSQLSourceConnectionStatus = "paused"
+)
+
+// Valid indicates whether the value is a known member of the PostgreSQLSourceConnectionStatus enum.
+func (e PostgreSQLSourceConnectionStatus) Valid() bool {
+	switch e {
+	case PostgreSQLSourceConnectionStatusActive:
+		return true
+	case PostgreSQLSourceConnectionStatusDeleted:
+		return true
+	case PostgreSQLSourceConnectionStatusPaused:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PresentHeadReferencePresence.
+const (
+	PresentHeadReferencePresencePresent PresentHeadReferencePresence = "present"
+)
+
+// Valid indicates whether the value is a known member of the PresentHeadReferencePresence enum.
+func (e PresentHeadReferencePresence) Valid() bool {
+	switch e {
+	case PresentHeadReferencePresencePresent:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProductionBusinessRuleEventAction.
+const (
+	ProductionBusinessRuleEventActionConfirm ProductionBusinessRuleEventAction = "confirm"
+	ProductionBusinessRuleEventActionRevoke  ProductionBusinessRuleEventAction = "revoke"
+)
+
+// Valid indicates whether the value is a known member of the ProductionBusinessRuleEventAction enum.
+func (e ProductionBusinessRuleEventAction) Valid() bool {
+	switch e {
+	case ProductionBusinessRuleEventActionConfirm:
+		return true
+	case ProductionBusinessRuleEventActionRevoke:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProductionBusinessRuleEventEvidenceOrigin.
+const (
+	HumanDeclaration ProductionBusinessRuleEventEvidenceOrigin = "human_declaration"
+	None             ProductionBusinessRuleEventEvidenceOrigin = "none"
+	SelectedEvidence ProductionBusinessRuleEventEvidenceOrigin = "selected_evidence"
+)
+
+// Valid indicates whether the value is a known member of the ProductionBusinessRuleEventEvidenceOrigin enum.
+func (e ProductionBusinessRuleEventEvidenceOrigin) Valid() bool {
+	switch e {
+	case HumanDeclaration:
+		return true
+	case None:
+		return true
+	case SelectedEvidence:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProductionBusinessRuleRequest0Action.
+const (
+	ProductionBusinessRuleRequest0ActionConfirm ProductionBusinessRuleRequest0Action = "confirm"
+)
+
+// Valid indicates whether the value is a known member of the ProductionBusinessRuleRequest0Action enum.
+func (e ProductionBusinessRuleRequest0Action) Valid() bool {
+	switch e {
+	case ProductionBusinessRuleRequest0ActionConfirm:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProductionBusinessRuleRequest1Action.
+const (
+	ProductionBusinessRuleRequest1ActionConfirm ProductionBusinessRuleRequest1Action = "confirm"
+)
+
+// Valid indicates whether the value is a known member of the ProductionBusinessRuleRequest1Action enum.
+func (e ProductionBusinessRuleRequest1Action) Valid() bool {
+	switch e {
+	case ProductionBusinessRuleRequest1ActionConfirm:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProductionBusinessRuleRequest2Action.
+const (
+	ProductionBusinessRuleRequest2ActionRevoke ProductionBusinessRuleRequest2Action = "revoke"
+)
+
+// Valid indicates whether the value is a known member of the ProductionBusinessRuleRequest2Action enum.
+func (e ProductionBusinessRuleRequest2Action) Valid() bool {
+	switch e {
+	case ProductionBusinessRuleRequest2ActionRevoke:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProductionCommandResultOutcome.
+const (
+	ProductionCommandResultOutcomeCreated          ProductionCommandResultOutcome = "created"
+	ProductionCommandResultOutcomeNoChange         ProductionCommandResultOutcome = "no_change"
+	ProductionCommandResultOutcomeReviewed         ProductionCommandResultOutcome = "reviewed"
+	ProductionCommandResultOutcomeSubmitted        ProductionCommandResultOutcome = "submitted"
+	ProductionCommandResultOutcomeUpdated          ProductionCommandResultOutcome = "updated"
+	ProductionCommandResultOutcomeValidationQueued ProductionCommandResultOutcome = "validation_queued"
+)
+
+// Valid indicates whether the value is a known member of the ProductionCommandResultOutcome enum.
+func (e ProductionCommandResultOutcome) Valid() bool {
+	switch e {
+	case ProductionCommandResultOutcomeCreated:
+		return true
+	case ProductionCommandResultOutcomeNoChange:
+		return true
+	case ProductionCommandResultOutcomeReviewed:
+		return true
+	case ProductionCommandResultOutcomeSubmitted:
+		return true
+	case ProductionCommandResultOutcomeUpdated:
+		return true
+	case ProductionCommandResultOutcomeValidationQueued:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProductionReleaseProjectionStatus.
+const (
+	ProductionReleaseProjectionStatusFailed  ProductionReleaseProjectionStatus = "failed"
+	ProductionReleaseProjectionStatusPending ProductionReleaseProjectionStatus = "pending"
+	ProductionReleaseProjectionStatusReady   ProductionReleaseProjectionStatus = "ready"
+)
+
+// Valid indicates whether the value is a known member of the ProductionReleaseProjectionStatus enum.
+func (e ProductionReleaseProjectionStatus) Valid() bool {
+	switch e {
+	case ProductionReleaseProjectionStatusFailed:
+		return true
+	case ProductionReleaseProjectionStatusPending:
+		return true
+	case ProductionReleaseProjectionStatusReady:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProductionReleaseProtection0RollbackDepth.
+const (
+	N0 ProductionReleaseProtection0RollbackDepth = 0
+)
+
+// Valid indicates whether the value is a known member of the ProductionReleaseProtection0RollbackDepth enum.
+func (e ProductionReleaseProtection0RollbackDepth) Valid() bool {
+	switch e {
+	case N0:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProposalState.
+const (
+	ProposalStateDraft      ProposalState = "draft"
+	ProposalStateInReview   ProposalState = "in_review"
+	ProposalStateProposed   ProposalState = "proposed"
+	ProposalStateRejected   ProposalState = "rejected"
+	ProposalStateReleased   ProposalState = "released"
+	ProposalStateValidating ProposalState = "validating"
+)
+
+// Valid indicates whether the value is a known member of the ProposalState enum.
+func (e ProposalState) Valid() bool {
+	switch e {
+	case ProposalStateDraft:
+		return true
+	case ProposalStateInReview:
+		return true
+	case ProposalStateProposed:
+		return true
+	case ProposalStateRejected:
+		return true
+	case ProposalStateReleased:
+		return true
+	case ProposalStateValidating:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PublicArtifactKind.
+const (
+	PublicArtifactKindCsv         PublicArtifactKind = "csv"
+	PublicArtifactKindDbtCatalog  PublicArtifactKind = "dbt_catalog"
+	PublicArtifactKindDbtManifest PublicArtifactKind = "dbt_manifest"
+	PublicArtifactKindMarkdown    PublicArtifactKind = "markdown"
+	PublicArtifactKindXlsx        PublicArtifactKind = "xlsx"
+)
+
+// Valid indicates whether the value is a known member of the PublicArtifactKind enum.
+func (e PublicArtifactKind) Valid() bool {
+	switch e {
+	case PublicArtifactKindCsv:
+		return true
+	case PublicArtifactKindDbtCatalog:
+		return true
+	case PublicArtifactKindDbtManifest:
+		return true
+	case PublicArtifactKindMarkdown:
+		return true
+	case PublicArtifactKindXlsx:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PublishedReference0Kind.
+const (
+	PublishedReference0KindSemanticAsset PublishedReference0Kind = "semantic_asset"
+)
+
+// Valid indicates whether the value is a known member of the PublishedReference0Kind enum.
+func (e PublishedReference0Kind) Valid() bool {
+	switch e {
+	case PublishedReference0KindSemanticAsset:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for QueryExecutionRequestChannel.
+const (
+	QueryExecutionRequestChannelApi QueryExecutionRequestChannel = "api"
+	QueryExecutionRequestChannelCli QueryExecutionRequestChannel = "cli"
+	QueryExecutionRequestChannelSdk QueryExecutionRequestChannel = "sdk"
+	QueryExecutionRequestChannelWeb QueryExecutionRequestChannel = "web"
+)
+
+// Valid indicates whether the value is a known member of the QueryExecutionRequestChannel enum.
+func (e QueryExecutionRequestChannel) Valid() bool {
+	switch e {
+	case QueryExecutionRequestChannelApi:
+		return true
+	case QueryExecutionRequestChannelCli:
+		return true
+	case QueryExecutionRequestChannelSdk:
+		return true
+	case QueryExecutionRequestChannelWeb:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for QueryExecutionResultAvailability.
+const (
+	Ephemeral    QueryExecutionResultAvailability = "ephemeral"
+	MetadataOnly QueryExecutionResultAvailability = "metadata_only"
+	Unavailable  QueryExecutionResultAvailability = "unavailable"
+)
+
+// Valid indicates whether the value is a known member of the QueryExecutionResultAvailability enum.
+func (e QueryExecutionResultAvailability) Valid() bool {
+	switch e {
+	case Ephemeral:
+		return true
+	case MetadataOnly:
+		return true
+	case Unavailable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for QueryExecutionRunChannel.
+const (
+	QueryExecutionRunChannelApi QueryExecutionRunChannel = "api"
+	QueryExecutionRunChannelCli QueryExecutionRunChannel = "cli"
+	QueryExecutionRunChannelMcp QueryExecutionRunChannel = "mcp"
+	QueryExecutionRunChannelSdk QueryExecutionRunChannel = "sdk"
+	QueryExecutionRunChannelWeb QueryExecutionRunChannel = "web"
+)
+
+// Valid indicates whether the value is a known member of the QueryExecutionRunChannel enum.
+func (e QueryExecutionRunChannel) Valid() bool {
+	switch e {
+	case QueryExecutionRunChannelApi:
+		return true
+	case QueryExecutionRunChannelCli:
+		return true
+	case QueryExecutionRunChannelMcp:
+		return true
+	case QueryExecutionRunChannelSdk:
+		return true
+	case QueryExecutionRunChannelWeb:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for QueryExecutionRunState.
+const (
+	QueryExecutionRunStateCancelled QueryExecutionRunState = "cancelled"
+	QueryExecutionRunStateFailed    QueryExecutionRunState = "failed"
+	QueryExecutionRunStateRunning   QueryExecutionRunState = "running"
+	QueryExecutionRunStateSucceeded QueryExecutionRunState = "succeeded"
+	QueryExecutionRunStateUnknown   QueryExecutionRunState = "unknown"
+)
+
+// Valid indicates whether the value is a known member of the QueryExecutionRunState enum.
+func (e QueryExecutionRunState) Valid() bool {
+	switch e {
+	case QueryExecutionRunStateCancelled:
+		return true
+	case QueryExecutionRunStateFailed:
+		return true
+	case QueryExecutionRunStateRunning:
+		return true
+	case QueryExecutionRunStateSucceeded:
+		return true
+	case QueryExecutionRunStateUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for QueryValidationStatus.
+const (
+	QueryValidationStatusFailed QueryValidationStatus = "failed"
+	QueryValidationStatusPassed QueryValidationStatus = "passed"
+)
+
+// Valid indicates whether the value is a known member of the QueryValidationStatus enum.
+func (e QueryValidationStatus) Valid() bool {
+	switch e {
+	case QueryValidationStatusFailed:
+		return true
+	case QueryValidationStatusPassed:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for QueryValidationResultSeverity.
+const (
+	QueryValidationResultSeverityBlocker QueryValidationResultSeverity = "blocker"
+	QueryValidationResultSeverityInfo    QueryValidationResultSeverity = "info"
+	QueryValidationResultSeverityWarning QueryValidationResultSeverity = "warning"
+)
+
+// Valid indicates whether the value is a known member of the QueryValidationResultSeverity enum.
+func (e QueryValidationResultSeverity) Valid() bool {
+	switch e {
+	case QueryValidationResultSeverityBlocker:
+		return true
+	case QueryValidationResultSeverityInfo:
+		return true
+	case QueryValidationResultSeverityWarning:
 		return true
 	default:
 		return false
@@ -588,43 +2776,238 @@ func (e RelationPlane) Valid() bool {
 
 // Defines values for RelationPredicate.
 const (
-	BroaderThan  RelationPredicate = "broader_than"
-	Contains     RelationPredicate = "contains"
-	DependsOn    RelationPredicate = "depends_on"
-	DerivedFrom  RelationPredicate = "derived_from"
-	Describes    RelationPredicate = "describes"
-	DisjointWith RelationPredicate = "disjoint_with"
-	EquivalentTo RelationPredicate = "equivalent_to"
-	FiltersBy    RelationPredicate = "filters_by"
-	Measures     RelationPredicate = "measures"
-	NarrowerThan RelationPredicate = "narrower_than"
-	SynonymOf    RelationPredicate = "synonym_of"
+	RelationPredicateBroaderThan  RelationPredicate = "broader_than"
+	RelationPredicateContains     RelationPredicate = "contains"
+	RelationPredicateDependsOn    RelationPredicate = "depends_on"
+	RelationPredicateDerivedFrom  RelationPredicate = "derived_from"
+	RelationPredicateDescribes    RelationPredicate = "describes"
+	RelationPredicateDisjointWith RelationPredicate = "disjoint_with"
+	RelationPredicateEquivalentTo RelationPredicate = "equivalent_to"
+	RelationPredicateFiltersBy    RelationPredicate = "filters_by"
+	RelationPredicateMeasures     RelationPredicate = "measures"
+	RelationPredicateNarrowerThan RelationPredicate = "narrower_than"
+	RelationPredicateSynonymOf    RelationPredicate = "synonym_of"
 )
 
 // Valid indicates whether the value is a known member of the RelationPredicate enum.
 func (e RelationPredicate) Valid() bool {
 	switch e {
-	case BroaderThan:
+	case RelationPredicateBroaderThan:
 		return true
-	case Contains:
+	case RelationPredicateContains:
 		return true
-	case DependsOn:
+	case RelationPredicateDependsOn:
 		return true
-	case DerivedFrom:
+	case RelationPredicateDerivedFrom:
 		return true
-	case Describes:
+	case RelationPredicateDescribes:
 		return true
-	case DisjointWith:
+	case RelationPredicateDisjointWith:
 		return true
-	case EquivalentTo:
+	case RelationPredicateEquivalentTo:
 		return true
-	case FiltersBy:
+	case RelationPredicateFiltersBy:
 		return true
-	case Measures:
+	case RelationPredicateMeasures:
 		return true
-	case NarrowerThan:
+	case RelationPredicateNarrowerThan:
 		return true
-	case SynonymOf:
+	case RelationPredicateSynonymOf:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ReleaseAttributionRole.
+const (
+	Applied  ReleaseAttributionRole = "applied"
+	Reverted ReleaseAttributionRole = "reverted"
+)
+
+// Valid indicates whether the value is a known member of the ReleaseAttributionRole enum.
+func (e ReleaseAttributionRole) Valid() bool {
+	switch e {
+	case Applied:
+		return true
+	case Reverted:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ResolutionContextMode.
+const (
+	ResolutionContextModeBinding  ResolutionContextMode = "binding"
+	ResolutionContextModeCurrent  ResolutionContextMode = "current"
+	ResolutionContextModeExplicit ResolutionContextMode = "explicit"
+)
+
+// Valid indicates whether the value is a known member of the ResolutionContextMode enum.
+func (e ResolutionContextMode) Valid() bool {
+	switch e {
+	case ResolutionContextModeBinding:
+		return true
+	case ResolutionContextModeCurrent:
+		return true
+	case ResolutionContextModeExplicit:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ResolveSemanticQueryRequestChannel.
+const (
+	ResolveSemanticQueryRequestChannelAgent  ResolveSemanticQueryRequestChannel = "agent"
+	ResolveSemanticQueryRequestChannelApi    ResolveSemanticQueryRequestChannel = "api"
+	ResolveSemanticQueryRequestChannelAsk    ResolveSemanticQueryRequestChannel = "ask"
+	ResolveSemanticQueryRequestChannelCli    ResolveSemanticQueryRequestChannel = "cli"
+	ResolveSemanticQueryRequestChannelMcp    ResolveSemanticQueryRequestChannel = "mcp"
+	ResolveSemanticQueryRequestChannelSdk    ResolveSemanticQueryRequestChannel = "sdk"
+	ResolveSemanticQueryRequestChannelSystem ResolveSemanticQueryRequestChannel = "system"
+)
+
+// Valid indicates whether the value is a known member of the ResolveSemanticQueryRequestChannel enum.
+func (e ResolveSemanticQueryRequestChannel) Valid() bool {
+	switch e {
+	case ResolveSemanticQueryRequestChannelAgent:
+		return true
+	case ResolveSemanticQueryRequestChannelApi:
+		return true
+	case ResolveSemanticQueryRequestChannelAsk:
+		return true
+	case ResolveSemanticQueryRequestChannelCli:
+		return true
+	case ResolveSemanticQueryRequestChannelMcp:
+		return true
+	case ResolveSemanticQueryRequestChannelSdk:
+		return true
+	case ResolveSemanticQueryRequestChannelSystem:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ResolvedSemanticObjectObjectType.
+const (
+	ResolvedSemanticObjectObjectTypeEntityKey       ResolvedSemanticObjectObjectType = "entity_key"
+	ResolvedSemanticObjectObjectTypeJoinContract    ResolvedSemanticObjectObjectType = "join_contract"
+	ResolvedSemanticObjectObjectTypeModelGrain      ResolvedSemanticObjectObjectType = "model_grain"
+	ResolvedSemanticObjectObjectTypePhysicalBinding ResolvedSemanticObjectObjectType = "physical_binding"
+)
+
+// Valid indicates whether the value is a known member of the ResolvedSemanticObjectObjectType enum.
+func (e ResolvedSemanticObjectObjectType) Valid() bool {
+	switch e {
+	case ResolvedSemanticObjectObjectTypeEntityKey:
+		return true
+	case ResolvedSemanticObjectObjectTypeJoinContract:
+		return true
+	case ResolvedSemanticObjectObjectTypeModelGrain:
+		return true
+	case ResolvedSemanticObjectObjectTypePhysicalBinding:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ResolvedSemanticPlanExecutionStatus.
+const (
+	ResolvedSemanticPlanExecutionStatusNotConfigured               ResolvedSemanticPlanExecutionStatus = "not_configured"
+	ResolvedSemanticPlanExecutionStatusReady                       ResolvedSemanticPlanExecutionStatus = "ready"
+	ResolvedSemanticPlanExecutionStatusRequiresExecutionValidation ResolvedSemanticPlanExecutionStatus = "requires_execution_validation"
+)
+
+// Valid indicates whether the value is a known member of the ResolvedSemanticPlanExecutionStatus enum.
+func (e ResolvedSemanticPlanExecutionStatus) Valid() bool {
+	switch e {
+	case ResolvedSemanticPlanExecutionStatusNotConfigured:
+		return true
+	case ResolvedSemanticPlanExecutionStatusReady:
+		return true
+	case ResolvedSemanticPlanExecutionStatusRequiresExecutionValidation:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ResolvedSemanticPlanIntent.
+const (
+	ResolvedSemanticPlanIntentAggregate ResolvedSemanticPlanIntent = "aggregate"
+	ResolvedSemanticPlanIntentBreakdown ResolvedSemanticPlanIntent = "breakdown"
+	ResolvedSemanticPlanIntentCompare   ResolvedSemanticPlanIntent = "compare"
+	ResolvedSemanticPlanIntentDescribe  ResolvedSemanticPlanIntent = "describe"
+)
+
+// Valid indicates whether the value is a known member of the ResolvedSemanticPlanIntent enum.
+func (e ResolvedSemanticPlanIntent) Valid() bool {
+	switch e {
+	case ResolvedSemanticPlanIntentAggregate:
+		return true
+	case ResolvedSemanticPlanIntentBreakdown:
+		return true
+	case ResolvedSemanticPlanIntentCompare:
+		return true
+	case ResolvedSemanticPlanIntentDescribe:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ReviewProductionRequestDecision.
+const (
+	ReviewProductionRequestDecisionApprove ReviewProductionRequestDecision = "approve"
+	ReviewProductionRequestDecisionReject  ReviewProductionRequestDecision = "reject"
+)
+
+// Valid indicates whether the value is a known member of the ReviewProductionRequestDecision enum.
+func (e ReviewProductionRequestDecision) Valid() bool {
+	switch e {
+	case ReviewProductionRequestDecisionApprove:
+		return true
+	case ReviewProductionRequestDecisionReject:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SaveWebhookSubscriptionEventTypes.
+const (
+	SaveWebhookSubscriptionEventTypesCatalogAssetChanged SaveWebhookSubscriptionEventTypes = "catalog.asset.changed"
+	SaveWebhookSubscriptionEventTypesReleasePublished    SaveWebhookSubscriptionEventTypes = "release.published"
+)
+
+// Valid indicates whether the value is a known member of the SaveWebhookSubscriptionEventTypes enum.
+func (e SaveWebhookSubscriptionEventTypes) Valid() bool {
+	switch e {
+	case SaveWebhookSubscriptionEventTypesCatalogAssetChanged:
+		return true
+	case SaveWebhookSubscriptionEventTypesReleasePublished:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ScheduleMisfirePolicy.
+const (
+	RunOnce ScheduleMisfirePolicy = "run_once"
+	Skip    ScheduleMisfirePolicy = "skip"
+)
+
+// Valid indicates whether the value is a known member of the ScheduleMisfirePolicy enum.
+func (e ScheduleMisfirePolicy) Valid() bool {
+	switch e {
+	case RunOnce:
+		return true
+	case Skip:
 		return true
 	default:
 		return false
@@ -633,31 +3016,532 @@ func (e RelationPredicate) Valid() bool {
 
 // Defines values for SemanticAssetType.
 const (
-	Concept       SemanticAssetType = "concept"
-	Dimension     SemanticAssetType = "dimension"
-	Entity        SemanticAssetType = "entity"
-	Measure       SemanticAssetType = "measure"
-	Metric        SemanticAssetType = "metric"
-	Segment       SemanticAssetType = "segment"
-	SemanticModel SemanticAssetType = "semantic_model"
+	SemanticAssetTypeConcept       SemanticAssetType = "concept"
+	SemanticAssetTypeDimension     SemanticAssetType = "dimension"
+	SemanticAssetTypeEntity        SemanticAssetType = "entity"
+	SemanticAssetTypeMeasure       SemanticAssetType = "measure"
+	SemanticAssetTypeMetric        SemanticAssetType = "metric"
+	SemanticAssetTypeSegment       SemanticAssetType = "segment"
+	SemanticAssetTypeSemanticModel SemanticAssetType = "semantic_model"
 )
 
 // Valid indicates whether the value is a known member of the SemanticAssetType enum.
 func (e SemanticAssetType) Valid() bool {
 	switch e {
-	case Concept:
+	case SemanticAssetTypeConcept:
 		return true
-	case Dimension:
+	case SemanticAssetTypeDimension:
 		return true
-	case Entity:
+	case SemanticAssetTypeEntity:
 		return true
-	case Measure:
+	case SemanticAssetTypeMeasure:
 		return true
-	case Metric:
+	case SemanticAssetTypeMetric:
 		return true
-	case Segment:
+	case SemanticAssetTypeSegment:
 		return true
-	case SemanticModel:
+	case SemanticAssetTypeSemanticModel:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SemanticCandidateCandidateKind.
+const (
+	SemanticCandidateCandidateKindDimension SemanticCandidateCandidateKind = "dimension"
+	SemanticCandidateCandidateKindEntity    SemanticCandidateCandidateKind = "entity"
+	SemanticCandidateCandidateKindJoin      SemanticCandidateCandidateKind = "join"
+	SemanticCandidateCandidateKindMetric    SemanticCandidateCandidateKind = "metric"
+)
+
+// Valid indicates whether the value is a known member of the SemanticCandidateCandidateKind enum.
+func (e SemanticCandidateCandidateKind) Valid() bool {
+	switch e {
+	case SemanticCandidateCandidateKindDimension:
+		return true
+	case SemanticCandidateCandidateKindEntity:
+		return true
+	case SemanticCandidateCandidateKindJoin:
+		return true
+	case SemanticCandidateCandidateKindMetric:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SemanticCandidateDecisionAction.
+const (
+	SemanticCandidateDecisionActionConvert SemanticCandidateDecisionAction = "convert"
+	SemanticCandidateDecisionActionDismiss SemanticCandidateDecisionAction = "dismiss"
+)
+
+// Valid indicates whether the value is a known member of the SemanticCandidateDecisionAction enum.
+func (e SemanticCandidateDecisionAction) Valid() bool {
+	switch e {
+	case SemanticCandidateDecisionActionConvert:
+		return true
+	case SemanticCandidateDecisionActionDismiss:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SemanticCandidateDecisionRequestAction.
+const (
+	SemanticCandidateDecisionRequestActionConvert SemanticCandidateDecisionRequestAction = "convert"
+	SemanticCandidateDecisionRequestActionDismiss SemanticCandidateDecisionRequestAction = "dismiss"
+)
+
+// Valid indicates whether the value is a known member of the SemanticCandidateDecisionRequestAction enum.
+func (e SemanticCandidateDecisionRequestAction) Valid() bool {
+	switch e {
+	case SemanticCandidateDecisionRequestActionConvert:
+		return true
+	case SemanticCandidateDecisionRequestActionDismiss:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SemanticCandidateStatus.
+const (
+	SemanticCandidateStatusConverted SemanticCandidateStatus = "converted"
+	SemanticCandidateStatusDismissed SemanticCandidateStatus = "dismissed"
+	SemanticCandidateStatusPending   SemanticCandidateStatus = "pending"
+)
+
+// Valid indicates whether the value is a known member of the SemanticCandidateStatus enum.
+func (e SemanticCandidateStatus) Valid() bool {
+	switch e {
+	case SemanticCandidateStatusConverted:
+		return true
+	case SemanticCandidateStatusDismissed:
+		return true
+	case SemanticCandidateStatusPending:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SemanticFilterOperator.
+const (
+	SemanticFilterOperatorContains SemanticFilterOperator = "contains"
+	SemanticFilterOperatorEq       SemanticFilterOperator = "eq"
+	SemanticFilterOperatorGt       SemanticFilterOperator = "gt"
+	SemanticFilterOperatorGte      SemanticFilterOperator = "gte"
+	SemanticFilterOperatorIn       SemanticFilterOperator = "in"
+	SemanticFilterOperatorLt       SemanticFilterOperator = "lt"
+	SemanticFilterOperatorLte      SemanticFilterOperator = "lte"
+	SemanticFilterOperatorNeq      SemanticFilterOperator = "neq"
+	SemanticFilterOperatorNotIn    SemanticFilterOperator = "not_in"
+)
+
+// Valid indicates whether the value is a known member of the SemanticFilterOperator enum.
+func (e SemanticFilterOperator) Valid() bool {
+	switch e {
+	case SemanticFilterOperatorContains:
+		return true
+	case SemanticFilterOperatorEq:
+		return true
+	case SemanticFilterOperatorGt:
+		return true
+	case SemanticFilterOperatorGte:
+		return true
+	case SemanticFilterOperatorIn:
+		return true
+	case SemanticFilterOperatorLt:
+		return true
+	case SemanticFilterOperatorLte:
+		return true
+	case SemanticFilterOperatorNeq:
+		return true
+	case SemanticFilterOperatorNotIn:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SemanticOrderDirection.
+const (
+	Asc  SemanticOrderDirection = "asc"
+	Desc SemanticOrderDirection = "desc"
+)
+
+// Valid indicates whether the value is a known member of the SemanticOrderDirection enum.
+func (e SemanticOrderDirection) Valid() bool {
+	switch e {
+	case Asc:
+		return true
+	case Desc:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SemanticQueryIntent.
+const (
+	SemanticQueryIntentAggregate SemanticQueryIntent = "aggregate"
+	SemanticQueryIntentBreakdown SemanticQueryIntent = "breakdown"
+	SemanticQueryIntentCompare   SemanticQueryIntent = "compare"
+	SemanticQueryIntentDescribe  SemanticQueryIntent = "describe"
+)
+
+// Valid indicates whether the value is a known member of the SemanticQueryIntent enum.
+func (e SemanticQueryIntent) Valid() bool {
+	switch e {
+	case SemanticQueryIntentAggregate:
+		return true
+	case SemanticQueryIntentBreakdown:
+		return true
+	case SemanticQueryIntentCompare:
+		return true
+	case SemanticQueryIntentDescribe:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SemanticQuerySchemaVersion.
+const (
+	SemanticQuerySchemaVersionN100 SemanticQuerySchemaVersion = "1.0.0"
+)
+
+// Valid indicates whether the value is a known member of the SemanticQuerySchemaVersion enum.
+func (e SemanticQuerySchemaVersion) Valid() bool {
+	switch e {
+	case SemanticQuerySchemaVersionN100:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SemanticRefusalCode.
+const (
+	AMBIGUOUSMATCH         SemanticRefusalCode = "AMBIGUOUS_MATCH"
+	BINDINGEXPIRED         SemanticRefusalCode = "BINDING_EXPIRED"
+	BINDINGINACTIVE        SemanticRefusalCode = "BINDING_INACTIVE"
+	CONSUMERINACTIVE       SemanticRefusalCode = "CONSUMER_INACTIVE"
+	INCOMPATIBLEGRAIN      SemanticRefusalCode = "INCOMPATIBLE_GRAIN"
+	INVALIDFILTER          SemanticRefusalCode = "INVALID_FILTER"
+	INVALIDLIMIT           SemanticRefusalCode = "INVALID_LIMIT"
+	INVALIDORDERING        SemanticRefusalCode = "INVALID_ORDERING"
+	INVALIDPLAN            SemanticRefusalCode = "INVALID_PLAN"
+	INVALIDQUERY           SemanticRefusalCode = "INVALID_QUERY"
+	INVALIDTIMERANGE       SemanticRefusalCode = "INVALID_TIME_RANGE"
+	MISSINGJOINPATH        SemanticRefusalCode = "MISSING_JOIN_PATH"
+	MISSINGPHYSICALBINDING SemanticRefusalCode = "MISSING_PHYSICAL_BINDING"
+	NOMATCH                SemanticRefusalCode = "NO_MATCH"
+	NORELEASE              SemanticRefusalCode = "NO_RELEASE"
+	STALERELEASEBINDING    SemanticRefusalCode = "STALE_RELEASE_BINDING"
+	UNAUTHORIZEDASSET      SemanticRefusalCode = "UNAUTHORIZED_ASSET"
+	UNAUTHORIZEDCONSUMER   SemanticRefusalCode = "UNAUTHORIZED_CONSUMER"
+)
+
+// Valid indicates whether the value is a known member of the SemanticRefusalCode enum.
+func (e SemanticRefusalCode) Valid() bool {
+	switch e {
+	case AMBIGUOUSMATCH:
+		return true
+	case BINDINGEXPIRED:
+		return true
+	case BINDINGINACTIVE:
+		return true
+	case CONSUMERINACTIVE:
+		return true
+	case INCOMPATIBLEGRAIN:
+		return true
+	case INVALIDFILTER:
+		return true
+	case INVALIDLIMIT:
+		return true
+	case INVALIDORDERING:
+		return true
+	case INVALIDPLAN:
+		return true
+	case INVALIDQUERY:
+		return true
+	case INVALIDTIMERANGE:
+		return true
+	case MISSINGJOINPATH:
+		return true
+	case MISSINGPHYSICALBINDING:
+		return true
+	case NOMATCH:
+		return true
+	case NORELEASE:
+		return true
+	case STALERELEASEBINDING:
+		return true
+	case UNAUTHORIZEDASSET:
+		return true
+	case UNAUTHORIZEDCONSUMER:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SemanticResolutionChannel.
+const (
+	SemanticResolutionChannelAgent  SemanticResolutionChannel = "agent"
+	SemanticResolutionChannelApi    SemanticResolutionChannel = "api"
+	SemanticResolutionChannelAsk    SemanticResolutionChannel = "ask"
+	SemanticResolutionChannelCli    SemanticResolutionChannel = "cli"
+	SemanticResolutionChannelMcp    SemanticResolutionChannel = "mcp"
+	SemanticResolutionChannelSdk    SemanticResolutionChannel = "sdk"
+	SemanticResolutionChannelSystem SemanticResolutionChannel = "system"
+)
+
+// Valid indicates whether the value is a known member of the SemanticResolutionChannel enum.
+func (e SemanticResolutionChannel) Valid() bool {
+	switch e {
+	case SemanticResolutionChannelAgent:
+		return true
+	case SemanticResolutionChannelApi:
+		return true
+	case SemanticResolutionChannelAsk:
+		return true
+	case SemanticResolutionChannelCli:
+		return true
+	case SemanticResolutionChannelMcp:
+		return true
+	case SemanticResolutionChannelSdk:
+		return true
+	case SemanticResolutionChannelSystem:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SemanticResolutionOutcome.
+const (
+	SemanticResolutionOutcomeRefused  SemanticResolutionOutcome = "refused"
+	SemanticResolutionOutcomeResolved SemanticResolutionOutcome = "resolved"
+)
+
+// Valid indicates whether the value is a known member of the SemanticResolutionOutcome enum.
+func (e SemanticResolutionOutcome) Valid() bool {
+	switch e {
+	case SemanticResolutionOutcomeRefused:
+		return true
+	case SemanticResolutionOutcomeResolved:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SemanticResolutionSchemaVersion.
+const (
+	SemanticResolutionSchemaVersionN100 SemanticResolutionSchemaVersion = "1.0.0"
+)
+
+// Valid indicates whether the value is a known member of the SemanticResolutionSchemaVersion enum.
+func (e SemanticResolutionSchemaVersion) Valid() bool {
+	switch e {
+	case SemanticResolutionSchemaVersionN100:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SemanticTimeRangeGranularity.
+const (
+	Day     SemanticTimeRangeGranularity = "day"
+	Month   SemanticTimeRangeGranularity = "month"
+	Quarter SemanticTimeRangeGranularity = "quarter"
+	Week    SemanticTimeRangeGranularity = "week"
+	Year    SemanticTimeRangeGranularity = "year"
+)
+
+// Valid indicates whether the value is a known member of the SemanticTimeRangeGranularity enum.
+func (e SemanticTimeRangeGranularity) Valid() bool {
+	switch e {
+	case Day:
+		return true
+	case Month:
+		return true
+	case Quarter:
+		return true
+	case Week:
+		return true
+	case Year:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SourceDiscoveryRunStatus.
+const (
+	SourceDiscoveryRunStatusCancelled SourceDiscoveryRunStatus = "cancelled"
+	SourceDiscoveryRunStatusDegraded  SourceDiscoveryRunStatus = "degraded"
+	SourceDiscoveryRunStatusFailed    SourceDiscoveryRunStatus = "failed"
+	SourceDiscoveryRunStatusQueued    SourceDiscoveryRunStatus = "queued"
+	SourceDiscoveryRunStatusRunning   SourceDiscoveryRunStatus = "running"
+	SourceDiscoveryRunStatusSucceeded SourceDiscoveryRunStatus = "succeeded"
+)
+
+// Valid indicates whether the value is a known member of the SourceDiscoveryRunStatus enum.
+func (e SourceDiscoveryRunStatus) Valid() bool {
+	switch e {
+	case SourceDiscoveryRunStatusCancelled:
+		return true
+	case SourceDiscoveryRunStatusDegraded:
+		return true
+	case SourceDiscoveryRunStatusFailed:
+		return true
+	case SourceDiscoveryRunStatusQueued:
+		return true
+	case SourceDiscoveryRunStatusRunning:
+		return true
+	case SourceDiscoveryRunStatusSucceeded:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SourceScheduleOccurrenceMisfireDisposition.
+const (
+	Coalesced SourceScheduleOccurrenceMisfireDisposition = "coalesced"
+	OnTime    SourceScheduleOccurrenceMisfireDisposition = "on_time"
+)
+
+// Valid indicates whether the value is a known member of the SourceScheduleOccurrenceMisfireDisposition enum.
+func (e SourceScheduleOccurrenceMisfireDisposition) Valid() bool {
+	switch e {
+	case Coalesced:
+		return true
+	case OnTime:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SourceScheduleOccurrenceReasonCode.
+const (
+	ARTIFACTSETUNAVAILABLE SourceScheduleOccurrenceReasonCode = "ARTIFACT_SET_UNAVAILABLE"
+	CREDENTIALUNAVAILABLE  SourceScheduleOccurrenceReasonCode = "CREDENTIAL_UNAVAILABLE"
+	DSTGAP                 SourceScheduleOccurrenceReasonCode = "DST_GAP"
+	MISFIRESKIPPED         SourceScheduleOccurrenceReasonCode = "MISFIRE_SKIPPED"
+	OVERLAPACTIVERUN       SourceScheduleOccurrenceReasonCode = "OVERLAP_ACTIVE_RUN"
+	SOURCEUNAVAILABLE      SourceScheduleOccurrenceReasonCode = "SOURCE_UNAVAILABLE"
+)
+
+// Valid indicates whether the value is a known member of the SourceScheduleOccurrenceReasonCode enum.
+func (e SourceScheduleOccurrenceReasonCode) Valid() bool {
+	switch e {
+	case ARTIFACTSETUNAVAILABLE:
+		return true
+	case CREDENTIALUNAVAILABLE:
+		return true
+	case DSTGAP:
+		return true
+	case MISFIRESKIPPED:
+		return true
+	case OVERLAPACTIVERUN:
+		return true
+	case SOURCEUNAVAILABLE:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SourceScheduleOccurrenceState.
+const (
+	Enqueued SourceScheduleOccurrenceState = "enqueued"
+	Skipped  SourceScheduleOccurrenceState = "skipped"
+)
+
+// Valid indicates whether the value is a known member of the SourceScheduleOccurrenceState enum.
+func (e SourceScheduleOccurrenceState) Valid() bool {
+	switch e {
+	case Enqueued:
+		return true
+	case Skipped:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SourceScheduleOccurrenceTriggerKind.
+const (
+	RunNow    SourceScheduleOccurrenceTriggerKind = "run_now"
+	Scheduled SourceScheduleOccurrenceTriggerKind = "scheduled"
+)
+
+// Valid indicates whether the value is a known member of the SourceScheduleOccurrenceTriggerKind enum.
+func (e SourceScheduleOccurrenceTriggerKind) Valid() bool {
+	switch e {
+	case RunNow:
+		return true
+	case Scheduled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SourceSnapshotCoverageStatus.
+const (
+	SourceSnapshotCoverageStatusComplete SourceSnapshotCoverageStatus = "complete"
+	SourceSnapshotCoverageStatusFailed   SourceSnapshotCoverageStatus = "failed"
+	SourceSnapshotCoverageStatusPartial  SourceSnapshotCoverageStatus = "partial"
+)
+
+// Valid indicates whether the value is a known member of the SourceSnapshotCoverageStatus enum.
+func (e SourceSnapshotCoverageStatus) Valid() bool {
+	switch e {
+	case SourceSnapshotCoverageStatusComplete:
+		return true
+	case SourceSnapshotCoverageStatusFailed:
+		return true
+	case SourceSnapshotCoverageStatusPartial:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SourceTestResultStatus.
+const (
+	SourceTestResultStatusSucceeded SourceTestResultStatus = "succeeded"
+)
+
+// Valid indicates whether the value is a known member of the SourceTestResultStatus enum.
+func (e SourceTestResultStatus) Valid() bool {
+	switch e {
+	case SourceTestResultStatusSucceeded:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for StructuredGenerationOutputSchemaVersion.
+const (
+	SemliaProductionSuggestionsv1 StructuredGenerationOutputSchemaVersion = "semlia.production-suggestions/v1"
+)
+
+// Valid indicates whether the value is a known member of the StructuredGenerationOutputSchemaVersion enum.
+func (e StructuredGenerationOutputSchemaVersion) Valid() bool {
+	switch e {
+	case SemliaProductionSuggestionsv1:
 		return true
 	default:
 		return false
@@ -673,6 +3557,663 @@ const (
 func (e SystemInfoService) Valid() bool {
 	switch e {
 	case Semlia:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TargetKind.
+const (
+	TargetKindEntityKey       TargetKind = "entity_key"
+	TargetKindJoinContract    TargetKind = "join_contract"
+	TargetKindModelGrain      TargetKind = "model_grain"
+	TargetKindPhysicalBinding TargetKind = "physical_binding"
+	TargetKindSemanticAsset   TargetKind = "semantic_asset"
+)
+
+// Valid indicates whether the value is a known member of the TargetKind enum.
+func (e TargetKind) Valid() bool {
+	switch e {
+	case TargetKindEntityKey:
+		return true
+	case TargetKindJoinContract:
+		return true
+	case TargetKindModelGrain:
+		return true
+	case TargetKindPhysicalBinding:
+		return true
+	case TargetKindSemanticAsset:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TargetKindContent0Kind.
+const (
+	TargetKindContent0KindSemanticAsset TargetKindContent0Kind = "semantic_asset"
+)
+
+// Valid indicates whether the value is a known member of the TargetKindContent0Kind enum.
+func (e TargetKindContent0Kind) Valid() bool {
+	switch e {
+	case TargetKindContent0KindSemanticAsset:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TargetKindContent1Kind.
+const (
+	TargetKindContent1KindPhysicalBinding TargetKindContent1Kind = "physical_binding"
+)
+
+// Valid indicates whether the value is a known member of the TargetKindContent1Kind enum.
+func (e TargetKindContent1Kind) Valid() bool {
+	switch e {
+	case TargetKindContent1KindPhysicalBinding:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TargetKindContent2Kind.
+const (
+	TargetKindContent2KindModelGrain TargetKindContent2Kind = "model_grain"
+)
+
+// Valid indicates whether the value is a known member of the TargetKindContent2Kind enum.
+func (e TargetKindContent2Kind) Valid() bool {
+	switch e {
+	case TargetKindContent2KindModelGrain:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TargetKindContent3Kind.
+const (
+	TargetKindContent3KindEntityKey TargetKindContent3Kind = "entity_key"
+)
+
+// Valid indicates whether the value is a known member of the TargetKindContent3Kind enum.
+func (e TargetKindContent3Kind) Valid() bool {
+	switch e {
+	case TargetKindContent3KindEntityKey:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TargetKindContent4Kind.
+const (
+	TargetKindContent4KindJoinContract TargetKindContent4Kind = "join_contract"
+)
+
+// Valid indicates whether the value is a known member of the TargetKindContent4Kind enum.
+func (e TargetKindContent4Kind) Valid() bool {
+	switch e {
+	case TargetKindContent4KindJoinContract:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TargetResultOutcome.
+const (
+	TargetResultOutcomeNoChange TargetResultOutcome = "no_change"
+	TargetResultOutcomeProposal TargetResultOutcome = "proposal"
+)
+
+// Valid indicates whether the value is a known member of the TargetResultOutcome enum.
+func (e TargetResultOutcome) Valid() bool {
+	switch e {
+	case TargetResultOutcomeNoChange:
+		return true
+	case TargetResultOutcomeProposal:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TargetResultProposalState.
+const (
+	TargetResultProposalStateDraft       TargetResultProposalState = "draft"
+	TargetResultProposalStateInReview    TargetResultProposalState = "in_review"
+	TargetResultProposalStateLessThannil TargetResultProposalState = "<nil>"
+	TargetResultProposalStateProposed    TargetResultProposalState = "proposed"
+	TargetResultProposalStateRejected    TargetResultProposalState = "rejected"
+	TargetResultProposalStateReleased    TargetResultProposalState = "released"
+	TargetResultProposalStateValidating  TargetResultProposalState = "validating"
+)
+
+// Valid indicates whether the value is a known member of the TargetResultProposalState enum.
+func (e TargetResultProposalState) Valid() bool {
+	switch e {
+	case TargetResultProposalStateDraft:
+		return true
+	case TargetResultProposalStateInReview:
+		return true
+	case TargetResultProposalStateLessThannil:
+		return true
+	case TargetResultProposalStateProposed:
+		return true
+	case TargetResultProposalStateRejected:
+		return true
+	case TargetResultProposalStateReleased:
+		return true
+	case TargetResultProposalStateValidating:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UpdateAssetTargetIntent.
+const (
+	UpdateAssetTargetIntentUpdate UpdateAssetTargetIntent = "update"
+)
+
+// Valid indicates whether the value is a known member of the UpdateAssetTargetIntent enum.
+func (e UpdateAssetTargetIntent) Valid() bool {
+	switch e {
+	case UpdateAssetTargetIntentUpdate:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UpdateAssetTargetKind.
+const (
+	UpdateAssetTargetKindSemanticAsset UpdateAssetTargetKind = "semantic_asset"
+)
+
+// Valid indicates whether the value is a known member of the UpdateAssetTargetKind enum.
+func (e UpdateAssetTargetKind) Valid() bool {
+	switch e {
+	case UpdateAssetTargetKindSemanticAsset:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UpdateConsumerBindingRequestMode.
+const (
+	UpdateConsumerBindingRequestModeCurrent UpdateConsumerBindingRequestMode = "current"
+	UpdateConsumerBindingRequestModePinned  UpdateConsumerBindingRequestMode = "pinned"
+)
+
+// Valid indicates whether the value is a known member of the UpdateConsumerBindingRequestMode enum.
+func (e UpdateConsumerBindingRequestMode) Valid() bool {
+	switch e {
+	case UpdateConsumerBindingRequestModeCurrent:
+		return true
+	case UpdateConsumerBindingRequestModePinned:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UpdateConsumerBindingRequestStatus.
+const (
+	UpdateConsumerBindingRequestStatusActive    UpdateConsumerBindingRequestStatus = "active"
+	UpdateConsumerBindingRequestStatusRevoked   UpdateConsumerBindingRequestStatus = "revoked"
+	UpdateConsumerBindingRequestStatusSuspended UpdateConsumerBindingRequestStatus = "suspended"
+)
+
+// Valid indicates whether the value is a known member of the UpdateConsumerBindingRequestStatus enum.
+func (e UpdateConsumerBindingRequestStatus) Valid() bool {
+	switch e {
+	case UpdateConsumerBindingRequestStatusActive:
+		return true
+	case UpdateConsumerBindingRequestStatusRevoked:
+		return true
+	case UpdateConsumerBindingRequestStatusSuspended:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UpdateConsumerRequestStatus.
+const (
+	UpdateConsumerRequestStatusActive    UpdateConsumerRequestStatus = "active"
+	UpdateConsumerRequestStatusRevoked   UpdateConsumerRequestStatus = "revoked"
+	UpdateConsumerRequestStatusSuspended UpdateConsumerRequestStatus = "suspended"
+)
+
+// Valid indicates whether the value is a known member of the UpdateConsumerRequestStatus enum.
+func (e UpdateConsumerRequestStatus) Valid() bool {
+	switch e {
+	case UpdateConsumerRequestStatusActive:
+		return true
+	case UpdateConsumerRequestStatusRevoked:
+		return true
+	case UpdateConsumerRequestStatusSuspended:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UpdateObjectTargetIntent.
+const (
+	UpdateObjectTargetIntentUpdate UpdateObjectTargetIntent = "update"
+)
+
+// Valid indicates whether the value is a known member of the UpdateObjectTargetIntent enum.
+func (e UpdateObjectTargetIntent) Valid() bool {
+	switch e {
+	case UpdateObjectTargetIntentUpdate:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UpdateObjectTarget0Kind.
+const (
+	UpdateObjectTarget0KindSemanticAsset UpdateObjectTarget0Kind = "semantic_asset"
+)
+
+// Valid indicates whether the value is a known member of the UpdateObjectTarget0Kind enum.
+func (e UpdateObjectTarget0Kind) Valid() bool {
+	switch e {
+	case UpdateObjectTarget0KindSemanticAsset:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UpdateObjectTarget1Kind.
+const (
+	UpdateObjectTarget1KindPhysicalBinding UpdateObjectTarget1Kind = "physical_binding"
+)
+
+// Valid indicates whether the value is a known member of the UpdateObjectTarget1Kind enum.
+func (e UpdateObjectTarget1Kind) Valid() bool {
+	switch e {
+	case UpdateObjectTarget1KindPhysicalBinding:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UpdateObjectTarget2Kind.
+const (
+	UpdateObjectTarget2KindModelGrain UpdateObjectTarget2Kind = "model_grain"
+)
+
+// Valid indicates whether the value is a known member of the UpdateObjectTarget2Kind enum.
+func (e UpdateObjectTarget2Kind) Valid() bool {
+	switch e {
+	case UpdateObjectTarget2KindModelGrain:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UpdateObjectTarget3Kind.
+const (
+	UpdateObjectTarget3KindEntityKey UpdateObjectTarget3Kind = "entity_key"
+)
+
+// Valid indicates whether the value is a known member of the UpdateObjectTarget3Kind enum.
+func (e UpdateObjectTarget3Kind) Valid() bool {
+	switch e {
+	case UpdateObjectTarget3KindEntityKey:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UpdateObjectTarget4Kind.
+const (
+	UpdateObjectTarget4KindJoinContract UpdateObjectTarget4Kind = "join_contract"
+)
+
+// Valid indicates whether the value is a known member of the UpdateObjectTarget4Kind enum.
+func (e UpdateObjectTarget4Kind) Valid() bool {
+	switch e {
+	case UpdateObjectTarget4KindJoinContract:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UpdateSourceRequestStatus.
+const (
+	UpdateSourceRequestStatusActive  UpdateSourceRequestStatus = "active"
+	UpdateSourceRequestStatusDeleted UpdateSourceRequestStatus = "deleted"
+	UpdateSourceRequestStatusPaused  UpdateSourceRequestStatus = "paused"
+)
+
+// Valid indicates whether the value is a known member of the UpdateSourceRequestStatus enum.
+func (e UpdateSourceRequestStatus) Valid() bool {
+	switch e {
+	case UpdateSourceRequestStatusActive:
+		return true
+	case UpdateSourceRequestStatusDeleted:
+		return true
+	case UpdateSourceRequestStatusPaused:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UpdateWorkbenchAttentionItemRequestState.
+const (
+	UpdateWorkbenchAttentionItemRequestStateDismissed  UpdateWorkbenchAttentionItemRequestState = "dismissed"
+	UpdateWorkbenchAttentionItemRequestStateInProgress UpdateWorkbenchAttentionItemRequestState = "in_progress"
+	UpdateWorkbenchAttentionItemRequestStateOpen       UpdateWorkbenchAttentionItemRequestState = "open"
+)
+
+// Valid indicates whether the value is a known member of the UpdateWorkbenchAttentionItemRequestState enum.
+func (e UpdateWorkbenchAttentionItemRequestState) Valid() bool {
+	switch e {
+	case UpdateWorkbenchAttentionItemRequestStateDismissed:
+		return true
+	case UpdateWorkbenchAttentionItemRequestStateInProgress:
+		return true
+	case UpdateWorkbenchAttentionItemRequestStateOpen:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ValidationAttemptResultStatus.
+const (
+	ValidationAttemptResultStatusFailed    ValidationAttemptResultStatus = "failed"
+	ValidationAttemptResultStatusQueued    ValidationAttemptResultStatus = "queued"
+	ValidationAttemptResultStatusRunning   ValidationAttemptResultStatus = "running"
+	ValidationAttemptResultStatusSucceeded ValidationAttemptResultStatus = "succeeded"
+)
+
+// Valid indicates whether the value is a known member of the ValidationAttemptResultStatus enum.
+func (e ValidationAttemptResultStatus) Valid() bool {
+	switch e {
+	case ValidationAttemptResultStatusFailed:
+		return true
+	case ValidationAttemptResultStatusQueued:
+		return true
+	case ValidationAttemptResultStatusRunning:
+		return true
+	case ValidationAttemptResultStatusSucceeded:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ValidationCheckResultResultsSeverity.
+const (
+	ValidationCheckResultResultsSeverityBlocker       ValidationCheckResultResultsSeverity = "blocker"
+	ValidationCheckResultResultsSeverityInfo          ValidationCheckResultResultsSeverity = "info"
+	ValidationCheckResultResultsSeverityNotApplicable ValidationCheckResultResultsSeverity = "not_applicable"
+	ValidationCheckResultResultsSeverityWarning       ValidationCheckResultResultsSeverity = "warning"
+)
+
+// Valid indicates whether the value is a known member of the ValidationCheckResultResultsSeverity enum.
+func (e ValidationCheckResultResultsSeverity) Valid() bool {
+	switch e {
+	case ValidationCheckResultResultsSeverityBlocker:
+		return true
+	case ValidationCheckResultResultsSeverityInfo:
+		return true
+	case ValidationCheckResultResultsSeverityNotApplicable:
+		return true
+	case ValidationCheckResultResultsSeverityWarning:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ValidationCheckResultStatus.
+const (
+	ValidationCheckResultStatusCancelled ValidationCheckResultStatus = "cancelled"
+	ValidationCheckResultStatusFailed    ValidationCheckResultStatus = "failed"
+	ValidationCheckResultStatusRunning   ValidationCheckResultStatus = "running"
+	ValidationCheckResultStatusSucceeded ValidationCheckResultStatus = "succeeded"
+)
+
+// Valid indicates whether the value is a known member of the ValidationCheckResultStatus enum.
+func (e ValidationCheckResultStatus) Valid() bool {
+	switch e {
+	case ValidationCheckResultStatusCancelled:
+		return true
+	case ValidationCheckResultStatusFailed:
+		return true
+	case ValidationCheckResultStatusRunning:
+		return true
+	case ValidationCheckResultStatusSucceeded:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ValidationStatus0Status.
+const (
+	NotRequested ValidationStatus0Status = "not_requested"
+)
+
+// Valid indicates whether the value is a known member of the ValidationStatus0Status enum.
+func (e ValidationStatus0Status) Valid() bool {
+	switch e {
+	case NotRequested:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WebhookDeliveryState.
+const (
+	WebhookDeliveryStateCancelled  WebhookDeliveryState = "cancelled"
+	WebhookDeliveryStateDeadLetter WebhookDeliveryState = "dead_letter"
+	WebhookDeliveryStateQueued     WebhookDeliveryState = "queued"
+	WebhookDeliveryStateRunning    WebhookDeliveryState = "running"
+	WebhookDeliveryStateSucceeded  WebhookDeliveryState = "succeeded"
+)
+
+// Valid indicates whether the value is a known member of the WebhookDeliveryState enum.
+func (e WebhookDeliveryState) Valid() bool {
+	switch e {
+	case WebhookDeliveryStateCancelled:
+		return true
+	case WebhookDeliveryStateDeadLetter:
+		return true
+	case WebhookDeliveryStateQueued:
+		return true
+	case WebhookDeliveryStateRunning:
+		return true
+	case WebhookDeliveryStateSucceeded:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WebhookSubscriptionEventTypes.
+const (
+	WebhookSubscriptionEventTypesCatalogAssetChanged WebhookSubscriptionEventTypes = "catalog.asset.changed"
+	WebhookSubscriptionEventTypesReleasePublished    WebhookSubscriptionEventTypes = "release.published"
+)
+
+// Valid indicates whether the value is a known member of the WebhookSubscriptionEventTypes enum.
+func (e WebhookSubscriptionEventTypes) Valid() bool {
+	switch e {
+	case WebhookSubscriptionEventTypesCatalogAssetChanged:
+		return true
+	case WebhookSubscriptionEventTypesReleasePublished:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WorkbenchAction.
+const (
+	WorkbenchActionAssign        WorkbenchAction = "assign"
+	WorkbenchActionDismiss       WorkbenchAction = "dismiss"
+	WorkbenchActionManageSource  WorkbenchAction = "manage_source"
+	WorkbenchActionOpenTarget    WorkbenchAction = "open_target"
+	WorkbenchActionPublish       WorkbenchAction = "publish"
+	WorkbenchActionReview        WorkbenchAction = "review"
+	WorkbenchActionRunValidation WorkbenchAction = "run_validation"
+)
+
+// Valid indicates whether the value is a known member of the WorkbenchAction enum.
+func (e WorkbenchAction) Valid() bool {
+	switch e {
+	case WorkbenchActionAssign:
+		return true
+	case WorkbenchActionDismiss:
+		return true
+	case WorkbenchActionManageSource:
+		return true
+	case WorkbenchActionOpenTarget:
+		return true
+	case WorkbenchActionPublish:
+		return true
+	case WorkbenchActionReview:
+		return true
+	case WorkbenchActionRunValidation:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WorkbenchAttentionKind.
+const (
+	WorkbenchAttentionKindCompatibility WorkbenchAttentionKind = "compatibility"
+	WorkbenchAttentionKindReview        WorkbenchAttentionKind = "review"
+	WorkbenchAttentionKindRuntime       WorkbenchAttentionKind = "runtime"
+	WorkbenchAttentionKindSource        WorkbenchAttentionKind = "source"
+	WorkbenchAttentionKindValidation    WorkbenchAttentionKind = "validation"
+)
+
+// Valid indicates whether the value is a known member of the WorkbenchAttentionKind enum.
+func (e WorkbenchAttentionKind) Valid() bool {
+	switch e {
+	case WorkbenchAttentionKindCompatibility:
+		return true
+	case WorkbenchAttentionKindReview:
+		return true
+	case WorkbenchAttentionKindRuntime:
+		return true
+	case WorkbenchAttentionKindSource:
+		return true
+	case WorkbenchAttentionKindValidation:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WorkbenchAttentionState.
+const (
+	WorkbenchAttentionStateDismissed  WorkbenchAttentionState = "dismissed"
+	WorkbenchAttentionStateInProgress WorkbenchAttentionState = "in_progress"
+	WorkbenchAttentionStateOpen       WorkbenchAttentionState = "open"
+	WorkbenchAttentionStateResolved   WorkbenchAttentionState = "resolved"
+)
+
+// Valid indicates whether the value is a known member of the WorkbenchAttentionState enum.
+func (e WorkbenchAttentionState) Valid() bool {
+	switch e {
+	case WorkbenchAttentionStateDismissed:
+		return true
+	case WorkbenchAttentionStateInProgress:
+		return true
+	case WorkbenchAttentionStateOpen:
+		return true
+	case WorkbenchAttentionStateResolved:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WorkbenchPriority.
+const (
+	WorkbenchPriorityCritical WorkbenchPriority = "critical"
+	WorkbenchPriorityHigh     WorkbenchPriority = "high"
+	WorkbenchPriorityLow      WorkbenchPriority = "low"
+	WorkbenchPriorityMedium   WorkbenchPriority = "medium"
+)
+
+// Valid indicates whether the value is a known member of the WorkbenchPriority enum.
+func (e WorkbenchPriority) Valid() bool {
+	switch e {
+	case WorkbenchPriorityCritical:
+		return true
+	case WorkbenchPriorityHigh:
+		return true
+	case WorkbenchPriorityLow:
+		return true
+	case WorkbenchPriorityMedium:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WorkbenchSort.
+const (
+	DueAsc       WorkbenchSort = "due_asc"
+	PriorityDesc WorkbenchSort = "priority_desc"
+	UpdatedDesc  WorkbenchSort = "updated_desc"
+)
+
+// Valid indicates whether the value is a known member of the WorkbenchSort enum.
+func (e WorkbenchSort) Valid() bool {
+	switch e {
+	case DueAsc:
+		return true
+	case PriorityDesc:
+		return true
+	case UpdatedDesc:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WorkbenchView.
+const (
+	Initiated WorkbenchView = "initiated"
+	Mine      WorkbenchView = "mine"
+	Team      WorkbenchView = "team"
+)
+
+// Valid indicates whether the value is a known member of the WorkbenchView enum.
+func (e WorkbenchView) Valid() bool {
+	switch e {
+	case Initiated:
+		return true
+	case Mine:
+		return true
+	case Team:
 		return true
 	default:
 		return false
@@ -704,6 +4245,152 @@ func (e ListAssetRelationsParamsDirection) Valid() bool {
 //
 // Example: v1
 type ApiVersion = string
+
+// ArtifactContentAvailability defines model for ArtifactContentAvailability.
+type ArtifactContentAvailability string
+
+// ArtifactId defines model for ArtifactId.
+type ArtifactId = identity.ArtifactID
+
+// ArtifactKind defines model for ArtifactKind.
+type ArtifactKind string
+
+// ArtifactPage defines model for ArtifactPage.
+type ArtifactPage struct {
+	Items []IngestionArtifact `json:"items"`
+	Limit int                 `json:"limit"`
+
+	// NextCursor Opaque pagination cursor that clients must not interpret.
+	NextCursor *Cursor `json:"nextCursor,omitempty"`
+	Total      int64   `json:"total"`
+}
+
+// ArtifactSet defines model for ArtifactSet.
+type ArtifactSet struct {
+	// CreatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	CreatedAt  Timestamp             `json:"createdAt"`
+	Id         ArtifactSetId         `json:"id"`
+	Members    []ArtifactSetMember   `json:"members"`
+	SetDigest  string                `json:"setDigest"`
+	SourceId   SourceConnectionId    `json:"sourceId"`
+	SourceKind ArtifactSetSourceKind `json:"sourceKind"`
+}
+
+// ArtifactSetSourceKind defines model for ArtifactSet.SourceKind.
+type ArtifactSetSourceKind string
+
+// ArtifactSetId defines model for ArtifactSetId.
+type ArtifactSetId = identity.ArtifactSetID
+
+// ArtifactSetMember defines model for ArtifactSetMember.
+type ArtifactSetMember struct {
+	ArtifactId          ArtifactId                  `json:"artifactId"`
+	ByteSize            int64                       `json:"byteSize"`
+	ContentAvailability ArtifactContentAvailability `json:"contentAvailability"`
+	ContentDigest       string                      `json:"contentDigest"`
+	Kind                ArtifactKind                `json:"kind"`
+	LogicalPath         string                      `json:"logicalPath"`
+	MediaType           string                      `json:"mediaType"`
+	Ordinal             int                         `json:"ordinal"`
+}
+
+// ArtifactSourceConnection defines model for ArtifactSourceConnection.
+type ArtifactSourceConnection struct {
+	ActiveArtifactSetId ArtifactSetId                       `json:"activeArtifactSetId"`
+	AdapterKind         ArtifactSourceConnectionAdapterKind `json:"adapterKind"`
+
+	// CreatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	CreatedAt  Timestamp                          `json:"createdAt"`
+	Id         SourceConnectionId                 `json:"id"`
+	Name       string                             `json:"name"`
+	SourceKind ArtifactSourceConnectionSourceKind `json:"sourceKind"`
+	Status     ArtifactSourceConnectionStatus     `json:"status"`
+
+	// UpdatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	UpdatedAt Timestamp `json:"updatedAt"`
+	Version   int64     `json:"version"`
+}
+
+// ArtifactSourceConnectionAdapterKind defines model for ArtifactSourceConnection.AdapterKind.
+type ArtifactSourceConnectionAdapterKind string
+
+// ArtifactSourceConnectionSourceKind defines model for ArtifactSourceConnection.SourceKind.
+type ArtifactSourceConnectionSourceKind string
+
+// ArtifactSourceConnectionStatus defines model for ArtifactSourceConnection.Status.
+type ArtifactSourceConnectionStatus string
+
+// ArtifactStatus defines model for ArtifactStatus.
+type ArtifactStatus string
+
+// ArtifactValidationSummary defines model for ArtifactValidationSummary.
+type ArtifactValidationSummary struct {
+	AdapterKind       string `json:"adapterKind"`
+	AdapterVersion    string `json:"adapterVersion"`
+	CodeArtifactCount int    `json:"codeArtifactCount"`
+	DatasetCount      int    `json:"datasetCount"`
+	FieldCount        int    `json:"fieldCount"`
+	FindingCount      int    `json:"findingCount"`
+	JoinCount         int    `json:"joinCount"`
+	KeyCount          int    `json:"keyCount"`
+	LineageCount      int    `json:"lineageCount"`
+}
+
+// AskInterpretation defines model for AskInterpretation.
+type AskInterpretation struct {
+	Clarification *string                  `json:"clarification,omitempty"`
+	Outcome       AskInterpretationOutcome `json:"outcome"`
+	Query         *SemanticQuery           `json:"query,omitempty"`
+	Schema        AskInterpretationSchema  `json:"schema"`
+}
+
+// AskInterpretationOutcome defines model for AskInterpretation.Outcome.
+type AskInterpretationOutcome string
+
+// AskInterpretationSchema defines model for AskInterpretation.Schema.
+type AskInterpretationSchema string
+
+// AskRequest defines model for AskRequest.
+type AskRequest struct {
+	// Context current has no reference; explicit requires releaseId; binding requires bindingId.
+	Context        *ResolutionContext `json:"context,omitempty"`
+	IdempotencyKey string             `json:"idempotencyKey"`
+
+	// Question Used for this provider call and retained only as an attributable digest.
+	Question string `json:"question"`
+}
+
+// AskResponse defines model for AskResponse.
+type AskResponse struct {
+	// AgentRun The §8.6 record of one agent execution — hashes, cost and duration only; raw prompts and provider payloads are unrepresentable.
+	AgentRun       GovernanceAgentRun   `json:"agentRun"`
+	Definitions    []ReleasedDefinition `json:"definitions"`
+	Interpretation AskInterpretation    `json:"interpretation"`
+	Resolution     *SemanticResolution  `json:"resolution,omitempty"`
+}
+
+// AssetContent defines model for AssetContent.
+type AssetContent struct {
+	Address     string                `json:"address"`
+	AssetType   AssetContentAssetType `json:"assetType"`
+	Definition  *string               `json:"definition"`
+	DisplayName string                `json:"displayName"`
+
+	// OwnerPrincipalId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	OwnerPrincipalId ResourceId `json:"ownerPrincipalId"`
+	Scope            *string    `json:"scope"`
+}
+
+// AssetContentAssetType defines model for AssetContent.AssetType.
+type AssetContentAssetType string
 
 // AssetLifecycleState defines model for AssetLifecycleState.
 type AssetLifecycleState string
@@ -778,13 +4465,213 @@ type AssetRevisionPage struct {
 	Page  PageInfo        `json:"page"`
 }
 
+// AttentionItemId Example: ati_01arz3ndektsv4rrffq69g5fav
+type AttentionItemId = identity.AttentionItemID
+
+// AuthorizationAction defines model for AuthorizationAction.
+type AuthorizationAction string
+
+// AuthorizationDecision defines model for AuthorizationDecision.
+type AuthorizationDecision struct {
+	Action               AuthorizationAction             `json:"action"`
+	Allowed              bool                            `json:"allowed"`
+	AuthorizationVersion int64                           `json:"authorizationVersion"`
+	BindingId            *AuthorizationRoleBindingId     `json:"bindingId,omitempty"`
+	PrincipalId          PrincipalId                     `json:"principalId"`
+	ReasonCode           AuthorizationDecisionReasonCode `json:"reasonCode"`
+	RoleId               *AuthorizationRoleId            `json:"roleId,omitempty"`
+}
+
+// AuthorizationDecisionReasonCode defines model for AuthorizationDecision.ReasonCode.
+type AuthorizationDecisionReasonCode string
+
+// AuthorizationRole defines model for AuthorizationRole.
+type AuthorizationRole struct {
+	Actions  []AuthorizationAction     `json:"actions"`
+	Category AuthorizationRoleCategory `json:"category"`
+
+	// CreatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	CreatedAt   *Timestamp          `json:"createdAt,omitempty"`
+	Description string              `json:"description"`
+	Id          AuthorizationRoleId `json:"id"`
+	Name        string              `json:"name"`
+	Version     int64               `json:"version"`
+
+	// WorkspaceId Example: wsp_01arz3ndektsv4rrffq69g5fav
+	WorkspaceId *WorkspaceId `json:"workspaceId,omitempty"`
+}
+
+// AuthorizationRoleCategory defines model for AuthorizationRole.Category.
+type AuthorizationRoleCategory string
+
+// AuthorizationRoleBinding defines model for AuthorizationRoleBinding.
+type AuthorizationRoleBinding struct {
+	// ExpiredAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	ExpiredAt *Timestamp `json:"expiredAt,omitempty"`
+
+	// ExpiresAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	ExpiresAt *Timestamp `json:"expiresAt,omitempty"`
+
+	// GrantedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	GrantedAt        Timestamp                  `json:"grantedAt"`
+	GrantedBy        *PrincipalId               `json:"grantedBy,omitempty"`
+	Id               AuthorizationRoleBindingId `json:"id"`
+	PrincipalId      PrincipalId                `json:"principalId"`
+	RevocationReason *string                    `json:"revocationReason,omitempty"`
+
+	// RevokedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	RevokedAt   *Timestamp                     `json:"revokedAt,omitempty"`
+	RevokedBy   *PrincipalId                   `json:"revokedBy,omitempty"`
+	RoleId      AuthorizationRoleId            `json:"roleId"`
+	RoleVersion int64                          `json:"roleVersion"`
+	Scope       AuthorizationScope             `json:"scope"`
+	Status      AuthorizationRoleBindingStatus `json:"status"`
+	Version     int64                          `json:"version"`
+
+	// WorkspaceId Example: wsp_01arz3ndektsv4rrffq69g5fav
+	WorkspaceId WorkspaceId `json:"workspaceId"`
+}
+
+// AuthorizationRoleBindingStatus defines model for AuthorizationRoleBinding.Status.
+type AuthorizationRoleBindingStatus string
+
+// AuthorizationRoleBindingId defines model for AuthorizationRoleBindingId.
+type AuthorizationRoleBindingId = identity.BindingID
+
+// AuthorizationRoleBindingMutationResult defines model for AuthorizationRoleBindingMutationResult.
+type AuthorizationRoleBindingMutationResult struct {
+	AuthorizationVersion int64                    `json:"authorizationVersion"`
+	Binding              AuthorizationRoleBinding `json:"binding"`
+}
+
+// AuthorizationRoleBindingPage defines model for AuthorizationRoleBindingPage.
+type AuthorizationRoleBindingPage struct {
+	Items []AuthorizationRoleBinding `json:"items"`
+}
+
+// AuthorizationRoleId defines model for AuthorizationRoleId.
+type AuthorizationRoleId = string
+
+// AuthorizationRoleMutationResult defines model for AuthorizationRoleMutationResult.
+type AuthorizationRoleMutationResult struct {
+	AuthorizationVersion int64             `json:"authorizationVersion"`
+	Role                 AuthorizationRole `json:"role"`
+}
+
+// AuthorizationRolePage defines model for AuthorizationRolePage.
+type AuthorizationRolePage struct {
+	Items []AuthorizationRole `json:"items"`
+}
+
+// AuthorizationScope defines model for AuthorizationScope.
+type AuthorizationScope struct {
+	DomainId *string                `json:"domainId,omitempty"`
+	Id       string                 `json:"id"`
+	Type     AuthorizationScopeType `json:"type"`
+}
+
+// AuthorizationScopeType defines model for AuthorizationScopeType.
+type AuthorizationScopeType string
+
+// BeforePin defines model for BeforePin.
+type BeforePin struct {
+	union json.RawMessage
+}
+
+// BeforePin0 defines model for BeforePin.0.
+type BeforePin0 struct {
+	Kind     TargetKind         `json:"kind"`
+	Presence BeforePin0Presence `json:"presence"`
+
+	// TargetId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	TargetId ResourceId `json:"targetId"`
+}
+
+// BeforePin0Presence defines model for BeforePin.0.Presence.
+type BeforePin0Presence string
+
+// BeforePin1 defines model for BeforePin.1.
+type BeforePin1 struct {
+	Kind     BeforePin1Kind     `json:"kind"`
+	Presence BeforePin1Presence `json:"presence"`
+
+	// RevisionId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	RevisionId ResourceId `json:"revisionId"`
+
+	// TargetId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	TargetId ResourceId `json:"targetId"`
+}
+
+// BeforePin1Kind defines model for BeforePin.1.Kind.
+type BeforePin1Kind string
+
+// BeforePin1Presence defines model for BeforePin.1.Presence.
+type BeforePin1Presence string
+
+// BeforePin2 defines model for BeforePin.2.
+type BeforePin2 struct {
+	ContentDigest Digest             `json:"contentDigest"`
+	Kind          ObjectKind         `json:"kind"`
+	ObjectVersion Version            `json:"objectVersion"`
+	Presence      BeforePin2Presence `json:"presence"`
+
+	// TargetId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	TargetId ResourceId `json:"targetId"`
+}
+
+// BeforePin2Presence defines model for BeforePin.2.Presence.
+type BeforePin2Presence string
+
+// BindingContent defines model for BindingContent.
+type BindingContent struct {
+	Asset     SemanticReference  `json:"asset"`
+	Dataset   PhysicalReference  `json:"dataset"`
+	Field     *PhysicalReference `json:"field,omitempty"`
+	Transform *string            `json:"transform,omitempty"`
+}
+
+// CandidateSelection defines model for CandidateSelection.
+type CandidateSelection struct {
+	// CandidateId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	CandidateId      ResourceId `json:"candidateId"`
+	Digest           Digest     `json:"digest"`
+	PrimaryTargetKey LocalKey   `json:"primaryTargetKey"`
+
+	// SnapshotId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	SnapshotId ResourceId `json:"snapshotId"`
+	TargetKeys []LocalKey `json:"targetKeys"`
+}
+
 // CatalogAssetDetail defines model for CatalogAssetDetail.
 type CatalogAssetDetail struct {
 	// Address Workspace-scoped human-readable namespace and stable key.
 	//
 	// Example: commerce.net_revenue
-	Address   SemanticAddress   `json:"address"`
-	AssetType SemanticAssetType `json:"assetType"`
+	Address           SemanticAddress           `json:"address"`
+	AssetType         SemanticAssetType         `json:"assetType"`
+	AuthoritySections []CatalogAuthoritySection `json:"authoritySections"`
 
 	// CreatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
 	//
@@ -831,14 +4718,348 @@ type CatalogAssetSummary struct {
 	UpdatedAt Timestamp `json:"updatedAt"`
 }
 
+// CatalogAuthorityAvailability defines model for CatalogAuthorityAvailability.
+type CatalogAuthorityAvailability string
+
+// CatalogAuthorityRecord defines model for CatalogAuthorityRecord.
+type CatalogAuthorityRecord struct {
+	Authority       string                           `json:"authority"`
+	ConsumerBinding *CatalogConsumerBindingAuthority `json:"consumerBinding,omitempty"`
+	EntityKey       *CatalogEntityKeyAuthority       `json:"entityKey,omitempty"`
+	Id              string                           `json:"id"`
+	JoinContract    *CatalogJoinContractAuthority    `json:"joinContract,omitempty"`
+	Kind            CatalogAuthorityRecordKind       `json:"kind"`
+	Label           string                           `json:"label"`
+	Lineage         *CatalogLineageAuthority         `json:"lineage,omitempty"`
+	ModelGrain      *CatalogModelGrainAuthority      `json:"modelGrain,omitempty"`
+	PhysicalBinding *CatalogPhysicalBindingAuthority `json:"physicalBinding,omitempty"`
+	RelatedId       *string                          `json:"relatedId,omitempty"`
+	Relation        *CatalogRelationAuthority        `json:"relation,omitempty"`
+
+	// ReleaseId Example: rls_01arz3ndektsv4rrffq69g5fav
+	ReleaseId       *GovernanceReleaseId `json:"releaseId,omitempty"`
+	ReleaseSequence *int64               `json:"releaseSequence,omitempty"`
+	Status          string               `json:"status"`
+	Version         int                  `json:"version"`
+}
+
+// CatalogAuthorityRecordKind defines model for CatalogAuthorityRecord.Kind.
+type CatalogAuthorityRecordKind string
+
+// CatalogAuthorityRecordPage defines model for CatalogAuthorityRecordPage.
+type CatalogAuthorityRecordPage struct {
+	Items []CatalogAuthorityRecord       `json:"items"`
+	Page  CatalogAuthorityRecordPageInfo `json:"page"`
+}
+
+// CatalogAuthorityRecordPageInfo defines model for CatalogAuthorityRecordPageInfo.
+type CatalogAuthorityRecordPageInfo struct {
+	Limit int `json:"limit"`
+
+	// NextCursor Opaque pagination cursor that clients must not interpret.
+	NextCursor *Cursor `json:"nextCursor,omitempty"`
+	Total      int64   `json:"total"`
+}
+
+// CatalogAuthoritySection Bounded aggregate facts with an explicit persisted authority and version basis.
+type CatalogAuthoritySection struct {
+	Authority    string                         `json:"authority"`
+	Availability CatalogAuthorityAvailability   `json:"availability"`
+	Kind         CatalogAuthoritySectionKind    `json:"kind"`
+	Records      []CatalogAuthorityRecord       `json:"records"`
+	RecordsPage  CatalogAuthorityRecordPageInfo `json:"recordsPage"`
+	Relation     *CatalogRelationAuthority      `json:"relation,omitempty"`
+
+	// ReleaseId Example: rls_01arz3ndektsv4rrffq69g5fav
+	ReleaseId       *GovernanceReleaseId `json:"releaseId,omitempty"`
+	ReleaseSequence *int64               `json:"releaseSequence,omitempty"`
+
+	// RevisionId Example: rev_01arz3ndektsv4rrffq69g5fav
+	RevisionId *AssetRevisionId `json:"revisionId,omitempty"`
+	Values     map[string]int64 `json:"values"`
+}
+
+// CatalogAuthoritySectionKind defines model for CatalogAuthoritySection.Kind.
+type CatalogAuthoritySectionKind string
+
+// CatalogConsumerBindingAuthority defines model for CatalogConsumerBindingAuthority.
+type CatalogConsumerBindingAuthority struct {
+	CompatibilityConstraint map[string]interface{} `json:"compatibilityConstraint"`
+	ConsumerId              ConsumerId             `json:"consumerId"`
+
+	// EffectiveReleaseId Example: rls_01arz3ndektsv4rrffq69g5fav
+	EffectiveReleaseId GovernanceReleaseId `json:"effectiveReleaseId"`
+	Environment        string              `json:"environment"`
+
+	// ExpiresAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	ExpiresAt *Timestamp                            `json:"expiresAt,omitempty"`
+	Mode      CatalogConsumerBindingAuthorityMode   `json:"mode"`
+	Purpose   string                                `json:"purpose"`
+	Status    CatalogConsumerBindingAuthorityStatus `json:"status"`
+}
+
+// CatalogConsumerBindingAuthorityMode defines model for CatalogConsumerBindingAuthority.Mode.
+type CatalogConsumerBindingAuthorityMode string
+
+// CatalogConsumerBindingAuthorityStatus defines model for CatalogConsumerBindingAuthority.Status.
+type CatalogConsumerBindingAuthorityStatus string
+
+// CatalogEntityKeyAuthority defines model for CatalogEntityKeyAuthority.
+type CatalogEntityKeyAuthority struct {
+	// AssetId Example: ast_01arz3ndektsv4rrffq69g5fav
+	AssetId             SemanticAssetId                              `json:"assetId"`
+	KeyFieldRefs        []PhysicalFieldId                            `json:"keyFieldRefs"`
+	UniquenessSemantics CatalogEntityKeyAuthorityUniquenessSemantics `json:"uniquenessSemantics"`
+}
+
+// CatalogEntityKeyAuthorityUniquenessSemantics defines model for CatalogEntityKeyAuthority.UniquenessSemantics.
+type CatalogEntityKeyAuthorityUniquenessSemantics string
+
+// CatalogJoinContractAuthority defines model for CatalogJoinContractAuthority.
+type CatalogJoinContractAuthority struct {
+	Cardinality    CatalogJoinContractAuthorityCardinality `json:"cardinality"`
+	Direction      CatalogJoinContractAuthorityDirection   `json:"direction"`
+	JoinExpression string                                  `json:"joinExpression"`
+	JoinType       CatalogJoinContractAuthorityJoinType    `json:"joinType"`
+	LeftDatasetId  PhysicalDatasetId                       `json:"leftDatasetId"`
+	LeftFieldRefs  []PhysicalFieldId                       `json:"leftFieldRefs"`
+	RightDatasetId PhysicalDatasetId                       `json:"rightDatasetId"`
+	RightFieldRefs []PhysicalFieldId                       `json:"rightFieldRefs"`
+}
+
+// CatalogJoinContractAuthorityCardinality defines model for CatalogJoinContractAuthority.Cardinality.
+type CatalogJoinContractAuthorityCardinality string
+
+// CatalogJoinContractAuthorityDirection defines model for CatalogJoinContractAuthority.Direction.
+type CatalogJoinContractAuthorityDirection string
+
+// CatalogJoinContractAuthorityJoinType defines model for CatalogJoinContractAuthority.JoinType.
+type CatalogJoinContractAuthorityJoinType string
+
+// CatalogLineageAuthority defines model for CatalogLineageAuthority.
+type CatalogLineageAuthority struct {
+	CodeArtifactId      *CodeArtifactId                  `json:"codeArtifactId,omitempty"`
+	Confidence          float64                          `json:"confidence"`
+	Direction           CatalogLineageAuthorityDirection `json:"direction"`
+	DownstreamDatasetId PhysicalDatasetId                `json:"downstreamDatasetId"`
+	EdgeKind            CatalogLineageAuthorityEdgeKind  `json:"edgeKind"`
+	SourceRevisionId    SourceRevisionId                 `json:"sourceRevisionId"`
+	UpstreamDatasetId   PhysicalDatasetId                `json:"upstreamDatasetId"`
+}
+
+// CatalogLineageAuthorityDirection defines model for CatalogLineageAuthority.Direction.
+type CatalogLineageAuthorityDirection string
+
+// CatalogLineageAuthorityEdgeKind defines model for CatalogLineageAuthority.EdgeKind.
+type CatalogLineageAuthorityEdgeKind string
+
+// CatalogModelGrainAuthority defines model for CatalogModelGrainAuthority.
+type CatalogModelGrainAuthority struct {
+	// AssetId Example: ast_01arz3ndektsv4rrffq69g5fav
+	AssetId SemanticAssetId `json:"assetId"`
+
+	// DocumentedBy Example: evd_01arz3ndektsv4rrffq69g5fav
+	DocumentedBy    *EvidenceArtifactId `json:"documentedBy,omitempty"`
+	GrainExpression string              `json:"grainExpression"`
+	GrainFieldRefs  []PhysicalFieldId   `json:"grainFieldRefs"`
+}
+
 // CatalogPage defines model for CatalogPage.
 type CatalogPage struct {
 	Items []CatalogAssetSummary `json:"items"`
 	Page  PageInfo              `json:"page"`
 }
 
+// CatalogPhysicalBindingAuthority defines model for CatalogPhysicalBindingAuthority.
+type CatalogPhysicalBindingAuthority struct {
+	// AssetId Example: ast_01arz3ndektsv4rrffq69g5fav
+	AssetId   SemanticAssetId   `json:"assetId"`
+	DatasetId PhysicalDatasetId `json:"datasetId"`
+	FieldId   *PhysicalFieldId  `json:"fieldId,omitempty"`
+	Transform *string           `json:"transform,omitempty"`
+}
+
+// CatalogRelationAuthority defines model for CatalogRelationAuthority.
+type CatalogRelationAuthority struct {
+	AssertionState RelationAssertionState            `json:"assertionState"`
+	Direction      CatalogRelationAuthorityDirection `json:"direction"`
+
+	// ObjectAssetId Example: ast_01arz3ndektsv4rrffq69g5fav
+	ObjectAssetId SemanticAssetId   `json:"objectAssetId"`
+	Plane         RelationPlane     `json:"plane"`
+	Predicate     RelationPredicate `json:"predicate"`
+
+	// SubjectAssetId Example: ast_01arz3ndektsv4rrffq69g5fav
+	SubjectAssetId SemanticAssetId `json:"subjectAssetId"`
+}
+
+// CatalogRelationAuthorityDirection defines model for CatalogRelationAuthority.Direction.
+type CatalogRelationAuthorityDirection string
+
+// Change defines model for Change.
+type Change struct {
+	union json.RawMessage
+}
+
+// Change0 defines model for Change.0.
+type Change0 struct {
+	AfterValue *JSONValue `json:"afterValue"`
+	FieldPath  string     `json:"fieldPath"`
+	Op         Change0Op  `json:"op"`
+}
+
+// Change0Op defines model for Change.0.Op.
+type Change0Op string
+
+// Change1 defines model for Change.1.
+type Change1 struct {
+	AfterValue  *JSONValue `json:"afterValue"`
+	BeforeValue *JSONValue `json:"beforeValue"`
+	FieldPath   string     `json:"fieldPath"`
+	Op          Change1Op  `json:"op"`
+}
+
+// Change1Op defines model for Change.1.Op.
+type Change1Op string
+
+// Change2 defines model for Change.2.
+type Change2 struct {
+	BeforeValue *JSONValue `json:"beforeValue"`
+	FieldPath   string     `json:"fieldPath"`
+	Op          Change2Op  `json:"op"`
+}
+
+// Change2Op defines model for Change.2.Op.
+type Change2Op string
+
+// ChangeList defines model for ChangeList.
+type ChangeList = []Change
+
+// ClientCredentialId defines model for ClientCredentialId.
+type ClientCredentialId = string
+
+// ClientCredentialSummary defines model for ClientCredentialSummary.
+type ClientCredentialSummary struct {
+	AllowedActions []ClientCredentialSummaryAllowedActions `json:"allowedActions"`
+	BindingId      ConsumerBindingId                       `json:"bindingId"`
+	ConsumerId     ConsumerId                              `json:"consumerId"`
+	ExpiresAt      time.Time                               `json:"expiresAt"`
+	Id             string                                  `json:"id"`
+	IssuedAt       time.Time                               `json:"issuedAt"`
+	IssuedBy       string                                  `json:"issuedBy"`
+	LastUsedAt     *time.Time                              `json:"lastUsedAt,omitempty"`
+	Name           string                                  `json:"name"`
+	PrincipalId    string                                  `json:"principalId"`
+	RevokedAt      *time.Time                              `json:"revokedAt,omitempty"`
+	RotatedFromId  *string                                 `json:"rotatedFromId,omitempty"`
+	ScopeId        string                                  `json:"scopeId"`
+	ScopeType      ClientCredentialSummaryScopeType        `json:"scopeType"`
+	TokenPrefix    string                                  `json:"tokenPrefix"`
+
+	// WorkspaceId Example: wsp_01arz3ndektsv4rrffq69g5fav
+	WorkspaceId WorkspaceId `json:"workspaceId"`
+}
+
+// ClientCredentialSummaryAllowedActions defines model for ClientCredentialSummary.AllowedActions.
+type ClientCredentialSummaryAllowedActions string
+
+// ClientCredentialSummaryScopeType defines model for ClientCredentialSummary.ScopeType.
+type ClientCredentialSummaryScopeType string
+
 // CodeArtifactId defines model for CodeArtifactId.
 type CodeArtifactId = identity.CodeArtifactID
+
+// Consumer defines model for Consumer.
+type Consumer struct {
+	// CreatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	CreatedAt         Timestamp              `json:"createdAt"`
+	Id                ConsumerId             `json:"id"`
+	Kind              ConsumerKind           `json:"kind"`
+	Metadata          map[string]interface{} `json:"metadata"`
+	Name              string                 `json:"name"`
+	OwnerPrincipalRef string                 `json:"ownerPrincipalRef"`
+	StableKey         string                 `json:"stableKey"`
+	Status            ConsumerStatus         `json:"status"`
+
+	// UpdatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	UpdatedAt Timestamp `json:"updatedAt"`
+}
+
+// ConsumerKind defines model for Consumer.Kind.
+type ConsumerKind string
+
+// ConsumerStatus defines model for Consumer.Status.
+type ConsumerStatus string
+
+// ConsumerBinding defines model for ConsumerBinding.
+type ConsumerBinding struct {
+	CompatibilityConstraint map[string]interface{} `json:"compatibilityConstraint"`
+	ConsumerId              ConsumerId             `json:"consumerId"`
+
+	// CreatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	CreatedAt   Timestamp `json:"createdAt"`
+	Environment string    `json:"environment"`
+
+	// ExpiresAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	ExpiresAt *Timestamp          `json:"expiresAt,omitempty"`
+	Id        ConsumerBindingId   `json:"id"`
+	Mode      ConsumerBindingMode `json:"mode"`
+	Purpose   string              `json:"purpose"`
+
+	// ReleaseId Example: rls_01arz3ndektsv4rrffq69g5fav
+	ReleaseId *GovernanceReleaseId  `json:"releaseId,omitempty"`
+	Status    ConsumerBindingStatus `json:"status"`
+
+	// UpdatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	UpdatedAt Timestamp `json:"updatedAt"`
+	Version   int       `json:"version"`
+}
+
+// ConsumerBindingMode defines model for ConsumerBinding.Mode.
+type ConsumerBindingMode string
+
+// ConsumerBindingStatus defines model for ConsumerBinding.Status.
+type ConsumerBindingStatus string
+
+// ConsumerBindingId defines model for ConsumerBindingId.
+type ConsumerBindingId = identity.ConsumerBindingID
+
+// ConsumerBindingPage defines model for ConsumerBindingPage.
+type ConsumerBindingPage struct {
+	Items []ConsumerBinding `json:"items"`
+}
+
+// ConsumerId defines model for ConsumerId.
+type ConsumerId = identity.ConsumerID
+
+// ConsumerPage defines model for ConsumerPage.
+type ConsumerPage struct {
+	Items []Consumer `json:"items"`
+}
+
+// CoverageUnit defines model for CoverageUnit.
+type CoverageUnit struct {
+	DiagnosticCodes     []string           `json:"diagnosticCodes"`
+	EnumerationComplete bool               `json:"enumerationComplete"`
+	Key                 string             `json:"key"`
+	Selector            *string            `json:"selector,omitempty"`
+	Status              CoverageUnitStatus `json:"status"`
+}
+
+// CoverageUnitStatus defines model for CoverageUnit.Status.
+type CoverageUnitStatus string
 
 // CreateAssetRevisionRequest defines model for CreateAssetRevisionRequest.
 type CreateAssetRevisionRequest struct {
@@ -850,6 +5071,26 @@ type CreateAssetRevisionRequest struct {
 	//
 	// Example: 0.1.0
 	SchemaVersion SchemaVersion `json:"schemaVersion"`
+}
+
+// CreateAuthorizationRoleBindingRequest defines model for CreateAuthorizationRoleBindingRequest.
+type CreateAuthorizationRoleBindingRequest struct {
+	ExpectedRoleVersion int64 `json:"expectedRoleVersion"`
+
+	// ExpiresAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	ExpiresAt   *Timestamp          `json:"expiresAt,omitempty"`
+	PrincipalId PrincipalId         `json:"principalId"`
+	RoleId      AuthorizationRoleId `json:"roleId"`
+	Scope       AuthorizationScope  `json:"scope"`
+}
+
+// CreateAuthorizationRoleRequest defines model for CreateAuthorizationRoleRequest.
+type CreateAuthorizationRoleRequest struct {
+	Actions     []AuthorizationAction `json:"actions"`
+	Description string                `json:"description"`
+	Name        string                `json:"name"`
 }
 
 // CreateCatalogAssetRequest defines model for CreateCatalogAssetRequest.
@@ -869,6 +5110,38 @@ type CreateCatalogAssetRequest struct {
 	// Example: 0.1.0
 	SchemaVersion SchemaVersion `json:"schemaVersion"`
 }
+
+// CreateConsumerBindingRequest defines model for CreateConsumerBindingRequest.
+type CreateConsumerBindingRequest struct {
+	CompatibilityConstraint *map[string]interface{} `json:"compatibilityConstraint,omitempty"`
+	ConsumerId              ConsumerId              `json:"consumerId"`
+	Environment             string                  `json:"environment"`
+
+	// ExpiresAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	ExpiresAt *Timestamp                       `json:"expiresAt,omitempty"`
+	Mode      CreateConsumerBindingRequestMode `json:"mode"`
+	Purpose   string                           `json:"purpose"`
+
+	// ReleaseId Example: rls_01arz3ndektsv4rrffq69g5fav
+	ReleaseId *GovernanceReleaseId `json:"releaseId,omitempty"`
+}
+
+// CreateConsumerBindingRequestMode defines model for CreateConsumerBindingRequest.Mode.
+type CreateConsumerBindingRequestMode string
+
+// CreateConsumerRequest defines model for CreateConsumerRequest.
+type CreateConsumerRequest struct {
+	Kind              CreateConsumerRequestKind `json:"kind"`
+	Metadata          *map[string]interface{}   `json:"metadata,omitempty"`
+	Name              string                    `json:"name"`
+	OwnerPrincipalRef *string                   `json:"ownerPrincipalRef,omitempty"`
+	StableKey         string                    `json:"stableKey"`
+}
+
+// CreateConsumerRequestKind defines model for CreateConsumerRequest.Kind.
+type CreateConsumerRequestKind string
 
 // CreateGovernanceModelProviderRequest credential is write-only secret material — it is reduced to its revision digest and never persisted or echoed. credentialEnv names the environment variable the runtime resolves.
 type CreateGovernanceModelProviderRequest struct {
@@ -915,6 +5188,119 @@ type CreateGovernanceProposalRequest struct {
 	Title            string                     `json:"title"`
 }
 
+// CreateMachinePrincipal defines model for CreateMachinePrincipal.
+type CreateMachinePrincipal struct {
+	Name string `json:"name"`
+}
+
+// CreateOperationsAuditExportRequest defines model for CreateOperationsAuditExportRequest.
+type CreateOperationsAuditExportRequest struct {
+	Filter         OperationsAuditFilter `json:"filter"`
+	IdempotencyKey string                `json:"idempotencyKey"`
+}
+
+// CreateProductionRequest defines model for CreateProductionRequest.
+type CreateProductionRequest struct {
+	Input ProductionInput `json:"input"`
+
+	// SupersedesOperationId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	SupersedesOperationId *ResourceId        `json:"supersedesOperationId,omitempty"`
+	Targets               []ProductionTarget `json:"targets"`
+}
+
+// CreateSourceRequest defines model for CreateSourceRequest.
+type CreateSourceRequest struct {
+	ArtifactPaths *[]string                  `json:"artifactPaths,omitempty"`
+	Database      string                     `json:"database"`
+	Host          string                     `json:"host"`
+	Name          string                     `json:"name"`
+	Password      *string                    `json:"password,omitempty"`
+	Port          int                        `json:"port"`
+	SslMode       CreateSourceRequestSslMode `json:"sslMode"`
+	Username      string                     `json:"username"`
+}
+
+// CreateSourceRequestSslMode defines model for CreateSourceRequest.SslMode.
+type CreateSourceRequestSslMode string
+
+// CreateSourceScheduleRequest defines model for CreateSourceScheduleRequest.
+type CreateSourceScheduleRequest struct {
+	Expression    string                `json:"expression"`
+	MisfirePolicy ScheduleMisfirePolicy `json:"misfirePolicy"`
+	Timezone      string                `json:"timezone"`
+}
+
+// CreateTarget defines model for CreateTarget.
+type CreateTarget struct {
+	Changes       []Change                `json:"changes"`
+	Content       map[string]interface{}  `json:"content"`
+	EvidenceIds   []ResourceId            `json:"evidenceIds"`
+	IdentityKey   string                  `json:"identityKey"`
+	Intent        CreateTargetIntent      `json:"intent"`
+	Kind          TargetKind              `json:"kind"`
+	LocalKey      LocalKey                `json:"localKey"`
+	ReuseIdentity *ReintroductionIdentity `json:"reuseIdentity,omitempty"`
+	Title         string                  `json:"title"`
+	union         json.RawMessage
+}
+
+// CreateTargetIntent defines model for CreateTarget.Intent.
+type CreateTargetIntent string
+
+// CreateTarget0 defines model for CreateTarget.0.
+type CreateTarget0 struct {
+	Content *AssetContent      `json:"content,omitempty"`
+	Kind    *CreateTarget0Kind `json:"kind,omitempty"`
+}
+
+// CreateTarget0Kind defines model for CreateTarget.0.Kind.
+type CreateTarget0Kind string
+
+// CreateTarget1 defines model for CreateTarget.1.
+type CreateTarget1 struct {
+	Content *BindingContent    `json:"content,omitempty"`
+	Kind    *CreateTarget1Kind `json:"kind,omitempty"`
+}
+
+// CreateTarget1Kind defines model for CreateTarget.1.Kind.
+type CreateTarget1Kind string
+
+// CreateTarget2 defines model for CreateTarget.2.
+type CreateTarget2 struct {
+	Content *GrainContent      `json:"content,omitempty"`
+	Kind    *CreateTarget2Kind `json:"kind,omitempty"`
+}
+
+// CreateTarget2Kind defines model for CreateTarget.2.Kind.
+type CreateTarget2Kind string
+
+// CreateTarget3 defines model for CreateTarget.3.
+type CreateTarget3 struct {
+	Content *EntityKeyContent  `json:"content,omitempty"`
+	Kind    *CreateTarget3Kind `json:"kind,omitempty"`
+}
+
+// CreateTarget3Kind defines model for CreateTarget.3.Kind.
+type CreateTarget3Kind string
+
+// CreateTarget4 defines model for CreateTarget.4.
+type CreateTarget4 struct {
+	Content *JoinContent       `json:"content,omitempty"`
+	Kind    *CreateTarget4Kind `json:"kind,omitempty"`
+}
+
+// CreateTarget4Kind defines model for CreateTarget.4.Kind.
+type CreateTarget4Kind string
+
+// CreateWorkspaceInvitationRequest defines model for CreateWorkspaceInvitationRequest.
+type CreateWorkspaceInvitationRequest struct {
+	Email   *string `json:"email,omitempty"`
+	RoleId  string  `json:"roleId"`
+	Subject *string `json:"subject,omitempty"`
+}
+
 // CreateWorkspaceRequest defines model for CreateWorkspaceRequest.
 type CreateWorkspaceRequest struct {
 	DisplayName string `json:"displayName"`
@@ -923,6 +5309,34 @@ type CreateWorkspaceRequest struct {
 
 // Cursor Opaque pagination cursor that clients must not interpret.
 type Cursor = string
+
+// DeleteSourceRequest defines model for DeleteSourceRequest.
+type DeleteSourceRequest struct {
+	ExpectedVersion int64 `json:"expectedVersion"`
+}
+
+// SourceSnapshotDiagnostic defines model for Diagnostic.
+type SourceSnapshotDiagnostic struct {
+	Code        string             `json:"code"`
+	CoverageKey string             `json:"coverageKey"`
+	Locator     *string            `json:"locator,omitempty"`
+	Message     string             `json:"message"`
+	Ordinal     int                `json:"ordinal"`
+	Severity    DiagnosticSeverity `json:"severity"`
+}
+
+// DiagnosticSeverity defines model for Diagnostic.Severity.
+type DiagnosticSeverity string
+
+// DiagnosticPage defines model for DiagnosticPage.
+type DiagnosticPage struct {
+	Items      []SourceSnapshotDiagnostic `json:"items"`
+	NextCursor *string                    `json:"nextCursor"`
+	SnapshotId SourceSnapshotId           `json:"snapshotId"`
+}
+
+// Digest defines model for Digest.
+type Digest = string
 
 // DiscoveryFinding defines model for DiscoveryFinding.
 type DiscoveryFinding struct {
@@ -979,6 +5393,71 @@ type DiscoveryRun struct {
 
 // DiscoveryRunStatus defines model for DiscoveryRun.Status.
 type DiscoveryRunStatus string
+
+// EmbeddingIndexStatus defines model for EmbeddingIndexStatus.
+type EmbeddingIndexStatus struct {
+	Active     *EmbeddingIndexVersion `json:"active"`
+	Configured bool                   `json:"configured"`
+	Latest     *EmbeddingIndexVersion `json:"latest"`
+	Reason     string                 `json:"reason"`
+}
+
+// EmbeddingIndexVersion defines model for EmbeddingIndexVersion.
+type EmbeddingIndexVersion struct {
+	ChunkCount   int       `json:"chunkCount"`
+	CorpusDigest string    `json:"corpusDigest"`
+	CreatedAt    time.Time `json:"createdAt"`
+	Dimension    int       `json:"dimension"`
+	ErrorCode    string    `json:"errorCode"`
+
+	// Id Example: run_01arz3ndektsv4rrffq69g5fav
+	Id    RunId  `json:"id"`
+	Model string `json:"model"`
+
+	// ReleaseId Example: rls_01arz3ndektsv4rrffq69g5fav
+	ReleaseId GovernanceReleaseId `json:"releaseId"`
+
+	// RuntimeRunId Example: run_01arz3ndektsv4rrffq69g5fav
+	RuntimeRunId RunId                      `json:"runtimeRunId"`
+	State        EmbeddingIndexVersionState `json:"state"`
+	UpdatedAt    time.Time                  `json:"updatedAt"`
+	VectorCount  int                        `json:"vectorCount"`
+
+	// WorkspaceId Example: wsp_01arz3ndektsv4rrffq69g5fav
+	WorkspaceId WorkspaceId `json:"workspaceId"`
+}
+
+// EmbeddingIndexVersionState defines model for EmbeddingIndexVersion.State.
+type EmbeddingIndexVersionState string
+
+// EmbeddingSearchResult defines model for EmbeddingSearchResult.
+type EmbeddingSearchResult struct {
+	FallbackReason string `json:"fallbackReason"`
+	Items          []struct {
+		Address string `json:"address"`
+
+		// AssetId Example: ast_01arz3ndektsv4rrffq69g5fav
+		AssetId SemanticAssetId `json:"assetId"`
+
+		// RevisionId Example: rev_01arz3ndektsv4rrffq69g5fav
+		RevisionId AssetRevisionId `json:"revisionId"`
+		Score      float32         `json:"score"`
+	} `json:"items"`
+	Mode EmbeddingSearchResultMode `json:"mode"`
+}
+
+// EmbeddingSearchResultMode defines model for EmbeddingSearchResult.Mode.
+type EmbeddingSearchResultMode string
+
+// EntityKeyContent defines model for EntityKeyContent.
+type EntityKeyContent struct {
+	Asset      SemanticReference          `json:"asset"`
+	Fields     FieldReferences            `json:"fields"`
+	Uniqueness EntityKeyContentUniqueness `json:"uniqueness"`
+}
+
+// EntityKeyContentUniqueness defines model for EntityKeyContent.Uniqueness.
+type EntityKeyContentUniqueness string
 
 // ErrorCode Stable machine-readable error identifier.
 //
@@ -1075,6 +5554,123 @@ type EvidenceArtifactRole string
 
 // EvidenceArtifactId Example: evd_01arz3ndektsv4rrffq69g5fav
 type EvidenceArtifactId = identity.EvidenceID
+
+// EvidenceSelection defines model for EvidenceSelection.
+type EvidenceSelection struct {
+	Digest Digest `json:"digest"`
+
+	// EvidenceId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	EvidenceId ResourceId `json:"evidenceId"`
+
+	// SnapshotId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	SnapshotId *ResourceId `json:"snapshotId,omitempty"`
+}
+
+// FieldReferences defines model for FieldReferences.
+type FieldReferences = []PhysicalReference
+
+// FinalizeArtifactSetRequest defines model for FinalizeArtifactSetRequest.
+type FinalizeArtifactSetRequest struct {
+	ArtifactIds           []ArtifactId        `json:"artifactIds"`
+	ExpectedSourceVersion *int64              `json:"expectedSourceVersion,omitempty"`
+	SourceId              *SourceConnectionId `json:"sourceId,omitempty"`
+	SourceName            string              `json:"sourceName"`
+}
+
+// GenerateProductionRequest Client ceilings only narrow a current server grant; they never authorize spending. Generation does not apply or publish drafts.
+type GenerateProductionRequest struct {
+	ExpectedVersion     Version `json:"expectedVersion"`
+	InputDigest         Digest  `json:"inputDigest"`
+	Instruction         string  `json:"instruction"`
+	MaxCostMicros       int64   `json:"maxCostMicros"`
+	MaxOutputTokens     int     `json:"maxOutputTokens"`
+	ModelConfigRevision string  `json:"modelConfigRevision"`
+
+	// ModelSettingId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	ModelSettingId ResourceId `json:"modelSettingId"`
+}
+
+// GenerationApplication defines model for GenerationApplication.
+type GenerationApplication struct {
+	// ActorPrincipalId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	ActorPrincipalId     ResourceId `json:"actorPrincipalId"`
+	AppliedContentDigest Digest     `json:"appliedContentDigest"`
+	AppliedVersion       Version    `json:"appliedVersion"`
+	Delta                []struct {
+		Change   Change   `json:"change"`
+		LocalKey LocalKey `json:"localKey"`
+	} `json:"delta"`
+	DeltaDigest Digest `json:"deltaDigest"`
+
+	// RunId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	RunId              ResourceId `json:"runId"`
+	SourceOutputDigest Digest     `json:"sourceOutputDigest"`
+	SourceVersion      Version    `json:"sourceVersion"`
+}
+
+// GenerationResult defines model for GenerationResult.
+type GenerationResult struct {
+	CostMicros          *int64  `json:"costMicros"`
+	DurationMs          *int64  `json:"durationMs"`
+	ErrorCode           *string `json:"errorCode"`
+	InputDigest         Digest  `json:"inputDigest"`
+	InputVersion        Version `json:"inputVersion"`
+	Model               string  `json:"model"`
+	ModelConfigRevision string  `json:"modelConfigRevision"`
+
+	// OperationId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	OperationId  ResourceId                   `json:"operationId"`
+	Output       interface{}                  `json:"output"`
+	OutputDigest *string                      `json:"outputDigest"`
+	ProviderMode GenerationResultProviderMode `json:"providerMode"`
+	Replayed     bool                         `json:"replayed"`
+
+	// RunId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	RunId  ResourceId             `json:"runId"`
+	Status GenerationResultStatus `json:"status"`
+	union  json.RawMessage
+}
+
+// GenerationResultProviderMode defines model for GenerationResult.ProviderMode.
+type GenerationResultProviderMode string
+
+// GenerationResultStatus defines model for GenerationResult.Status.
+type GenerationResultStatus string
+
+// GenerationResult0 defines model for GenerationResult.0.
+type GenerationResult0 struct {
+	ErrorCode    interface{}                 `json:"errorCode,omitempty"`
+	Output       *StructuredGenerationOutput `json:"output,omitempty"`
+	OutputDigest *Digest                     `json:"outputDigest,omitempty"`
+	Status       *GenerationResult0Status    `json:"status,omitempty"`
+}
+
+// GenerationResult0Status defines model for GenerationResult.0.Status.
+type GenerationResult0Status string
+
+// GenerationResult1 defines model for GenerationResult.1.
+type GenerationResult1 struct {
+	Output       interface{}              `json:"output,omitempty"`
+	OutputDigest interface{}              `json:"outputDigest,omitempty"`
+	Status       *GenerationResult1Status `json:"status,omitempty"`
+}
+
+// GenerationResult1Status defines model for GenerationResult.1.Status.
+type GenerationResult1Status string
 
 // GovernanceAgentRun The §8.6 record of one agent execution — hashes, cost and duration only; raw prompts and provider payloads are unrepresentable.
 type GovernanceAgentRun struct {
@@ -1243,6 +5839,9 @@ type GovernanceModelSetting struct {
 	EmbeddingDimension *int      `json:"embeddingDimension,omitempty"`
 	Enabled            bool      `json:"enabled"`
 
+	// GenerationConfigRevision Returned by model/provider lists; pins both setting and provider for production generation. This digest does not grant spending permission.
+	GenerationConfigRevision *string `json:"generationConfigRevision,omitempty"`
+
 	// Id Example: mdl_01arz3ndektsv4rrffq69g5fav
 	Id        GovernanceModelSettingId `json:"id"`
 	IsDefault bool                     `json:"isDefault"`
@@ -1334,8 +5933,16 @@ type GovernanceProposalDetail struct {
 	DecidedAt *Timestamp `json:"decidedAt,omitempty"`
 
 	// Id Example: prp_01arz3ndektsv4rrffq69g5fav
-	Id     GovernanceProposalId `json:"id"`
-	Reason string               `json:"reason"`
+	Id     GovernanceProposalId            `json:"id"`
+	Intent *GovernanceProposalDetailIntent `json:"intent,omitempty"`
+
+	// OperationId Example: prodop_01arz3ndektsv4rrffq69g5fav
+	OperationId      *ProductionOperationId `json:"operationId,omitempty"`
+	OperationVersion *int                   `json:"operationVersion,omitempty"`
+
+	// OriginReleaseId Example: rls_01arz3ndektsv4rrffq69g5fav
+	OriginReleaseId *GovernanceReleaseId `json:"originReleaseId,omitempty"`
+	Reason          string               `json:"reason"`
 
 	// State SSOT §7.5 workflow state of a proposal.
 	State GovernanceProposalState `json:"state"`
@@ -1343,8 +5950,9 @@ type GovernanceProposalDetail struct {
 	// SubmittedAt RFC 3339 timestamp normalized to UTC at public boundaries.
 	//
 	// Example: 2026-08-08T08:00:00Z
-	SubmittedAt *Timestamp `json:"submittedAt,omitempty"`
-	Summary     string     `json:"summary"`
+	SubmittedAt    *Timestamp `json:"submittedAt,omitempty"`
+	Summary        string     `json:"summary"`
+	TargetLocalKey *string    `json:"targetLocalKey,omitempty"`
 
 	// TargetObjectId Target TypeID; the prefix must match targetObjectType.
 	//
@@ -1360,6 +5968,9 @@ type GovernanceProposalDetail struct {
 	// Example: 2026-08-08T08:00:00Z
 	UpdatedAt Timestamp `json:"updatedAt"`
 }
+
+// GovernanceProposalDetailIntent defines model for GovernanceProposalDetail.Intent.
+type GovernanceProposalDetailIntent string
 
 // GovernanceProposalId Example: prp_01arz3ndektsv4rrffq69g5fav
 type GovernanceProposalId = identity.ProposalID
@@ -1396,8 +6007,16 @@ type GovernanceProposalSummary struct {
 	DecidedAt *Timestamp `json:"decidedAt,omitempty"`
 
 	// Id Example: prp_01arz3ndektsv4rrffq69g5fav
-	Id     GovernanceProposalId `json:"id"`
-	Reason string               `json:"reason"`
+	Id     GovernanceProposalId             `json:"id"`
+	Intent *GovernanceProposalSummaryIntent `json:"intent,omitempty"`
+
+	// OperationId Example: prodop_01arz3ndektsv4rrffq69g5fav
+	OperationId      *ProductionOperationId `json:"operationId,omitempty"`
+	OperationVersion *int                   `json:"operationVersion,omitempty"`
+
+	// OriginReleaseId Example: rls_01arz3ndektsv4rrffq69g5fav
+	OriginReleaseId *GovernanceReleaseId `json:"originReleaseId,omitempty"`
+	Reason          string               `json:"reason"`
 
 	// State SSOT §7.5 workflow state of a proposal.
 	State GovernanceProposalState `json:"state"`
@@ -1405,8 +6024,9 @@ type GovernanceProposalSummary struct {
 	// SubmittedAt RFC 3339 timestamp normalized to UTC at public boundaries.
 	//
 	// Example: 2026-08-08T08:00:00Z
-	SubmittedAt *Timestamp `json:"submittedAt,omitempty"`
-	Summary     string     `json:"summary"`
+	SubmittedAt    *Timestamp `json:"submittedAt,omitempty"`
+	Summary        string     `json:"summary"`
+	TargetLocalKey *string    `json:"targetLocalKey,omitempty"`
 
 	// TargetObjectId Target TypeID; the prefix must match targetObjectType.
 	//
@@ -1422,6 +6042,9 @@ type GovernanceProposalSummary struct {
 	// Example: 2026-08-08T08:00:00Z
 	UpdatedAt Timestamp `json:"updatedAt"`
 }
+
+// GovernanceProposalSummaryIntent defines model for GovernanceProposalSummary.Intent.
+type GovernanceProposalSummaryIntent string
 
 // GovernanceRelease One immutable release snapshot (P-003); rollback creates a new one.
 type GovernanceRelease struct {
@@ -1451,12 +6074,31 @@ type GovernanceRelease struct {
 	State GovernanceReleaseState `json:"state"`
 }
 
+// GovernanceReleaseConsumerImpact defines model for GovernanceReleaseConsumerImpact.
+type GovernanceReleaseConsumerImpact struct {
+	Current int64 `json:"current"`
+	Pinned  int64 `json:"pinned"`
+}
+
 // GovernanceReleaseDetail The release with its manifest entries and rollback reference.
 type GovernanceReleaseDetail struct {
+	Authority      string                           `json:"authority"`
+	Availability   CatalogAuthorityAvailability     `json:"availability"`
+	ConsumerImpact *GovernanceReleaseConsumerImpact `json:"consumerImpact,omitempty"`
+
+	// ConsumerImpactAvailability Authorization and source availability for exact consumer binding impact.
+	ConsumerImpactAvailability CatalogAuthorityAvailability `json:"consumerImpactAvailability"`
+
 	// CreatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
 	//
 	// Example: 2026-08-08T08:00:00Z
 	CreatedAt Timestamp `json:"createdAt"`
+
+	// CurrentRegistryDiff Selected release pins compared independently with each target's live registry pointer or version.
+	CurrentRegistryDiff []GovernanceReleaseDiffEntry `json:"currentRegistryDiff"`
+
+	// DiffAvailability Authorization and source availability shared by both persisted comparison sets.
+	DiffAvailability CatalogAuthorityAvailability `json:"diffAvailability"`
 
 	// Id Example: rls_01arz3ndektsv4rrffq69g5fav
 	Id GovernanceReleaseId `json:"id"`
@@ -1465,8 +6107,14 @@ type GovernanceReleaseDetail struct {
 	Manifest       GovernanceReleaseManifest `json:"manifest"`
 	ManifestDigest string                    `json:"manifestDigest"`
 
+	// ObjectAvailability Authorization and source availability for governed-object manifest pins.
+	ObjectAvailability CatalogAuthorityAvailability `json:"objectAvailability"`
+
 	// OriginProposalId Example: prp_01arz3ndektsv4rrffq69g5fav
 	OriginProposalId *GovernanceProposalId `json:"originProposalId,omitempty"`
+
+	// PriorPinDiff Selected release pins compared with each target's nearest earlier release pin.
+	PriorPinDiff []GovernanceReleaseDiffEntry `json:"priorPinDiff"`
 
 	// PublishedAt RFC 3339 timestamp normalized to UTC at public boundaries.
 	//
@@ -1481,6 +6129,20 @@ type GovernanceReleaseDetail struct {
 	// State Release lifecycle vocabulary. Rows are immutable: cuts and rollbacks insert new rows, so served releases are always published.
 	State GovernanceReleaseState `json:"state"`
 }
+
+// GovernanceReleaseDiffEntry defines model for GovernanceReleaseDiffEntry.
+type GovernanceReleaseDiffEntry struct {
+	BaselineVersion *string                          `json:"baselineVersion,omitempty"`
+	Change          GovernanceReleaseDiffEntryChange `json:"change"`
+	SelectedVersion string                           `json:"selectedVersion"`
+	TargetId        string                           `json:"targetId"`
+
+	// TargetType Objects a governed proposal can target.
+	TargetType GovernanceTargetObjectType `json:"targetType"`
+}
+
+// GovernanceReleaseDiffEntryChange defines model for GovernanceReleaseDiffEntry.Change.
+type GovernanceReleaseDiffEntryChange string
 
 // GovernanceReleaseId Example: rls_01arz3ndektsv4rrffq69g5fav
 type GovernanceReleaseId = identity.ReleaseID
@@ -1688,6 +6350,11 @@ type GovernanceReviewGroupingRule struct {
 	TargetObjectType GovernanceTargetObjectType `json:"targetObjectType"`
 }
 
+// GovernanceReviewPage defines model for GovernanceReviewPage.
+type GovernanceReviewPage struct {
+	Items []GovernanceReview `json:"items"`
+}
+
 // GovernanceReviewRecordedDecision Outcome recorded on an immutable review fact (SSOT §8.4).
 type GovernanceReviewRecordedDecision string
 
@@ -1778,6 +6445,26 @@ type GovernanceValidationSeverity string
 // GovernanceValidationStatus Terminal and non-terminal states of one validator run.
 type GovernanceValidationStatus string
 
+// GrainContent defines model for GrainContent.
+type GrainContent struct {
+	Asset      SemanticReference `json:"asset"`
+	Expression string            `json:"expression"`
+	Fields     FieldReferences   `json:"fields"`
+}
+
+// HeadReference defines model for HeadReference.
+type HeadReference struct {
+	union json.RawMessage
+}
+
+// HeadReference0 defines model for HeadReference.0.
+type HeadReference0 struct {
+	Presence HeadReference0Presence `json:"presence"`
+}
+
+// HeadReference0Presence defines model for HeadReference.0.Presence.
+type HeadReference0Presence string
+
 // HealthResponse defines model for HealthResponse.
 type HealthResponse struct {
 	Status HealthResponseStatus `json:"status"`
@@ -1791,11 +6478,420 @@ type HealthResponse struct {
 // HealthResponseStatus defines model for HealthResponse.Status.
 type HealthResponseStatus string
 
+// HistoryQuality defines model for HistoryQuality.
+type HistoryQuality string
+
+// IngestionArtifact defines model for IngestionArtifact.
+type IngestionArtifact struct {
+	ByteSize            int64                       `json:"byteSize"`
+	ContentAvailability ArtifactContentAvailability `json:"contentAvailability"`
+	ContentDigest       *string                     `json:"contentDigest,omitempty"`
+
+	// CreatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	CreatedAt Timestamp `json:"createdAt"`
+
+	// ExpiresAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	ExpiresAt   *Timestamp `json:"expiresAt,omitempty"`
+	FailureCode *string    `json:"failureCode,omitempty"`
+
+	// FinalizedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	FinalizedAt       *Timestamp                 `json:"finalizedAt,omitempty"`
+	Id                ArtifactId                 `json:"id"`
+	Kind              ArtifactKind               `json:"kind"`
+	MediaType         string                     `json:"mediaType"`
+	OriginalName      string                     `json:"originalName"`
+	SchemaVersion     string                     `json:"schemaVersion"`
+	SourceId          *SourceConnectionId        `json:"sourceId,omitempty"`
+	Status            ArtifactStatus             `json:"status"`
+	ValidationSummary *ArtifactValidationSummary `json:"validationSummary,omitempty"`
+}
+
+// InspectAuthorizationRequest defines model for InspectAuthorizationRequest.
+type InspectAuthorizationRequest struct {
+	Action      AuthorizationAction `json:"action"`
+	PrincipalId PrincipalId         `json:"principalId"`
+	Resource    AuthorizationScope  `json:"resource"`
+}
+
+// InvitationId defines model for InvitationId.
+type InvitationId = identity.InvitationID
+
+// InvitationStatus defines model for InvitationStatus.
+type InvitationStatus string
+
+// IssueClientCredential defines model for IssueClientCredential.
+type IssueClientCredential struct {
+	AllowedActions []IssueClientCredentialAllowedActions `json:"allowedActions"`
+	BindingId      ConsumerBindingId                     `json:"bindingId"`
+	ConsumerId     ConsumerId                            `json:"consumerId"`
+	ExpiresAt      time.Time                             `json:"expiresAt"`
+	Name           string                                `json:"name"`
+	PrincipalId    string                                `json:"principalId"`
+	ScopeId        string                                `json:"scopeId"`
+	ScopeType      IssueClientCredentialScopeType        `json:"scopeType"`
+}
+
+// IssueClientCredentialAllowedActions defines model for IssueClientCredential.AllowedActions.
+type IssueClientCredentialAllowedActions string
+
+// IssueClientCredentialScopeType defines model for IssueClientCredential.ScopeType.
+type IssueClientCredentialScopeType string
+
+// IssuedCredential defines model for IssuedCredential.
+type IssuedCredential struct {
+	Credential ClientCredentialSummary `json:"credential"`
+
+	// Token Returned exactly once; never store in browser storage. Rotation revokes the prior credential atomically with zero grace.
+	Token string `json:"token"`
+}
+
+// IssuedWebhookSubscription defines model for IssuedWebhookSubscription.
+type IssuedWebhookSubscription struct {
+	// SigningSecret One-time create or rotate secret. Empty on ordinary updates. Pending deliveries from older subscription versions are cancelled before transport; in-flight attempts may finish with their captured version.
+	SigningSecret string              `json:"signingSecret"`
+	Subscription  WebhookSubscription `json:"subscription"`
+}
+
+// JSONValue defines model for JSONValue.
+type JSONValue = interface{}
+
+// JoinContent defines model for JoinContent.
+type JoinContent struct {
+	Cardinality JoinContentCardinality `json:"cardinality"`
+	Expression  string                 `json:"expression"`
+	JoinType    JoinContentJoinType    `json:"joinType"`
+	LeftDataset PhysicalReference      `json:"leftDataset"`
+	Notes       *string                `json:"notes,omitempty"`
+	Pairs       []struct {
+		Left  PhysicalReference `json:"left"`
+		Right PhysicalReference `json:"right"`
+	} `json:"pairs"`
+	RightDataset PhysicalReference `json:"rightDataset"`
+}
+
+// JoinContentCardinality defines model for JoinContent.Cardinality.
+type JoinContentCardinality string
+
+// JoinContentJoinType defines model for JoinContent.JoinType.
+type JoinContentJoinType string
+
 // LineageEdgeId defines model for LineageEdgeId.
 type LineageEdgeId = identity.LineageEdgeID
 
+// LocalKey defines model for LocalKey.
+type LocalKey = string
+
+// MachinePrincipal defines model for MachinePrincipal.
+type MachinePrincipal struct {
+	Id     string `json:"id"`
+	Name   string `json:"name"`
+	Status string `json:"status"`
+}
+
+// Manifest defines model for Manifest.
+type Manifest struct {
+	Assets []struct {
+		// AssetId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+		//
+		// Example: ast_01arz3ndektsv4rrffq69g5fav
+		AssetId       ResourceId            `json:"assetId"`
+		Compatibility map[string]*JSONValue `json:"compatibility"`
+		Position      int                   `json:"position"`
+
+		// RevisionId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+		//
+		// Example: ast_01arz3ndektsv4rrffq69g5fav
+		RevisionId ResourceId `json:"revisionId"`
+	} `json:"assets"`
+	Digest  Digest `json:"digest"`
+	Objects []struct {
+		ContentDigest Digest     `json:"contentDigest"`
+		Kind          ObjectKind `json:"kind"`
+		ObjectVersion Version    `json:"objectVersion"`
+		Position      int        `json:"position"`
+
+		// TargetId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+		//
+		// Example: ast_01arz3ndektsv4rrffq69g5fav
+		TargetId ResourceId `json:"targetId"`
+	} `json:"objects"`
+}
+
+// MemberKind defines model for MemberKind.
+type MemberKind string
+
+// MembershipId defines model for MembershipId.
+type MembershipId = identity.MembershipID
+
+// MembershipStatus defines model for MembershipStatus.
+type MembershipStatus string
+
+// ObjectKind defines model for ObjectKind.
+type ObjectKind string
+
 // OntologyRevisionId Example: ont_01arz3ndektsv4rrffq69g5fav
 type OntologyRevisionId = identity.OntologyID
+
+// OperationSummary defines model for OperationSummary.
+type OperationSummary struct {
+	// CreatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	CreatedAt Timestamp `json:"createdAt"`
+
+	// CreatedBy Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	CreatedBy      ResourceId `json:"createdBy"`
+	CurrentVersion Version    `json:"currentVersion"`
+	Frozen         bool       `json:"frozen"`
+
+	// Id Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	Id          ResourceId               `json:"id"`
+	Progress    OperationSummaryProgress `json:"progress"`
+	ReleaseId   *string                  `json:"releaseId"`
+	TargetCount int                      `json:"targetCount"`
+
+	// UpdatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	UpdatedAt Timestamp `json:"updatedAt"`
+}
+
+// OperationSummaryProgress defines model for OperationSummary.Progress.
+type OperationSummaryProgress string
+
+// OperationsAuditEvent defines model for OperationsAuditEvent.
+type OperationsAuditEvent struct {
+	ActorId string `json:"actorId"`
+	Channel string `json:"channel"`
+
+	// CreatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	CreatedAt Timestamp `json:"createdAt"`
+	EventType string    `json:"eventType"`
+
+	// Id Example: evt_01arz3ndektsv4rrffq69g5fav
+	Id         EventId `json:"id"`
+	ObjectId   string  `json:"objectId"`
+	ObjectType string  `json:"objectType"`
+	Outcome    string  `json:"outcome"`
+	ReasonCode string  `json:"reasonCode"`
+	Summary    string  `json:"summary"`
+
+	// TraceId Lowercase 16-byte W3C trace identifier.
+	//
+	// Example: 4bf92f3577b34da6a3ce929d0e0e4736
+	TraceId TraceId `json:"traceId"`
+}
+
+// OperationsAuditEventPage defines model for OperationsAuditEventPage.
+type OperationsAuditEventPage struct {
+	Items []OperationsAuditEvent `json:"items"`
+	Page  PageInfo               `json:"page"`
+}
+
+// OperationsAuditExport defines model for OperationsAuditExport.
+type OperationsAuditExport struct {
+	ArtifactId    string `json:"artifactId"`
+	ContentDigest string `json:"contentDigest"`
+
+	// CreatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	CreatedAt Timestamp `json:"createdAt"`
+
+	// ExpiresAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	ExpiresAt Timestamp                   `json:"expiresAt"`
+	Format    OperationsAuditExportFormat `json:"format"`
+
+	// Id Example: evt_01arz3ndektsv4rrffq69g5fav
+	Id       EventId `json:"id"`
+	RowCount int     `json:"rowCount"`
+
+	// RuntimeRunId Example: run_01arz3ndektsv4rrffq69g5fav
+	RuntimeRunId RunId `json:"runtimeRunId"`
+}
+
+// OperationsAuditExportFormat defines model for OperationsAuditExport.Format.
+type OperationsAuditExportFormat string
+
+// OperationsAuditExportContent defines model for OperationsAuditExportContent.
+type OperationsAuditExportContent = []OperationsAuditEvent
+
+// OperationsAuditFilter defines model for OperationsAuditFilter.
+type OperationsAuditFilter struct {
+	ActorId   *string `json:"actorId,omitempty"`
+	EventType *string `json:"eventType,omitempty"`
+
+	// From RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	From       *Timestamp `json:"from,omitempty"`
+	ObjectId   *string    `json:"objectId,omitempty"`
+	ObjectType *string    `json:"objectType,omitempty"`
+
+	// To RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	To *Timestamp `json:"to,omitempty"`
+
+	// TraceId Lowercase 16-byte W3C trace identifier.
+	//
+	// Example: 4bf92f3577b34da6a3ce929d0e0e4736
+	TraceId *TraceId `json:"traceId,omitempty"`
+}
+
+// OperationsDeploymentStatus Safe booleans and policy labels only; values, endpoints and secret references are never returned.
+type OperationsDeploymentStatus struct {
+	AuditRetention       OperationsDeploymentStatusAuditRetention `json:"auditRetention"`
+	EncryptionConfigured bool                                     `json:"encryptionConfigured"`
+	OidcConfigured       bool                                     `json:"oidcConfigured"`
+	TelemetryConfigured  bool                                     `json:"telemetryConfigured"`
+	WorkerConfigured     bool                                     `json:"workerConfigured"`
+}
+
+// OperationsDeploymentStatusAuditRetention defines model for OperationsDeploymentStatus.AuditRetention.
+type OperationsDeploymentStatusAuditRetention string
+
+// OperationsRuntimePolicy defines model for OperationsRuntimePolicy.
+type OperationsRuntimePolicy struct {
+	// Deployment Safe booleans and policy labels only; values, endpoints and secret references are never returned.
+	Deployment OperationsDeploymentStatus `json:"deployment"`
+	Settings   OperationsRuntimeSettings  `json:"settings"`
+}
+
+// OperationsRuntimeRun defines model for OperationsRuntimeRun.
+type OperationsRuntimeRun struct {
+	Attempt      int                              `json:"attempt"`
+	Capabilities OperationsRuntimeRunCapabilities `json:"capabilities"`
+
+	// CreatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	CreatedAt Timestamp `json:"createdAt"`
+
+	// ErrorCode Stable machine-readable error identifier.
+	//
+	// Example: DEPENDENCY_UNAVAILABLE
+	ErrorCode    *ErrorCode `json:"errorCode,omitempty"`
+	ErrorSummary *string    `json:"errorSummary,omitempty"`
+
+	// FinishedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	FinishedAt *Timestamp `json:"finishedAt,omitempty"`
+
+	// Id Example: run_01arz3ndektsv4rrffq69g5fav
+	Id             RunId  `json:"id"`
+	IdempotencyKey string `json:"idempotencyKey"`
+
+	// JobId Example: run_01arz3ndektsv4rrffq69g5fav
+	JobId                  *RunId                   `json:"jobId,omitempty"`
+	Kind                   OperationsRuntimeRunKind `json:"kind"`
+	MaxAttempts            int                      `json:"maxAttempts"`
+	Phase                  *string                  `json:"phase,omitempty"`
+	ProgressCurrent        *int64                   `json:"progressCurrent,omitempty"`
+	ProgressTotal          *int64                   `json:"progressTotal,omitempty"`
+	RequestedByPrincipalId *PrincipalId             `json:"requestedByPrincipalId,omitempty"`
+	SourceId               string                   `json:"sourceId"`
+	SourceType             string                   `json:"sourceType"`
+	SourceVersionDigest    string                   `json:"sourceVersionDigest"`
+
+	// StartedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	StartedAt *Timestamp                `json:"startedAt,omitempty"`
+	State     OperationsRuntimeRunState `json:"state"`
+
+	// TraceId Lowercase 16-byte W3C trace identifier.
+	//
+	// Example: 4bf92f3577b34da6a3ce929d0e0e4736
+	TraceId *TraceId `json:"traceId,omitempty"`
+
+	// UpdatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	UpdatedAt Timestamp `json:"updatedAt"`
+	Version   int64     `json:"version"`
+}
+
+// OperationsRuntimeRunCapabilities defines model for OperationsRuntimeRunCapabilities.
+type OperationsRuntimeRunCapabilities struct {
+	Cancel bool `json:"cancel"`
+	Retry  bool `json:"retry"`
+}
+
+// OperationsRuntimeRunDetail defines model for OperationsRuntimeRunDetail.
+type OperationsRuntimeRunDetail struct {
+	Events []OperationsRuntimeRunEvent `json:"events"`
+	Run    OperationsRuntimeRun        `json:"run"`
+}
+
+// OperationsRuntimeRunEvent defines model for OperationsRuntimeRunEvent.
+type OperationsRuntimeRunEvent struct {
+	// CreatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	CreatedAt Timestamp `json:"createdAt"`
+
+	// ErrorCode Stable machine-readable error identifier.
+	//
+	// Example: DEPENDENCY_UNAVAILABLE
+	ErrorCode *ErrorCode                         `json:"errorCode,omitempty"`
+	EventType OperationsRuntimeRunEventEventType `json:"eventType"`
+
+	// Id Example: evt_01arz3ndektsv4rrffq69g5fav
+	Id              EventId                    `json:"id"`
+	Phase           *string                    `json:"phase,omitempty"`
+	ProgressCurrent *int64                     `json:"progressCurrent,omitempty"`
+	ProgressTotal   *int64                     `json:"progressTotal,omitempty"`
+	Sequence        int64                      `json:"sequence"`
+	State           *OperationsRuntimeRunState `json:"state,omitempty"`
+	Summary         *string                    `json:"summary,omitempty"`
+}
+
+// OperationsRuntimeRunEventEventType defines model for OperationsRuntimeRunEvent.EventType.
+type OperationsRuntimeRunEventEventType string
+
+// OperationsRuntimeRunKind defines model for OperationsRuntimeRunKind.
+type OperationsRuntimeRunKind string
+
+// OperationsRuntimeRunPage defines model for OperationsRuntimeRunPage.
+type OperationsRuntimeRunPage struct {
+	Items []OperationsRuntimeRun `json:"items"`
+	Page  PageInfo               `json:"page"`
+}
+
+// OperationsRuntimeRunState defines model for OperationsRuntimeRunState.
+type OperationsRuntimeRunState string
+
+// OperationsRuntimeSettings defines model for OperationsRuntimeSettings.
+type OperationsRuntimeSettings struct {
+	QueryByteLimit           int64 `json:"queryByteLimit"`
+	QueryRowLimit            int   `json:"queryRowLimit"`
+	RetryCeiling             int   `json:"retryCeiling"`
+	RunMetadataRetentionDays int   `json:"runMetadataRetentionDays"`
+	StatementTimeoutMs       int   `json:"statementTimeoutMs"`
+
+	// UpdatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	UpdatedAt        Timestamp `json:"updatedAt"`
+	Version          int64     `json:"version"`
+	WebhookTimeoutMs int       `json:"webhookTimeoutMs"`
+}
 
 // PageInfo defines model for PageInfo.
 type PageInfo struct {
@@ -1803,6 +6899,7 @@ type PageInfo struct {
 
 	// NextCursor Opaque pagination cursor that clients must not interpret.
 	NextCursor *Cursor `json:"nextCursor,omitempty"`
+	Total      *int64  `json:"total,omitempty"`
 }
 
 // PhysicalDatasetId defines model for PhysicalDatasetId.
@@ -1817,10 +6914,500 @@ type PhysicalFieldId = identity.PhysicalFieldID
 // PhysicalFieldRevisionId defines model for PhysicalFieldRevisionId.
 type PhysicalFieldRevisionId = identity.PhysicalFieldRevisionID
 
+// PhysicalReference defines model for PhysicalReference.
+type PhysicalReference struct {
+	Kind PhysicalReferenceKind `json:"kind"`
+
+	// ObjectId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	ObjectId ResourceId `json:"objectId"`
+
+	// RevisionId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	RevisionId ResourceId `json:"revisionId"`
+
+	// SnapshotId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	SnapshotId ResourceId `json:"snapshotId"`
+}
+
+// PhysicalReferenceKind defines model for PhysicalReference.Kind.
+type PhysicalReferenceKind string
+
+// PostgreSQLSourceConnection defines model for PostgreSQLSourceConnection.
+type PostgreSQLSourceConnection struct {
+	AdapterKind   PostgreSQLSourceConnectionAdapterKind `json:"adapterKind"`
+	ArtifactPaths *[]string                             `json:"artifactPaths,omitempty"`
+
+	// CreatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	CreatedAt         Timestamp                            `json:"createdAt"`
+	CredentialVersion int                                  `json:"credentialVersion"`
+	Database          string                               `json:"database"`
+	Host              string                               `json:"host"`
+	Id                SourceConnectionId                   `json:"id"`
+	Name              string                               `json:"name"`
+	Port              int                                  `json:"port"`
+	SourceKind        PostgreSQLSourceConnectionSourceKind `json:"sourceKind"`
+	SslMode           PostgreSQLSourceConnectionSslMode    `json:"sslMode"`
+	Status            PostgreSQLSourceConnectionStatus     `json:"status"`
+
+	// UpdatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	UpdatedAt Timestamp `json:"updatedAt"`
+	Username  string    `json:"username"`
+	Version   int64     `json:"version"`
+}
+
+// PostgreSQLSourceConnectionAdapterKind defines model for PostgreSQLSourceConnection.AdapterKind.
+type PostgreSQLSourceConnectionAdapterKind string
+
+// PostgreSQLSourceConnectionSourceKind defines model for PostgreSQLSourceConnection.SourceKind.
+type PostgreSQLSourceConnectionSourceKind string
+
+// PostgreSQLSourceConnectionSslMode defines model for PostgreSQLSourceConnection.SslMode.
+type PostgreSQLSourceConnectionSslMode string
+
+// PostgreSQLSourceConnectionStatus defines model for PostgreSQLSourceConnection.Status.
+type PostgreSQLSourceConnectionStatus string
+
+// PresentHeadReference defines model for PresentHeadReference.
+type PresentHeadReference struct {
+	ManifestDigest Digest                       `json:"manifestDigest"`
+	Presence       PresentHeadReferencePresence `json:"presence"`
+
+	// ReleaseId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	ReleaseId ResourceId `json:"releaseId"`
+}
+
+// PresentHeadReferencePresence defines model for PresentHeadReference.Presence.
+type PresentHeadReferencePresence string
+
+// PrincipalId defines model for PrincipalId.
+type PrincipalId = identity.PrincipalID
+
+// ProductionBusinessRuleEvent defines model for ProductionBusinessRuleEvent.
+type ProductionBusinessRuleEvent struct {
+	Action               ProductionBusinessRuleEventAction `json:"action"`
+	AuthorizationVersion int64                             `json:"authorizationVersion"`
+	ContentDigest        Digest                            `json:"contentDigest"`
+	CreatedAt            time.Time                         `json:"createdAt"`
+	EvidenceDigest       *Digest                           `json:"evidenceDigest,omitempty"`
+
+	// EvidenceId Example: evd_01arz3ndektsv4rrffq69g5fav
+	EvidenceId     *EvidenceArtifactId                       `json:"evidenceId,omitempty"`
+	EvidenceOrigin ProductionBusinessRuleEventEvidenceOrigin `json:"evidenceOrigin"`
+
+	// OperationId Example: prodop_01arz3ndektsv4rrffq69g5fav
+	OperationId       ProductionOperationId `json:"operationId"`
+	PrincipalId       PrincipalId           `json:"principalId"`
+	ProductionVersion Version               `json:"productionVersion"`
+	Replayed          bool                  `json:"replayed"`
+	Sequence          int64                 `json:"sequence"`
+	SetDigest         Digest                `json:"setDigest"`
+	TargetKey         string                `json:"targetKey"`
+
+	// WorkspaceId Example: wsp_01arz3ndektsv4rrffq69g5fav
+	WorkspaceId WorkspaceId `json:"workspaceId"`
+}
+
+// ProductionBusinessRuleEventAction defines model for ProductionBusinessRuleEvent.Action.
+type ProductionBusinessRuleEventAction string
+
+// ProductionBusinessRuleEventEvidenceOrigin defines model for ProductionBusinessRuleEvent.EvidenceOrigin.
+type ProductionBusinessRuleEventEvidenceOrigin string
+
+// ProductionBusinessRuleRequest Server derives actor, evidence origin and all digests. Confirm either selects declared evidence or atomically records an explicit human declaration supporting the exact target definition and scope. Revoke withdraws the current confirmation. Maximum 256 events per version; replay does not add an event.
+type ProductionBusinessRuleRequest struct {
+	union json.RawMessage
+}
+
+// ProductionBusinessRuleRequest0 defines model for ProductionBusinessRuleRequest.0.
+type ProductionBusinessRuleRequest0 struct {
+	Action ProductionBusinessRuleRequest0Action `json:"action"`
+
+	// EvidenceId Example: evd_01arz3ndektsv4rrffq69g5fav
+	EvidenceId      EvidenceArtifactId `json:"evidenceId"`
+	ExpectedVersion Version            `json:"expectedVersion"`
+	SetDigest       Digest             `json:"setDigest"`
+	TargetKey       string             `json:"targetKey"`
+}
+
+// ProductionBusinessRuleRequest0Action defines model for ProductionBusinessRuleRequest.0.Action.
+type ProductionBusinessRuleRequest0Action string
+
+// ProductionBusinessRuleRequest1 defines model for ProductionBusinessRuleRequest.1.
+type ProductionBusinessRuleRequest1 struct {
+	Action          ProductionBusinessRuleRequest1Action `json:"action"`
+	Declaration     string                               `json:"declaration"`
+	ExpectedVersion Version                              `json:"expectedVersion"`
+	SetDigest       Digest                               `json:"setDigest"`
+	TargetKey       string                               `json:"targetKey"`
+}
+
+// ProductionBusinessRuleRequest1Action defines model for ProductionBusinessRuleRequest.1.Action.
+type ProductionBusinessRuleRequest1Action string
+
+// ProductionBusinessRuleRequest2 defines model for ProductionBusinessRuleRequest.2.
+type ProductionBusinessRuleRequest2 struct {
+	Action          ProductionBusinessRuleRequest2Action `json:"action"`
+	ExpectedVersion Version                              `json:"expectedVersion"`
+	SetDigest       Digest                               `json:"setDigest"`
+	TargetKey       string                               `json:"targetKey"`
+}
+
+// ProductionBusinessRuleRequest2Action defines model for ProductionBusinessRuleRequest.2.Action.
+type ProductionBusinessRuleRequest2Action string
+
+// ProductionBusinessRuleWitness defines model for ProductionBusinessRuleWitness.
+type ProductionBusinessRuleWitness struct {
+	Declaration *string                     `json:"declaration,omitempty"`
+	Event       ProductionBusinessRuleEvent `json:"event"`
+	Valid       bool                        `json:"valid"`
+}
+
+// ProductionCommandResult defines model for ProductionCommandResult.
+type ProductionCommandResult struct {
+	// OperationId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	OperationId         ResourceId                     `json:"operationId"`
+	Outcome             ProductionCommandResultOutcome `json:"outcome"`
+	ProposalIds         []ResourceId                   `json:"proposalIds"`
+	Replayed            bool                           `json:"replayed"`
+	ReviewIds           []ResourceId                   `json:"reviewIds"`
+	SetDigest           Digest                         `json:"setDigest"`
+	ValidationAttemptNo *int                           `json:"validationAttemptNo"`
+	ValidationRunIds    []ResourceId                   `json:"validationRunIds"`
+	Version             Version                        `json:"version"`
+}
+
+// ProductionCommandResultOutcome defines model for ProductionCommandResult.Outcome.
+type ProductionCommandResultOutcome string
+
+// ProductionInput defines model for ProductionInput.
+type ProductionInput struct {
+	Candidates   []CandidateSelection `json:"candidates"`
+	Dependencies []PublishedReference `json:"dependencies"`
+	Evidence     []EvidenceSelection  `json:"evidence"`
+	Snapshots    []SnapshotSelection  `json:"snapshots"`
+}
+
+// ProductionOperation defines model for ProductionOperation.
+type ProductionOperation struct {
+	ActiveValidation       ValidationStatus        `json:"activeValidation"`
+	BaselineHead           HeadReference           `json:"baselineHead"`
+	GenerationApplications []GenerationApplication `json:"generationApplications"`
+	GenerationRunIds       []ResourceId            `json:"generationRunIds"`
+	Input                  ProductionInput         `json:"input"`
+	InputDigest            Digest                  `json:"inputDigest"`
+	SetDigest              Digest                  `json:"setDigest"`
+	Summary                OperationSummary        `json:"summary"`
+	Targets                []TargetResult          `json:"targets"`
+	UnresolvedCodes        []string                `json:"unresolvedCodes"`
+	Version                Version                 `json:"version"`
+}
+
+// ProductionOperationId Example: prodop_01arz3ndektsv4rrffq69g5fav
+type ProductionOperationId = identity.ProductionOperationID
+
+// ProductionOperationPage defines model for ProductionOperationPage.
+type ProductionOperationPage struct {
+	Items      []OperationSummary `json:"items"`
+	NextCursor *string            `json:"nextCursor"`
+}
+
+// ProductionRelease defines model for ProductionRelease.
+type ProductionRelease struct {
+	AfterManifest  Manifest           `json:"afterManifest"`
+	Attribution    ReleaseAttribution `json:"attribution"`
+	BeforeHead     HeadReference      `json:"beforeHead"`
+	BeforeManifest Manifest           `json:"beforeManifest"`
+	BeforePins     []BeforePin        `json:"beforePins"`
+
+	// Id Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	Id                ResourceId                        `json:"id"`
+	OriginProposalId  *string                           `json:"originProposalId"`
+	OriginProposalIds []ResourceId                      `json:"originProposalIds"`
+	ProjectionStatus  ProductionReleaseProjectionStatus `json:"projectionStatus"`
+	Protection        ProductionReleaseProtection       `json:"protection"`
+
+	// PublishedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	PublishedAt Timestamp `json:"publishedAt"`
+
+	// PublishedBy Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	PublishedBy         ResourceId `json:"publishedBy"`
+	RolledBackReleaseId *string    `json:"rolledBackReleaseId"`
+	Sequence            int64      `json:"sequence"`
+}
+
+// ProductionReleaseProjectionStatus defines model for ProductionRelease.ProjectionStatus.
+type ProductionReleaseProjectionStatus string
+
+// ProductionReleaseProtection defines model for ProductionReleaseProtection.
+type ProductionReleaseProtection struct {
+	union json.RawMessage
+}
+
+// ProductionReleaseProtection0 defines model for ProductionReleaseProtection.0.
+type ProductionReleaseProtection0 struct {
+	RollbackDepth ProductionReleaseProtection0RollbackDepth `json:"rollbackDepth"`
+
+	// RootReleaseId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	RootReleaseId ResourceId `json:"rootReleaseId"`
+}
+
+// ProductionReleaseProtection0RollbackDepth defines model for ProductionReleaseProtection.0.RollbackDepth.
+type ProductionReleaseProtection0RollbackDepth int
+
+// ProductionReleaseProtection1 defines model for ProductionReleaseProtection.1.
+type ProductionReleaseProtection1 struct {
+	RollbackDepth int `json:"rollbackDepth"`
+
+	// RollbackParentReleaseId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	RollbackParentReleaseId ResourceId `json:"rollbackParentReleaseId"`
+
+	// RootReleaseId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	RootReleaseId ResourceId `json:"rootReleaseId"`
+}
+
+// ProductionTarget defines model for ProductionTarget.
+type ProductionTarget struct {
+	union json.RawMessage
+}
+
+// ProposalState defines model for ProposalState.
+type ProposalState string
+
+// PublicArtifactKind defines model for PublicArtifactKind.
+type PublicArtifactKind string
+
 // PublishGovernanceReleaseRequest defines model for PublishGovernanceReleaseRequest.
 type PublishGovernanceReleaseRequest struct {
 	// ProposalId Example: prp_01arz3ndektsv4rrffq69g5fav
 	ProposalId GovernanceProposalId `json:"proposalId"`
+}
+
+// PublishProductionRequest defines model for PublishProductionRequest.
+type PublishProductionRequest struct {
+	ExpectedHead    HeadReference       `json:"expectedHead"`
+	ExpectedVersion Version             `json:"expectedVersion"`
+	SetDigest       Digest              `json:"setDigest"`
+	Validation      ValidationReference `json:"validation"`
+}
+
+// PublishedReference defines model for PublishedReference.
+type PublishedReference struct {
+	union json.RawMessage
+}
+
+// PublishedReference0 defines model for PublishedReference.0.
+type PublishedReference0 struct {
+	Kind PublishedReference0Kind `json:"kind"`
+
+	// ReleaseId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	ReleaseId ResourceId `json:"releaseId"`
+
+	// RevisionId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	RevisionId ResourceId `json:"revisionId"`
+
+	// TargetId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	TargetId ResourceId `json:"targetId"`
+}
+
+// PublishedReference0Kind defines model for PublishedReference.0.Kind.
+type PublishedReference0Kind string
+
+// PublishedReference1 defines model for PublishedReference.1.
+type PublishedReference1 struct {
+	ContentDigest Digest     `json:"contentDigest"`
+	Kind          ObjectKind `json:"kind"`
+	ObjectVersion Version    `json:"objectVersion"`
+
+	// ReleaseId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	ReleaseId ResourceId `json:"releaseId"`
+
+	// TargetId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	TargetId ResourceId `json:"targetId"`
+}
+
+// QueryExecutionRequest defines model for QueryExecutionRequest.
+type QueryExecutionRequest struct {
+	Channel        *QueryExecutionRequestChannel `json:"channel,omitempty"`
+	IdempotencyKey string                        `json:"idempotencyKey"`
+
+	// PlanDigest Recomputable sha256 content digest of the paired value.
+	PlanDigest GovernanceChangeDigest `json:"planDigest"`
+	PlanId     ResolvedSemanticPlanId `json:"planId"`
+}
+
+// QueryExecutionRequestChannel defines model for QueryExecutionRequest.Channel.
+type QueryExecutionRequestChannel string
+
+// QueryExecutionResult defines model for QueryExecutionResult.
+type QueryExecutionResult struct {
+	Availability QueryExecutionResultAvailability `json:"availability"`
+	Columns      *[]string                        `json:"columns,omitempty"`
+	Replay       bool                             `json:"replay"`
+
+	// Rows Ephemeral cells; numeric and integer values use exact decimal strings to avoid client precision loss. Never retained for replay.
+	Rows *[][]interface{}  `json:"rows,omitempty"`
+	Run  QueryExecutionRun `json:"run"`
+}
+
+// QueryExecutionResultAvailability defines model for QueryExecutionResult.Availability.
+type QueryExecutionResultAvailability string
+
+// QueryExecutionRun defines model for QueryExecutionRun.
+type QueryExecutionRun struct {
+	AdapterVersion  string                   `json:"adapterVersion"`
+	ByteCount       int                      `json:"byteCount"`
+	CancelRequested bool                     `json:"cancelRequested"`
+	Channel         QueryExecutionRunChannel `json:"channel"`
+	ConsumerId      *ConsumerId              `json:"consumerId,omitempty"`
+	CredentialId    *ClientCredentialId      `json:"credentialId,omitempty"`
+	ErrorCode       *string                  `json:"errorCode,omitempty"`
+
+	// FinishedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	FinishedAt *Timestamp `json:"finishedAt,omitempty"`
+
+	// Id Example: run_01arz3ndektsv4rrffq69g5fav
+	Id       RunId `json:"id"`
+	MaxBytes int   `json:"maxBytes"`
+	MaxRows  int   `json:"maxRows"`
+
+	// PlanDigest Recomputable sha256 content digest of the paired value.
+	PlanDigest    GovernanceChangeDigest `json:"planDigest"`
+	PlanId        ResolvedSemanticPlanId `json:"planId"`
+	PolicyVersion int                    `json:"policyVersion"`
+	PrincipalId   PrincipalId            `json:"principalId"`
+	QueryId       SemanticQueryId        `json:"queryId"`
+
+	// ResultDigest Recomputable sha256 content digest of the paired value.
+	ResultDigest     *GovernanceChangeDigest `json:"resultDigest,omitempty"`
+	RowCount         int                     `json:"rowCount"`
+	SourceId         SourceConnectionId      `json:"sourceId"`
+	SourceRevisionId SourceRevisionId        `json:"sourceRevisionId"`
+
+	// StartedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	StartedAt Timestamp              `json:"startedAt"`
+	State     QueryExecutionRunState `json:"state"`
+	TimeoutMs int                    `json:"timeoutMs"`
+	TraceId   string                 `json:"traceId"`
+
+	// WorkspaceId Example: wsp_01arz3ndektsv4rrffq69g5fav
+	WorkspaceId WorkspaceId `json:"workspaceId"`
+}
+
+// QueryExecutionRunChannel defines model for QueryExecutionRun.Channel.
+type QueryExecutionRunChannel string
+
+// QueryExecutionRunState defines model for QueryExecutionRun.State.
+type QueryExecutionRunState string
+
+// QueryValidation defines model for QueryValidation.
+type QueryValidation struct {
+	// CompletedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	CompletedAt Timestamp `json:"completedAt"`
+
+	// CreatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	CreatedAt Timestamp            `json:"createdAt"`
+	Id        QueryValidationRunId `json:"id"`
+
+	// InputDigest Recomputable sha256 content digest of the paired value.
+	InputDigest      GovernanceChangeDigest  `json:"inputDigest"`
+	PlanId           *ResolvedSemanticPlanId `json:"planId,omitempty"`
+	QueryId          SemanticQueryId         `json:"queryId"`
+	Results          []QueryValidationResult `json:"results"`
+	Status           QueryValidationStatus   `json:"status"`
+	Validator        string                  `json:"validator"`
+	ValidatorVersion string                  `json:"validatorVersion"`
+}
+
+// QueryValidationStatus defines model for QueryValidation.Status.
+type QueryValidationStatus string
+
+// QueryValidationResult defines model for QueryValidationResult.
+type QueryValidationResult struct {
+	Code     string                        `json:"code"`
+	Details  map[string]interface{}        `json:"details"`
+	Message  string                        `json:"message"`
+	Severity QueryValidationResultSeverity `json:"severity"`
+}
+
+// QueryValidationResultSeverity defines model for QueryValidationResult.Severity.
+type QueryValidationResultSeverity string
+
+// QueryValidationRunId defines model for QueryValidationRunId.
+type QueryValidationRunId = identity.QueryValidationRunID
+
+// RegisterSQLArtifactsRequest defines model for RegisterSQLArtifactsRequest.
+type RegisterSQLArtifactsRequest struct {
+	ExpectedSourceVersion *int64              `json:"expectedSourceVersion,omitempty"`
+	Paths                 []string            `json:"paths"`
+	SourceId              *SourceConnectionId `json:"sourceId,omitempty"`
+	SourceName            string              `json:"sourceName"`
+}
+
+// ReintroductionIdentity defines model for ReintroductionIdentity.
+type ReintroductionIdentity struct {
+	// AbsenceReleaseId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	AbsenceReleaseId ResourceId `json:"absenceReleaseId"`
+
+	// CreationOperationId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	CreationOperationId ResourceId `json:"creationOperationId"`
+
+	// CreationReleaseId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	CreationReleaseId ResourceId           `json:"creationReleaseId"`
+	ExpectedHead      PresentHeadReference `json:"expectedHead"`
+
+	// TargetId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	TargetId ResourceId `json:"targetId"`
 }
 
 // RelationAssertionState defines model for RelationAssertionState.
@@ -1832,13 +7419,218 @@ type RelationPlane string
 // RelationPredicate defines model for RelationPredicate.
 type RelationPredicate string
 
+// ReleaseAttribution defines model for ReleaseAttribution.
+type ReleaseAttribution struct {
+	Contributors []ResourceId `json:"contributors"`
+
+	// OperationId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	OperationId ResourceId             `json:"operationId"`
+	ProposalIds []ResourceId           `json:"proposalIds"`
+	ReviewIds   []ResourceId           `json:"reviewIds"`
+	Role        ReleaseAttributionRole `json:"role"`
+	SetDigest   Digest                 `json:"setDigest"`
+	Validation  ValidationReference    `json:"validation"`
+	Version     Version                `json:"version"`
+}
+
+// ReleaseAttributionRole defines model for ReleaseAttribution.Role.
+type ReleaseAttributionRole string
+
+// ReleaseCommandResult defines model for ReleaseCommandResult.
+type ReleaseCommandResult struct {
+	ManifestDigest Digest `json:"manifestDigest"`
+
+	// OperationId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	OperationId ResourceId `json:"operationId"`
+
+	// ReleaseId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	ReleaseId ResourceId `json:"releaseId"`
+	Replayed  bool       `json:"replayed"`
+}
+
+// ReleasedDefinition defines model for ReleasedDefinition.
+type ReleasedDefinition struct {
+	// Address Workspace-scoped human-readable namespace and stable key.
+	//
+	// Example: commerce.net_revenue
+	Address SemanticAddress `json:"address"`
+
+	// AssetId Example: ast_01arz3ndektsv4rrffq69g5fav
+	AssetId   SemanticAssetId   `json:"assetId"`
+	AssetType SemanticAssetType `json:"assetType"`
+
+	// ContentDigest Recomputable sha256 content digest of the paired value.
+	ContentDigest GovernanceChangeDigest `json:"contentDigest"`
+	Definition    string                 `json:"definition"`
+	Name          string                 `json:"name"`
+
+	// RevisionId Example: rev_01arz3ndektsv4rrffq69g5fav
+	RevisionId AssetRevisionId `json:"revisionId"`
+}
+
+// ReplaceProductionRequest defines model for ReplaceProductionRequest.
+type ReplaceProductionRequest struct {
+	ExpectedVersion Version         `json:"expectedVersion"`
+	Input           ProductionInput `json:"input"`
+
+	// SuggestionRunId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	SuggestionRunId *ResourceId        `json:"suggestionRunId,omitempty"`
+	Targets         []ProductionTarget `json:"targets"`
+}
+
+// ResolutionContext current has no reference; explicit requires releaseId; binding requires bindingId.
+type ResolutionContext struct {
+	BindingId *ConsumerBindingId    `json:"bindingId,omitempty"`
+	Mode      ResolutionContextMode `json:"mode"`
+
+	// ReleaseId Example: rls_01arz3ndektsv4rrffq69g5fav
+	ReleaseId *GovernanceReleaseId `json:"releaseId,omitempty"`
+}
+
+// ResolutionContextMode defines model for ResolutionContext.Mode.
+type ResolutionContextMode string
+
+// ResolveSemanticQueryRequest defines model for ResolveSemanticQueryRequest.
+type ResolveSemanticQueryRequest struct {
+	Channel        ResolveSemanticQueryRequestChannel `json:"channel"`
+	IdempotencyKey string                             `json:"idempotencyKey"`
+	Query          SemanticQuery                      `json:"query"`
+}
+
+// ResolveSemanticQueryRequestChannel defines model for ResolveSemanticQueryRequest.Channel.
+type ResolveSemanticQueryRequestChannel string
+
+// ResolvedSemanticAsset defines model for ResolvedSemanticAsset.
+type ResolvedSemanticAsset struct {
+	// Address Workspace-scoped human-readable namespace and stable key.
+	//
+	// Example: commerce.net_revenue
+	Address SemanticAddress `json:"address"`
+
+	// AssetId Example: ast_01arz3ndektsv4rrffq69g5fav
+	AssetId   SemanticAssetId   `json:"assetId"`
+	AssetType SemanticAssetType `json:"assetType"`
+
+	// RevisionId Example: rev_01arz3ndektsv4rrffq69g5fav
+	RevisionId AssetRevisionId `json:"revisionId"`
+}
+
+// ResolvedSemanticObject defines model for ResolvedSemanticObject.
+type ResolvedSemanticObject struct {
+	// ObjectId Target TypeID; the prefix must match targetObjectType.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	ObjectId   GovernanceTargetObjectId         `json:"objectId"`
+	ObjectType ResolvedSemanticObjectObjectType `json:"objectType"`
+	Version    int                              `json:"version"`
+}
+
+// ResolvedSemanticObjectObjectType defines model for ResolvedSemanticObject.ObjectType.
+type ResolvedSemanticObjectObjectType string
+
+// ResolvedSemanticPlan The plan digest is an opaque server-owned fingerprint including private immutable execution provenance; clients do not recompute it.
+type ResolvedSemanticPlan struct {
+	Assets []ResolvedSemanticAsset `json:"assets"`
+
+	// CreatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	CreatedAt       Timestamp                           `json:"createdAt"`
+	ExecutionStatus ResolvedSemanticPlanExecutionStatus `json:"executionStatus"`
+	Filters         *[]SemanticFilter                   `json:"filters,omitempty"`
+	Grouping        *[]SemanticSelector                 `json:"grouping,omitempty"`
+	Id              ResolvedSemanticPlanId              `json:"id"`
+	Intent          ResolvedSemanticPlanIntent          `json:"intent"`
+	Limit           *int                                `json:"limit,omitempty"`
+	Measures        *[]SemanticSelector                 `json:"measures,omitempty"`
+	Objects         []ResolvedSemanticObject            `json:"objects"`
+	Order           *[]SemanticOrder                    `json:"order,omitempty"`
+
+	// PlanDigest Recomputable sha256 content digest of the paired value.
+	PlanDigest GovernanceChangeDigest `json:"planDigest"`
+	QueryId    SemanticQueryId        `json:"queryId"`
+
+	// ReleaseId Example: rls_01arz3ndektsv4rrffq69g5fav
+	ReleaseId       GovernanceReleaseId `json:"releaseId"`
+	ResolverVersion string              `json:"resolverVersion"`
+	TimeRange       *SemanticTimeRange  `json:"timeRange,omitempty"`
+}
+
+// ResolvedSemanticPlanExecutionStatus defines model for ResolvedSemanticPlan.ExecutionStatus.
+type ResolvedSemanticPlanExecutionStatus string
+
+// ResolvedSemanticPlanIntent defines model for ResolvedSemanticPlan.Intent.
+type ResolvedSemanticPlanIntent string
+
+// ResolvedSemanticPlanId defines model for ResolvedSemanticPlanId.
+type ResolvedSemanticPlanId = identity.ResolvedSemanticPlanID
+
 // ResourceId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
 //
 // Example: ast_01arz3ndektsv4rrffq69g5fav
 type ResourceId = identity.ID
 
+// ReviewProductionRequest defines model for ReviewProductionRequest.
+type ReviewProductionRequest struct {
+	Decision        ReviewProductionRequestDecision `json:"decision"`
+	ExpectedVersion Version                         `json:"expectedVersion"`
+	Note            string                          `json:"note"`
+	ProposalIds     []ResourceId                    `json:"proposalIds"`
+	SetDigest       Digest                          `json:"setDigest"`
+	Validation      ValidationReference             `json:"validation"`
+}
+
+// ReviewProductionRequestDecision defines model for ReviewProductionRequest.Decision.
+type ReviewProductionRequestDecision string
+
+// RevokeAuthorizationRoleBindingRequest defines model for RevokeAuthorizationRoleBindingRequest.
+type RevokeAuthorizationRoleBindingRequest struct {
+	ExpectedVersion int64  `json:"expectedVersion"`
+	Reason          string `json:"reason"`
+}
+
+// RollbackProductionRequest defines model for RollbackProductionRequest.
+type RollbackProductionRequest struct {
+	ExpectedHead    HeadReference `json:"expectedHead"`
+	ExpectedVersion Version       `json:"expectedVersion"`
+	Reason          string        `json:"reason"`
+	SetDigest       Digest        `json:"setDigest"`
+}
+
+// RotateSourceCredentialRequest defines model for RotateSourceCredentialRequest.
+type RotateSourceCredentialRequest struct {
+	ExpectedVersion int64   `json:"expectedVersion"`
+	Password        *string `json:"password,omitempty"`
+}
+
 // RunId Example: run_01arz3ndektsv4rrffq69g5fav
 type RunId = identity.RunID
+
+// SaveWebhookSubscription defines model for SaveWebhookSubscription.
+type SaveWebhookSubscription struct {
+	Enabled         bool                                `json:"enabled"`
+	Endpoint        string                              `json:"endpoint"`
+	EventTypes      []SaveWebhookSubscriptionEventTypes `json:"eventTypes"`
+	ExpectedVersion *int                                `json:"expectedVersion,omitempty"`
+	Name            string                              `json:"name"`
+}
+
+// SaveWebhookSubscriptionEventTypes defines model for SaveWebhookSubscription.EventTypes.
+type SaveWebhookSubscriptionEventTypes string
+
+// ScheduleMisfirePolicy defines model for ScheduleMisfirePolicy.
+type ScheduleMisfirePolicy string
+
+// ScheduleOccurrenceId defines model for ScheduleOccurrenceId.
+type ScheduleOccurrenceId = identity.ScheduleOccurrenceID
 
 // SchemaVersion Semantic version of the public contract bundle.
 //
@@ -1856,14 +7648,570 @@ type SemanticAssetId = identity.AssetID
 // SemanticAssetType defines model for SemanticAssetType.
 type SemanticAssetType string
 
+// SemanticCandidate defines model for SemanticCandidate.
+type SemanticCandidate struct {
+	CandidateKey  string                         `json:"candidateKey"`
+	CandidateKind SemanticCandidateCandidateKind `json:"candidateKind"`
+	ContentDigest string                         `json:"contentDigest"`
+
+	// CreatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	CreatedAt Timestamp `json:"createdAt"`
+
+	// DiscoveryRunId Example: run_01arz3ndektsv4rrffq69g5fav
+	DiscoveryRunId RunId                    `json:"discoveryRunId"`
+	Evidence       []map[string]interface{} `json:"evidence"`
+	Id             SemanticCandidateId      `json:"id"`
+
+	// ProposalId Example: prp_01arz3ndektsv4rrffq69g5fav
+	ProposalId         *GovernanceProposalId   `json:"proposalId,omitempty"`
+	ProposalInput      map[string]interface{}  `json:"proposalInput"`
+	SourceConnectionId SourceConnectionId      `json:"sourceConnectionId"`
+	SourceRevisionId   SourceRevisionId        `json:"sourceRevisionId"`
+	Status             SemanticCandidateStatus `json:"status"`
+	Title              string                  `json:"title"`
+
+	// UpdatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	UpdatedAt Timestamp `json:"updatedAt"`
+}
+
+// SemanticCandidateCandidateKind defines model for SemanticCandidate.CandidateKind.
+type SemanticCandidateCandidateKind string
+
+// SemanticCandidateDecision defines model for SemanticCandidateDecision.
+type SemanticCandidateDecision struct {
+	Action      SemanticCandidateDecisionAction `json:"action"`
+	Actor       string                          `json:"actor"`
+	CandidateId SemanticCandidateId             `json:"candidateId"`
+
+	// CreatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	CreatedAt Timestamp `json:"createdAt"`
+
+	// Id Example: run_01arz3ndektsv4rrffq69g5fav
+	Id             RunId  `json:"id"`
+	IdempotencyKey string `json:"idempotencyKey"`
+
+	// ProposalId Example: prp_01arz3ndektsv4rrffq69g5fav
+	ProposalId *GovernanceProposalId `json:"proposalId,omitempty"`
+	Reason     string                `json:"reason"`
+}
+
+// SemanticCandidateDecisionAction defines model for SemanticCandidateDecision.Action.
+type SemanticCandidateDecisionAction string
+
+// SemanticCandidateDecisionRequest defines model for SemanticCandidateDecisionRequest.
+type SemanticCandidateDecisionRequest struct {
+	Action         SemanticCandidateDecisionRequestAction `json:"action"`
+	IdempotencyKey string                                 `json:"idempotencyKey"`
+
+	// ProposalId Example: prp_01arz3ndektsv4rrffq69g5fav
+	ProposalId *GovernanceProposalId `json:"proposalId,omitempty"`
+	Reason     string                `json:"reason"`
+}
+
+// SemanticCandidateDecisionRequestAction defines model for SemanticCandidateDecisionRequest.Action.
+type SemanticCandidateDecisionRequestAction string
+
+// SemanticCandidateId defines model for SemanticCandidateId.
+type SemanticCandidateId = identity.SemanticCandidateID
+
+// SemanticCandidatePage defines model for SemanticCandidatePage.
+type SemanticCandidatePage struct {
+	Items []SemanticCandidate `json:"items"`
+	Limit int                 `json:"limit"`
+
+	// NextCursor Opaque pagination cursor that clients must not interpret.
+	NextCursor *Cursor `json:"nextCursor,omitempty"`
+	Total      int64   `json:"total"`
+}
+
+// SemanticCandidateStatus defines model for SemanticCandidateStatus.
+type SemanticCandidateStatus string
+
+// SemanticFilter defines model for SemanticFilter.
+type SemanticFilter struct {
+	Operator SemanticFilterOperator `json:"operator"`
+
+	// Selector Exactly one of assetId, address or search is accepted by the service.
+	Selector SemanticSelector `json:"selector"`
+	Value    interface{}      `json:"value"`
+}
+
+// SemanticFilterOperator defines model for SemanticFilter.Operator.
+type SemanticFilterOperator string
+
+// SemanticOrder defines model for SemanticOrder.
+type SemanticOrder struct {
+	Direction SemanticOrderDirection `json:"direction"`
+
+	// Selector Exactly one of assetId, address or search is accepted by the service.
+	Selector SemanticSelector `json:"selector"`
+}
+
+// SemanticOrderDirection defines model for SemanticOrder.Direction.
+type SemanticOrderDirection string
+
+// SemanticQuery defines model for SemanticQuery.
+type SemanticQuery struct {
+	// Context current has no reference; explicit requires releaseId; binding requires bindingId.
+	Context       ResolutionContext          `json:"context"`
+	Dimensions    *[]SemanticSelector        `json:"dimensions,omitempty"`
+	Filters       *[]SemanticFilter          `json:"filters,omitempty"`
+	Intent        SemanticQueryIntent        `json:"intent"`
+	Limit         *int                       `json:"limit,omitempty"`
+	Measures      *[]SemanticSelector        `json:"measures,omitempty"`
+	Order         *[]SemanticOrder           `json:"order,omitempty"`
+	SchemaVersion SemanticQuerySchemaVersion `json:"schemaVersion"`
+	TimeRange     *SemanticTimeRange         `json:"timeRange,omitempty"`
+}
+
+// SemanticQueryIntent defines model for SemanticQuery.Intent.
+type SemanticQueryIntent string
+
+// SemanticQuerySchemaVersion defines model for SemanticQuery.SchemaVersion.
+type SemanticQuerySchemaVersion string
+
+// SemanticQueryId defines model for SemanticQueryId.
+type SemanticQueryId = identity.SemanticQueryID
+
+// SemanticReference defines model for SemanticReference.
+type SemanticReference struct {
+	union json.RawMessage
+}
+
+// SemanticReference0 defines model for SemanticReference.0.
+type SemanticReference0 struct {
+	LocalKey LocalKey `json:"localKey"`
+}
+
+// SemanticRefusal defines model for SemanticRefusal.
+type SemanticRefusal struct {
+	CandidateIds  []SemanticAssetId      `json:"candidateIds"`
+	Clarification string                 `json:"clarification"`
+	Code          SemanticRefusalCode    `json:"code"`
+	Details       map[string]interface{} `json:"details"`
+}
+
+// SemanticRefusalCode defines model for SemanticRefusal.Code.
+type SemanticRefusalCode string
+
 // SemanticRelationId Example: rel_01arz3ndektsv4rrffq69g5fav
 type SemanticRelationId = identity.RelationID
+
+// SemanticResolution defines model for SemanticResolution.
+type SemanticResolution struct {
+	BindingId  *ConsumerBindingId        `json:"bindingId,omitempty"`
+	Channel    SemanticResolutionChannel `json:"channel"`
+	ConsumerId *ConsumerId               `json:"consumerId,omitempty"`
+
+	// CreatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	CreatedAt   Timestamp                 `json:"createdAt"`
+	Definitions *[]ReleasedDefinition     `json:"definitions,omitempty"`
+	Id          SemanticQueryId           `json:"id"`
+	Outcome     SemanticResolutionOutcome `json:"outcome"`
+
+	// Plan The plan digest is an opaque server-owned fingerprint including private immutable execution provenance; clients do not recompute it.
+	Plan    *ResolvedSemanticPlan `json:"plan,omitempty"`
+	Refusal *SemanticRefusal      `json:"refusal,omitempty"`
+
+	// ReleaseId Example: rls_01arz3ndektsv4rrffq69g5fav
+	ReleaseId *GovernanceReleaseId `json:"releaseId,omitempty"`
+
+	// RequestDigest Recomputable sha256 content digest of the paired value.
+	RequestDigest   GovernanceChangeDigest          `json:"requestDigest"`
+	ResolverVersion string                          `json:"resolverVersion"`
+	SchemaVersion   SemanticResolutionSchemaVersion `json:"schemaVersion"`
+	Validation      QueryValidation                 `json:"validation"`
+}
+
+// SemanticResolutionChannel defines model for SemanticResolution.Channel.
+type SemanticResolutionChannel string
+
+// SemanticResolutionOutcome defines model for SemanticResolution.Outcome.
+type SemanticResolutionOutcome string
+
+// SemanticResolutionSchemaVersion defines model for SemanticResolution.SchemaVersion.
+type SemanticResolutionSchemaVersion string
+
+// SemanticSelector Exactly one of assetId, address or search is accepted by the service.
+type SemanticSelector struct {
+	// Address Workspace-scoped human-readable namespace and stable key.
+	//
+	// Example: commerce.net_revenue
+	Address *SemanticAddress `json:"address,omitempty"`
+
+	// AssetId Example: ast_01arz3ndektsv4rrffq69g5fav
+	AssetId *SemanticAssetId `json:"assetId,omitempty"`
+	Search  *string          `json:"search,omitempty"`
+}
+
+// SemanticTimeRange defines model for SemanticTimeRange.
+type SemanticTimeRange struct {
+	// From RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	From        Timestamp                     `json:"from"`
+	Granularity *SemanticTimeRangeGranularity `json:"granularity,omitempty"`
+
+	// Selector Exactly one of assetId, address or search is accepted by the service.
+	Selector SemanticSelector `json:"selector"`
+
+	// To RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	To Timestamp `json:"to"`
+}
+
+// SemanticTimeRangeGranularity defines model for SemanticTimeRange.Granularity.
+type SemanticTimeRangeGranularity string
+
+// SessionAccount defines model for SessionAccount.
+type SessionAccount struct {
+	DisplayName string        `json:"displayName"`
+	Id          UserAccountId `json:"id"`
+
+	// LocalPassword This account has an independently managed local password.
+	LocalPassword *bool `json:"localPassword,omitempty"`
+}
+
+// SessionResponse defines model for SessionResponse.
+type SessionResponse struct {
+	Account   SessionAccount `json:"account"`
+	ExpiresAt time.Time      `json:"expiresAt"`
+
+	// TraceId Lowercase 16-byte W3C trace identifier.
+	//
+	// Example: 4bf92f3577b34da6a3ce929d0e0e4736
+	TraceId    TraceId            `json:"traceId"`
+	Workspaces []SessionWorkspace `json:"workspaces"`
+}
+
+// SessionWorkspace defines model for SessionWorkspace.
+type SessionWorkspace struct {
+	AuthorizationVersion int64                 `json:"authorizationVersion"`
+	Capabilities         []AuthorizationAction `json:"capabilities"`
+	DisplayName          string                `json:"displayName"`
+
+	// Id Example: wsp_01arz3ndektsv4rrffq69g5fav
+	Id          WorkspaceId `json:"id"`
+	PrincipalId PrincipalId `json:"principalId"`
+	RoleIds     []string    `json:"roleIds"`
+	Slug        string      `json:"slug"`
+}
+
+// SnapshotDigest defines model for SnapshotDigest.
+type SnapshotDigest = string
+
+// SnapshotMember defines model for SnapshotMember.
+type SnapshotMember struct {
+	ContentDigest SnapshotDigest `json:"contentDigest"`
+	CoverageKey   string         `json:"coverageKey"`
+	Kind          MemberKind     `json:"kind"`
+	Locator       string         `json:"locator"`
+	Name          string         `json:"name"`
+
+	// ObjectId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	ObjectId         ResourceId                 `json:"objectId"`
+	ParentObjectId   *PhysicalDatasetId         `json:"parentObjectId,omitempty"`
+	ParentRevisionId *PhysicalDatasetRevisionId `json:"parentRevisionId,omitempty"`
+
+	// RevisionId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	RevisionId ResourceId `json:"revisionId"`
+}
+
+// SnapshotMemberPage defines model for SnapshotMemberPage.
+type SnapshotMemberPage struct {
+	HistoryQuality HistoryQuality   `json:"historyQuality"`
+	Items          []SnapshotMember `json:"items"`
+	NextCursor     *string          `json:"nextCursor"`
+	SnapshotId     SourceSnapshotId `json:"snapshotId"`
+}
+
+// SnapshotPage defines model for SnapshotPage.
+type SnapshotPage struct {
+	Items      []SourceSnapshot `json:"items"`
+	NextCursor *string          `json:"nextCursor"`
+}
+
+// SnapshotSelection defines model for SnapshotSelection.
+type SnapshotSelection struct {
+	CoverageKeys []string `json:"coverageKeys"`
+	Digest       Digest   `json:"digest"`
+
+	// SnapshotId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	SnapshotId ResourceId `json:"snapshotId"`
+
+	// SourceId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	SourceId ResourceId `json:"sourceId"`
+}
+
+// SourceCodeRevisionId defines model for SourceCodeRevisionId.
+type SourceCodeRevisionId = identity.SourceCodeRevisionID
+
+// SourceConnection Redacted discriminated source configuration; reusable credentials and raw artifacts are never readable.
+type SourceConnection struct {
+	union json.RawMessage
+}
 
 // SourceConnectionId defines model for SourceConnectionId.
 type SourceConnectionId = identity.SourceConnectionID
 
+// SourceConnectionPage defines model for SourceConnectionPage.
+type SourceConnectionPage struct {
+	Items []SourceConnection `json:"items"`
+	Limit int                `json:"limit"`
+
+	// NextCursor Opaque pagination cursor that clients must not interpret.
+	NextCursor *Cursor `json:"nextCursor,omitempty"`
+	Total      int64   `json:"total"`
+}
+
+// SourceDiscoveryRun defines model for SourceDiscoveryRun.
+type SourceDiscoveryRun struct {
+	ArtifactSetId *ArtifactSetId `json:"artifactSetId,omitempty"`
+
+	// CompletedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	CompletedAt *Timestamp `json:"completedAt,omitempty"`
+
+	// CreatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	CreatedAt         Timestamp `json:"createdAt"`
+	CredentialVersion *int      `json:"credentialVersion,omitempty"`
+
+	// ErrorCode Stable machine-readable error identifier.
+	//
+	// Example: DEPENDENCY_UNAVAILABLE
+	ErrorCode *ErrorCode `json:"errorCode,omitempty"`
+
+	// Id Example: run_01arz3ndektsv4rrffq69g5fav
+	Id                     RunId              `json:"id"`
+	OperationsPath         string             `json:"operationsPath"`
+	SnapshotId             *string            `json:"snapshotId,omitempty"`
+	SourceConnectionId     SourceConnectionId `json:"sourceConnectionId"`
+	SourceInputFingerprint *string            `json:"sourceInputFingerprint,omitempty"`
+
+	// StartedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	StartedAt *Timestamp               `json:"startedAt,omitempty"`
+	Stats     map[string]interface{}   `json:"stats"`
+	Status    SourceDiscoveryRunStatus `json:"status"`
+
+	// UpdatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	UpdatedAt Timestamp `json:"updatedAt"`
+}
+
+// SourceDiscoveryRunStatus defines model for SourceDiscoveryRun.Status.
+type SourceDiscoveryRunStatus string
+
+// SourceDiscoveryRunPage defines model for SourceDiscoveryRunPage.
+type SourceDiscoveryRunPage struct {
+	Items []SourceDiscoveryRun `json:"items"`
+	Limit int                  `json:"limit"`
+
+	// NextCursor Opaque pagination cursor that clients must not interpret.
+	NextCursor *Cursor `json:"nextCursor,omitempty"`
+	Total      int64   `json:"total"`
+}
+
+// SourceLineageRevisionId defines model for SourceLineageRevisionId.
+type SourceLineageRevisionId = identity.SourceLineageRevisionID
+
 // SourceRevisionId defines model for SourceRevisionId.
 type SourceRevisionId = identity.SourceRevisionID
+
+// SourceSchedule defines model for SourceSchedule.
+type SourceSchedule struct {
+	// CreatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	CreatedAt         Timestamp `json:"createdAt"`
+	CredentialVersion *int64    `json:"credentialVersion,omitempty"`
+
+	// DeletedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	DeletedAt  *Timestamp       `json:"deletedAt,omitempty"`
+	Enabled    bool             `json:"enabled"`
+	Expression string           `json:"expression"`
+	Id         SourceScheduleId `json:"id"`
+
+	// LastRunAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	LastRunAt     *Timestamp            `json:"lastRunAt,omitempty"`
+	MisfirePolicy ScheduleMisfirePolicy `json:"misfirePolicy"`
+
+	// NextRunAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	NextRunAt        *Timestamp         `json:"nextRunAt,omitempty"`
+	NextWallClockKey *string            `json:"nextWallClockKey,omitempty"`
+	SourceId         SourceConnectionId `json:"sourceId"`
+	Timezone         string             `json:"timezone"`
+
+	// UpdatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	UpdatedAt Timestamp `json:"updatedAt"`
+	Version   int64     `json:"version"`
+}
+
+// SourceScheduleCommandRequest defines model for SourceScheduleCommandRequest.
+type SourceScheduleCommandRequest struct {
+	ExpectedVersion int64 `json:"expectedVersion"`
+}
+
+// SourceScheduleId defines model for SourceScheduleId.
+type SourceScheduleId = identity.SourceScheduleID
+
+// SourceScheduleOccurrence defines model for SourceScheduleOccurrence.
+type SourceScheduleOccurrence struct {
+	ArtifactSetId *ArtifactSetId `json:"artifactSetId,omitempty"`
+
+	// CreatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	CreatedAt         Timestamp `json:"createdAt"`
+	CredentialVersion *int64    `json:"credentialVersion,omitempty"`
+
+	// DiscoveryRunId Example: run_01arz3ndektsv4rrffq69g5fav
+	DiscoveryRunId *RunId `json:"discoveryRunId,omitempty"`
+
+	// EligibleAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	EligibleAt     Timestamp            `json:"eligibleAt"`
+	Id             ScheduleOccurrenceId `json:"id"`
+	IdempotencyKey string               `json:"idempotencyKey"`
+
+	// JobId Example: run_01arz3ndektsv4rrffq69g5fav
+	JobId              *RunId                                      `json:"jobId,omitempty"`
+	MisfireDisposition *SourceScheduleOccurrenceMisfireDisposition `json:"misfireDisposition,omitempty"`
+	OperationsPath     *string                                     `json:"operationsPath,omitempty"`
+	ReasonCode         *SourceScheduleOccurrenceReasonCode         `json:"reasonCode,omitempty"`
+
+	// RuntimeRunId Example: run_01arz3ndektsv4rrffq69g5fav
+	RuntimeRunId    *RunId           `json:"runtimeRunId,omitempty"`
+	ScheduleId      SourceScheduleId `json:"scheduleId"`
+	ScheduleVersion int64            `json:"scheduleVersion"`
+
+	// ScheduledFor RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	ScheduledFor      *Timestamp                          `json:"scheduledFor,omitempty"`
+	SourceFingerprint *string                             `json:"sourceFingerprint,omitempty"`
+	SourceId          SourceConnectionId                  `json:"sourceId"`
+	State             SourceScheduleOccurrenceState       `json:"state"`
+	TriggerKind       SourceScheduleOccurrenceTriggerKind `json:"triggerKind"`
+	WallClockKey      string                              `json:"wallClockKey"`
+}
+
+// SourceScheduleOccurrenceMisfireDisposition defines model for SourceScheduleOccurrence.MisfireDisposition.
+type SourceScheduleOccurrenceMisfireDisposition string
+
+// SourceScheduleOccurrenceReasonCode defines model for SourceScheduleOccurrence.ReasonCode.
+type SourceScheduleOccurrenceReasonCode string
+
+// SourceScheduleOccurrenceState defines model for SourceScheduleOccurrence.State.
+type SourceScheduleOccurrenceState string
+
+// SourceScheduleOccurrenceTriggerKind defines model for SourceScheduleOccurrence.TriggerKind.
+type SourceScheduleOccurrenceTriggerKind string
+
+// SourceScheduleOccurrencePage defines model for SourceScheduleOccurrencePage.
+type SourceScheduleOccurrencePage struct {
+	Items []SourceScheduleOccurrence `json:"items"`
+	Limit int                        `json:"limit"`
+
+	// NextCursor Opaque pagination cursor that clients must not interpret.
+	NextCursor *Cursor `json:"nextCursor,omitempty"`
+	Total      int64   `json:"total"`
+}
+
+// SourceSchedulePage defines model for SourceSchedulePage.
+type SourceSchedulePage struct {
+	Items []SourceSchedule `json:"items"`
+	Limit int              `json:"limit"`
+
+	// NextCursor Opaque pagination cursor that clients must not interpret.
+	NextCursor *Cursor `json:"nextCursor,omitempty"`
+	Total      int64   `json:"total"`
+}
+
+// SourceSnapshot defines model for SourceSnapshot.
+type SourceSnapshot struct {
+	AdapterVersion string                       `json:"adapterVersion"`
+	ContentDigest  SnapshotDigest               `json:"contentDigest"`
+	Coverage       []CoverageUnit               `json:"coverage"`
+	CoverageStatus SourceSnapshotCoverageStatus `json:"coverageStatus"`
+
+	// CreatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	CreatedAt        Timestamp          `json:"createdAt"`
+	DiagnosticCount  int                `json:"diagnosticCount"`
+	HistoryQuality   HistoryQuality     `json:"historyQuality"`
+	Id               SourceSnapshotId   `json:"id"`
+	MemberCount      int                `json:"memberCount"`
+	ScopeDigest      SnapshotDigest     `json:"scopeDigest"`
+	SourceId         SourceConnectionId `json:"sourceId"`
+	SourceRevisionId SourceRevisionId   `json:"sourceRevisionId"`
+}
+
+// SourceSnapshotCoverageStatus defines model for SourceSnapshot.CoverageStatus.
+type SourceSnapshotCoverageStatus string
+
+// SourceSnapshotId defines model for SourceSnapshotId.
+type SourceSnapshotId = identity.SourceSnapshotID
+
+// SourceTestResult defines model for SourceTestResult.
+type SourceTestResult struct {
+	Status SourceTestResultStatus `json:"status"`
+}
+
+// SourceTestResultStatus defines model for SourceTestResult.Status.
+type SourceTestResultStatus string
+
+// StartDiscoveryRunRequest defines model for StartDiscoveryRunRequest.
+type StartDiscoveryRunRequest struct {
+	IdempotencyKey string `json:"idempotencyKey"`
+}
+
+// StructuredGenerationOutput defines model for StructuredGenerationOutput.
+type StructuredGenerationOutput struct {
+	SchemaVersion StructuredGenerationOutputSchemaVersion `json:"schemaVersion"`
+	Targets       []ProductionTarget                      `json:"targets"`
+}
+
+// StructuredGenerationOutputSchemaVersion defines model for StructuredGenerationOutput.SchemaVersion.
+type StructuredGenerationOutputSchemaVersion string
+
+// SubmitProductionRequest defines model for SubmitProductionRequest.
+type SubmitProductionRequest struct {
+	ExpectedVersion Version `json:"expectedVersion"`
+	SetDigest       Digest  `json:"setDigest"`
+}
 
 // SystemInfo defines model for SystemInfo.
 type SystemInfo struct {
@@ -1888,6 +8236,82 @@ type SystemInfo struct {
 // SystemInfoService defines model for SystemInfo.Service.
 type SystemInfoService string
 
+// TargetKind defines model for TargetKind.
+type TargetKind string
+
+// TargetKindContent defines model for TargetKindContent.
+type TargetKindContent struct {
+	union json.RawMessage
+}
+
+// TargetKindContent0 defines model for TargetKindContent.0.
+type TargetKindContent0 struct {
+	Content *AssetContent           `json:"content,omitempty"`
+	Kind    *TargetKindContent0Kind `json:"kind,omitempty"`
+}
+
+// TargetKindContent0Kind defines model for TargetKindContent.0.Kind.
+type TargetKindContent0Kind string
+
+// TargetKindContent1 defines model for TargetKindContent.1.
+type TargetKindContent1 struct {
+	Content *BindingContent         `json:"content,omitempty"`
+	Kind    *TargetKindContent1Kind `json:"kind,omitempty"`
+}
+
+// TargetKindContent1Kind defines model for TargetKindContent.1.Kind.
+type TargetKindContent1Kind string
+
+// TargetKindContent2 defines model for TargetKindContent.2.
+type TargetKindContent2 struct {
+	Content *GrainContent           `json:"content,omitempty"`
+	Kind    *TargetKindContent2Kind `json:"kind,omitempty"`
+}
+
+// TargetKindContent2Kind defines model for TargetKindContent.2.Kind.
+type TargetKindContent2Kind string
+
+// TargetKindContent3 defines model for TargetKindContent.3.
+type TargetKindContent3 struct {
+	Content *EntityKeyContent       `json:"content,omitempty"`
+	Kind    *TargetKindContent3Kind `json:"kind,omitempty"`
+}
+
+// TargetKindContent3Kind defines model for TargetKindContent.3.Kind.
+type TargetKindContent3Kind string
+
+// TargetKindContent4 defines model for TargetKindContent.4.
+type TargetKindContent4 struct {
+	Content *JoinContent            `json:"content,omitempty"`
+	Kind    *TargetKindContent4Kind `json:"kind,omitempty"`
+}
+
+// TargetKindContent4Kind defines model for TargetKindContent.4.Kind.
+type TargetKindContent4Kind string
+
+// TargetResult defines model for TargetResult.
+type TargetResult struct {
+	ContentDigest Digest                     `json:"contentDigest"`
+	Declaration   ProductionTarget           `json:"declaration"`
+	LocalKey      LocalKey                   `json:"localKey"`
+	Outcome       TargetResultOutcome        `json:"outcome"`
+	ProposalId    *string                    `json:"proposalId"`
+	ProposalState *TargetResultProposalState `json:"proposalState"`
+	ReviewIds     []ResourceId               `json:"reviewIds"`
+
+	// TargetId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	TargetId         ResourceId   `json:"targetId"`
+	ValidationRunIds []ResourceId `json:"validationRunIds"`
+}
+
+// TargetResultOutcome defines model for TargetResult.Outcome.
+type TargetResultOutcome string
+
+// TargetResultProposalState defines model for TargetResult.ProposalState.
+type TargetResultProposalState string
+
 // Timestamp RFC 3339 timestamp normalized to UTC at public boundaries.
 //
 // Example: 2026-08-08T08:00:00Z
@@ -1897,6 +8321,73 @@ type Timestamp = time.Time
 //
 // Example: 4bf92f3577b34da6a3ce929d0e0e4736
 type TraceId = string
+
+// UpdateAssetTarget defines model for UpdateAssetTarget.
+type UpdateAssetTarget struct {
+	// BaseRevisionId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	BaseRevisionId ResourceId              `json:"baseRevisionId"`
+	Changes        ChangeList              `json:"changes"`
+	Content        AssetContent            `json:"content"`
+	EvidenceIds    []ResourceId            `json:"evidenceIds"`
+	Intent         UpdateAssetTargetIntent `json:"intent"`
+	Kind           UpdateAssetTargetKind   `json:"kind"`
+	LocalKey       LocalKey                `json:"localKey"`
+
+	// TargetId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	TargetId ResourceId `json:"targetId"`
+	Title    string     `json:"title"`
+}
+
+// UpdateAssetTargetIntent defines model for UpdateAssetTarget.Intent.
+type UpdateAssetTargetIntent string
+
+// UpdateAssetTargetKind defines model for UpdateAssetTarget.Kind.
+type UpdateAssetTargetKind string
+
+// UpdateAuthorizationRoleRequest defines model for UpdateAuthorizationRoleRequest.
+type UpdateAuthorizationRoleRequest struct {
+	Actions         []AuthorizationAction `json:"actions"`
+	Description     string                `json:"description"`
+	ExpectedVersion int64                 `json:"expectedVersion"`
+	Name            string                `json:"name"`
+}
+
+// UpdateConsumerBindingRequest defines model for UpdateConsumerBindingRequest.
+type UpdateConsumerBindingRequest struct {
+	CompatibilityConstraint map[string]interface{} `json:"compatibilityConstraint"`
+	ExpectedVersion         int                    `json:"expectedVersion"`
+
+	// ExpiresAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	ExpiresAt *Timestamp                       `json:"expiresAt,omitempty"`
+	Mode      UpdateConsumerBindingRequestMode `json:"mode"`
+	Purpose   string                           `json:"purpose"`
+
+	// ReleaseId Example: rls_01arz3ndektsv4rrffq69g5fav
+	ReleaseId *GovernanceReleaseId               `json:"releaseId,omitempty"`
+	Status    UpdateConsumerBindingRequestStatus `json:"status"`
+}
+
+// UpdateConsumerBindingRequestMode defines model for UpdateConsumerBindingRequest.Mode.
+type UpdateConsumerBindingRequestMode string
+
+// UpdateConsumerBindingRequestStatus defines model for UpdateConsumerBindingRequest.Status.
+type UpdateConsumerBindingRequestStatus string
+
+// UpdateConsumerRequest defines model for UpdateConsumerRequest.
+type UpdateConsumerRequest struct {
+	Metadata map[string]interface{}      `json:"metadata"`
+	Name     string                      `json:"name"`
+	Status   UpdateConsumerRequestStatus `json:"status"`
+}
+
+// UpdateConsumerRequestStatus defines model for UpdateConsumerRequest.Status.
+type UpdateConsumerRequestStatus string
 
 // UpdateGovernanceModelProviderRequest Omitting credential and credentialEnv keeps the persisted env name and revision digest; supplying credential rotates the digest.
 type UpdateGovernanceModelProviderRequest struct {
@@ -1916,6 +8407,344 @@ type UpdateGovernanceModelSettingRequest struct {
 	TokenLimit         int    `json:"tokenLimit"`
 }
 
+// UpdateObjectTarget defines model for UpdateObjectTarget.
+type UpdateObjectTarget struct {
+	BaseObjectVersion Version                  `json:"baseObjectVersion"`
+	Changes           ChangeList               `json:"changes"`
+	Content           map[string]interface{}   `json:"content"`
+	EvidenceIds       []ResourceId             `json:"evidenceIds"`
+	Intent            UpdateObjectTargetIntent `json:"intent"`
+	Kind              ObjectKind               `json:"kind"`
+	LocalKey          LocalKey                 `json:"localKey"`
+
+	// TargetId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	TargetId ResourceId `json:"targetId"`
+	Title    string     `json:"title"`
+	union    json.RawMessage
+}
+
+// UpdateObjectTargetIntent defines model for UpdateObjectTarget.Intent.
+type UpdateObjectTargetIntent string
+
+// UpdateObjectTarget0 defines model for UpdateObjectTarget.0.
+type UpdateObjectTarget0 struct {
+	Content *AssetContent            `json:"content,omitempty"`
+	Kind    *UpdateObjectTarget0Kind `json:"kind,omitempty"`
+}
+
+// UpdateObjectTarget0Kind defines model for UpdateObjectTarget.0.Kind.
+type UpdateObjectTarget0Kind string
+
+// UpdateObjectTarget1 defines model for UpdateObjectTarget.1.
+type UpdateObjectTarget1 struct {
+	Content *BindingContent          `json:"content,omitempty"`
+	Kind    *UpdateObjectTarget1Kind `json:"kind,omitempty"`
+}
+
+// UpdateObjectTarget1Kind defines model for UpdateObjectTarget.1.Kind.
+type UpdateObjectTarget1Kind string
+
+// UpdateObjectTarget2 defines model for UpdateObjectTarget.2.
+type UpdateObjectTarget2 struct {
+	Content *GrainContent            `json:"content,omitempty"`
+	Kind    *UpdateObjectTarget2Kind `json:"kind,omitempty"`
+}
+
+// UpdateObjectTarget2Kind defines model for UpdateObjectTarget.2.Kind.
+type UpdateObjectTarget2Kind string
+
+// UpdateObjectTarget3 defines model for UpdateObjectTarget.3.
+type UpdateObjectTarget3 struct {
+	Content *EntityKeyContent        `json:"content,omitempty"`
+	Kind    *UpdateObjectTarget3Kind `json:"kind,omitempty"`
+}
+
+// UpdateObjectTarget3Kind defines model for UpdateObjectTarget.3.Kind.
+type UpdateObjectTarget3Kind string
+
+// UpdateObjectTarget4 defines model for UpdateObjectTarget.4.
+type UpdateObjectTarget4 struct {
+	Content *JoinContent             `json:"content,omitempty"`
+	Kind    *UpdateObjectTarget4Kind `json:"kind,omitempty"`
+}
+
+// UpdateObjectTarget4Kind defines model for UpdateObjectTarget.4.Kind.
+type UpdateObjectTarget4Kind string
+
+// UpdateOperationsRuntimeSettingsRequest defines model for UpdateOperationsRuntimeSettingsRequest.
+type UpdateOperationsRuntimeSettingsRequest struct {
+	ExpectedVersion          int64 `json:"expectedVersion"`
+	QueryByteLimit           int64 `json:"queryByteLimit"`
+	QueryRowLimit            int   `json:"queryRowLimit"`
+	RetryCeiling             int   `json:"retryCeiling"`
+	RunMetadataRetentionDays int   `json:"runMetadataRetentionDays"`
+	StatementTimeoutMs       int   `json:"statementTimeoutMs"`
+	WebhookTimeoutMs         int   `json:"webhookTimeoutMs"`
+}
+
+// UpdateSourceRequest defines model for UpdateSourceRequest.
+type UpdateSourceRequest struct {
+	ArtifactPaths   []string                  `json:"artifactPaths"`
+	ExpectedVersion int64                     `json:"expectedVersion"`
+	Name            string                    `json:"name"`
+	Status          UpdateSourceRequestStatus `json:"status"`
+}
+
+// UpdateSourceRequestStatus defines model for UpdateSourceRequest.Status.
+type UpdateSourceRequestStatus string
+
+// UpdateSourceScheduleRequest defines model for UpdateSourceScheduleRequest.
+type UpdateSourceScheduleRequest struct {
+	Enabled         bool                  `json:"enabled"`
+	ExpectedVersion int64                 `json:"expectedVersion"`
+	Expression      string                `json:"expression"`
+	MisfirePolicy   ScheduleMisfirePolicy `json:"misfirePolicy"`
+	Timezone        string                `json:"timezone"`
+}
+
+// UpdateWorkbenchAttentionItemRequest defines model for UpdateWorkbenchAttentionItemRequest.
+type UpdateWorkbenchAttentionItemRequest struct {
+	AssigneePrincipalId *PrincipalId                              `json:"assigneePrincipalId,omitempty"`
+	ExpectedVersion     int64                                     `json:"expectedVersion"`
+	SetAssignee         *bool                                     `json:"setAssignee,omitempty"`
+	State               *UpdateWorkbenchAttentionItemRequestState `json:"state,omitempty"`
+}
+
+// UpdateWorkbenchAttentionItemRequestState defines model for UpdateWorkbenchAttentionItemRequest.State.
+type UpdateWorkbenchAttentionItemRequestState string
+
+// UpdateWorkspaceMembershipRequest defines model for UpdateWorkspaceMembershipRequest.
+type UpdateWorkspaceMembershipRequest struct {
+	Status MembershipStatus `json:"status"`
+}
+
+// UserAccountId defines model for UserAccountId.
+type UserAccountId = identity.UserAccountID
+
+// ValidateProductionRequest defines model for ValidateProductionRequest.
+type ValidateProductionRequest struct {
+	ExpectedVersion   Version `json:"expectedVersion"`
+	PreviousAttemptNo int     `json:"previousAttemptNo"`
+	Reason            string  `json:"reason"`
+	SetDigest         Digest  `json:"setDigest"`
+}
+
+// ValidationAttemptPage defines model for ValidationAttemptPage.
+type ValidationAttemptPage struct {
+	Items      []ValidationAttemptResult `json:"items"`
+	NextCursor *string                   `json:"nextCursor"`
+
+	// OperationId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	OperationId ResourceId `json:"operationId"`
+	Version     Version    `json:"version"`
+}
+
+// ValidationAttemptResult defines model for ValidationAttemptResult.
+type ValidationAttemptResult struct {
+	AttemptNo            int                           `json:"attemptNo"`
+	Checks               []ValidationCheckResult       `json:"checks"`
+	CompletedAt          *time.Time                    `json:"completedAt"`
+	FreshnessDigest      Digest                        `json:"freshnessDigest"`
+	RequiredChecksDigest Digest                        `json:"requiredChecksDigest"`
+	RunIds               []ResourceId                  `json:"runIds"`
+	SetDigest            Digest                        `json:"setDigest"`
+	Status               ValidationAttemptResultStatus `json:"status"`
+	ValidationDigest     *string                       `json:"validationDigest"`
+}
+
+// ValidationAttemptResultStatus defines model for ValidationAttemptResult.Status.
+type ValidationAttemptResultStatus string
+
+// ValidationCheckResult defines model for ValidationCheckResult.
+type ValidationCheckResult struct {
+	// ProposalId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	ProposalId ResourceId `json:"proposalId"`
+	Results    []struct {
+		Code        string                               `json:"code"`
+		Details     map[string]*JSONValue                `json:"details"`
+		InputDigest Digest                               `json:"inputDigest"`
+		Message     string                               `json:"message"`
+		Severity    ValidationCheckResultResultsSeverity `json:"severity"`
+	} `json:"results"`
+
+	// RunId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	RunId            ResourceId                  `json:"runId"`
+	Status           ValidationCheckResultStatus `json:"status"`
+	ValidatorId      string                      `json:"validatorId"`
+	ValidatorVersion string                      `json:"validatorVersion"`
+}
+
+// ValidationCheckResultResultsSeverity defines model for ValidationCheckResult.Results.Severity.
+type ValidationCheckResultResultsSeverity string
+
+// ValidationCheckResultStatus defines model for ValidationCheckResult.Status.
+type ValidationCheckResultStatus string
+
+// ValidationReference defines model for ValidationReference.
+type ValidationReference struct {
+	AttemptNo        int    `json:"attemptNo"`
+	ValidationDigest Digest `json:"validationDigest"`
+}
+
+// ValidationStatus defines model for ValidationStatus.
+type ValidationStatus struct {
+	union json.RawMessage
+}
+
+// ValidationStatus0 defines model for ValidationStatus.0.
+type ValidationStatus0 struct {
+	Status ValidationStatus0Status `json:"status"`
+}
+
+// ValidationStatus0Status defines model for ValidationStatus.0.Status.
+type ValidationStatus0Status string
+
+// Version defines model for Version.
+type Version = int
+
+// WebhookDelivery defines model for WebhookDelivery.
+type WebhookDelivery struct {
+	Attempt             int                  `json:"attempt"`
+	CreatedAt           time.Time            `json:"createdAt"`
+	ErrorCode           *string              `json:"errorCode,omitempty"`
+	EventId             string               `json:"eventId"`
+	EventType           string               `json:"eventType"`
+	HttpStatus          int                  `json:"httpStatus"`
+	Id                  string               `json:"id"`
+	MaxAttempts         int                  `json:"maxAttempts"`
+	NextAttemptAt       time.Time            `json:"nextAttemptAt"`
+	PayloadDigest       string               `json:"payloadDigest"`
+	RuntimeRunId        string               `json:"runtimeRunId"`
+	SigningVersion      int                  `json:"signingVersion"`
+	State               WebhookDeliveryState `json:"state"`
+	SubscriptionId      string               `json:"subscriptionId"`
+	SubscriptionVersion int                  `json:"subscriptionVersion"`
+	TraceId             string               `json:"traceId"`
+	UpdatedAt           time.Time            `json:"updatedAt"`
+
+	// WorkspaceId Example: wsp_01arz3ndektsv4rrffq69g5fav
+	WorkspaceId WorkspaceId `json:"workspaceId"`
+}
+
+// WebhookDeliveryState defines model for WebhookDelivery.State.
+type WebhookDeliveryState string
+
+// WebhookRotation defines model for WebhookRotation.
+type WebhookRotation struct {
+	ExpectedVersion int `json:"expectedVersion"`
+}
+
+// WebhookSubscription defines model for WebhookSubscription.
+type WebhookSubscription struct {
+	CreatedAt      time.Time                       `json:"createdAt"`
+	CreatedBy      string                          `json:"createdBy"`
+	Enabled        bool                            `json:"enabled"`
+	Endpoint       string                          `json:"endpoint"`
+	EventTypes     []WebhookSubscriptionEventTypes `json:"eventTypes"`
+	Id             string                          `json:"id"`
+	Name           string                          `json:"name"`
+	SecretSuffix   string                          `json:"secretSuffix"`
+	SigningVersion int                             `json:"signingVersion"`
+	UpdatedAt      time.Time                       `json:"updatedAt"`
+	Version        int                             `json:"version"`
+
+	// WorkspaceId Example: wsp_01arz3ndektsv4rrffq69g5fav
+	WorkspaceId WorkspaceId `json:"workspaceId"`
+}
+
+// WebhookSubscriptionEventTypes defines model for WebhookSubscription.EventTypes.
+type WebhookSubscriptionEventTypes string
+
+// WorkbenchAction defines model for WorkbenchAction.
+type WorkbenchAction string
+
+// WorkbenchAttentionCounts defines model for WorkbenchAttentionCounts.
+type WorkbenchAttentionCounts struct {
+	Critical   int `json:"critical"`
+	InProgress int `json:"inProgress"`
+	Open       int `json:"open"`
+	Total      int `json:"total"`
+}
+
+// WorkbenchAttentionItem defines model for WorkbenchAttentionItem.
+type WorkbenchAttentionItem struct {
+	AssigneePrincipalId *PrincipalId `json:"assigneePrincipalId,omitempty"`
+	AudienceRoleId      *string      `json:"audienceRoleId,omitempty"`
+
+	// DueAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	DueAt       *Timestamp `json:"dueAt,omitempty"`
+	EvidenceRef *string    `json:"evidenceRef,omitempty"`
+
+	// Id Example: ati_01arz3ndektsv4rrffq69g5fav
+	Id                   AttentionItemId        `json:"id"`
+	InitiatorPrincipalId *PrincipalId           `json:"initiatorPrincipalId,omitempty"`
+	Kind                 WorkbenchAttentionKind `json:"kind"`
+	NextActions          []WorkbenchAction      `json:"nextActions"`
+
+	// OpenedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	OpenedAt   Timestamp         `json:"openedAt"`
+	Priority   WorkbenchPriority `json:"priority"`
+	ReasonCode string            `json:"reasonCode"`
+
+	// ResolvedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	ResolvedAt  *Timestamp              `json:"resolvedAt,omitempty"`
+	Risk        WorkbenchPriority       `json:"risk"`
+	RuleVersion string                  `json:"ruleVersion"`
+	State       WorkbenchAttentionState `json:"state"`
+	Summary     string                  `json:"summary"`
+	TargetId    string                  `json:"targetId"`
+	TargetRoute string                  `json:"targetRoute"`
+	TargetType  string                  `json:"targetType"`
+	Title       string                  `json:"title"`
+
+	// TraceId Lowercase 16-byte W3C trace identifier.
+	//
+	// Example: 4bf92f3577b34da6a3ce929d0e0e4736
+	TraceId TraceId `json:"traceId"`
+
+	// UpdatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	UpdatedAt Timestamp `json:"updatedAt"`
+	Version   int64     `json:"version"`
+}
+
+// WorkbenchAttentionKind defines model for WorkbenchAttentionKind.
+type WorkbenchAttentionKind string
+
+// WorkbenchAttentionPage defines model for WorkbenchAttentionPage.
+type WorkbenchAttentionPage struct {
+	Counts WorkbenchAttentionCounts `json:"counts"`
+	Items  []WorkbenchAttentionItem `json:"items"`
+	Page   PageInfo                 `json:"page"`
+}
+
+// WorkbenchAttentionState defines model for WorkbenchAttentionState.
+type WorkbenchAttentionState string
+
+// WorkbenchPriority defines model for WorkbenchPriority.
+type WorkbenchPriority string
+
+// WorkbenchSort defines model for WorkbenchSort.
+type WorkbenchSort string
+
+// WorkbenchView defines model for WorkbenchView.
+type WorkbenchView string
+
 // Workspace defines model for Workspace.
 type Workspace struct {
 	CreatedAt   time.Time `json:"createdAt"`
@@ -1930,11 +8759,59 @@ type Workspace struct {
 // WorkspaceId Example: wsp_01arz3ndektsv4rrffq69g5fav
 type WorkspaceId = identity.WorkspaceID
 
+// WorkspaceInvitation defines model for WorkspaceInvitation.
+type WorkspaceInvitation struct {
+	CreatedAt time.Time        `json:"createdAt"`
+	Email     *string          `json:"email,omitempty"`
+	ExpiresAt time.Time        `json:"expiresAt"`
+	Id        InvitationId     `json:"id"`
+	Issuer    string           `json:"issuer"`
+	RoleId    string           `json:"roleId"`
+	Status    InvitationStatus `json:"status"`
+	Subject   *string          `json:"subject,omitempty"`
+}
+
+// WorkspaceInvitationPage defines model for WorkspaceInvitationPage.
+type WorkspaceInvitationPage struct {
+	Items []WorkspaceInvitation `json:"items"`
+}
+
+// WorkspaceMembership defines model for WorkspaceMembership.
+type WorkspaceMembership struct {
+	AccountId   UserAccountId    `json:"accountId"`
+	AdmittedAt  time.Time        `json:"admittedAt"`
+	DisplayName string           `json:"displayName"`
+	Id          MembershipId     `json:"id"`
+	PrincipalId PrincipalId      `json:"principalId"`
+	RoleIds     []string         `json:"roleIds"`
+	Status      MembershipStatus `json:"status"`
+}
+
+// WorkspaceMembershipPage defines model for WorkspaceMembershipPage.
+type WorkspaceMembershipPage struct {
+	Items []WorkspaceMembership `json:"items"`
+}
+
 // AssetId Example: ast_01arz3ndektsv4rrffq69g5fav
 type AssetId = SemanticAssetId
 
+// AuditExportId Example: evt_01arz3ndektsv4rrffq69g5fav
+type AuditExportId = EventId
+
+// CSRF defines model for CSRF.
+type CSRF = string
+
+// CandidateId defines model for CandidateId.
+type CandidateId = SemanticCandidateId
+
+// IdempotencyKey defines model for IdempotencyKey.
+type IdempotencyKey = string
+
 // Limit defines model for Limit.
 type Limit = int
+
+// OperationId Example: prodop_01arz3ndektsv4rrffq69g5fav
+type OperationId = ProductionOperationId
 
 // ProposalId Example: prp_01arz3ndektsv4rrffq69g5fav
 type ProposalId = GovernanceProposalId
@@ -1954,6 +8831,12 @@ type RevisionId = AssetRevisionId
 // SettingId Example: mdl_01arz3ndektsv4rrffq69g5fav
 type SettingId = GovernanceModelSettingId
 
+// SnapshotId defines model for SnapshotId.
+type SnapshotId = SourceSnapshotId
+
+// SourceId defines model for SourceId.
+type SourceId = SourceConnectionId
+
 // BadRequest defines model for BadRequest.
 type BadRequest = ErrorResponse
 
@@ -1972,8 +8855,82 @@ type NotFound = ErrorResponse
 // ServiceUnavailable defines model for ServiceUnavailable.
 type ServiceUnavailable = ErrorResponse
 
+// Unauthorized defines model for Unauthorized.
+type Unauthorized = ErrorResponse
+
 // UnprocessableEntity defines model for UnprocessableEntity.
 type UnprocessableEntity = ErrorResponse
+
+// CompleteOIDCLoginParams defines parameters for CompleteOIDCLogin.
+type CompleteOIDCLoginParams struct {
+	State string `form:"state" json:"state"`
+	Code  string `form:"code" json:"code"`
+}
+
+// BeginOIDCLoginParams defines parameters for BeginOIDCLogin.
+type BeginOIDCLoginParams struct {
+	ReturnTo *string `form:"returnTo,omitempty" json:"returnTo,omitempty"`
+}
+
+// PasswordLoginJSONBody defines parameters for PasswordLogin.
+type PasswordLoginJSONBody struct {
+	Password *string `json:"password,omitempty"`
+	Username string  `json:"username"`
+}
+
+// DeleteSessionParams defines parameters for DeleteSession.
+type DeleteSessionParams struct {
+	// XSemliaCSRF Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests.
+	XSemliaCSRF CSRF `json:"X-Semlia-CSRF"`
+}
+
+// ChangePasswordJSONBody defines parameters for ChangePassword.
+type ChangePasswordJSONBody struct {
+	CurrentPassword *string `json:"currentPassword,omitempty"`
+	NewPassword     *string `json:"newPassword,omitempty"`
+}
+
+// ChangePasswordParams defines parameters for ChangePassword.
+type ChangePasswordParams struct {
+	// XSemliaCSRF Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests.
+	XSemliaCSRF CSRF `json:"X-Semlia-CSRF"`
+}
+
+// AskReleasedSemanticsParams defines parameters for AskReleasedSemantics.
+type AskReleasedSemanticsParams struct {
+	// XSemliaCSRF Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests.
+	XSemliaCSRF CSRF `json:"X-Semlia-CSRF"`
+}
+
+// CreateAuthorizationRoleBindingParams defines parameters for CreateAuthorizationRoleBinding.
+type CreateAuthorizationRoleBindingParams struct {
+	// XSemliaCSRF Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests.
+	XSemliaCSRF CSRF `json:"X-Semlia-CSRF"`
+}
+
+// RevokeAuthorizationRoleBindingParams defines parameters for RevokeAuthorizationRoleBinding.
+type RevokeAuthorizationRoleBindingParams struct {
+	// XSemliaCSRF Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests.
+	XSemliaCSRF CSRF `json:"X-Semlia-CSRF"`
+}
+
+// CreateAuthorizationRoleParams defines parameters for CreateAuthorizationRole.
+type CreateAuthorizationRoleParams struct {
+	// XSemliaCSRF Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests.
+	XSemliaCSRF CSRF `json:"X-Semlia-CSRF"`
+}
+
+// UpdateAuthorizationRoleParams defines parameters for UpdateAuthorizationRole.
+type UpdateAuthorizationRoleParams struct {
+	// XSemliaCSRF Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests.
+	XSemliaCSRF CSRF `json:"X-Semlia-CSRF"`
+}
+
+// InspectEffectiveAuthorizationParams defines parameters for InspectEffectiveAuthorization.
+type InspectEffectiveAuthorizationParams struct {
+	// XSemliaCSRF Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests.
+	XSemliaCSRF CSRF `json:"X-Semlia-CSRF"`
+}
 
 // ListCatalogAssetsParams defines parameters for ListCatalogAssets.
 type ListCatalogAssetsParams struct {
@@ -1986,11 +8943,20 @@ type ListCatalogAssetsParams struct {
 	LifecycleState *AssetLifecycleState `form:"lifecycleState,omitempty" json:"lifecycleState,omitempty"`
 }
 
+// ListCatalogAssetAuthorityRecordsParams defines parameters for ListCatalogAssetAuthorityRecords.
+type ListCatalogAssetAuthorityRecordsParams struct {
+	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
 // ListAssetRelationsParams defines parameters for ListAssetRelations.
 type ListAssetRelationsParams struct {
 	Direction *ListAssetRelationsParamsDirection `form:"direction,omitempty" json:"direction,omitempty"`
 	Plane     *RelationPlane                     `form:"plane,omitempty" json:"plane,omitempty"`
 	Depth     *int                               `form:"depth,omitempty" json:"depth,omitempty"`
+
+	// Limit Hard cap for this legacy bounded graph projection. Use the authority relations endpoint for cursor paging.
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
 // ListAssetRelationsParamsDirection defines parameters for ListAssetRelations.
@@ -2000,6 +8966,40 @@ type ListAssetRelationsParamsDirection string
 type ListAssetRevisionsParams struct {
 	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// CreateConsumerBindingParams defines parameters for CreateConsumerBinding.
+type CreateConsumerBindingParams struct {
+	// XSemliaCSRF Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests.
+	XSemliaCSRF CSRF `json:"X-Semlia-CSRF"`
+}
+
+// UpdateConsumerBindingParams defines parameters for UpdateConsumerBinding.
+type UpdateConsumerBindingParams struct {
+	// XSemliaCSRF Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests.
+	XSemliaCSRF CSRF `json:"X-Semlia-CSRF"`
+}
+
+// CreateConsumerParams defines parameters for CreateConsumer.
+type CreateConsumerParams struct {
+	// XSemliaCSRF Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests.
+	XSemliaCSRF CSRF `json:"X-Semlia-CSRF"`
+}
+
+// UpdateConsumerParams defines parameters for UpdateConsumer.
+type UpdateConsumerParams struct {
+	// XSemliaCSRF Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests.
+	XSemliaCSRF CSRF `json:"X-Semlia-CSRF"`
+}
+
+// StartEmbeddingRebuildParams defines parameters for StartEmbeddingRebuild.
+type StartEmbeddingRebuildParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// SearchEmbeddingIndexParams defines parameters for SearchEmbeddingIndex.
+type SearchEmbeddingIndexParams struct {
+	Q string `form:"q" json:"q"`
 }
 
 // ListGovernanceProposalsParams defines parameters for ListGovernanceProposals.
@@ -2020,14 +9020,412 @@ type ListGovernanceReviewBatchesParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
+// FinalizeIngestionArtifactSetParams defines parameters for FinalizeIngestionArtifactSet.
+type FinalizeIngestionArtifactSetParams struct {
+	// IdempotencyKey Workspace-scoped command replay key.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+
+	// XSemliaCSRF Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests.
+	XSemliaCSRF CSRF `json:"X-Semlia-CSRF"`
+}
+
+// ListIngestionArtifactsParams defines parameters for ListIngestionArtifacts.
+type ListIngestionArtifactsParams struct {
+	Kind     *ArtifactKind       `form:"kind,omitempty" json:"kind,omitempty"`
+	Status   *ArtifactStatus     `form:"status,omitempty" json:"status,omitempty"`
+	SourceId *SourceConnectionId `form:"sourceId,omitempty" json:"sourceId,omitempty"`
+	Limit    *Limit              `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor   *Cursor             `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// StageIngestionArtifactJSONBody defines parameters for StageIngestionArtifact.
+type StageIngestionArtifactJSONBody = openapi_types.File
+
+// StageIngestionArtifactParams defines parameters for StageIngestionArtifact.
+type StageIngestionArtifactParams struct {
+	// IdempotencyKey Workspace-scoped command replay key.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+
+	// XSemliaCSRF Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests.
+	XSemliaCSRF   CSRF               `json:"X-Semlia-CSRF"`
+	XArtifactKind PublicArtifactKind `json:"X-Artifact-Kind"`
+	XFileName     string             `json:"X-File-Name"`
+
+	// XSourceId Existing source receiving this staged version. Omit when creating a source.
+	XSourceId *SourceConnectionId `json:"X-Source-Id,omitempty"`
+
+	// XExpectedSourceVersion Required optimistic source version when X-Source-Id is present.
+	XExpectedSourceVersion *int64 `json:"X-Expected-Source-Version,omitempty"`
+}
+
+// RegisterConfiguredSQLArtifactsParams defines parameters for RegisterConfiguredSQLArtifacts.
+type RegisterConfiguredSQLArtifactsParams struct {
+	// IdempotencyKey Workspace-scoped command replay key.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+
+	// XSemliaCSRF Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests.
+	XSemliaCSRF CSRF `json:"X-Semlia-CSRF"`
+}
+
+// CreateWorkspaceInvitationParams defines parameters for CreateWorkspaceInvitation.
+type CreateWorkspaceInvitationParams struct {
+	// XSemliaCSRF Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests.
+	XSemliaCSRF CSRF `json:"X-Semlia-CSRF"`
+}
+
+// CallMCPJSONBody defines parameters for CallMCP.
+type CallMCPJSONBody map[string]interface{}
+
+// CreatePasswordMemberJSONBody defines parameters for CreatePasswordMember.
+type CreatePasswordMemberJSONBody struct {
+	DisplayName string  `json:"displayName"`
+	Password    *string `json:"password,omitempty"`
+	RoleId      string  `json:"roleId"`
+	Username    string  `json:"username"`
+}
+
+// CreatePasswordMemberParams defines parameters for CreatePasswordMember.
+type CreatePasswordMemberParams struct {
+	// XSemliaCSRF Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests.
+	XSemliaCSRF CSRF `json:"X-Semlia-CSRF"`
+}
+
+// UpdateWorkspaceMembershipParams defines parameters for UpdateWorkspaceMembership.
+type UpdateWorkspaceMembershipParams struct {
+	// XSemliaCSRF Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests.
+	XSemliaCSRF CSRF `json:"X-Semlia-CSRF"`
+}
+
+// ListOperationsAuditEventsParams defines parameters for ListOperationsAuditEvents.
+type ListOperationsAuditEventsParams struct {
+	Limit      *Limit     `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor     *Cursor    `form:"cursor,omitempty" json:"cursor,omitempty"`
+	ActorId    *string    `form:"actorId,omitempty" json:"actorId,omitempty"`
+	EventType  *string    `form:"eventType,omitempty" json:"eventType,omitempty"`
+	ObjectType *string    `form:"objectType,omitempty" json:"objectType,omitempty"`
+	ObjectId   *string    `form:"objectId,omitempty" json:"objectId,omitempty"`
+	TraceId    *TraceId   `form:"traceId,omitempty" json:"traceId,omitempty"`
+	From       *Timestamp `form:"from,omitempty" json:"from,omitempty"`
+	To         *Timestamp `form:"to,omitempty" json:"to,omitempty"`
+}
+
+// CreateOperationsAuditExportParams defines parameters for CreateOperationsAuditExport.
+type CreateOperationsAuditExportParams struct {
+	// XSemliaCSRF Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests.
+	XSemliaCSRF CSRF `json:"X-Semlia-CSRF"`
+}
+
+// ListOperationsRuntimeRunsParams defines parameters for ListOperationsRuntimeRuns.
+type ListOperationsRuntimeRunsParams struct {
+	Limit      *Limit                     `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor     *Cursor                    `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Kind       *OperationsRuntimeRunKind  `form:"kind,omitempty" json:"kind,omitempty"`
+	State      *OperationsRuntimeRunState `form:"state,omitempty" json:"state,omitempty"`
+	SourceType *string                    `form:"sourceType,omitempty" json:"sourceType,omitempty"`
+	SourceId   *string                    `form:"sourceId,omitempty" json:"sourceId,omitempty"`
+	TraceId    *TraceId                   `form:"traceId,omitempty" json:"traceId,omitempty"`
+}
+
+// CancelOperationsRuntimeRunParams defines parameters for CancelOperationsRuntimeRun.
+type CancelOperationsRuntimeRunParams struct {
+	// XSemliaCSRF Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests.
+	XSemliaCSRF CSRF `json:"X-Semlia-CSRF"`
+}
+
+// RetryOperationsRuntimeRunParams defines parameters for RetryOperationsRuntimeRun.
+type RetryOperationsRuntimeRunParams struct {
+	// XSemliaCSRF Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests.
+	XSemliaCSRF CSRF `json:"X-Semlia-CSRF"`
+}
+
+// ListProductionOperationsParams defines parameters for ListProductionOperations.
+type ListProductionOperationsParams struct {
+	Limit       *Limit      `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor      *Cursor     `form:"cursor,omitempty" json:"cursor,omitempty"`
+	SourceId    *ResourceId `form:"sourceId,omitempty" json:"sourceId,omitempty"`
+	CandidateId *ResourceId `form:"candidateId,omitempty" json:"candidateId,omitempty"`
+	CreatedBy   *ResourceId `form:"createdBy,omitempty" json:"createdBy,omitempty"`
+}
+
+// CreateProductionOperationParams defines parameters for CreateProductionOperation.
+type CreateProductionOperationParams struct {
+	// IdempotencyKey Workspace-scoped command replay key.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetProductionOperationParams defines parameters for GetProductionOperation.
+type GetProductionOperationParams struct {
+	// Version Exact immutable version; omitted selects current, never rewrites history
+	Version *int `form:"version,omitempty" json:"version,omitempty"`
+}
+
+// ReplaceProductionDraftParams defines parameters for ReplaceProductionDraft.
+type ReplaceProductionDraftParams struct {
+	// IdempotencyKey Workspace-scoped command replay key.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// ListProductionBusinessRulesParams defines parameters for ListProductionBusinessRules.
+type ListProductionBusinessRulesParams struct {
+	Version Version `form:"version" json:"version"`
+}
+
+// RecordProductionBusinessRuleParams defines parameters for RecordProductionBusinessRule.
+type RecordProductionBusinessRuleParams struct {
+	// IdempotencyKey Workspace-scoped command replay key.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GenerateProductionSuggestionsParams defines parameters for GenerateProductionSuggestions.
+type GenerateProductionSuggestionsParams struct {
+	// IdempotencyKey Workspace-scoped command replay key.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PublishProductionOperationParams defines parameters for PublishProductionOperation.
+type PublishProductionOperationParams struct {
+	// IdempotencyKey Workspace-scoped command replay key.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// ReviewProductionOperationParams defines parameters for ReviewProductionOperation.
+type ReviewProductionOperationParams struct {
+	// IdempotencyKey Workspace-scoped command replay key.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// SubmitProductionOperationParams defines parameters for SubmitProductionOperation.
+type SubmitProductionOperationParams struct {
+	// IdempotencyKey Workspace-scoped command replay key.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// ListProductionValidationAttemptsParams defines parameters for ListProductionValidationAttempts.
+type ListProductionValidationAttemptsParams struct {
+	Version Version `form:"version" json:"version"`
+	Limit   *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor  *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// ValidateProductionOperationParams defines parameters for ValidateProductionOperation.
+type ValidateProductionOperationParams struct {
+	// IdempotencyKey Workspace-scoped command replay key.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// RollbackProductionReleaseParams defines parameters for RollbackProductionRelease.
+type RollbackProductionReleaseParams struct {
+	// IdempotencyKey Workspace-scoped command replay key.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// CancelQueryExecutionParams defines parameters for CancelQueryExecution.
+type CancelQueryExecutionParams struct {
+	XSemliaCSRF *string `json:"X-Semlia-CSRF,omitempty"`
+}
+
+// ExecuteSemanticPlanParams defines parameters for ExecuteSemanticPlan.
+type ExecuteSemanticPlanParams struct {
+	XSemliaCSRF *string `json:"X-Semlia-CSRF,omitempty"`
+}
+
+// UpdateRuntimePolicyParams defines parameters for UpdateRuntimePolicy.
+type UpdateRuntimePolicyParams struct {
+	// XSemliaCSRF Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests.
+	XSemliaCSRF CSRF `json:"X-Semlia-CSRF"`
+}
+
+// DeleteSourceScheduleParams defines parameters for DeleteSourceSchedule.
+type DeleteSourceScheduleParams struct {
+	// IdempotencyKey Workspace-scoped command replay key.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+
+	// XSemliaCSRF Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests.
+	XSemliaCSRF CSRF `json:"X-Semlia-CSRF"`
+}
+
+// UpdateSourceScheduleParams defines parameters for UpdateSourceSchedule.
+type UpdateSourceScheduleParams struct {
+	// IdempotencyKey Workspace-scoped command replay key.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+
+	// XSemliaCSRF Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests.
+	XSemliaCSRF CSRF `json:"X-Semlia-CSRF"`
+}
+
+// ListSourceScheduleOccurrencesParams defines parameters for ListSourceScheduleOccurrences.
+type ListSourceScheduleOccurrencesParams struct {
+	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// PauseSourceScheduleParams defines parameters for PauseSourceSchedule.
+type PauseSourceScheduleParams struct {
+	// IdempotencyKey Workspace-scoped command replay key.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+
+	// XSemliaCSRF Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests.
+	XSemliaCSRF CSRF `json:"X-Semlia-CSRF"`
+}
+
+// ResumeSourceScheduleParams defines parameters for ResumeSourceSchedule.
+type ResumeSourceScheduleParams struct {
+	// IdempotencyKey Workspace-scoped command replay key.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+
+	// XSemliaCSRF Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests.
+	XSemliaCSRF CSRF `json:"X-Semlia-CSRF"`
+}
+
+// RunSourceScheduleNowParams defines parameters for RunSourceScheduleNow.
+type RunSourceScheduleNowParams struct {
+	// IdempotencyKey Workspace-scoped command replay key.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+
+	// XSemliaCSRF Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests.
+	XSemliaCSRF CSRF `json:"X-Semlia-CSRF"`
+}
+
+// ListSemanticCandidatesParams defines parameters for ListSemanticCandidates.
+type ListSemanticCandidatesParams struct {
+	Status   *SemanticCandidateStatus `form:"status,omitempty" json:"status,omitempty"`
+	Limit    *Limit                   `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor   *Cursor                  `form:"cursor,omitempty" json:"cursor,omitempty"`
+	SourceId *SourceConnectionId      `form:"sourceId,omitempty" json:"sourceId,omitempty"`
+}
+
+// ResolveSemanticQueryParams defines parameters for ResolveSemanticQuery.
+type ResolveSemanticQueryParams struct {
+	// XSemliaCSRF Required for browser session requests; omitted for bearer requests.
+	XSemliaCSRF *string `json:"X-Semlia-CSRF,omitempty"`
+}
+
+// SearchReleasedSemanticsParams defines parameters for SearchReleasedSemantics.
+type SearchReleasedSemanticsParams struct {
+	Q *string `form:"q,omitempty" json:"q,omitempty"`
+}
+
+// ListSourcesParams defines parameters for ListSources.
+type ListSourcesParams struct {
+	Limit    *Limit              `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor   *Cursor             `form:"cursor,omitempty" json:"cursor,omitempty"`
+	SourceId *SourceConnectionId `form:"sourceId,omitempty" json:"sourceId,omitempty"`
+}
+
+// ListSourceDiscoveryRunsParams defines parameters for ListSourceDiscoveryRuns.
+type ListSourceDiscoveryRunsParams struct {
+	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// ListSourceSchedulesParams defines parameters for ListSourceSchedules.
+type ListSourceSchedulesParams struct {
+	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// CreateSourceScheduleParams defines parameters for CreateSourceSchedule.
+type CreateSourceScheduleParams struct {
+	// IdempotencyKey Workspace-scoped command replay key.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+
+	// XSemliaCSRF Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests.
+	XSemliaCSRF CSRF `json:"X-Semlia-CSRF"`
+}
+
+// ListProductionSourceSnapshotsParams defines parameters for ListProductionSourceSnapshots.
+type ListProductionSourceSnapshotsParams struct {
+	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// ListProductionSnapshotDiagnosticsParams defines parameters for ListProductionSnapshotDiagnostics.
+type ListProductionSnapshotDiagnosticsParams struct {
+	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// ListProductionSnapshotMembersParams defines parameters for ListProductionSnapshotMembers.
+type ListProductionSnapshotMembersParams struct {
+	Limit  *Limit      `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor *Cursor     `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Kind   *MemberKind `form:"kind,omitempty" json:"kind,omitempty"`
+}
+
+// ReplayWebhookDeliveryJSONBody defines parameters for ReplayWebhookDelivery.
+type ReplayWebhookDeliveryJSONBody struct {
+	ExpectedAttempt int `json:"expectedAttempt"`
+}
+
+// ListWorkbenchAttentionItemsParams defines parameters for ListWorkbenchAttentionItems.
+type ListWorkbenchAttentionItemsParams struct {
+	View     *WorkbenchView           `form:"view,omitempty" json:"view,omitempty"`
+	Search   *string                  `form:"search,omitempty" json:"search,omitempty"`
+	Kind     *WorkbenchAttentionKind  `form:"kind,omitempty" json:"kind,omitempty"`
+	State    *WorkbenchAttentionState `form:"state,omitempty" json:"state,omitempty"`
+	Priority *WorkbenchPriority       `form:"priority,omitempty" json:"priority,omitempty"`
+	Risk     *WorkbenchPriority       `form:"risk,omitempty" json:"risk,omitempty"`
+	Sort     *WorkbenchSort           `form:"sort,omitempty" json:"sort,omitempty"`
+	Limit    *int                     `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor   *Cursor                  `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// UpdateWorkbenchAttentionItemParams defines parameters for UpdateWorkbenchAttentionItem.
+type UpdateWorkbenchAttentionItemParams struct {
+	// XSemliaCSRF Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests.
+	XSemliaCSRF CSRF `json:"X-Semlia-CSRF"`
+
+	// IdempotencyKey Workspace-scoped command replay key.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PasswordLoginJSONRequestBody defines body for PasswordLogin for application/json ContentType.
+type PasswordLoginJSONRequestBody PasswordLoginJSONBody
+
+// ChangePasswordJSONRequestBody defines body for ChangePassword for application/json ContentType.
+type ChangePasswordJSONRequestBody ChangePasswordJSONBody
+
 // CreateWorkspaceJSONRequestBody defines body for CreateWorkspace for application/json ContentType.
 type CreateWorkspaceJSONRequestBody = CreateWorkspaceRequest
+
+// AskReleasedSemanticsJSONRequestBody defines body for AskReleasedSemantics for application/json ContentType.
+type AskReleasedSemanticsJSONRequestBody = AskRequest
+
+// CreateAuthorizationRoleBindingJSONRequestBody defines body for CreateAuthorizationRoleBinding for application/json ContentType.
+type CreateAuthorizationRoleBindingJSONRequestBody = CreateAuthorizationRoleBindingRequest
+
+// RevokeAuthorizationRoleBindingJSONRequestBody defines body for RevokeAuthorizationRoleBinding for application/json ContentType.
+type RevokeAuthorizationRoleBindingJSONRequestBody = RevokeAuthorizationRoleBindingRequest
+
+// CreateAuthorizationRoleJSONRequestBody defines body for CreateAuthorizationRole for application/json ContentType.
+type CreateAuthorizationRoleJSONRequestBody = CreateAuthorizationRoleRequest
+
+// UpdateAuthorizationRoleJSONRequestBody defines body for UpdateAuthorizationRole for application/json ContentType.
+type UpdateAuthorizationRoleJSONRequestBody = UpdateAuthorizationRoleRequest
+
+// InspectEffectiveAuthorizationJSONRequestBody defines body for InspectEffectiveAuthorization for application/json ContentType.
+type InspectEffectiveAuthorizationJSONRequestBody = InspectAuthorizationRequest
 
 // CreateCatalogAssetJSONRequestBody defines body for CreateCatalogAsset for application/json ContentType.
 type CreateCatalogAssetJSONRequestBody = CreateCatalogAssetRequest
 
 // CreateAssetRevisionJSONRequestBody defines body for CreateAssetRevision for application/json ContentType.
 type CreateAssetRevisionJSONRequestBody = CreateAssetRevisionRequest
+
+// IssueClientCredentialJSONRequestBody defines body for IssueClientCredential for application/json ContentType.
+type IssueClientCredentialJSONRequestBody = IssueClientCredential
+
+// CreateConsumerBindingJSONRequestBody defines body for CreateConsumerBinding for application/json ContentType.
+type CreateConsumerBindingJSONRequestBody = CreateConsumerBindingRequest
+
+// UpdateConsumerBindingJSONRequestBody defines body for UpdateConsumerBinding for application/json ContentType.
+type UpdateConsumerBindingJSONRequestBody = UpdateConsumerBindingRequest
+
+// CreateConsumerJSONRequestBody defines body for CreateConsumer for application/json ContentType.
+type CreateConsumerJSONRequestBody = CreateConsumerRequest
+
+// UpdateConsumerJSONRequestBody defines body for UpdateConsumer for application/json ContentType.
+type UpdateConsumerJSONRequestBody = UpdateConsumerRequest
 
 // GenerateGovernanceProposalJSONRequestBody defines body for GenerateGovernanceProposal for application/json ContentType.
 type GenerateGovernanceProposalJSONRequestBody = GovernanceGenerateProposalRequest
@@ -2055,3 +9453,1814 @@ type PublishGovernanceReleaseJSONRequestBody = PublishGovernanceReleaseRequest
 
 // ConfirmGovernanceReviewBatchJSONRequestBody defines body for ConfirmGovernanceReviewBatch for application/json ContentType.
 type ConfirmGovernanceReviewBatchJSONRequestBody = GovernanceReviewCommandRequest
+
+// FinalizeIngestionArtifactSetJSONRequestBody defines body for FinalizeIngestionArtifactSet for application/json ContentType.
+type FinalizeIngestionArtifactSetJSONRequestBody = FinalizeArtifactSetRequest
+
+// StageIngestionArtifactJSONRequestBody defines body for StageIngestionArtifact for application/json ContentType.
+type StageIngestionArtifactJSONRequestBody = StageIngestionArtifactJSONBody
+
+// RegisterConfiguredSQLArtifactsJSONRequestBody defines body for RegisterConfiguredSQLArtifacts for application/json ContentType.
+type RegisterConfiguredSQLArtifactsJSONRequestBody = RegisterSQLArtifactsRequest
+
+// CreateWorkspaceInvitationJSONRequestBody defines body for CreateWorkspaceInvitation for application/json ContentType.
+type CreateWorkspaceInvitationJSONRequestBody = CreateWorkspaceInvitationRequest
+
+// CreateMachinePrincipalJSONRequestBody defines body for CreateMachinePrincipal for application/json ContentType.
+type CreateMachinePrincipalJSONRequestBody = CreateMachinePrincipal
+
+// CallMCPJSONRequestBody defines body for CallMCP for application/json ContentType.
+type CallMCPJSONRequestBody CallMCPJSONBody
+
+// CreatePasswordMemberJSONRequestBody defines body for CreatePasswordMember for application/json ContentType.
+type CreatePasswordMemberJSONRequestBody CreatePasswordMemberJSONBody
+
+// UpdateWorkspaceMembershipJSONRequestBody defines body for UpdateWorkspaceMembership for application/json ContentType.
+type UpdateWorkspaceMembershipJSONRequestBody = UpdateWorkspaceMembershipRequest
+
+// CreateOperationsAuditExportJSONRequestBody defines body for CreateOperationsAuditExport for application/json ContentType.
+type CreateOperationsAuditExportJSONRequestBody = CreateOperationsAuditExportRequest
+
+// CreateProductionOperationJSONRequestBody defines body for CreateProductionOperation for application/json ContentType.
+type CreateProductionOperationJSONRequestBody = CreateProductionRequest
+
+// ReplaceProductionDraftJSONRequestBody defines body for ReplaceProductionDraft for application/json ContentType.
+type ReplaceProductionDraftJSONRequestBody = ReplaceProductionRequest
+
+// RecordProductionBusinessRuleJSONRequestBody defines body for RecordProductionBusinessRule for application/json ContentType.
+type RecordProductionBusinessRuleJSONRequestBody = ProductionBusinessRuleRequest
+
+// GenerateProductionSuggestionsJSONRequestBody defines body for GenerateProductionSuggestions for application/json ContentType.
+type GenerateProductionSuggestionsJSONRequestBody = GenerateProductionRequest
+
+// PublishProductionOperationJSONRequestBody defines body for PublishProductionOperation for application/json ContentType.
+type PublishProductionOperationJSONRequestBody = PublishProductionRequest
+
+// ReviewProductionOperationJSONRequestBody defines body for ReviewProductionOperation for application/json ContentType.
+type ReviewProductionOperationJSONRequestBody = ReviewProductionRequest
+
+// SubmitProductionOperationJSONRequestBody defines body for SubmitProductionOperation for application/json ContentType.
+type SubmitProductionOperationJSONRequestBody = SubmitProductionRequest
+
+// ValidateProductionOperationJSONRequestBody defines body for ValidateProductionOperation for application/json ContentType.
+type ValidateProductionOperationJSONRequestBody = ValidateProductionRequest
+
+// RollbackProductionReleaseJSONRequestBody defines body for RollbackProductionRelease for application/json ContentType.
+type RollbackProductionReleaseJSONRequestBody = RollbackProductionRequest
+
+// ExecuteSemanticPlanJSONRequestBody defines body for ExecuteSemanticPlan for application/json ContentType.
+type ExecuteSemanticPlanJSONRequestBody = QueryExecutionRequest
+
+// UpdateRuntimePolicyJSONRequestBody defines body for UpdateRuntimePolicy for application/json ContentType.
+type UpdateRuntimePolicyJSONRequestBody = UpdateOperationsRuntimeSettingsRequest
+
+// DeleteSourceScheduleJSONRequestBody defines body for DeleteSourceSchedule for application/json ContentType.
+type DeleteSourceScheduleJSONRequestBody = SourceScheduleCommandRequest
+
+// UpdateSourceScheduleJSONRequestBody defines body for UpdateSourceSchedule for application/json ContentType.
+type UpdateSourceScheduleJSONRequestBody = UpdateSourceScheduleRequest
+
+// PauseSourceScheduleJSONRequestBody defines body for PauseSourceSchedule for application/json ContentType.
+type PauseSourceScheduleJSONRequestBody = SourceScheduleCommandRequest
+
+// ResumeSourceScheduleJSONRequestBody defines body for ResumeSourceSchedule for application/json ContentType.
+type ResumeSourceScheduleJSONRequestBody = SourceScheduleCommandRequest
+
+// RunSourceScheduleNowJSONRequestBody defines body for RunSourceScheduleNow for application/json ContentType.
+type RunSourceScheduleNowJSONRequestBody = SourceScheduleCommandRequest
+
+// DecideSemanticCandidateJSONRequestBody defines body for DecideSemanticCandidate for application/json ContentType.
+type DecideSemanticCandidateJSONRequestBody = SemanticCandidateDecisionRequest
+
+// DescribeSemanticsJSONRequestBody defines body for DescribeSemantics for application/json ContentType.
+type DescribeSemanticsJSONRequestBody = ResolveSemanticQueryRequest
+
+// ResolveSemanticQueryJSONRequestBody defines body for ResolveSemanticQuery for application/json ContentType.
+type ResolveSemanticQueryJSONRequestBody = ResolveSemanticQueryRequest
+
+// CreateSourceJSONRequestBody defines body for CreateSource for application/json ContentType.
+type CreateSourceJSONRequestBody = CreateSourceRequest
+
+// DeleteSourceJSONRequestBody defines body for DeleteSource for application/json ContentType.
+type DeleteSourceJSONRequestBody = DeleteSourceRequest
+
+// UpdateSourceJSONRequestBody defines body for UpdateSource for application/json ContentType.
+type UpdateSourceJSONRequestBody = UpdateSourceRequest
+
+// RotateSourceCredentialJSONRequestBody defines body for RotateSourceCredential for application/json ContentType.
+type RotateSourceCredentialJSONRequestBody = RotateSourceCredentialRequest
+
+// StartSourceDiscoveryRunJSONRequestBody defines body for StartSourceDiscoveryRun for application/json ContentType.
+type StartSourceDiscoveryRunJSONRequestBody = StartDiscoveryRunRequest
+
+// CreateSourceScheduleJSONRequestBody defines body for CreateSourceSchedule for application/json ContentType.
+type CreateSourceScheduleJSONRequestBody = CreateSourceScheduleRequest
+
+// ReplayWebhookDeliveryJSONRequestBody defines body for ReplayWebhookDelivery for application/json ContentType.
+type ReplayWebhookDeliveryJSONRequestBody ReplayWebhookDeliveryJSONBody
+
+// CreateWebhookSubscriptionJSONRequestBody defines body for CreateWebhookSubscription for application/json ContentType.
+type CreateWebhookSubscriptionJSONRequestBody = SaveWebhookSubscription
+
+// UpdateWebhookSubscriptionJSONRequestBody defines body for UpdateWebhookSubscription for application/json ContentType.
+type UpdateWebhookSubscriptionJSONRequestBody = SaveWebhookSubscription
+
+// RotateWebhookSigningSecretJSONRequestBody defines body for RotateWebhookSigningSecret for application/json ContentType.
+type RotateWebhookSigningSecretJSONRequestBody = WebhookRotation
+
+// UpdateWorkbenchAttentionItemJSONRequestBody defines body for UpdateWorkbenchAttentionItem for application/json ContentType.
+type UpdateWorkbenchAttentionItemJSONRequestBody = UpdateWorkbenchAttentionItemRequest
+
+// AsBeforePin0 returns the union data inside the BeforePin as a BeforePin0
+func (t BeforePin) AsBeforePin0() (BeforePin0, error) {
+	var body BeforePin0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromBeforePin0 overwrites any union data inside the BeforePin as the provided BeforePin0
+func (t *BeforePin) FromBeforePin0(v BeforePin0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeBeforePin0 performs a merge with any union data inside the BeforePin, using the provided BeforePin0
+func (t *BeforePin) MergeBeforePin0(v BeforePin0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsBeforePin1 returns the union data inside the BeforePin as a BeforePin1
+func (t BeforePin) AsBeforePin1() (BeforePin1, error) {
+	var body BeforePin1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromBeforePin1 overwrites any union data inside the BeforePin as the provided BeforePin1
+func (t *BeforePin) FromBeforePin1(v BeforePin1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeBeforePin1 performs a merge with any union data inside the BeforePin, using the provided BeforePin1
+func (t *BeforePin) MergeBeforePin1(v BeforePin1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsBeforePin2 returns the union data inside the BeforePin as a BeforePin2
+func (t BeforePin) AsBeforePin2() (BeforePin2, error) {
+	var body BeforePin2
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromBeforePin2 overwrites any union data inside the BeforePin as the provided BeforePin2
+func (t *BeforePin) FromBeforePin2(v BeforePin2) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeBeforePin2 performs a merge with any union data inside the BeforePin, using the provided BeforePin2
+func (t *BeforePin) MergeBeforePin2(v BeforePin2) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t BeforePin) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *BeforePin) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsChange0 returns the union data inside the Change as a Change0
+func (t Change) AsChange0() (Change0, error) {
+	var body Change0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromChange0 overwrites any union data inside the Change as the provided Change0
+func (t *Change) FromChange0(v Change0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeChange0 performs a merge with any union data inside the Change, using the provided Change0
+func (t *Change) MergeChange0(v Change0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsChange1 returns the union data inside the Change as a Change1
+func (t Change) AsChange1() (Change1, error) {
+	var body Change1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromChange1 overwrites any union data inside the Change as the provided Change1
+func (t *Change) FromChange1(v Change1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeChange1 performs a merge with any union data inside the Change, using the provided Change1
+func (t *Change) MergeChange1(v Change1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsChange2 returns the union data inside the Change as a Change2
+func (t Change) AsChange2() (Change2, error) {
+	var body Change2
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromChange2 overwrites any union data inside the Change as the provided Change2
+func (t *Change) FromChange2(v Change2) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeChange2 performs a merge with any union data inside the Change, using the provided Change2
+func (t *Change) MergeChange2(v Change2) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t Change) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *Change) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsCreateTarget0 returns the union data inside the CreateTarget as a CreateTarget0
+func (t CreateTarget) AsCreateTarget0() (CreateTarget0, error) {
+	var body CreateTarget0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromCreateTarget0 overwrites any union data inside the CreateTarget as the provided CreateTarget0
+func (t *CreateTarget) FromCreateTarget0(v CreateTarget0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeCreateTarget0 performs a merge with any union data inside the CreateTarget, using the provided CreateTarget0
+func (t *CreateTarget) MergeCreateTarget0(v CreateTarget0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsCreateTarget1 returns the union data inside the CreateTarget as a CreateTarget1
+func (t CreateTarget) AsCreateTarget1() (CreateTarget1, error) {
+	var body CreateTarget1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromCreateTarget1 overwrites any union data inside the CreateTarget as the provided CreateTarget1
+func (t *CreateTarget) FromCreateTarget1(v CreateTarget1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeCreateTarget1 performs a merge with any union data inside the CreateTarget, using the provided CreateTarget1
+func (t *CreateTarget) MergeCreateTarget1(v CreateTarget1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsCreateTarget2 returns the union data inside the CreateTarget as a CreateTarget2
+func (t CreateTarget) AsCreateTarget2() (CreateTarget2, error) {
+	var body CreateTarget2
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromCreateTarget2 overwrites any union data inside the CreateTarget as the provided CreateTarget2
+func (t *CreateTarget) FromCreateTarget2(v CreateTarget2) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeCreateTarget2 performs a merge with any union data inside the CreateTarget, using the provided CreateTarget2
+func (t *CreateTarget) MergeCreateTarget2(v CreateTarget2) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsCreateTarget3 returns the union data inside the CreateTarget as a CreateTarget3
+func (t CreateTarget) AsCreateTarget3() (CreateTarget3, error) {
+	var body CreateTarget3
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromCreateTarget3 overwrites any union data inside the CreateTarget as the provided CreateTarget3
+func (t *CreateTarget) FromCreateTarget3(v CreateTarget3) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeCreateTarget3 performs a merge with any union data inside the CreateTarget, using the provided CreateTarget3
+func (t *CreateTarget) MergeCreateTarget3(v CreateTarget3) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsCreateTarget4 returns the union data inside the CreateTarget as a CreateTarget4
+func (t CreateTarget) AsCreateTarget4() (CreateTarget4, error) {
+	var body CreateTarget4
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromCreateTarget4 overwrites any union data inside the CreateTarget as the provided CreateTarget4
+func (t *CreateTarget) FromCreateTarget4(v CreateTarget4) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeCreateTarget4 performs a merge with any union data inside the CreateTarget, using the provided CreateTarget4
+func (t *CreateTarget) MergeCreateTarget4(v CreateTarget4) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t CreateTarget) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+	object := make(map[string]json.RawMessage)
+	if t.union != nil {
+		err = json.Unmarshal(b, &object)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if t.Changes != nil {
+		object["changes"], err = json.Marshal(t.Changes)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'changes': %w", err)
+		}
+	}
+
+	if t.Content != nil {
+		object["content"], err = json.Marshal(t.Content)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'content': %w", err)
+		}
+	}
+
+	if t.EvidenceIds != nil {
+		object["evidenceIds"], err = json.Marshal(t.EvidenceIds)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'evidenceIds': %w", err)
+		}
+	}
+
+	object["identityKey"], err = json.Marshal(t.IdentityKey)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'identityKey': %w", err)
+	}
+
+	object["intent"], err = json.Marshal(t.Intent)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'intent': %w", err)
+	}
+
+	object["kind"], err = json.Marshal(t.Kind)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'kind': %w", err)
+	}
+
+	object["localKey"], err = json.Marshal(t.LocalKey)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'localKey': %w", err)
+	}
+
+	if t.ReuseIdentity != nil {
+		object["reuseIdentity"], err = json.Marshal(t.ReuseIdentity)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'reuseIdentity': %w", err)
+		}
+	}
+
+	object["title"], err = json.Marshal(t.Title)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'title': %w", err)
+	}
+
+	b, err = json.Marshal(object)
+	return b, err
+}
+
+func (t *CreateTarget) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	if err != nil {
+		return err
+	}
+	object := make(map[string]json.RawMessage)
+	err = json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["changes"]; found {
+		err = json.Unmarshal(raw, &t.Changes)
+		if err != nil {
+			return fmt.Errorf("error reading 'changes': %w", err)
+		}
+	}
+
+	if raw, found := object["content"]; found {
+		err = json.Unmarshal(raw, &t.Content)
+		if err != nil {
+			return fmt.Errorf("error reading 'content': %w", err)
+		}
+	}
+
+	if raw, found := object["evidenceIds"]; found {
+		err = json.Unmarshal(raw, &t.EvidenceIds)
+		if err != nil {
+			return fmt.Errorf("error reading 'evidenceIds': %w", err)
+		}
+	}
+
+	if raw, found := object["identityKey"]; found {
+		err = json.Unmarshal(raw, &t.IdentityKey)
+		if err != nil {
+			return fmt.Errorf("error reading 'identityKey': %w", err)
+		}
+	}
+
+	if raw, found := object["intent"]; found {
+		err = json.Unmarshal(raw, &t.Intent)
+		if err != nil {
+			return fmt.Errorf("error reading 'intent': %w", err)
+		}
+	}
+
+	if raw, found := object["kind"]; found {
+		err = json.Unmarshal(raw, &t.Kind)
+		if err != nil {
+			return fmt.Errorf("error reading 'kind': %w", err)
+		}
+	}
+
+	if raw, found := object["localKey"]; found {
+		err = json.Unmarshal(raw, &t.LocalKey)
+		if err != nil {
+			return fmt.Errorf("error reading 'localKey': %w", err)
+		}
+	}
+
+	if raw, found := object["reuseIdentity"]; found {
+		err = json.Unmarshal(raw, &t.ReuseIdentity)
+		if err != nil {
+			return fmt.Errorf("error reading 'reuseIdentity': %w", err)
+		}
+	}
+
+	if raw, found := object["title"]; found {
+		err = json.Unmarshal(raw, &t.Title)
+		if err != nil {
+			return fmt.Errorf("error reading 'title': %w", err)
+		}
+	}
+
+	return err
+}
+
+// AsGenerationResult0 returns the union data inside the GenerationResult as a GenerationResult0
+func (t GenerationResult) AsGenerationResult0() (GenerationResult0, error) {
+	var body GenerationResult0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromGenerationResult0 overwrites any union data inside the GenerationResult as the provided GenerationResult0
+func (t *GenerationResult) FromGenerationResult0(v GenerationResult0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeGenerationResult0 performs a merge with any union data inside the GenerationResult, using the provided GenerationResult0
+func (t *GenerationResult) MergeGenerationResult0(v GenerationResult0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsGenerationResult1 returns the union data inside the GenerationResult as a GenerationResult1
+func (t GenerationResult) AsGenerationResult1() (GenerationResult1, error) {
+	var body GenerationResult1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromGenerationResult1 overwrites any union data inside the GenerationResult as the provided GenerationResult1
+func (t *GenerationResult) FromGenerationResult1(v GenerationResult1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeGenerationResult1 performs a merge with any union data inside the GenerationResult, using the provided GenerationResult1
+func (t *GenerationResult) MergeGenerationResult1(v GenerationResult1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t GenerationResult) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+	object := make(map[string]json.RawMessage)
+	if t.union != nil {
+		err = json.Unmarshal(b, &object)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	object["costMicros"], err = json.Marshal(t.CostMicros)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'costMicros': %w", err)
+	}
+
+	object["durationMs"], err = json.Marshal(t.DurationMs)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'durationMs': %w", err)
+	}
+
+	object["errorCode"], err = json.Marshal(t.ErrorCode)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'errorCode': %w", err)
+	}
+
+	object["inputDigest"], err = json.Marshal(t.InputDigest)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'inputDigest': %w", err)
+	}
+
+	object["inputVersion"], err = json.Marshal(t.InputVersion)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'inputVersion': %w", err)
+	}
+
+	object["model"], err = json.Marshal(t.Model)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'model': %w", err)
+	}
+
+	object["modelConfigRevision"], err = json.Marshal(t.ModelConfigRevision)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'modelConfigRevision': %w", err)
+	}
+
+	object["operationId"], err = json.Marshal(t.OperationId)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'operationId': %w", err)
+	}
+
+	object["output"], err = json.Marshal(t.Output)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'output': %w", err)
+	}
+
+	object["outputDigest"], err = json.Marshal(t.OutputDigest)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'outputDigest': %w", err)
+	}
+
+	object["providerMode"], err = json.Marshal(t.ProviderMode)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'providerMode': %w", err)
+	}
+
+	object["replayed"], err = json.Marshal(t.Replayed)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'replayed': %w", err)
+	}
+
+	object["runId"], err = json.Marshal(t.RunId)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'runId': %w", err)
+	}
+
+	object["status"], err = json.Marshal(t.Status)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'status': %w", err)
+	}
+
+	b, err = json.Marshal(object)
+	return b, err
+}
+
+func (t *GenerationResult) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	if err != nil {
+		return err
+	}
+	object := make(map[string]json.RawMessage)
+	err = json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["costMicros"]; found {
+		err = json.Unmarshal(raw, &t.CostMicros)
+		if err != nil {
+			return fmt.Errorf("error reading 'costMicros': %w", err)
+		}
+	}
+
+	if raw, found := object["durationMs"]; found {
+		err = json.Unmarshal(raw, &t.DurationMs)
+		if err != nil {
+			return fmt.Errorf("error reading 'durationMs': %w", err)
+		}
+	}
+
+	if raw, found := object["errorCode"]; found {
+		err = json.Unmarshal(raw, &t.ErrorCode)
+		if err != nil {
+			return fmt.Errorf("error reading 'errorCode': %w", err)
+		}
+	}
+
+	if raw, found := object["inputDigest"]; found {
+		err = json.Unmarshal(raw, &t.InputDigest)
+		if err != nil {
+			return fmt.Errorf("error reading 'inputDigest': %w", err)
+		}
+	}
+
+	if raw, found := object["inputVersion"]; found {
+		err = json.Unmarshal(raw, &t.InputVersion)
+		if err != nil {
+			return fmt.Errorf("error reading 'inputVersion': %w", err)
+		}
+	}
+
+	if raw, found := object["model"]; found {
+		err = json.Unmarshal(raw, &t.Model)
+		if err != nil {
+			return fmt.Errorf("error reading 'model': %w", err)
+		}
+	}
+
+	if raw, found := object["modelConfigRevision"]; found {
+		err = json.Unmarshal(raw, &t.ModelConfigRevision)
+		if err != nil {
+			return fmt.Errorf("error reading 'modelConfigRevision': %w", err)
+		}
+	}
+
+	if raw, found := object["operationId"]; found {
+		err = json.Unmarshal(raw, &t.OperationId)
+		if err != nil {
+			return fmt.Errorf("error reading 'operationId': %w", err)
+		}
+	}
+
+	if raw, found := object["output"]; found {
+		err = json.Unmarshal(raw, &t.Output)
+		if err != nil {
+			return fmt.Errorf("error reading 'output': %w", err)
+		}
+	}
+
+	if raw, found := object["outputDigest"]; found {
+		err = json.Unmarshal(raw, &t.OutputDigest)
+		if err != nil {
+			return fmt.Errorf("error reading 'outputDigest': %w", err)
+		}
+	}
+
+	if raw, found := object["providerMode"]; found {
+		err = json.Unmarshal(raw, &t.ProviderMode)
+		if err != nil {
+			return fmt.Errorf("error reading 'providerMode': %w", err)
+		}
+	}
+
+	if raw, found := object["replayed"]; found {
+		err = json.Unmarshal(raw, &t.Replayed)
+		if err != nil {
+			return fmt.Errorf("error reading 'replayed': %w", err)
+		}
+	}
+
+	if raw, found := object["runId"]; found {
+		err = json.Unmarshal(raw, &t.RunId)
+		if err != nil {
+			return fmt.Errorf("error reading 'runId': %w", err)
+		}
+	}
+
+	if raw, found := object["status"]; found {
+		err = json.Unmarshal(raw, &t.Status)
+		if err != nil {
+			return fmt.Errorf("error reading 'status': %w", err)
+		}
+	}
+
+	return err
+}
+
+// AsHeadReference0 returns the union data inside the HeadReference as a HeadReference0
+func (t HeadReference) AsHeadReference0() (HeadReference0, error) {
+	var body HeadReference0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromHeadReference0 overwrites any union data inside the HeadReference as the provided HeadReference0
+func (t *HeadReference) FromHeadReference0(v HeadReference0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeHeadReference0 performs a merge with any union data inside the HeadReference, using the provided HeadReference0
+func (t *HeadReference) MergeHeadReference0(v HeadReference0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsPresentHeadReference returns the union data inside the HeadReference as a PresentHeadReference
+func (t HeadReference) AsPresentHeadReference() (PresentHeadReference, error) {
+	var body PresentHeadReference
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromPresentHeadReference overwrites any union data inside the HeadReference as the provided PresentHeadReference
+func (t *HeadReference) FromPresentHeadReference(v PresentHeadReference) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergePresentHeadReference performs a merge with any union data inside the HeadReference, using the provided PresentHeadReference
+func (t *HeadReference) MergePresentHeadReference(v PresentHeadReference) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t HeadReference) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *HeadReference) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsProductionBusinessRuleRequest0 returns the union data inside the ProductionBusinessRuleRequest as a ProductionBusinessRuleRequest0
+func (t ProductionBusinessRuleRequest) AsProductionBusinessRuleRequest0() (ProductionBusinessRuleRequest0, error) {
+	var body ProductionBusinessRuleRequest0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromProductionBusinessRuleRequest0 overwrites any union data inside the ProductionBusinessRuleRequest as the provided ProductionBusinessRuleRequest0
+func (t *ProductionBusinessRuleRequest) FromProductionBusinessRuleRequest0(v ProductionBusinessRuleRequest0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeProductionBusinessRuleRequest0 performs a merge with any union data inside the ProductionBusinessRuleRequest, using the provided ProductionBusinessRuleRequest0
+func (t *ProductionBusinessRuleRequest) MergeProductionBusinessRuleRequest0(v ProductionBusinessRuleRequest0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsProductionBusinessRuleRequest1 returns the union data inside the ProductionBusinessRuleRequest as a ProductionBusinessRuleRequest1
+func (t ProductionBusinessRuleRequest) AsProductionBusinessRuleRequest1() (ProductionBusinessRuleRequest1, error) {
+	var body ProductionBusinessRuleRequest1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromProductionBusinessRuleRequest1 overwrites any union data inside the ProductionBusinessRuleRequest as the provided ProductionBusinessRuleRequest1
+func (t *ProductionBusinessRuleRequest) FromProductionBusinessRuleRequest1(v ProductionBusinessRuleRequest1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeProductionBusinessRuleRequest1 performs a merge with any union data inside the ProductionBusinessRuleRequest, using the provided ProductionBusinessRuleRequest1
+func (t *ProductionBusinessRuleRequest) MergeProductionBusinessRuleRequest1(v ProductionBusinessRuleRequest1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsProductionBusinessRuleRequest2 returns the union data inside the ProductionBusinessRuleRequest as a ProductionBusinessRuleRequest2
+func (t ProductionBusinessRuleRequest) AsProductionBusinessRuleRequest2() (ProductionBusinessRuleRequest2, error) {
+	var body ProductionBusinessRuleRequest2
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromProductionBusinessRuleRequest2 overwrites any union data inside the ProductionBusinessRuleRequest as the provided ProductionBusinessRuleRequest2
+func (t *ProductionBusinessRuleRequest) FromProductionBusinessRuleRequest2(v ProductionBusinessRuleRequest2) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeProductionBusinessRuleRequest2 performs a merge with any union data inside the ProductionBusinessRuleRequest, using the provided ProductionBusinessRuleRequest2
+func (t *ProductionBusinessRuleRequest) MergeProductionBusinessRuleRequest2(v ProductionBusinessRuleRequest2) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t ProductionBusinessRuleRequest) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *ProductionBusinessRuleRequest) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsProductionReleaseProtection0 returns the union data inside the ProductionReleaseProtection as a ProductionReleaseProtection0
+func (t ProductionReleaseProtection) AsProductionReleaseProtection0() (ProductionReleaseProtection0, error) {
+	var body ProductionReleaseProtection0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromProductionReleaseProtection0 overwrites any union data inside the ProductionReleaseProtection as the provided ProductionReleaseProtection0
+func (t *ProductionReleaseProtection) FromProductionReleaseProtection0(v ProductionReleaseProtection0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeProductionReleaseProtection0 performs a merge with any union data inside the ProductionReleaseProtection, using the provided ProductionReleaseProtection0
+func (t *ProductionReleaseProtection) MergeProductionReleaseProtection0(v ProductionReleaseProtection0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsProductionReleaseProtection1 returns the union data inside the ProductionReleaseProtection as a ProductionReleaseProtection1
+func (t ProductionReleaseProtection) AsProductionReleaseProtection1() (ProductionReleaseProtection1, error) {
+	var body ProductionReleaseProtection1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromProductionReleaseProtection1 overwrites any union data inside the ProductionReleaseProtection as the provided ProductionReleaseProtection1
+func (t *ProductionReleaseProtection) FromProductionReleaseProtection1(v ProductionReleaseProtection1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeProductionReleaseProtection1 performs a merge with any union data inside the ProductionReleaseProtection, using the provided ProductionReleaseProtection1
+func (t *ProductionReleaseProtection) MergeProductionReleaseProtection1(v ProductionReleaseProtection1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t ProductionReleaseProtection) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *ProductionReleaseProtection) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsCreateTarget returns the union data inside the ProductionTarget as a CreateTarget
+func (t ProductionTarget) AsCreateTarget() (CreateTarget, error) {
+	var body CreateTarget
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromCreateTarget overwrites any union data inside the ProductionTarget as the provided CreateTarget
+func (t *ProductionTarget) FromCreateTarget(v CreateTarget) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeCreateTarget performs a merge with any union data inside the ProductionTarget, using the provided CreateTarget
+func (t *ProductionTarget) MergeCreateTarget(v CreateTarget) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsUpdateAssetTarget returns the union data inside the ProductionTarget as a UpdateAssetTarget
+func (t ProductionTarget) AsUpdateAssetTarget() (UpdateAssetTarget, error) {
+	var body UpdateAssetTarget
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromUpdateAssetTarget overwrites any union data inside the ProductionTarget as the provided UpdateAssetTarget
+func (t *ProductionTarget) FromUpdateAssetTarget(v UpdateAssetTarget) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeUpdateAssetTarget performs a merge with any union data inside the ProductionTarget, using the provided UpdateAssetTarget
+func (t *ProductionTarget) MergeUpdateAssetTarget(v UpdateAssetTarget) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsUpdateObjectTarget returns the union data inside the ProductionTarget as a UpdateObjectTarget
+func (t ProductionTarget) AsUpdateObjectTarget() (UpdateObjectTarget, error) {
+	var body UpdateObjectTarget
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromUpdateObjectTarget overwrites any union data inside the ProductionTarget as the provided UpdateObjectTarget
+func (t *ProductionTarget) FromUpdateObjectTarget(v UpdateObjectTarget) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeUpdateObjectTarget performs a merge with any union data inside the ProductionTarget, using the provided UpdateObjectTarget
+func (t *ProductionTarget) MergeUpdateObjectTarget(v UpdateObjectTarget) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t ProductionTarget) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *ProductionTarget) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsPublishedReference0 returns the union data inside the PublishedReference as a PublishedReference0
+func (t PublishedReference) AsPublishedReference0() (PublishedReference0, error) {
+	var body PublishedReference0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromPublishedReference0 overwrites any union data inside the PublishedReference as the provided PublishedReference0
+func (t *PublishedReference) FromPublishedReference0(v PublishedReference0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergePublishedReference0 performs a merge with any union data inside the PublishedReference, using the provided PublishedReference0
+func (t *PublishedReference) MergePublishedReference0(v PublishedReference0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsPublishedReference1 returns the union data inside the PublishedReference as a PublishedReference1
+func (t PublishedReference) AsPublishedReference1() (PublishedReference1, error) {
+	var body PublishedReference1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromPublishedReference1 overwrites any union data inside the PublishedReference as the provided PublishedReference1
+func (t *PublishedReference) FromPublishedReference1(v PublishedReference1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergePublishedReference1 performs a merge with any union data inside the PublishedReference, using the provided PublishedReference1
+func (t *PublishedReference) MergePublishedReference1(v PublishedReference1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t PublishedReference) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *PublishedReference) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsSemanticReference0 returns the union data inside the SemanticReference as a SemanticReference0
+func (t SemanticReference) AsSemanticReference0() (SemanticReference0, error) {
+	var body SemanticReference0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromSemanticReference0 overwrites any union data inside the SemanticReference as the provided SemanticReference0
+func (t *SemanticReference) FromSemanticReference0(v SemanticReference0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeSemanticReference0 performs a merge with any union data inside the SemanticReference, using the provided SemanticReference0
+func (t *SemanticReference) MergeSemanticReference0(v SemanticReference0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsPublishedReference returns the union data inside the SemanticReference as a PublishedReference
+func (t SemanticReference) AsPublishedReference() (PublishedReference, error) {
+	var body PublishedReference
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromPublishedReference overwrites any union data inside the SemanticReference as the provided PublishedReference
+func (t *SemanticReference) FromPublishedReference(v PublishedReference) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergePublishedReference performs a merge with any union data inside the SemanticReference, using the provided PublishedReference
+func (t *SemanticReference) MergePublishedReference(v PublishedReference) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t SemanticReference) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *SemanticReference) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsPostgreSQLSourceConnection returns the union data inside the SourceConnection as a PostgreSQLSourceConnection
+func (t SourceConnection) AsPostgreSQLSourceConnection() (PostgreSQLSourceConnection, error) {
+	var body PostgreSQLSourceConnection
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromPostgreSQLSourceConnection overwrites any union data inside the SourceConnection as the provided PostgreSQLSourceConnection
+func (t *SourceConnection) FromPostgreSQLSourceConnection(v PostgreSQLSourceConnection) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergePostgreSQLSourceConnection performs a merge with any union data inside the SourceConnection, using the provided PostgreSQLSourceConnection
+func (t *SourceConnection) MergePostgreSQLSourceConnection(v PostgreSQLSourceConnection) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsArtifactSourceConnection returns the union data inside the SourceConnection as a ArtifactSourceConnection
+func (t SourceConnection) AsArtifactSourceConnection() (ArtifactSourceConnection, error) {
+	var body ArtifactSourceConnection
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromArtifactSourceConnection overwrites any union data inside the SourceConnection as the provided ArtifactSourceConnection
+func (t *SourceConnection) FromArtifactSourceConnection(v ArtifactSourceConnection) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeArtifactSourceConnection performs a merge with any union data inside the SourceConnection, using the provided ArtifactSourceConnection
+func (t *SourceConnection) MergeArtifactSourceConnection(v ArtifactSourceConnection) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t SourceConnection) Discriminator() (string, error) {
+	var discriminator struct {
+		Discriminator string `json:"sourceKind"`
+	}
+	err := json.Unmarshal(t.union, &discriminator)
+	return discriminator.Discriminator, err
+}
+
+func (t SourceConnection) ValueByDiscriminator() (interface{}, error) {
+	discriminator, err := t.Discriminator()
+	if err != nil {
+		return nil, err
+	}
+	switch discriminator {
+	case "dbt_bundle":
+		return t.AsArtifactSourceConnection()
+	case "file":
+		return t.AsArtifactSourceConnection()
+	case "postgresql":
+		return t.AsPostgreSQLSourceConnection()
+	case "sql_bundle":
+		return t.AsArtifactSourceConnection()
+	default:
+		return nil, errors.New("unknown discriminator value: " + discriminator)
+	}
+}
+
+func (t SourceConnection) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *SourceConnection) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsTargetKindContent0 returns the union data inside the TargetKindContent as a TargetKindContent0
+func (t TargetKindContent) AsTargetKindContent0() (TargetKindContent0, error) {
+	var body TargetKindContent0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromTargetKindContent0 overwrites any union data inside the TargetKindContent as the provided TargetKindContent0
+func (t *TargetKindContent) FromTargetKindContent0(v TargetKindContent0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeTargetKindContent0 performs a merge with any union data inside the TargetKindContent, using the provided TargetKindContent0
+func (t *TargetKindContent) MergeTargetKindContent0(v TargetKindContent0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsTargetKindContent1 returns the union data inside the TargetKindContent as a TargetKindContent1
+func (t TargetKindContent) AsTargetKindContent1() (TargetKindContent1, error) {
+	var body TargetKindContent1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromTargetKindContent1 overwrites any union data inside the TargetKindContent as the provided TargetKindContent1
+func (t *TargetKindContent) FromTargetKindContent1(v TargetKindContent1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeTargetKindContent1 performs a merge with any union data inside the TargetKindContent, using the provided TargetKindContent1
+func (t *TargetKindContent) MergeTargetKindContent1(v TargetKindContent1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsTargetKindContent2 returns the union data inside the TargetKindContent as a TargetKindContent2
+func (t TargetKindContent) AsTargetKindContent2() (TargetKindContent2, error) {
+	var body TargetKindContent2
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromTargetKindContent2 overwrites any union data inside the TargetKindContent as the provided TargetKindContent2
+func (t *TargetKindContent) FromTargetKindContent2(v TargetKindContent2) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeTargetKindContent2 performs a merge with any union data inside the TargetKindContent, using the provided TargetKindContent2
+func (t *TargetKindContent) MergeTargetKindContent2(v TargetKindContent2) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsTargetKindContent3 returns the union data inside the TargetKindContent as a TargetKindContent3
+func (t TargetKindContent) AsTargetKindContent3() (TargetKindContent3, error) {
+	var body TargetKindContent3
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromTargetKindContent3 overwrites any union data inside the TargetKindContent as the provided TargetKindContent3
+func (t *TargetKindContent) FromTargetKindContent3(v TargetKindContent3) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeTargetKindContent3 performs a merge with any union data inside the TargetKindContent, using the provided TargetKindContent3
+func (t *TargetKindContent) MergeTargetKindContent3(v TargetKindContent3) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsTargetKindContent4 returns the union data inside the TargetKindContent as a TargetKindContent4
+func (t TargetKindContent) AsTargetKindContent4() (TargetKindContent4, error) {
+	var body TargetKindContent4
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromTargetKindContent4 overwrites any union data inside the TargetKindContent as the provided TargetKindContent4
+func (t *TargetKindContent) FromTargetKindContent4(v TargetKindContent4) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeTargetKindContent4 performs a merge with any union data inside the TargetKindContent, using the provided TargetKindContent4
+func (t *TargetKindContent) MergeTargetKindContent4(v TargetKindContent4) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t TargetKindContent) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *TargetKindContent) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsUpdateObjectTarget0 returns the union data inside the UpdateObjectTarget as a UpdateObjectTarget0
+func (t UpdateObjectTarget) AsUpdateObjectTarget0() (UpdateObjectTarget0, error) {
+	var body UpdateObjectTarget0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromUpdateObjectTarget0 overwrites any union data inside the UpdateObjectTarget as the provided UpdateObjectTarget0
+func (t *UpdateObjectTarget) FromUpdateObjectTarget0(v UpdateObjectTarget0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeUpdateObjectTarget0 performs a merge with any union data inside the UpdateObjectTarget, using the provided UpdateObjectTarget0
+func (t *UpdateObjectTarget) MergeUpdateObjectTarget0(v UpdateObjectTarget0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsUpdateObjectTarget1 returns the union data inside the UpdateObjectTarget as a UpdateObjectTarget1
+func (t UpdateObjectTarget) AsUpdateObjectTarget1() (UpdateObjectTarget1, error) {
+	var body UpdateObjectTarget1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromUpdateObjectTarget1 overwrites any union data inside the UpdateObjectTarget as the provided UpdateObjectTarget1
+func (t *UpdateObjectTarget) FromUpdateObjectTarget1(v UpdateObjectTarget1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeUpdateObjectTarget1 performs a merge with any union data inside the UpdateObjectTarget, using the provided UpdateObjectTarget1
+func (t *UpdateObjectTarget) MergeUpdateObjectTarget1(v UpdateObjectTarget1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsUpdateObjectTarget2 returns the union data inside the UpdateObjectTarget as a UpdateObjectTarget2
+func (t UpdateObjectTarget) AsUpdateObjectTarget2() (UpdateObjectTarget2, error) {
+	var body UpdateObjectTarget2
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromUpdateObjectTarget2 overwrites any union data inside the UpdateObjectTarget as the provided UpdateObjectTarget2
+func (t *UpdateObjectTarget) FromUpdateObjectTarget2(v UpdateObjectTarget2) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeUpdateObjectTarget2 performs a merge with any union data inside the UpdateObjectTarget, using the provided UpdateObjectTarget2
+func (t *UpdateObjectTarget) MergeUpdateObjectTarget2(v UpdateObjectTarget2) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsUpdateObjectTarget3 returns the union data inside the UpdateObjectTarget as a UpdateObjectTarget3
+func (t UpdateObjectTarget) AsUpdateObjectTarget3() (UpdateObjectTarget3, error) {
+	var body UpdateObjectTarget3
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromUpdateObjectTarget3 overwrites any union data inside the UpdateObjectTarget as the provided UpdateObjectTarget3
+func (t *UpdateObjectTarget) FromUpdateObjectTarget3(v UpdateObjectTarget3) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeUpdateObjectTarget3 performs a merge with any union data inside the UpdateObjectTarget, using the provided UpdateObjectTarget3
+func (t *UpdateObjectTarget) MergeUpdateObjectTarget3(v UpdateObjectTarget3) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsUpdateObjectTarget4 returns the union data inside the UpdateObjectTarget as a UpdateObjectTarget4
+func (t UpdateObjectTarget) AsUpdateObjectTarget4() (UpdateObjectTarget4, error) {
+	var body UpdateObjectTarget4
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromUpdateObjectTarget4 overwrites any union data inside the UpdateObjectTarget as the provided UpdateObjectTarget4
+func (t *UpdateObjectTarget) FromUpdateObjectTarget4(v UpdateObjectTarget4) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeUpdateObjectTarget4 performs a merge with any union data inside the UpdateObjectTarget, using the provided UpdateObjectTarget4
+func (t *UpdateObjectTarget) MergeUpdateObjectTarget4(v UpdateObjectTarget4) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t UpdateObjectTarget) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+	object := make(map[string]json.RawMessage)
+	if t.union != nil {
+		err = json.Unmarshal(b, &object)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	object["baseObjectVersion"], err = json.Marshal(t.BaseObjectVersion)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'baseObjectVersion': %w", err)
+	}
+
+	if t.Changes != nil {
+		object["changes"], err = json.Marshal(t.Changes)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'changes': %w", err)
+		}
+	}
+
+	if t.Content != nil {
+		object["content"], err = json.Marshal(t.Content)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'content': %w", err)
+		}
+	}
+
+	if t.EvidenceIds != nil {
+		object["evidenceIds"], err = json.Marshal(t.EvidenceIds)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'evidenceIds': %w", err)
+		}
+	}
+
+	object["intent"], err = json.Marshal(t.Intent)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'intent': %w", err)
+	}
+
+	object["kind"], err = json.Marshal(t.Kind)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'kind': %w", err)
+	}
+
+	object["localKey"], err = json.Marshal(t.LocalKey)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'localKey': %w", err)
+	}
+
+	object["targetId"], err = json.Marshal(t.TargetId)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'targetId': %w", err)
+	}
+
+	object["title"], err = json.Marshal(t.Title)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'title': %w", err)
+	}
+
+	b, err = json.Marshal(object)
+	return b, err
+}
+
+func (t *UpdateObjectTarget) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	if err != nil {
+		return err
+	}
+	object := make(map[string]json.RawMessage)
+	err = json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["baseObjectVersion"]; found {
+		err = json.Unmarshal(raw, &t.BaseObjectVersion)
+		if err != nil {
+			return fmt.Errorf("error reading 'baseObjectVersion': %w", err)
+		}
+	}
+
+	if raw, found := object["changes"]; found {
+		err = json.Unmarshal(raw, &t.Changes)
+		if err != nil {
+			return fmt.Errorf("error reading 'changes': %w", err)
+		}
+	}
+
+	if raw, found := object["content"]; found {
+		err = json.Unmarshal(raw, &t.Content)
+		if err != nil {
+			return fmt.Errorf("error reading 'content': %w", err)
+		}
+	}
+
+	if raw, found := object["evidenceIds"]; found {
+		err = json.Unmarshal(raw, &t.EvidenceIds)
+		if err != nil {
+			return fmt.Errorf("error reading 'evidenceIds': %w", err)
+		}
+	}
+
+	if raw, found := object["intent"]; found {
+		err = json.Unmarshal(raw, &t.Intent)
+		if err != nil {
+			return fmt.Errorf("error reading 'intent': %w", err)
+		}
+	}
+
+	if raw, found := object["kind"]; found {
+		err = json.Unmarshal(raw, &t.Kind)
+		if err != nil {
+			return fmt.Errorf("error reading 'kind': %w", err)
+		}
+	}
+
+	if raw, found := object["localKey"]; found {
+		err = json.Unmarshal(raw, &t.LocalKey)
+		if err != nil {
+			return fmt.Errorf("error reading 'localKey': %w", err)
+		}
+	}
+
+	if raw, found := object["targetId"]; found {
+		err = json.Unmarshal(raw, &t.TargetId)
+		if err != nil {
+			return fmt.Errorf("error reading 'targetId': %w", err)
+		}
+	}
+
+	if raw, found := object["title"]; found {
+		err = json.Unmarshal(raw, &t.Title)
+		if err != nil {
+			return fmt.Errorf("error reading 'title': %w", err)
+		}
+	}
+
+	return err
+}
+
+// AsValidationStatus0 returns the union data inside the ValidationStatus as a ValidationStatus0
+func (t ValidationStatus) AsValidationStatus0() (ValidationStatus0, error) {
+	var body ValidationStatus0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromValidationStatus0 overwrites any union data inside the ValidationStatus as the provided ValidationStatus0
+func (t *ValidationStatus) FromValidationStatus0(v ValidationStatus0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeValidationStatus0 performs a merge with any union data inside the ValidationStatus, using the provided ValidationStatus0
+func (t *ValidationStatus) MergeValidationStatus0(v ValidationStatus0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsValidationAttemptResult returns the union data inside the ValidationStatus as a ValidationAttemptResult
+func (t ValidationStatus) AsValidationAttemptResult() (ValidationAttemptResult, error) {
+	var body ValidationAttemptResult
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromValidationAttemptResult overwrites any union data inside the ValidationStatus as the provided ValidationAttemptResult
+func (t *ValidationStatus) FromValidationAttemptResult(v ValidationAttemptResult) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeValidationAttemptResult performs a merge with any union data inside the ValidationStatus, using the provided ValidationAttemptResult
+func (t *ValidationStatus) MergeValidationAttemptResult(v ValidationAttemptResult) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t ValidationStatus) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *ValidationStatus) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}

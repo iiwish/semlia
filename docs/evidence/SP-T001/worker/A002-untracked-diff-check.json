@@ -1,0 +1,72 @@
+[
+  {
+    "command": "git diff --no-index --check /dev/null tests/contracts/semantic_production_contract_test.go",
+    "start": {
+      "current_time": "2026-09-09 05:20:43 UTC"
+    },
+    "end": {
+      "current_time": "2026-09-09 05:20:43 UTC"
+    },
+    "chunk_id": "901867",
+    "wall_time_seconds": 0.000002958,
+    "exit_code": 1,
+    "original_token_count": 0,
+    "output": ""
+  },
+  {
+    "command": "git diff --no-index --check /dev/null docs/specs/semantic-production/data-model.md",
+    "start": {
+      "current_time": "2026-09-09 05:20:43 UTC"
+    },
+    "end": {
+      "current_time": "2026-09-09 05:20:43 UTC"
+    },
+    "chunk_id": "ac8f04",
+    "wall_time_seconds": 0.000002417,
+    "exit_code": 1,
+    "original_token_count": 0,
+    "output": ""
+  },
+  {
+    "command": "git diff --no-index --check /dev/null docs/specs/semantic-production/contracts/production.openapi.yaml",
+    "start": {
+      "current_time": "2026-09-09 05:20:43 UTC"
+    },
+    "end": {
+      "current_time": "2026-09-09 05:20:43 UTC"
+    },
+    "chunk_id": "5a1fa5",
+    "wall_time_seconds": 0.00000325,
+    "exit_code": 1,
+    "original_token_count": 0,
+    "output": ""
+  },
+  {
+    "command": "git diff --no-index --check /dev/null docs/specs/semantic-production/contracts/production.md",
+    "start": {
+      "current_time": "2026-09-09 05:20:43 UTC"
+    },
+    "end": {
+      "current_time": "2026-09-09 05:20:43 UTC"
+    },
+    "chunk_id": "c5b43d",
+    "wall_time_seconds": 0.000003208,
+    "exit_code": 1,
+    "original_token_count": 0,
+    "output": ""
+  },
+  {
+    "command": "git diff --no-index --check /dev/null docs/evidence/SP-T001/attempts/SP-T001-A002.md",
+    "start": {
+      "current_time": "2026-09-09 05:20:43 UTC"
+    },
+    "end": {
+      "current_time": "2026-09-09 05:20:43 UTC"
+    },
+    "chunk_id": "834a98",
+    "wall_time_seconds": 0.000003375,
+    "exit_code": 1,
+    "original_token_count": 0,
+    "output": ""
+  }
+]

@@ -1,0 +1,93 @@
+{
+  "checkedAt": "2026-09-09T05:31:31.936Z",
+  "preflight": "2026-09-09T04:20:39.145Z",
+  "preflightManifestEntries": 1182,
+  "changedSincePreflight": [
+    "docs/README.md",
+    "docs/SSOT.md",
+    "docs/specs/semantic-production/analysis.md",
+    "docs/specs/semantic-production/checklists/requirements.md",
+    "docs/specs/semantic-production/packets/SP-T001.yaml",
+    "docs/specs/semantic-production/plan.md",
+    "docs/specs/semantic-production/product-design.md",
+    "docs/specs/semantic-production/tasks.md"
+  ],
+  "newPaths": [
+    "docs/evidence/SP-T001/attempts/SP-T001-A001.md",
+    "docs/evidence/SP-T001/attempts/SP-T001-A002.md",
+    "docs/evidence/SP-T001/baseline-integration.jsonl",
+    "docs/evidence/SP-T001/baseline-integration.result.json",
+    "docs/evidence/SP-T001/baseline-unit.jsonl",
+    "docs/evidence/SP-T001/baseline-unit.result.json",
+    "docs/evidence/SP-T001/baseline.md",
+    "docs/evidence/SP-T001/checkout.json",
+    "docs/evidence/SP-T001/closeout-checks.json",
+    "docs/evidence/SP-T001/coverage.md",
+    "docs/evidence/SP-T001/environment-after.json",
+    "docs/evidence/SP-T001/handoff.md",
+    "docs/evidence/SP-T001/implementation-A001.diff.patch",
+    "docs/evidence/SP-T001/implementation.diff.patch",
+    "docs/evidence/SP-T001/pm-closeout-repository.jsonl",
+    "docs/evidence/SP-T001/pm-closeout-repository.result.json",
+    "docs/evidence/SP-T001/pm-final-verification.jsonl",
+    "docs/evidence/SP-T001/pm-final-verification.result.json",
+    "docs/evidence/SP-T001/pm-verification.jsonl",
+    "docs/evidence/SP-T001/pm-verification.result.json",
+    "docs/evidence/SP-T001/review-a001.md",
+    "docs/evidence/SP-T001/review-a002.md",
+    "docs/evidence/SP-T001/scope-review.json",
+    "docs/evidence/SP-T001/summary.md",
+    "docs/evidence/SP-T001/test-results.md",
+    "docs/evidence/SP-T001/timing.json",
+    "docs/evidence/SP-T001/worker/A002-artifact-hashes.json",
+    "docs/evidence/SP-T001/worker/A002-diff-check.json",
+    "docs/evidence/SP-T001/worker/A002-green-01.json",
+    "docs/evidence/SP-T001/worker/A002-green-final.json",
+    "docs/evidence/SP-T001/worker/A002-red.json",
+    "docs/evidence/SP-T001/worker/A002-test-contracts.json",
+    "docs/evidence/SP-T001/worker/A002-test-repository.json",
+    "docs/evidence/SP-T001/worker/A002-timing.json",
+    "docs/evidence/SP-T001/worker/A002-untracked-diff-check.json",
+    "docs/evidence/SP-T001/worker/artifact-hashes.json",
+    "docs/evidence/SP-T001/worker/diff-check.json",
+    "docs/evidence/SP-T001/worker/green-01.json",
+    "docs/evidence/SP-T001/worker/green-final.json",
+    "docs/evidence/SP-T001/worker/green-handoff.json",
+    "docs/evidence/SP-T001/worker/red.json",
+    "docs/evidence/SP-T001/worker/test-contracts.json",
+    "docs/evidence/SP-T001/worker/test-repository-rerun.json",
+    "docs/evidence/SP-T001/worker/test-repository.json",
+    "docs/evidence/SP-T001/worker/timing.json",
+    "docs/evidence/SP-T001/worker/untracked-diff-check.json",
+    "docs/specs/semantic-production/contracts/production.md",
+    "docs/specs/semantic-production/contracts/production.openapi.yaml",
+    "docs/specs/semantic-production/data-model.md",
+    "tests/contracts/semantic_production_contract_test.go"
+  ],
+  "outOfScope": [],
+  "workerHashMismatches": [],
+  "artifactHashes": [
+    {
+      "path": "tests/contracts/semantic_production_contract_test.go",
+      "bytes": 20735,
+      "sha256": "ded703b224ac03ed0df4b4e9e794ecdb94f259915d5a890b7f2c5891705c553c"
+    },
+    {
+      "path": "docs/specs/semantic-production/data-model.md",
+      "bytes": 45328,
+      "sha256": "321bb5429550cd290e5fe1b3f3ef12991ea20bfea048399e0f2f6e5174839703"
+    },
+    {
+      "path": "docs/specs/semantic-production/contracts/production.openapi.yaml",
+      "bytes": 66506,
+      "sha256": "b7185d7951fdf4ef770197ae2512ec884aa3b7d0a76162311408a0e0d5046c44"
+    },
+    {
+      "path": "docs/specs/semantic-production/contracts/production.md",
+      "bytes": 31206,
+      "sha256": "66520a507512565f5719406f18485e3b0956cf6f2821646d296f4f5e572a80e6"
+    }
+  ],
+  "result": "PASS",
+  "boundary": "PM metadata/evidence plus four new worker artifacts only. Existing application and test changes remain intact."
+}

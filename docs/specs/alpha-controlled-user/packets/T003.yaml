@@ -1,0 +1,99 @@
+schema_version: 1
+packet_id: ALPHA-T003-A001
+task_id: T003
+feature_id: alpha-controlled-user
+mode: execute_one_task
+status: Completed
+
+goal: >-
+  Deliver one secure PostgreSQL source-to-semantic-candidate backend path with encrypted credential
+  rotation, bounded read-only collection, versioned SQL evidence, atomic queued jobs, exact-run
+  completion and idempotent candidate decisions while extending the existing M1 persistence model.
+
+requirements:
+  - FR-005 PostgreSQL source configuration and credential protection
+  - FR-006 asynchronous discovery and semantic candidates
+  - FR-012 attributable audit, migrations and restart recovery
+  - NFR-001 security and privacy
+  - NFR-002 deterministic and idempotent persistence
+  - NFR-003 bounded runtime behavior
+
+dependencies:
+  - T001 is Needs_Review with session identity and workspace authorization evidence
+  - Existing M1 discovery adapters, catalog snapshot persistence, jobs and outbox contracts
+  - Controlled-User Alpha technical baseline 0.1.0 approved on 2026-09-04
+
+allowed_files:
+  - api/**
+  - cmd/semlia/**
+  - compose.yaml
+  - db/**
+  - docs/operations/**
+  - docs/specs/alpha-controlled-user/**
+  - docs/evidence/ALPHA-T003/**
+  - go.mod
+  - go.sum
+  - internal/adapters/discovery/**
+  - internal/adapters/postgres/**
+  - internal/application/discovery/**
+  - internal/application/jobs/**
+  - internal/domain/catalog/**
+  - internal/domain/discovery/**
+  - internal/platform/config/**
+  - internal/platform/http/**
+  - migrations/**
+  - pkg/identity/**
+  - sdk/typescript/**
+  - tests/**
+
+forbidden_changes:
+  - Do not store or return a plaintext password, DSN, connection URI or reusable credential.
+  - Do not log credential plaintext, ciphertext, nonce or derived key material.
+  - Do not read customer fact rows; live PostgreSQL collection is catalog metadata only.
+  - Do not accept arbitrary filesystem paths or unallowlisted SQL artifact locations.
+  - Do not let a failed run advance the current imported projection.
+  - Do not complete a different run from the one atomically enqueued.
+  - Do not convert physical key or join observations into released semantic authority.
+  - Do not replace the existing M1 snapshot tables, job lease model or outbox semantics.
+  - Do not start T004-T007 implementation in this packet.
+
+tdd:
+  red:
+    - Plaintext and DSN fragments are absent from rows, API bodies, errors, logs and audit payloads.
+    - Wrong envelope key/version or associated data fails closed without attempting a connection.
+    - Elevated or writable source roles, connection timeout and terminal collector failures fail the run.
+    - Artifact traversal, absolute paths, symlinks and files outside configured roots are rejected.
+    - Overlapping starts, worker restart, duplicate snapshots and credential rotation do not cross or duplicate runs.
+    - Parser warnings produce degraded state; terminal collection failure produces failed state and no current projection advance.
+  green:
+    - Authorized users can create, read, update, test, rotate and disable one PostgreSQL source.
+    - A source command stores a versioned AES-256-GCM envelope bound to workspace, source and credential version.
+    - Start-run atomically persists a queued run and its job; workers claim and complete that exact run.
+    - Successful or degraded import persists M1 revisions, key/join observations, evidence and semantic candidates.
+    - Candidate dismiss and proposal conversion decisions are append-only and idempotent.
+  refactor:
+    - Keep encryption, PostgreSQL collection, SQL artifact loading, orchestration and persistence behind narrow ports.
+    - Reuse canonical digest, TypeID, job lease, audit and outbox helpers already present in the repository.
+
+validation:
+  - focused domain and application tests
+  - source and candidate HTTP contract tests
+  - real PostgreSQL read-only source integration
+  - ciphertext and associated-data integration assertions
+  - job retry, restart and idempotency tests
+  - populated migration up/down/up lifecycle
+  - make contracts-check
+  - make check-source
+  - make check-smoke
+  - git diff --check
+
+acceptance:
+  - A real read-only PostgreSQL fixture flows from protected source configuration to an exact terminal discovery run.
+  - APIs expose only redacted non-secret source configuration and immutable run/candidate facts.
+  - Successful and degraded runs produce deterministic candidates tied to one source revision; failed runs do not advance current state.
+  - Credential rotation is write-only, versioned and safe for already queued runs.
+  - Restart and retry preserve exact-run identity and idempotent projection.
+
+evidence:
+  summary: docs/evidence/ALPHA-T003/summary.md
+  test_results: docs/evidence/ALPHA-T003/test-results.md

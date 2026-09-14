@@ -151,6 +151,10 @@ func (store *Store) LoadReleaseProjection(
 	result.Assets = assets
 	result.Objects = objects
 	result.Proposal = proposal
+	result.Production, err = store.productionReleaseProjection(ctx, workspace, release)
+	if err != nil {
+		return domain.Release{}, err
+	}
 	return result, nil
 }
 

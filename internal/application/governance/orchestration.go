@@ -22,8 +22,10 @@ const ValidationJobMaxAttempts int32 = 3
 
 // ValidationJobPayload is the decoded job body.
 type ValidationJobPayload struct {
-	ProposalID string `json:"proposalId"`
-	Attempt    int    `json:"attempt"`
+	OperationID       string `json:"operationId,omitempty"`
+	ProductionVersion int    `json:"productionVersion,omitempty"`
+	ProposalID        string `json:"proposalId"`
+	Attempt           int    `json:"attempt"`
 }
 
 // ValidationJobIdempotencyKey pins one validation job per proposal and

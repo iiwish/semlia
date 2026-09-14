@@ -1,186 +1,136 @@
-import { createPortal } from "react-dom";
-import { useState, type FormEvent } from "react";
-import { Ban, BookOpenText, Bot, Braces, Cable, Check, Clipboard, KeyRound, Pause, Play, Plus, RotateCw, Search, Server, ShieldCheck, Terminal, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { Ban, Bot, Braces, Cable, Check, Clipboard, KeyRound, Pencil, Play, Plus, RefreshCw, Search, ShieldCheck, Terminal, X } from "lucide-react";
+import { AUTHORIZATION_STALE_EVENT } from "./apiClient";
+import { integrationApi, IntegrationPartialSuccess, type CredentialInput, type IntegrationApi, type IntegrationData, type Webhook } from "./integrations";
 
-import type { PermissionAction } from "./types";
+type Dialog = "credential" | "consumer" | "binding" | "principal" | "webhook" | "secret" | "principal-result" | null;
+interface Props { workspaceId?: string; canRead?: boolean; canManage?: boolean; canCreatePrincipal?: boolean; canGrant?: boolean; runtimeRead?: boolean; runtimeManage?: boolean; api?: IntegrationApi; onNotify: (message: string) => void }
+const initialData: IntegrationData = { credentials: [], consumers: [], bindings: [], webhooks: [], deliveries: [] };
+const stateLabels: Record<string, string> = { queued: "等待投递", running: "投递中", succeeded: "已送达", cancelled: "已取消", dead_letter: "死信" };
 
-interface IntegrationChannel {
-  id: "rest" | "mcp" | "cli" | "sdk";
-  name: string;
-  description: string;
-  endpoint: string;
-  capability: string;
-  enabled: boolean;
-}
-
-interface IntegrationClient {
-  id: string;
-  name: string;
-  channel: "REST API" | "MCP" | "CLI";
-  environment: "生产" | "测试" | "开发";
-  credential: string;
-  lastUsed: string;
-  enabled: boolean;
-  permissions: PermissionAction[];
-  expiresAt: string;
-  assignmentSource: string;
-  revokedAt?: string;
-}
-
-interface IntegrationGuide {
-  authentication: string;
-  scenario: string;
-  steps: string[];
-  example: string;
-}
-
-const channelIcons = { rest: Cable, mcp: Bot, cli: Terminal, sdk: Braces } as const;
-const clientPermissionOptions: Array<{ action: PermissionAction; label: string }> = [
-  { action: "asset.read", label: "读取已发布语义资产" },
-  { action: "evidence.read", label: "读取证据与版本来源" },
-  { action: "semantic.resolve", label: "解析语义与已发布版本" },
-  { action: "semantic.execute", label: "执行语义查询" },
-  { action: "validation.run", label: "运行只读验证" },
-];
-const prototypeToday = "2026-09-01";
-
-function clientStatus(client: IntegrationClient) {
-  if (client.revokedAt) return "revoked" as const;
-  if (client.expiresAt < prototypeToday) return "expired" as const;
-  if (!client.enabled) return "disabled" as const;
-  return "active" as const;
-}
-
-const channelGuides: Record<IntegrationChannel["id"], IntegrationGuide> = {
-  rest: {
-    authentication: "Bearer 工作区客户端凭据",
-    scenario: "服务端查询、内部应用与自动化流程",
-    steps: ["创建 REST API 客户端并保存一次性凭据。", "将凭据写入 Authorization 请求头。", "调用知识检索端点并固定使用响应中的资产版本。"],
-    example: "curl -s 'https://api.semlia.example/v1/knowledge/search?q=净收入' \\\n  -H 'Authorization: Bearer $SEMLIA_API_KEY'",
-  },
-  mcp: {
-    authentication: "Bearer MCP 客户端凭据",
-    scenario: "Codex、AI Agent 与支持 MCP 的工作台",
-    steps: ["创建 MCP 客户端并选择对应环境。", "在 AI 客户端中登记服务器地址与凭据。", "连接后仅调用已发布的语义工具和资产版本。"],
-    example: `{
-  "mcpServers": {
-    "semlia": {
-      "url": "https://mcp.semlia.example/sse",
-      "headers": { "Authorization": "Bearer \${SEMLIA_MCP_TOKEN}" }
-    }
-  }
-}`,
-  },
-  cli: {
-    authentication: "SEMLIA_API_KEY 环境变量",
-    scenario: "本地诊断、CI 校验与批量导出",
-    steps: ["创建 CLI 客户端并保存凭据。", "在本机或 CI Secret 中设置 SEMLIA_API_KEY。", "运行 query、validate 或 export 命令。"],
-    example: "export SEMLIA_API_KEY='••••••••'\npnpm dlx @semlia/cli query '净收入'",
-  },
-  sdk: {
-    authentication: "服务端工作区客户端凭据",
-    scenario: "TypeScript 或 Python 应用服务",
-    steps: ["安装 Semlia SDK。", "从服务端环境变量读取客户端凭据。", "初始化客户端并查询已发布知识，禁止向浏览器暴露凭据。"],
-    example: "import { Semlia } from '@semlia/sdk';\n\nconst semlia = new Semlia({ apiKey: process.env.SEMLIA_API_KEY });\nconst result = await semlia.knowledge.search({ query: '净收入' });",
-  },
-};
-
-export function IntegrationSettingsView({ onNotify }: { onNotify: (message: string) => void }) {
-  const [channels, setChannels] = useState<IntegrationChannel[]>([
-    { id: "rest", name: "REST API", description: "查询已发布语义资产、定义与版本化解析结果。", endpoint: "https://api.semlia.example/v1", capability: "12 个端点 · OpenAPI 3.1", enabled: true },
-    { id: "mcp", name: "MCP Server", description: "向 AI 客户端暴露可信语义检索与资产解析工具。", endpoint: "https://mcp.semlia.example/sse", capability: "6 个工具 · Streamable HTTP", enabled: true },
-    { id: "cli", name: "CLI", description: "在 CI 或终端中验证、查询和导出语义资产。", endpoint: "pnpm dlx @semlia/cli", capability: "query · validate · export", enabled: true },
-    { id: "sdk", name: "SDK", description: "在应用服务中使用类型化客户端调用 Semlia。", endpoint: "@semlia/sdk", capability: "TypeScript · Python", enabled: true },
-  ]);
-  const [clients, setClients] = useState<IntegrationClient[]>([
-    { id: "client-fluxale", name: "Fluxale Production", channel: "REST API", environment: "生产", credential: "sk_live_••••7K2A", lastUsed: "2 分钟前", enabled: true, permissions: ["asset.read", "semantic.resolve", "semantic.execute"], expiresAt: "2027-02-28", assignmentSource: "安全管理员 · 林悦" },
-    { id: "client-codex", name: "Codex MCP Workspace", channel: "MCP", environment: "开发", credential: "mcp_••••91HF", lastUsed: "18 分钟前", enabled: true, permissions: ["asset.read", "evidence.read", "semantic.resolve", "semantic.execute"], expiresAt: "2026-11-30", assignmentSource: "安全管理员 · 林悦" },
-    { id: "client-ci", name: "Semantic Release CI", channel: "CLI", environment: "生产", credential: "sk_ci_••••4DPQ", lastUsed: "昨天 23:10", enabled: true, permissions: ["asset.read", "validation.run"], expiresAt: "2026-08-31", assignmentSource: "自动迁移 · v1" },
-  ]);
+export function IntegrationSettingsView({ workspaceId = "", canRead = false, canManage = false, canCreatePrincipal = false, canGrant = false, runtimeRead = false, runtimeManage = false, api = integrationApi, onNotify }: Props) {
+  const [data, setData] = useState(initialData);
+  const [now, setNow] = useState(() => Date.now());
+  const [loaded, setLoaded] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [stale, setStale] = useState(false);
+  const [error, setError] = useState("");
+  const [dialog, setDialog] = useState<Dialog>(null);
+  const [secret, setSecret] = useState("");
+  const [secretKind, setSecretKind] = useState<"credential" | "webhook">("credential");
+  const [editingWebhook, setEditingWebhook] = useState<Webhook | null>(null);
+  const [eventTypes, setEventTypes] = useState<Webhook["eventTypes"]>(["release.published"]);
+  const [principal, setPrincipal] = useState("");
+  const [granted, setGranted] = useState(false);
   const [query, setQuery] = useState("");
-  const [creatingClient, setCreatingClient] = useState(false);
-  const [guideChannelId, setGuideChannelId] = useState<IntegrationChannel["id"] | null>(null);
-  const [createdCredential, setCreatedCredential] = useState<{ name: string; secret: string } | null>(null);
-  const [draft, setDraft] = useState({ name: "", channel: "REST API" as IntegrationClient["channel"], environment: "生产" as IntegrationClient["environment"], permissions: ["semantic.resolve", "semantic.execute"] as PermissionAction[], expiresAt: "2026-12-31" });
-  const normalizedQuery = query.trim().toLocaleLowerCase("zh-CN");
-  const visibleClients = clients.filter((client) => !normalizedQuery || `${client.name} ${client.channel} ${client.environment} ${client.credential}`.toLocaleLowerCase("zh-CN").includes(normalizedQuery));
-  const guideChannel = channels.find((channel) => channel.id === guideChannelId) ?? null;
-
-  const openCreateClient = () => {
-    setDraft({ name: "", channel: "REST API", environment: "生产", permissions: ["semantic.resolve", "semantic.execute"], expiresAt: "2026-12-31" });
-    setCreatedCredential(null);
-    setCreatingClient(true);
+  const [tab, setTab] = useState<"credentials" | "webhooks">("credentials");
+  const [draft, setDraft] = useState({ name: "", principalId: "", consumerId: "", bindingId: "", stableKey: "", environment: "prod", endpoint: "", expiresAt: "", scopeType: "workspace" as CredentialInput["scopeType"], scopeId: "", actions: ["asset.read", "semantic.resolve"] as CredentialInput["allowedActions"] });
+  const modal = useRef<HTMLElement>(null);
+  const trigger = useRef<HTMLElement | null>(null);
+  const pendingFocus = useRef<HTMLElement | null>(null);
+  const mutation = useRef(false);
+  const mounted = useRef(true);
+  const sequence = useRef(0);
+  const dialogEpoch = useRef(0);
+  const base = `${window.location.origin}/api/v1/workspaces/${workspaceId}`;
+  const disabled = !canManage || !loaded || stale || busy || loading;
+  const load = useCallback(async (signal?: AbortSignal) => {
+    if (!workspaceId || !canRead) return false;
+    const generation = ++sequence.current;
+    setLoading(true);
+    try {
+      const result = await api.load(workspaceId, runtimeRead, signal);
+      if (!mounted.current || signal?.aborted || generation !== sequence.current) return false;
+      setData(result); setNow(Date.now()); setLoaded(true); setStale(false); setError(""); return true;
+    } catch {
+      if (mounted.current && !signal?.aborted && generation === sequence.current) { setStale(true); setError("无法刷新集成设置，当前数据不可用于变更。"); }
+      return false;
+    } finally { if (mounted.current && generation === sequence.current) setLoading(false); }
+  }, [api, canRead, runtimeRead, workspaceId]);
+  useEffect(() => { const epoch = sequence; mounted.current = true; const controller = new AbortController(); queueMicrotask(() => { if (!controller.signal.aborted) void load(controller.signal); }); return () => { mounted.current = false; controller.abort(); epoch.current++; }; }, [load]);
+  useEffect(() => { const invalidate = () => { sequence.current++; pendingFocus.current = null; setStale(true); setSecret(""); setDialog(null); setError("权限已变更，请刷新工作区后重试。"); }; window.addEventListener(AUTHORIZATION_STALE_EVENT, invalidate); return () => window.removeEventListener(AUTHORIZATION_STALE_EVENT, invalidate); }, []);
+  const close = useCallback(() => { dialogEpoch.current++; pendingFocus.current = trigger.current; setDialog(null); setSecret(""); }, []);
+  useEffect(() => {
+    if (dialog || busy || loading) return;
+    const target = pendingFocus.current;
+    pendingFocus.current = null;
+    if (target?.isConnected && !target.matches(":disabled") && (document.activeElement === document.body || document.activeElement === target)) target.focus();
+  }, [busy, dialog, loading]);
+  useEffect(() => {
+    if (!dialog) return;
+    modal.current?.querySelector<HTMLElement>('input:not(:disabled),select:not(:disabled),button:not(:disabled)')?.focus();
+    const key = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { event.preventDefault(); close(); return; }
+      if (event.key !== "Tab") return;
+      const controls = [...(modal.current?.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled)') ?? [])];
+      const first = controls[0], last = controls.at(-1);
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    };
+    document.addEventListener("keydown", key);
+    return () => { document.removeEventListener("keydown", key); };
+  }, [close, dialog]);
+  const open = (kind: Dialog) => { dialogEpoch.current++; pendingFocus.current = null; trigger.current = document.activeElement as HTMLElement; setSecret(""); setSecretKind(kind === "webhook" ? "webhook" : "credential"); setEditingWebhook(null); setEventTypes(["release.published"]); setError(""); setDraft(current => ({ ...current, name: "", expiresAt: new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10), scopeId: workspaceId })); setDialog(kind); };
+  const perform = async <T,>(work: () => Promise<T>, success: (value: T) => void) => {
+    if (mutation.current || stale) return;
+    mutation.current = true; setBusy(true); setError("");
+    const generation = sequence.current, shownDialog = dialogEpoch.current;
+    try {
+      const value = await work();
+      if (!mounted.current || generation !== sequence.current) return;
+      if (shownDialog === dialogEpoch.current) success(value);
+      onNotify("变更已保存。");
+      if (!await load() && mounted.current) setError("变更已保存，但刷新失败。请刷新确认最新状态，不要重复提交。");
+    } catch (cause) { if (mounted.current) { if (cause instanceof IntegrationPartialSuccess) { close(); await load(); } setError(cause instanceof Error ? cause.message : "变更失败，请重试。"); } }
+    finally { mutation.current = false; if (mounted.current) setBusy(false); }
   };
-
-  const createClient = (event: FormEvent) => {
-    event.preventDefault();
-    const secret = draft.channel === "MCP" ? "mcp_session_9Fx2R7kL3a" : "sk_session_7Kp2Nc4Q8m";
-    setClients((current) => [{ id: `client-${current.length + 1}`, name: draft.name.trim(), channel: draft.channel, environment: draft.environment, credential: `${secret.slice(0, 8)}••••${secret.slice(-4)}`, lastUsed: "尚未使用", enabled: true, permissions: draft.permissions, expiresAt: draft.expiresAt, assignmentSource: "手动创建 · 林悦" }, ...current]);
-    setCreatedCredential({ name: draft.name.trim(), secret });
-    onNotify(`${draft.name.trim()} 已创建。凭据只在当前窗口显示一次。`);
+  const copy = async (value: string) => { try { await navigator.clipboard.writeText(value); onNotify("已复制。"); } catch { setError("复制失败。请检查剪贴板权限，凭据仍仅在当前窗口显示。"); } };
+  const submit = (event: FormEvent) => {
+    event.preventDefault(); if (disabled) return;
+    if (dialog === "credential") void perform(() => api.issue(workspaceId, { name: draft.name, principalId: draft.principalId, consumerId: draft.consumerId, bindingId: draft.bindingId, expiresAt: new Date(`${draft.expiresAt}T23:59:59Z`).toISOString(), allowedActions: draft.actions, scopeType: draft.scopeType, scopeId: draft.scopeType === "workspace" ? workspaceId : draft.scopeId }), result => { setSecret(result.token); setDialog("secret"); });
+    if (dialog === "consumer") void perform(() => api.createConsumer(workspaceId, draft.name, draft.stableKey, draft.environment), close);
+    if (dialog === "binding") void perform(() => api.createBinding(workspaceId, draft.consumerId, draft.environment), close);
+    if (dialog === "principal" && canCreatePrincipal) void perform(() => api.createPrincipal(workspaceId, draft.name), result => { setPrincipal(result.id); setGranted(false); setDraft(current => ({ ...current, principalId: result.id })); setDialog("principal-result"); });
+    if (dialog === "webhook") void perform(() => api.saveWebhook(workspaceId, { name: draft.name, endpoint: draft.endpoint, enabled: editingWebhook?.enabled ?? true, eventTypes, ...(editingWebhook ? { expectedVersion: editingWebhook.version } : {}) }, editingWebhook?.id), result => { if (result.signingSecret) { setSecretKind("webhook"); setSecret(result.signingSecret); setDialog("secret"); } else close(); });
   };
-
-  const closeCreateClient = () => {
-    setCreatingClient(false);
-    setCreatedCredential(null);
-  };
-
-  return (
-    <section className="view settings-view integration-settings-view" aria-label="接口与集成">
-      <div className="integration-commandbar">
-        <label><Search size={14} /><input type="search" aria-label="搜索集成客户端" placeholder="搜索客户端、接口或环境" value={query} onChange={(event) => setQuery(event.target.value)} />{query && <button type="button" aria-label="清除集成搜索" title="清除搜索" onClick={() => setQuery("")}><X size={13} /></button>}</label>
-        <button className="primary-button" type="button" onClick={openCreateClient}><Plus size={15} />创建客户端</button>
-      </div>
-
-      <section className="integration-channel-section" aria-labelledby="integration-channel-title">
-        <header><div><h2 id="integration-channel-title">接口能力</h2><span>统一使用发布版本与工作区凭据</span></div><span className="integration-health"><i />{channels.filter((channel) => channel.enabled).length} 项服务正常</span></header>
-        <div className="integration-channel-grid">
-          {channels.map((channel) => { const Icon = channelIcons[channel.id]; return <article key={channel.id}>
-            <header><span className={`integration-channel-mark is-${channel.id}`}><Icon size={16} /></span><span><strong>{channel.name}</strong><small>{channel.capability}</small></span><span className={channel.enabled ? "integration-channel-state is-enabled" : "integration-channel-state"}>{channel.enabled ? "已启用" : "已停用"}</span></header>
-            <p>{channel.description}</p>
-            <footer><button className="secondary-button integration-guide-button" type="button" onClick={() => setGuideChannelId(channel.id)}><BookOpenText size={13} />使用说明</button><button className="icon-button" type="button" aria-label={`${channel.enabled ? "停用" : "启用"} ${channel.name}`} title={channel.enabled ? "停用" : "启用"} onClick={() => { setChannels((current) => current.map((item) => item.id === channel.id ? { ...item, enabled: !item.enabled } : item)); onNotify(`${channel.name} 已${channel.enabled ? "停用" : "启用"}。`); }}>{channel.enabled ? <Pause size={14} /> : <Play size={14} />}</button></footer>
-          </article>; })}
-        </div>
-      </section>
-
-      <section className="integration-client-section" aria-labelledby="integration-client-title">
-        <header><div><h2 id="integration-client-title">客户端凭据</h2><span>用于 MCP、API 与自动化调用，不继承浏览器会话</span></div><strong>{visibleClients.length} 个客户端</strong></header>
-        <div className="integration-client-table" aria-label="集成客户端列表">
-          <div className="integration-client-head" aria-hidden="true"><span>客户端</span><span>接口 / 环境</span><span>有效权限</span><span>到期时间</span><span>分配来源</span><span>凭据</span><span>状态与操作</span></div>
-          {visibleClients.map((client) => {
-            const status = clientStatus(client);
-            const statusLabel = status === "active" ? "有效" : status === "disabled" ? "已停用" : status === "expired" ? "已过期" : "已撤销";
-            const mutable = status === "active" || status === "disabled";
-            return <div className="integration-client-row" key={client.id}><span><strong>{client.name}</strong><small>{client.id}</small></span><span><strong>{client.channel}</strong><small>{client.environment}</small></span><span><strong>{client.permissions.length} 项权限</strong><small>{client.permissions.slice(0, 2).join(" · ")}</small></span><span>{client.expiresAt}</span><span>{client.assignmentSource}</span><code>{client.credential}</code><span className="integration-client-actions"><span className={`integration-client-status status-${status}`}>{statusLabel}</span><button className="icon-button" type="button" aria-label={`轮换 ${client.name} 的凭据`} title="轮换凭据" disabled={!mutable} onClick={() => onNotify(`${client.name} 的凭据轮换已模拟完成。`)}><RotateCw size={14} /></button><button className="icon-button" type="button" aria-label={`${client.enabled ? "停用" : "启用"}客户端 ${client.name}`} title={client.enabled ? "停用客户端" : "启用客户端"} disabled={!mutable} onClick={() => setClients((current) => current.map((item) => item.id === client.id ? { ...item, enabled: !item.enabled } : item))}>{client.enabled ? <Pause size={14} /> : <Play size={14} />}</button>{status !== "revoked" && <button className="icon-button" type="button" aria-label={`撤销客户端 ${client.name}`} title="永久撤销客户端" onClick={() => { setClients((current) => current.map((item) => item.id === client.id ? { ...item, revokedAt: "2026-09-01 16:30", enabled: false } : item)); onNotify(`${client.name} 已撤销，后续调用将被拒绝并写入审计日志。`); }}><Ban size={14} /></button>}</span></div>;
-          })}
-          {visibleClients.length === 0 && <div className="integration-client-empty"><Search size={17} /><strong>没有匹配的客户端</strong><span>调整搜索词或创建新的接入客户端。</span></div>}
-        </div>
-      </section>
-
-      {guideChannel && createPortal(<div className="dialog-backdrop integration-guide-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setGuideChannelId(null); }}><section className="review-dialog integration-guide-dialog" role="dialog" aria-modal="true" aria-labelledby="integration-guide-dialog-title">
-        <header><div><span className="content-label">{guideChannel.capability}</span><h2 id="integration-guide-dialog-title">{guideChannel.name} 使用说明</h2></div><button className="icon-button" type="button" aria-label="关闭使用说明" title="关闭" onClick={() => setGuideChannelId(null)}><X size={16} /></button></header>
-        <div className="dialog-body integration-guide-body">
-          <p>{guideChannel.description}</p>
-          <dl><div><dt>接入地址</dt><dd><code>{guideChannel.endpoint}</code><button className="icon-button" type="button" aria-label={`复制 ${guideChannel.name} 接入地址`} title="复制接入地址" onClick={() => onNotify(`${guideChannel.name} 接入地址已复制。`)}><Clipboard size={13} /></button></dd></div><div><dt>认证方式</dt><dd>{channelGuides[guideChannel.id].authentication}</dd></div><div><dt>适用场景</dt><dd>{channelGuides[guideChannel.id].scenario}</dd></div></dl>
-          <section aria-labelledby="integration-guide-steps-title"><h3 id="integration-guide-steps-title">快速开始</h3><ol>{channelGuides[guideChannel.id].steps.map((step) => <li key={step}>{step}</li>)}</ol></section>
-          <section className="integration-guide-example" aria-labelledby="integration-guide-example-title"><header><h3 id="integration-guide-example-title">调用示例</h3><button className="secondary-button" type="button" onClick={() => onNotify(`${guideChannel.name} 调用示例已复制。`)}><Clipboard size={13} />复制示例</button></header><pre><code>{channelGuides[guideChannel.id].example}</code></pre></section>
-          <aside><ShieldCheck size={14} /><span><strong>调用边界</strong><small>仅返回已发布知识；客户端、调用工具、资产版本与执行结果会进入审计日志。</small></span></aside>
-        </div>
-        <footer><span className="model-dialog-boundary"><KeyRound size={13} />凭据不会出现在调用日志中</span><div><button className="primary-button" type="button" onClick={() => setGuideChannelId(null)}>完成</button></div></footer>
-      </section></div>, document.body)}
-
-      {creatingClient && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeCreateClient(); }}><section className="review-dialog compact-dialog integration-client-dialog" role="dialog" aria-modal="true" aria-labelledby="integration-client-dialog-title">
-        <header><div><span className="content-label">接口与集成</span><h2 id="integration-client-dialog-title">{createdCredential ? "保存客户端凭据" : "创建客户端"}</h2></div><button className="icon-button" type="button" aria-label="关闭客户端配置" title="关闭" onClick={closeCreateClient}><X size={16} /></button></header>
-        <div className="dialog-body">{createdCredential ? <div className="integration-secret-view"><span><Check size={17} /></span><h3>{createdCredential.name} 已创建</h3><p>该凭据只显示一次。关闭窗口后只能轮换，无法再次查看。</p><label><span>客户端凭据</span><code>{createdCredential.secret}</code><button className="secondary-button" type="button" onClick={() => onNotify("客户端凭据已复制。")}>复制凭据</button></label></div> : <form id="integration-client-form" className="integration-client-form" onSubmit={createClient}>
-          <label><span>客户端名称</span><input autoFocus value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} placeholder="例如：经营分析 Agent" /></label>
-          <label><span>调用方式</span><select value={draft.channel} onChange={(event) => setDraft((current) => ({ ...current, channel: event.target.value as IntegrationClient["channel"] }))}><option>REST API</option><option>MCP</option><option>CLI</option></select></label>
-          <label><span>环境</span><select value={draft.environment} onChange={(event) => setDraft((current) => ({ ...current, environment: event.target.value as IntegrationClient["environment"] }))}><option>生产</option><option>测试</option><option>开发</option></select></label>
-          <label><span>到期时间</span><input aria-label="到期时间" type="date" min="2026-09-02" value={draft.expiresAt} onChange={(event) => setDraft((current) => ({ ...current, expiresAt: event.target.value }))} /></label>
-          <fieldset className="integration-client-permissions"><legend>操作权限</legend>{clientPermissionOptions.map((permission) => <label key={permission.action}><input type="checkbox" aria-label={permission.action} checked={draft.permissions.includes(permission.action)} onChange={(event) => setDraft((current) => ({ ...current, permissions: event.target.checked ? [...current.permissions, permission.action] : current.permissions.filter((action) => action !== permission.action) }))} /><span><code>{permission.action}</code><small>{permission.label}</small></span></label>)}</fieldset>
-          <div className="integration-client-scope"><ShieldCheck size={15} /><span><strong>最小权限与独立身份</strong><small>客户端仅获得所选操作；不继承浏览器会话，创建、到期、撤销和调用都会进入审计日志。</small></span></div>
-        </form>}</div>
-        <footer><span className="model-dialog-boundary"><KeyRound size={13} />凭据由工作区托管</span><div>{createdCredential ? <button className="primary-button" type="button" onClick={closeCreateClient}>完成</button> : <><button className="secondary-button" type="button" onClick={closeCreateClient}>取消</button><button className="primary-button" type="submit" form="integration-client-form" disabled={!draft.name.trim() || draft.permissions.length === 0 || !draft.expiresAt}><Server size={14} />创建客户端</button></>}</div></footer>
-      </section></div>}
-    </section>
-  );
+  const toggleWebhook = (item: Webhook) => void perform(() => api.saveWebhook(workspaceId, { name: item.name, endpoint: item.endpoint, enabled: !item.enabled, eventTypes: item.eventTypes, expectedVersion: item.version }, item.id), () => {});
+  const titles: Record<Exclude<Dialog, null>, string> = { credential: "创建客户端", consumer: "登记消费方", binding: "补建消费绑定", principal: "创建机器身份", webhook: editingWebhook ? "编辑 Webhook" : "新增 Webhook", secret: "保存一次性凭据", "principal-result": "机器身份已创建" };
+  const visible = data.credentials.filter(item => `${item.name} ${item.principalId} ${item.tokenPrefix}`.toLowerCase().includes(query.toLowerCase()));
+  return <section className="view settings-view integration-settings-view" aria-label="接口与集成">
+    <div className="integration-commandbar"><label><Search size={14}/><input aria-label="搜索集成客户端" type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="搜索客户端或机器身份"/></label><div className="integration-command-actions">
+      <button className="icon-button" title="刷新集成设置" aria-label="刷新集成设置" disabled={loading || busy || !canRead} onClick={() => void load()}><RefreshCw size={15}/></button>
+      <button className="secondary-button" disabled={disabled || !canCreatePrincipal} onClick={() => open("principal")}><Bot size={14}/>创建机器身份</button>
+      <button className="secondary-button" disabled={disabled} onClick={() => open("consumer")}><Plus size={14}/>登记消费方</button>
+      <button className="primary-button" disabled={disabled} onClick={() => open("credential")}><KeyRound size={14}/>创建客户端</button>
+    </div></div>
+    {!canRead && <p role="alert">没有读取集成设置的权限。</p>}
+    {loading && <p role="status">正在读取集成设置</p>}
+    {error && <p className="integration-error" role="alert">{error}</p>}
+    <section className="integration-channel-section" aria-label="接口能力"><div className="integration-channel-grid">
+      {[{ name: "REST API", icon: Cable, endpoint: `${base}/semantic-queries:resolve` }, { name: "MCP Server", icon: Bot, endpoint: `${base}/mcp` }, { name: "CLI", icon: Terminal, endpoint: "semlia semantic resolve <query-json>" }, { name: "TypeScript SDK", icon: Braces, endpoint: "@semlia/sdk-typescript · createSemanticClient" }].map(channel => <article key={channel.name}><header><channel.icon size={17}/><strong>{channel.name}</strong></header><code className="integration-endpoint">{channel.endpoint}</code><footer><button className="icon-button" title={`复制 ${channel.name} 接入信息`} aria-label={`复制 ${channel.name} 接入信息`} onClick={() => void copy(channel.endpoint)}><Clipboard size={14}/></button></footer></article>)}
+    </div></section>
+    <div className="integration-tabs" role="tablist" aria-label="集成资源"><button role="tab" aria-selected={tab === "credentials"} onClick={() => setTab("credentials")}>客户端凭据 {data.credentials.length}</button><button role="tab" aria-selected={tab === "webhooks"} onClick={() => setTab("webhooks")}>Webhook {data.webhooks.length}</button></div>
+    {tab === "credentials" && <section className="integration-live-list" aria-label="客户端凭据">
+      {data.consumers.filter(item => item.status === "active" && !data.bindings.some(binding => binding.consumerId === item.id && binding.status === "active")).map(item => <article className="integration-live-object" key={item.id}><header><strong>{item.name}</strong><span>缺少消费绑定</span></header><code>{item.id}</code><footer><button className="secondary-button" disabled={disabled} onClick={() => { open("binding"); setDraft(current => ({ ...current, consumerId: item.id, name: item.name })); }}><Plus size={14}/>补建绑定</button></footer></article>)}
+      {loaded && visible.length === 0 && <p>尚无客户端凭据</p>}
+      {visible.map(item => { const active = !item.revokedAt && new Date(item.expiresAt).getTime() > now; return <article key={item.id} className="integration-live-object"><header><div><strong>{item.name}</strong><code>{item.tokenPrefix}</code></div><span>{item.revokedAt ? "已撤销" : active ? "有效" : "已过期"}</span></header><dl><div><dt>机器身份</dt><dd><code>{item.principalId}</code></dd></div><div><dt>到期时间</dt><dd>{new Date(item.expiresAt).toLocaleString("zh-CN")}</dd></div><div><dt>权限上限</dt><dd>{item.allowedActions.join(" · ")}</dd></div><div><dt>资源范围</dt><dd><code>{item.scopeId}</code></dd></div><div><dt>最近调用</dt><dd>{item.lastUsedAt ? new Date(item.lastUsedAt).toLocaleString("zh-CN") : "尚未使用"}</dd></div></dl><footer><button className="icon-button" disabled={disabled || !active} title="轮换凭据，旧凭据立即失效" aria-label={`轮换 ${item.name} 的凭据`} onClick={() => { trigger.current = document.activeElement as HTMLElement; void perform(() => api.rotate(workspaceId, item.id), result => { setSecretKind("credential"); setSecret(result.token); setDialog("secret"); }); }}><RefreshCw size={15}/></button><button className="icon-button" disabled={disabled || !active} title="永久撤销凭据" aria-label={`撤销客户端 ${item.name}`} onClick={() => void perform(() => api.revoke(workspaceId, item.id), () => {})}><Ban size={15}/></button></footer></article>; })}
+    </section>}
+    {tab === "webhooks" && <section className="integration-live-list" aria-label="Webhook 订阅"><header className="integration-section-title"><h2>事件订阅</h2><button className="secondary-button" disabled={disabled || !!data.webhookError} onClick={() => open("webhook")}><Plus size={14}/>新增 Webhook</button></header>
+      {data.webhookError && <p role="alert">Webhook 不可用：{data.webhookError}</p>}
+      {loaded && !data.webhookError && data.webhooks.length === 0 && <p>尚无 Webhook 订阅</p>}
+      {data.webhooks.map(item => <article className="integration-live-object" key={item.id}><header><strong>{item.name}</strong><label><input type="checkbox" checked={item.enabled} disabled={disabled} onChange={() => toggleWebhook(item)}/>启用</label></header><code className="integration-endpoint">{item.endpoint}</code><p>{item.eventTypes.join(" · ")} · 版本 {item.version} · 签名 v{item.signingVersion} / {item.secretSuffix}</p><footer><button className="icon-button" title="编辑订阅，取消旧版本待投递事件" aria-label={`编辑 ${item.name} 的订阅`} disabled={disabled} onClick={() => { open("webhook"); setEditingWebhook(item); setEventTypes(item.eventTypes); setDraft(current => ({ ...current, name: item.name, endpoint: item.endpoint })); }}><Pencil size={15}/></button><button className="icon-button" title="轮换签名，取消旧版本待投递事件" aria-label={`轮换 ${item.name} 的签名`} disabled={disabled} onClick={() => { trigger.current = document.activeElement as HTMLElement; void perform(() => api.rotateWebhook(workspaceId, item), result => { setSecretKind("webhook"); setSecret(result.signingSecret); setDialog("secret"); }); }}><RefreshCw size={15}/></button></footer></article>)}
+      <header className="integration-section-title"><h2>投递记录</h2></header>{!runtimeRead ? <p>没有读取运行记录的权限。</p> : data.deliveries.length === 0 ? <p>尚无投递记录</p> : data.deliveries.map(item => <article className="integration-live-object" key={item.id}><header><strong>{item.eventType}</strong><span>{stateLabels[item.state]}</span></header><code>{item.eventId}</code><p>尝试 {item.attempt} / {item.maxAttempts} · HTTP {item.httpStatus || "-"}{item.errorCode ? ` · ${item.errorCode}` : ""}</p><footer><a href={`/operations/runtime?run=${encodeURIComponent(item.runtimeRunId)}`}>查看运行记录</a><button className="icon-button" aria-label={`重放投递 ${item.eventId}`} title="重放死信，增加八次尝试，仅限一次" disabled={!runtimeManage || !loaded || stale || loading || busy || item.state !== "dead_letter" || item.maxAttempts !== 8} onClick={() => void perform(() => api.replayDelivery(workspaceId, item), () => {})}><Play size={15}/></button></footer></article>)}
+    </section>}
+    {dialog && <div className="dialog-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) close(); }}><section ref={modal} className="review-dialog compact-dialog integration-live-dialog" role="dialog" aria-modal="true" aria-labelledby="integration-dialog-title"><header><h2 id="integration-dialog-title">{titles[dialog]}</h2><button className="icon-button" title="关闭" aria-label="关闭集成窗口" onClick={close}><X size={16}/></button></header><div className="dialog-body">
+      {error && <p role="alert">{error}</p>}
+      {dialog === "secret" ? <div className="integration-secret-view"><Check size={20}/><p>{secretKind === "webhook" ? "签名密钥只显示一次。旧版本待投递事件会取消；已在途的请求可能以旧签名完成。" : "凭据只显示一次。关闭后无法恢复；轮换会使旧凭据立即失效。"}</p><code>{secret}</code><button className="secondary-button" onClick={() => void copy(secret)}><Clipboard size={14}/>复制凭据</button></div> : dialog === "principal-result" ? <div className="integration-secret-view"><code>{principal}</code><p>{granted ? "消费开发者角色已授予。" : "当前身份尚无角色授权。"}</p><button className="secondary-button" onClick={() => void copy(principal)}><Clipboard size={14}/>复制身份 ID</button><button className="secondary-button" disabled={!canGrant || busy || stale || granted} onClick={() => void perform(() => api.grant(workspaceId, principal), () => setGranted(true))}><ShieldCheck size={14}/>授予消费开发者角色</button></div> : <form id="integration-live-form" onSubmit={submit} className="integration-client-form">
+        {dialog !== "binding" && <label><span>名称</span><input required maxLength={160} value={draft.name} onChange={event => setDraft({ ...draft, name: event.target.value })}/></label>}
+        {dialog === "credential" && <><label><span>机器身份 ID</span><input required value={draft.principalId} onChange={event => setDraft({ ...draft, principalId: event.target.value })}/></label><label><span>消费方</span><select required value={draft.consumerId} onChange={event => setDraft({ ...draft, consumerId: event.target.value, bindingId: "" })}><option value="">选择消费方</option>{data.consumers.filter(item => item.status === "active").map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label><span>消费绑定</span><select required value={draft.bindingId} onChange={event => setDraft({ ...draft, bindingId: event.target.value })}><option value="">选择绑定</option>{data.bindings.filter(item => item.consumerId === draft.consumerId && item.status === "active").map(item => <option key={item.id} value={item.id}>{item.environment} · {item.mode}</option>)}</select></label><label><span>到期时间</span><input required type="date" value={draft.expiresAt} min={new Date().toISOString().slice(0, 10)} onChange={event => setDraft({ ...draft, expiresAt: event.target.value })}/></label><label><span>资源范围</span><select value={draft.scopeType} onChange={event => setDraft({ ...draft, scopeType: event.target.value as CredentialInput["scopeType"], scopeId: "" })}><option value="workspace">工作区</option><option value="asset">单个资产</option><option value="release">单个发布版本</option></select></label>{draft.scopeType !== "workspace" && <label><span>资源 ID</span><input required value={draft.scopeId} onChange={event => setDraft({ ...draft, scopeId: event.target.value })}/></label>}<fieldset><legend>权限上限</legend>{(["asset.read", "semantic.resolve", "semantic.execute"] as const).map(action => <label key={action}><input type="checkbox" checked={draft.actions.includes(action)} onChange={event => setDraft({ ...draft, actions: event.target.checked ? [...draft.actions, action] : draft.actions.filter(item => item !== action) })}/>{action}</label>)}</fieldset></>}
+        {dialog === "consumer" && <><label><span>稳定键</span><input required pattern="[a-z0-9][a-z0-9_.-]*" maxLength={120} value={draft.stableKey} onChange={event => setDraft({ ...draft, stableKey: event.target.value })}/></label><label><span>环境</span><input required maxLength={80} value={draft.environment} onChange={event => setDraft({ ...draft, environment: event.target.value })}/></label></>}
+        {dialog === "binding" && <><code>{draft.consumerId}</code><label><span>环境</span><input required maxLength={80} value={draft.environment} onChange={event => setDraft({ ...draft, environment: event.target.value })}/></label></>}
+        {dialog === "webhook" && <><label><span>HTTPS 接收地址</span><input required type="url" maxLength={2048} value={draft.endpoint} onChange={event => setDraft({ ...draft, endpoint: event.target.value })}/></label><fieldset><legend>事件筛选</legend>{(["release.published", "catalog.asset.changed"] as const).map(kind => <label key={kind}><input type="checkbox" checked={eventTypes.includes(kind)} onChange={event => setEventTypes(current => event.target.checked ? [...current, kind] : current.filter(value => value !== kind))}/>{kind}</label>)}</fieldset></>}
+      </form>}
+    </div><footer><button className="secondary-button" onClick={close}>{dialog === "secret" || dialog === "principal-result" ? "完成" : "取消"}</button>{dialog !== "secret" && dialog !== "principal-result" && <button className="primary-button" type="submit" form="integration-live-form" disabled={disabled || !draft.name.trim() || (dialog === "credential" && draft.actions.length === 0) || (dialog === "webhook" && eventTypes.length === 0)}>{busy ? "提交中" : editingWebhook ? "保存" : "创建"}</button>}</footer></section></div>}
+  </section>;
 }

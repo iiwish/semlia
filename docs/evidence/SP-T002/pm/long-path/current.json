@@ -1,0 +1,5 @@
+{
+  "Replace": {
+    "/workspace/internal/adapters/discovery/postgresql/adapter_test.go": "/workspace/docs/evidence/SP-T002/pm/long-path/probe_test.go.txt"
+  }
+}

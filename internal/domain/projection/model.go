@@ -79,4 +79,29 @@ type Release struct {
 	Assets                []ManifestAssetProjection
 	Objects               []ManifestObjectProjection
 	Proposal              *ReleaseProposalMeta
+	Production            *ProductionRelease
+}
+
+type ProductionRelease struct {
+	RootReleaseID        string               `json:"rootReleaseId"`
+	RollbackParentID     *string              `json:"rollbackParentId"`
+	RollbackDepth        int                  `json:"rollbackDepth"`
+	BeforeReleaseID      *string              `json:"beforeReleaseId"`
+	BeforeManifest       json.RawMessage      `json:"beforeManifest"`
+	BeforeManifestDigest string               `json:"beforeManifestDigest"`
+	AttributionDigest    string               `json:"attributionDigest"`
+	Proposals            []ProductionProposal `json:"proposals"`
+}
+
+type ProductionProposal struct {
+	ProposalID        string          `json:"proposalId"`
+	OperationID       string          `json:"operationId"`
+	ProductionVersion int             `json:"productionVersion"`
+	SetDigest         string          `json:"setDigest"`
+	ContentDigest     string          `json:"contentDigest"`
+	AuthorPrincipalID string          `json:"authorPrincipalId"`
+	AttemptNo         int             `json:"attemptNo"`
+	ValidationDigest  string          `json:"validationDigest"`
+	ReviewIDs         json.RawMessage `json:"reviewIds"`
+	Role              string          `json:"role"`
 }

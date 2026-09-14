@@ -1,0 +1,89 @@
+{
+  "summary": {
+    "id": "prodop_01m27rfshgf4r88fe1t6vvmdkh",
+    "currentVersion": 1,
+    "createdBy": "prn_01m27revxjewcb9q0v2fetnw8f",
+    "createdAt": "2026-09-11T08:14:03Z",
+    "updatedAt": "2026-09-11T08:14:03Z",
+    "frozen": false,
+    "progress": "draft",
+    "targetCount": 1,
+    "releaseId": null
+  },
+  "version": 1,
+  "input": {
+    "snapshots": [
+      {
+        "sourceId": "src_01m27rezrpewj9t9btbxq5ycd1",
+        "snapshotId": "ssnp_01m27rf0j8ewp9ke8abfmwcykg",
+        "digest": "sha256:40c0e1017366d100573f0cca03fb577d699e756b103d475521b07ec96d30d319",
+        "coverageKeys": [
+          "sql:desktop.sql"
+        ]
+      }
+    ],
+    "candidates": [
+      {
+        "snapshotId": "ssnp_01m27rf0j8ewp9ke8abfmwcykg",
+        "candidateId": "scd_01m27rf0hzewpbg0v76n69rg6a",
+        "digest": "sha256:b35f3b6bdbd0a93c106e11a1242201305039632fdb52b3a6db1daeb02ec10dd1",
+        "primaryTargetKey": "primary",
+        "targetKeys": [
+          "primary"
+        ]
+      }
+    ],
+    "evidence": [],
+    "dependencies": []
+  },
+  "inputDigest": "sha256:b0bda9f94a3cba8c5ec75e6a6331398eb82ec64fb89899511e3e82f4a259da9e",
+  "setDigest": "sha256:6cb844da63c4903f75d75241201a74080cb07451d97cccc4445415faa3f02027",
+  "baselineHead": {
+    "presence": "present",
+    "releaseId": "rls_01m27rfnb2f3zt785qd4qwctnz",
+    "manifestDigest": "sha256:d8013d2051eeb8bdd38aae5b2b086c69216c52dfafda2b9a8d4800d086200d30"
+  },
+  "targets": [
+    {
+      "localKey": "primary",
+      "targetId": "ast_01m27rf2bwewrtzr5752nbcten",
+      "declaration": {
+        "intent": "update",
+        "kind": "semantic_asset",
+        "localKey": "primary",
+        "targetId": "ast_01m27rf2bwewrtzr5752nbcten",
+        "baseRevisionId": "rev_01m27rfk1pf3c91m4byky446f5",
+        "title": "public.desktop_customers",
+        "content": {
+          "address": "acceptance.desktop_customers",
+          "assetType": "entity",
+          "definition": "One customer per customer_id, matched from the published catalogue.",
+          "displayName": "desktop customers",
+          "ownerPrincipalId": "prn_01m27revxjewcb9q0v2fetnw8f",
+          "scope": "Acceptance commerce source; reviewed business scope."
+        },
+        "changes": [
+          {
+            "fieldPath": "definition",
+            "op": "update",
+            "beforeValue": "One customer per customer_id.",
+            "afterValue": "One customer per customer_id, matched from the published catalogue."
+          }
+        ],
+        "evidenceIds": []
+      },
+      "outcome": "proposal",
+      "contentDigest": "sha256:27698473429da7564f553f88a874b4c367ea92d35f1d95a0dedd13ca97087135",
+      "proposalId": "prp_01m27rfshgf4rtyydf17wygjtx",
+      "proposalState": "draft",
+      "validationRunIds": [],
+      "reviewIds": []
+    }
+  ],
+  "activeValidation": {
+    "status": "not_requested"
+  },
+  "generationRunIds": [],
+  "generationApplications": [],
+  "unresolvedCodes": []
+}

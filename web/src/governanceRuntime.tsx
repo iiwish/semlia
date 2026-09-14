@@ -16,6 +16,7 @@ import {
   listModelProviders as apiListModelProviders,
   listProposals as apiListProposals,
   listReleases as apiListReleases,
+  listReviews as apiListReviews,
   listReviewBatches as apiListReviewBatches,
   listValidationRuns as apiListValidationRuns,
   publishRelease as apiPublishRelease,
@@ -36,6 +37,7 @@ import {
   type GovernanceProposalSummary,
   type GovernanceRelease,
   type GovernanceReleaseDetail,
+  type GovernanceReleasePage,
   type GovernanceReview,
   type GovernanceReviewBatchDetail,
   type GovernanceReviewBatch,
@@ -44,17 +46,13 @@ import {
   type UpdateGovernanceModelProviderRequest,
   type UpdateGovernanceModelSettingRequest,
 } from "./governance";
-import { createGovernanceFixture, type GovernanceFixtureClient } from "./governanceFixture";
 import { listAssetRevisions } from "./catalog";
 import type { AssetWorkflowState } from "./types";
 
 export type GovernanceDataState = "idle" | "ready" | "error";
+export type GovernanceReleaseDetailState = { state: "loading" | "ready" | "error"; error: string };
 
-/**
- * One governance API surface shared by every M2 view. The real client comes
- * from web/src/governance.ts; the fixture client (VITE_CATALOG_FIXTURE=1)
- * implements the same shapes in memory.
- */
+/** Shared governance API contract for the normal workspace. */
 export interface GovernanceApi {
   listProposals(workspaceId: string, signal?: AbortSignal): Promise<GovernanceProposalSummary[]>;
   createProposal(workspaceId: string, input: CreateGovernanceProposalRequest): Promise<GovernanceProposalDetail>;
@@ -63,11 +61,12 @@ export interface GovernanceApi {
   listValidationRuns(workspaceId: string, proposalId: string, signal?: AbortSignal): Promise<GovernanceValidationRun[]>;
   getPolicyDecision(workspaceId: string, proposalId: string, signal?: AbortSignal): Promise<GovernancePolicyDecision | null>;
   createReview(workspaceId: string, proposalId: string, input: GovernanceReviewCommandRequest): Promise<GovernanceReview>;
+  listReviews(workspaceId: string, proposalId: string, signal?: AbortSignal): Promise<GovernanceReview[]>;
   listReviewBatches(workspaceId: string, signal?: AbortSignal): Promise<GovernanceReviewBatch[]>;
   assembleReviewBatches(workspaceId: string): Promise<GovernanceReviewBatch[]>;
   getReviewBatch(workspaceId: string, batchId: string, signal?: AbortSignal): Promise<GovernanceReviewBatchDetail>;
   confirmReviewBatch(workspaceId: string, batchId: string, input: GovernanceReviewCommandRequest): Promise<GovernanceReviewBatchDetail>;
-  listReleases(workspaceId: string, signal?: AbortSignal): Promise<GovernanceRelease[]>;
+  listReleases(workspaceId: string, cursor?: string, signal?: AbortSignal): Promise<GovernanceReleasePage>;
   publishRelease(workspaceId: string, proposalId: string): Promise<GovernanceReleaseDetail>;
   getRelease(workspaceId: string, releaseId: string, signal?: AbortSignal): Promise<GovernanceReleaseDetail>;
   rollbackRelease(workspaceId: string, releaseId: string): Promise<GovernanceReleaseDetail>;
@@ -88,6 +87,7 @@ const realApi: GovernanceApi = {
   listValidationRuns: apiListValidationRuns,
   getPolicyDecision: apiGetPolicyDecision,
   createReview: apiCreateReview,
+  listReviews: apiListReviews,
   listReviewBatches: apiListReviewBatches,
   assembleReviewBatches: apiAssembleReviewBatches,
   getReviewBatch: apiGetReviewBatch,
@@ -105,42 +105,21 @@ const realApi: GovernanceApi = {
   generateProposal: apiGenerateProposal,
 };
 
-function fixtureApi(inner: GovernanceFixtureClient): GovernanceApi {
-  return {
-    listProposals: () => inner.listProposals(),
-    createProposal: (_workspaceId, input) => inner.createProposal(input),
-    getProposal: (_workspaceId, proposalId) => inner.getProposal(proposalId),
-    submitProposal: (_workspaceId, proposalId) => inner.submitProposal(proposalId),
-    listValidationRuns: (_workspaceId, proposalId) => inner.listValidationRuns(proposalId),
-    getPolicyDecision: (_workspaceId, proposalId) => inner.getPolicyDecision(proposalId),
-    createReview: (_workspaceId, proposalId, input) => inner.createReview(proposalId, input),
-    listReviewBatches: () => inner.listReviewBatches(),
-    assembleReviewBatches: () => inner.assembleReviewBatches(),
-    getReviewBatch: (_workspaceId, batchId) => inner.getReviewBatch(batchId),
-    confirmReviewBatch: (_workspaceId, batchId, input) => inner.confirmReviewBatch(batchId, input),
-    listReleases: () => inner.listReleases(),
-    publishRelease: (_workspaceId, proposalId) => inner.publishRelease(proposalId),
-    getRelease: (_workspaceId, releaseId) => inner.getRelease(releaseId),
-    rollbackRelease: (_workspaceId, releaseId) => inner.rollbackRelease(releaseId),
-    listModelProviders: () => inner.listModelProviders(),
-    createModelProvider: (_workspaceId, input) => inner.createModelProvider(input),
-    updateModelProvider: (_workspaceId, providerId, input) => inner.updateModelProvider(providerId, input),
-    createModelSetting: (_workspaceId, input) => inner.createModelSetting(input),
-    updateModelSetting: (_workspaceId, settingId, input) => inner.updateModelSetting(settingId, input),
-    setDefaultModelSetting: (_workspaceId, settingId) => inner.setDefaultModelSetting(settingId),
-    generateProposal: (_workspaceId, input) => inner.generateProposal(input),
-  };
-}
-
 export interface GovernanceRuntimeValue {
   workspaceId: string;
   proposals: GovernanceProposalSummary[];
+  proposalDetails: Record<string, GovernanceProposalDetail>;
   proposalsState: GovernanceDataState;
   proposalsError: string;
   releases: GovernanceRelease[];
   releaseDetails: Record<string, GovernanceReleaseDetail>;
+  releaseDetailStates: Record<string, GovernanceReleaseDetailState>;
   releasesState: GovernanceDataState;
   releasesError: string;
+  releasesTotal?: number;
+  releasesNextCursor?: string;
+  releasesLoadingMore: boolean;
+  releasesAppendError: string;
   batches: GovernanceReviewBatch[];
   batchesState: GovernanceDataState;
   batchesError: string;
@@ -153,6 +132,7 @@ export interface GovernanceRuntimeValue {
   workflowStateByAsset: Record<string, AssetWorkflowState>;
   refreshProposals: () => void;
   refreshReleases: () => void;
+  loadMoreReleases: () => Promise<void>;
   refreshBatches: () => void;
   refreshModelConfig: () => void;
   refreshAll: () => void;
@@ -162,7 +142,7 @@ export interface GovernanceRuntimeValue {
   loadBatchDetail: (batchId: string) => Promise<GovernanceReviewBatchDetail>;
   loadReleaseDetail: (releaseId: string) => Promise<GovernanceReleaseDetail>;
   submitProposal: (proposalId: string) => Promise<GovernanceProposalDetail>;
-  createAndSubmitProposal: (input: CreateGovernanceProposalRequest) => Promise<GovernanceProposalDetail>;
+  createAndSubmitProposal: (input: CreateGovernanceProposalRequest, onCreated?: (draft: GovernanceProposalDetail) => void) => Promise<GovernanceProposalDetail>;
   reviewProposal: (proposalId: string, input: GovernanceReviewCommandRequest) => Promise<GovernanceReview>;
   assembleBatches: () => Promise<GovernanceReviewBatch[]>;
   confirmBatch: (batchId: string, input: GovernanceReviewCommandRequest) => Promise<GovernanceReviewBatchDetail>;
@@ -186,15 +166,20 @@ const workflowStateMapping: Record<string, AssetWorkflowState> = {
   in_review: "in_review",
 };
 
-export function GovernanceRuntimeProvider({ children, workspaceId, fixture = false }: { children: ReactNode; workspaceId: string; fixture?: boolean }) {
-  const api = useMemo<GovernanceApi>(() => (fixture ? fixtureApi(createGovernanceFixture()) : realApi), [fixture]);
+export function GovernanceRuntimeProvider({ children, workspaceId, api = realApi, reviewBatchesEnabled = true }: { children: ReactNode; workspaceId: string; api?: GovernanceApi; reviewBatchesEnabled?: boolean }) {
   const [proposals, setProposals] = useState<GovernanceProposalSummary[]>([]);
+  const [proposalDetails, setProposalDetails] = useState<Record<string, GovernanceProposalDetail>>({});
   const [proposalsState, setProposalsState] = useState<GovernanceDataState>("idle");
   const [proposalsError, setProposalsError] = useState("");
   const [releases, setReleases] = useState<GovernanceRelease[]>([]);
   const [releasesState, setReleasesState] = useState<GovernanceDataState>("idle");
   const [releasesError, setReleasesError] = useState("");
+  const [releasesTotal, setReleasesTotal] = useState<number>();
+  const [releasesNextCursor, setReleasesNextCursor] = useState<string>();
+  const [releasesLoadingMore, setReleasesLoadingMore] = useState(false);
+  const [releasesAppendError, setReleasesAppendError] = useState("");
   const [releaseDetails, setReleaseDetails] = useState<Record<string, GovernanceReleaseDetail>>({});
+  const [releaseDetailStates, setReleaseDetailStates] = useState<Record<string, GovernanceReleaseDetailState>>({});
   const [batches, setBatches] = useState<GovernanceReviewBatch[]>([]);
   const [batchesState, setBatchesState] = useState<GovernanceDataState>("idle");
   const [batchesError, setBatchesError] = useState("");
@@ -207,6 +192,11 @@ export function GovernanceRuntimeProvider({ children, workspaceId, fixture = fal
   const [refreshVersion, setRefreshVersion] = useState(0);
   const revisionLabels = useRef<Record<string, string>>({});
   const revisionRequests = useRef<Record<string, Promise<void>>>({});
+  const workspaceRef = useRef(workspaceId);
+
+  useEffect(() => {
+    workspaceRef.current = workspaceId;
+  }, [workspaceId]);
 
   const refreshProposals = useCallback(() => setRefreshVersion((version) => version + 1), []);
 
@@ -214,7 +204,17 @@ export function GovernanceRuntimeProvider({ children, workspaceId, fixture = fal
     if (!workspaceId) return;
     const controller = new AbortController();
     api.listProposals(workspaceId, controller.signal)
-      .then((items) => {
+      .then(async (items) => {
+        const reviewedProposals = items.filter((item) =>
+          item.state === "in_review" || item.state === "rejected" || item.state === "released");
+        const reviewPages = await Promise.all(reviewedProposals.map((item) =>
+          api.listReviews(workspaceId, item.id, controller.signal)));
+        const reviewMap: Record<string, GovernanceReview> = {};
+        for (const page of reviewPages) {
+          if (page[0]) reviewMap[page[0].proposalId] = page[0];
+        }
+        if (controller.signal.aborted) return;
+        setReviews(reviewMap);
         setProposals(items);
         setProposalsState("ready");
         setProposalsError("");
@@ -231,15 +231,33 @@ export function GovernanceRuntimeProvider({ children, workspaceId, fixture = fal
   useEffect(() => {
     if (!workspaceId) return;
     const controller = new AbortController();
-    api.listReleases(workspaceId, controller.signal)
-      .then(async (items) => {
-        const details = await Promise.all(items.map((release) => api.getRelease(workspaceId, release.id).catch(() => undefined)));
+    api.listReleases(workspaceId, undefined, controller.signal)
+      .then(async (page) => {
+        const results = await Promise.all(page.items.map(async (release) => {
+          try {
+            return { release, detail: await api.getRelease(workspaceId, release.id, controller.signal) };
+          } catch (reason) {
+            return { release, error: reason instanceof Error ? reason.message : "发布清单读取失败。" };
+          }
+        }));
+        if (controller.signal.aborted || workspaceRef.current !== workspaceId) return;
         const detailMap: Record<string, GovernanceReleaseDetail> = {};
-        for (const detail of details) {
-          if (detail) detailMap[detail.id] = detail;
+        const detailStateMap: Record<string, GovernanceReleaseDetailState> = {};
+        for (const result of results) {
+          if (result.detail) {
+            detailMap[result.detail.id] = result.detail;
+            detailStateMap[result.release.id] = { state: "ready", error: "" };
+          } else {
+            detailStateMap[result.release.id] = { state: "error", error: result.error ?? "发布清单读取失败。" };
+          }
         }
         setReleaseDetails(detailMap);
-        setReleases(items);
+        setReleaseDetailStates(detailStateMap);
+        setReleases(page.items);
+        setReleasesTotal(page.page.total);
+        setReleasesNextCursor(page.page.nextCursor);
+        setReleasesLoadingMore(false);
+        setReleasesAppendError("");
         setReleasesState("ready");
         setReleasesError("");
       })
@@ -247,13 +265,14 @@ export function GovernanceRuntimeProvider({ children, workspaceId, fixture = fal
         if (!controller.signal.aborted) {
           setReleasesState("error");
           setReleasesError(reason.message);
+          setReleasesLoadingMore(false);
         }
       });
     return () => controller.abort();
   }, [api, refreshVersion, workspaceId]);
 
   useEffect(() => {
-    if (!workspaceId) return;
+    if (!workspaceId || !reviewBatchesEnabled) return;
     const controller = new AbortController();
     api.listReviewBatches(workspaceId, controller.signal)
       .then((items) => {
@@ -268,7 +287,7 @@ export function GovernanceRuntimeProvider({ children, workspaceId, fixture = fal
         }
       });
     return () => controller.abort();
-  }, [api, refreshVersion, workspaceId]);
+  }, [api, refreshVersion, reviewBatchesEnabled, workspaceId]);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -297,7 +316,13 @@ export function GovernanceRuntimeProvider({ children, workspaceId, fixture = fal
     return states;
   }, [proposals]);
 
-  const loadProposal = useCallback(async (proposalId: string) => api.getProposal(workspaceId, proposalId), [api, workspaceId]);
+  const loadProposal = useCallback(async (proposalId: string) => {
+    const detail = await api.getProposal(workspaceId, proposalId);
+    if (workspaceRef.current !== workspaceId) return detail;
+    setProposalDetails((current) => ({ ...current, [detail.id]: detail }));
+    setProposals((current) => current.map((item) => item.id === detail.id ? detail : item));
+    return detail;
+  }, [api, workspaceId]);
 
   const loadValidationRuns = useCallback(async (proposalId: string) => {
     const runs = await api.listValidationRuns(workspaceId, proposalId);
@@ -313,12 +338,28 @@ export function GovernanceRuntimeProvider({ children, workspaceId, fixture = fal
 
   const loadBatchDetail = useCallback((batchId: string) => api.getReviewBatch(workspaceId, batchId), [api, workspaceId]);
 
-  const loadReleaseDetail = useCallback((releaseId: string) => api.getRelease(workspaceId, releaseId), [api, workspaceId]);
+  const loadReleaseDetail = useCallback(async (releaseId: string) => {
+    const requestWorkspaceId = workspaceId;
+    setReleaseDetailStates((current) => ({ ...current, [releaseId]: { state: "loading", error: "" } }));
+    try {
+      const detail = await api.getRelease(requestWorkspaceId, releaseId);
+      if (workspaceRef.current !== requestWorkspaceId) return detail;
+      setReleaseDetails((current) => ({ ...current, [detail.id]: detail }));
+      setReleaseDetailStates((current) => ({ ...current, [releaseId]: { state: "ready", error: "" } }));
+      return detail;
+    } catch (reason) {
+      if (workspaceRef.current === requestWorkspaceId) {
+        setReleaseDetailStates((current) => ({ ...current, [releaseId]: { state: "error", error: reason instanceof Error ? reason.message : "发布清单读取失败。" } }));
+      }
+      throw reason;
+    }
+  }, [api, workspaceId]);
 
   const submitProposal = useCallback((proposalId: string) => api.submitProposal(workspaceId, proposalId), [api, workspaceId]);
 
-  const createAndSubmitProposal = useCallback(async (input: CreateGovernanceProposalRequest) => {
+  const createAndSubmitProposal = useCallback(async (input: CreateGovernanceProposalRequest, onCreated?: (draft: GovernanceProposalDetail) => void) => {
     const draft = await api.createProposal(workspaceId, input);
+    onCreated?.(draft);
     const submitted = await api.submitProposal(workspaceId, draft.id);
     setValidationRuns((current) => ({ ...current, [submitted.id]: [] }));
     refreshProposals();
@@ -348,14 +389,73 @@ export function GovernanceRuntimeProvider({ children, workspaceId, fixture = fal
 
   const refreshReleases = useCallback(() => setRefreshVersion((version) => version + 1), []);
 
+  const loadMoreReleases = useCallback(async () => {
+    const cursor = releasesNextCursor;
+    if (!workspaceId || !cursor || releasesLoadingMore) return;
+    const requestWorkspaceId = workspaceId;
+    setReleasesLoadingMore(true);
+    setReleasesAppendError("");
+    try {
+      const page = await api.listReleases(requestWorkspaceId, cursor);
+      if (workspaceRef.current !== requestWorkspaceId) return;
+      const results = await Promise.all(page.items.map(async (release) => {
+        try {
+          return { release, detail: await api.getRelease(requestWorkspaceId, release.id) };
+        } catch (reason) {
+          return { release, error: reason instanceof Error ? reason.message : "发布清单读取失败。" };
+        }
+      }));
+      if (workspaceRef.current !== requestWorkspaceId) return;
+      setReleases((current) => {
+        const next = [...current];
+        for (const release of page.items) {
+          const index = next.findIndex((candidate) => candidate.id === release.id);
+          if (index < 0) next.push(release);
+          else next[index] = release;
+        }
+        return next;
+      });
+      setReleaseDetails((current) => {
+        const next = { ...current };
+        for (const result of results) if (result.detail) next[result.detail.id] = result.detail;
+        return next;
+      });
+      setReleaseDetailStates((current) => {
+        const next = { ...current };
+        for (const result of results) next[result.release.id] = result.detail
+          ? { state: "ready", error: "" }
+          : { state: "error", error: result.error ?? "发布清单读取失败。" };
+        return next;
+      });
+      setReleasesTotal(page.page.total);
+      setReleasesNextCursor(page.page.nextCursor === cursor ? undefined : page.page.nextCursor);
+      setReleasesAppendError(page.page.nextCursor === cursor ? "服务器返回了重复游标，已停止继续加载。" : "");
+    } catch (reason) {
+      if (workspaceRef.current !== requestWorkspaceId) return;
+      setReleasesAppendError(reason instanceof Error ? reason.message : "无法加载更多发布记录。");
+    } finally {
+      if (workspaceRef.current === requestWorkspaceId) setReleasesLoadingMore(false);
+    }
+  }, [api, releasesLoadingMore, releasesNextCursor, workspaceId]);
+
   const publishProposal = useCallback(async (proposalId: string) => {
-    const release = await api.publishRelease(workspaceId, proposalId);
+    const requestWorkspaceId = workspaceId;
+    const release = await api.publishRelease(requestWorkspaceId, proposalId);
+    if (workspaceRef.current !== requestWorkspaceId) return release;
+    setReleases((current) => [release, ...current.filter((item) => item.id !== release.id)]);
+    setReleaseDetails((current) => ({ ...current, [release.id]: release }));
+    setReleaseDetailStates((current) => ({ ...current, [release.id]: { state: "ready", error: "" } }));
     refreshReleases();
     return release;
   }, [api, refreshReleases, workspaceId]);
 
   const rollback = useCallback(async (releaseId: string) => {
-    const release = await api.rollbackRelease(workspaceId, releaseId);
+    const requestWorkspaceId = workspaceId;
+    const release = await api.rollbackRelease(requestWorkspaceId, releaseId);
+    if (workspaceRef.current !== requestWorkspaceId) return release;
+    setReleases((current) => [release, ...current.filter((item) => item.id !== release.id)]);
+    setReleaseDetails((current) => ({ ...current, [release.id]: release }));
+    setReleaseDetailStates((current) => ({ ...current, [release.id]: { state: "ready", error: "" } }));
     refreshReleases();
     return release;
   }, [api, refreshReleases, workspaceId]);
@@ -408,13 +508,19 @@ export function GovernanceRuntimeProvider({ children, workspaceId, fixture = fal
     if (revisionLabels.current[revisionId]) return revisionLabels.current[revisionId];
     const requestKey = `${assetId}:${revisionId}`;
     if (!revisionRequests.current[requestKey]) {
-      revisionRequests.current[requestKey] = listAssetRevisions(workspaceId, assetId)
-        .then((page) => {
+      revisionRequests.current[requestKey] = (async () => {
+        let cursor: string | undefined;
+        const seenCursors = new Set<string>();
+        do {
+          const page = await listAssetRevisions(workspaceId, assetId, cursor);
           for (const revision of page.items) {
             revisionLabels.current[revision.id] = `@${revision.sequence}`;
           }
-        })
-        .catch(() => undefined);
+          if (revisionLabels.current[revisionId] || !page.page.nextCursor || seenCursors.has(page.page.nextCursor)) break;
+          cursor = page.page.nextCursor;
+          seenCursors.add(cursor);
+        } while (cursor);
+      })().catch(() => undefined);
     }
     await revisionRequests.current[requestKey];
     return revisionLabels.current[revisionId] ?? revisionId;
@@ -423,12 +529,18 @@ export function GovernanceRuntimeProvider({ children, workspaceId, fixture = fal
   const value = useMemo<GovernanceRuntimeValue>(() => ({
     workspaceId,
     proposals,
+    proposalDetails,
     proposalsState,
     proposalsError,
     releases,
     releaseDetails,
+    releaseDetailStates,
     releasesState,
     releasesError,
+    releasesTotal,
+    releasesNextCursor,
+    releasesLoadingMore,
+    releasesAppendError,
     batches,
     batchesState,
     batchesError,
@@ -441,6 +553,7 @@ export function GovernanceRuntimeProvider({ children, workspaceId, fixture = fal
     workflowStateByAsset,
     refreshProposals,
     refreshReleases,
+    loadMoreReleases,
     refreshBatches,
     refreshModelConfig,
     refreshAll: refreshProposals,
@@ -465,9 +578,9 @@ export function GovernanceRuntimeProvider({ children, workspaceId, fixture = fal
     resolveRevisionLabel,
   }), [
     assembleBatches, batches, batchesError, batchesState, confirmBatch, createAndSubmitProposal, createModelSetting, createProvider, decisions,
-    generateProposal, loadBatchDetail, loadPolicyDecision, loadProposal, loadReleaseDetail, loadValidationRuns, modelProviders, modelProvidersError,
-    modelProvidersState, proposals, proposalsError, proposalsState, publishProposal, refreshBatches, refreshModelConfig, refreshProposals,
-    refreshReleases, releaseDetails, releases, releasesError, releasesState, resolveRevisionLabel, reviewProposal, rollback, reviews,
+    generateProposal, loadBatchDetail, loadMoreReleases, loadPolicyDecision, loadProposal, loadReleaseDetail, loadValidationRuns, modelProviders, modelProvidersError,
+    modelProvidersState, proposalDetails, proposals, proposalsError, proposalsState, publishProposal, refreshBatches, refreshModelConfig, refreshProposals,
+    refreshReleases, releaseDetails, releaseDetailStates, releases, releasesAppendError, releasesError, releasesLoadingMore, releasesNextCursor, releasesState, releasesTotal, resolveRevisionLabel, reviewProposal, rollback, reviews,
     setDefaultModelSetting, submitProposal, updateModelSetting, updateProvider, validationRuns, workflowStateByAsset, workspaceId,
   ]);
 
