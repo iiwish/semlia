@@ -454,7 +454,7 @@ function projectAsset(workspaceId: string, summary: CatalogAsset, detail: Catalo
   const revision = detail?.currentRevision;
   const content = revision?.content ?? {};
   const [namespace, key] = splitAddress(summary.address);
-  const name = stringValue(content.name) || stringValue(content.title) || summary.title || key;
+  const name = stringValue(content.displayName) || stringValue(content.name) || stringValue(content.title) || summary.title || key;
   const definition = stringValue(content.definition) || stringValue(content.summary) || summary.summary || "尚未声明规范定义。";
   const aliases = stringArray(content.aliases);
   const includes = stringArray(content.includes);
@@ -481,7 +481,7 @@ function projectAsset(workspaceId: string, summary: CatalogAsset, detail: Catalo
       release: record.releaseId ?? relationSection?.releaseId ?? "服务端未提供 release 基准",
     }];
   });
-  const owner = stringValue(content.owner) || "未分配";
+  const owner = stringValue(content.ownerPrincipalId) || stringValue(content.owner) || "未分配";
   const maintainer = stringValue(content.maintainer) || "未分配";
   const domain = stringValue(content.domain) || namespace || "未分域";
 

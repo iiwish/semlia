@@ -23,6 +23,29 @@ import (
 
 const traceID = "4bf92f3577b34da6a3ce929d0e0e4736"
 
+func TestProductionDisplayNameAppearsInCatalog(t *testing.T) {
+	pool, _, service := fixture(t)
+	workspaceID := createWorkspace(t, pool, "catalog-production-name")
+	created, err := service.CreateAsset(context.Background(), application.CreateAssetRequest{
+		WorkspaceID: workspaceID, Address: "demo.net_revenue", AssetType: semantic.Metric,
+		Lifecycle: "active", SchemaVersion: "1.0.0", CreatedBy: "catalog-test", TraceID: traceID,
+		Content: json.RawMessage(`{"displayName":"Synthetic net revenue","name":"Legacy name","definition":"Synthetic revenue after refunds"}`),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.Title != "Synthetic net revenue" {
+		t.Fatalf("detail title = %q", created.Title)
+	}
+	page, err := service.ListAssets(context.Background(), application.ListAssetsRequest{WorkspaceID: workspaceID, Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Items) != 1 || page.Items[0].Title != "Synthetic net revenue" {
+		t.Fatalf("catalog title mismatch: %+v", page.Items)
+	}
+}
+
 var databaseURL string
 
 func TestMain(testingMain *testing.M) {
