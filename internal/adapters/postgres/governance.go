@@ -9,6 +9,7 @@ import (
 	dbgen "github.com/iiwish/semlia/internal/adapters/postgres/sqlc"
 	governanceapp "github.com/iiwish/semlia/internal/application/governance"
 	"github.com/iiwish/semlia/internal/domain/governance"
+	operationsdomain "github.com/iiwish/semlia/internal/domain/operations"
 	"github.com/iiwish/semlia/pkg/identity"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -435,6 +436,9 @@ func (store *Store) TransitionProposal(ctx context.Context, command governanceap
 	}); err != nil {
 		return governance.Proposal{}, governanceRepositoryError("record proposal transition events", err)
 	}
+	if err := projectProposalAttention(ctx, queries, transitioned, command.TraceID, command.UpdatedAt); err != nil {
+		return governance.Proposal{}, governanceRepositoryError("project proposal attention", err)
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return governance.Proposal{}, governanceRepositoryError("commit proposal transition", err)
 	}
@@ -553,6 +557,34 @@ func (store *Store) CreateReview(ctx context.Context, review governance.Review) 
 	return reviewFromRow(row)
 }
 
+func (store *Store) ListProposalReviews(
+	ctx context.Context, workspace identity.WorkspaceID, proposal identity.ProposalID,
+) ([]governance.Review, error) {
+	workspaceID, err := uuidValue(workspace)
+	if err != nil {
+		return nil, fmt.Errorf("encode workspace ID: %w", err)
+	}
+	proposalID, err := uuidValue(proposal)
+	if err != nil {
+		return nil, fmt.Errorf("encode proposal ID: %w", err)
+	}
+	rows, err := store.queries.ListProposalReviews(ctx, dbgen.ListProposalReviewsParams{
+		WorkspaceID: workspaceID, ProposalID: proposalID,
+	})
+	if err != nil {
+		return nil, governanceRepositoryError("list proposal reviews", err)
+	}
+	reviews := make([]governance.Review, 0, len(rows))
+	for _, row := range rows {
+		review, mapErr := reviewFromRow(row)
+		if mapErr != nil {
+			return nil, mapErr
+		}
+		reviews = append(reviews, review)
+	}
+	return reviews, nil
+}
+
 // ---------- validation ----------
 
 func (store *Store) CreateValidationRun(ctx context.Context, run governance.ValidationRun) (governance.ValidationRun, error) {
@@ -568,7 +600,13 @@ func (store *Store) CreateValidationRun(ctx context.Context, run governance.Vali
 	if err != nil {
 		return governance.ValidationRun{}, fmt.Errorf("encode proposal ID: %w", err)
 	}
-	row, err := store.queries.CreateValidationRun(ctx, dbgen.CreateValidationRunParams{
+	tx, err := store.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return governance.ValidationRun{}, governanceRepositoryError("begin validation run", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	queries := dbgen.New(tx)
+	row, err := queries.CreateValidationRun(ctx, dbgen.CreateValidationRunParams{
 		ID: runID, WorkspaceID: workspaceID, ProposalID: proposalID,
 		ValidatorID: run.ValidatorID, ValidatorVersion: run.ValidatorVersion,
 		Status: string(run.Status), StartedAt: timestamp(run.StartedAt),
@@ -576,7 +614,31 @@ func (store *Store) CreateValidationRun(ctx context.Context, run governance.Vali
 	if err != nil {
 		return governance.ValidationRun{}, governanceRepositoryError("create validation run", err)
 	}
-	return validationRunFromRow(row)
+	created, err := validationRunFromRow(row)
+	if err != nil {
+		return governance.ValidationRun{}, err
+	}
+	runtimeID, err := identity.NewRunID()
+	if err != nil {
+		return governance.ValidationRun{}, err
+	}
+	event, err := newRuntimeEvent(run.WorkspaceID, runtimeID, "running", operationsdomain.RunEventState,
+		operationsdomain.RunRunning, "running", "", "", run.StartedAt)
+	if err != nil {
+		return governance.ValidationRun{}, err
+	}
+	if err := projectRuntime(ctx, queries, operationsdomain.RuntimeRun{ID: runtimeID, WorkspaceID: run.WorkspaceID,
+		Kind: operationsdomain.RunKindValidation, SourceType: "validation_run", SourceID: run.ID.String(),
+		SourceVersionDigest: runtimeDigest(run.ProposalID.String(), run.ValidatorID, run.ValidatorVersion),
+		IdempotencyKey:      boundedRuntimeIdempotencyKey("runtime:validation:", run.ID.String()), State: operationsdomain.RunRunning, Phase: "running",
+		MaxAttempts: 1, StartedAt: timePointer(run.StartedAt), Version: 1,
+		CreatedAt: run.StartedAt.UTC(), UpdatedAt: run.StartedAt.UTC()}, event); err != nil {
+		return governance.ValidationRun{}, governanceRepositoryError("project validation run", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return governance.ValidationRun{}, governanceRepositoryError("commit validation run", err)
+	}
+	return created, nil
 }
 
 func (store *Store) GetValidationRun(
@@ -608,14 +670,53 @@ func (store *Store) FinishValidationRun(ctx context.Context, command governancea
 	if err != nil {
 		return governance.ValidationRun{}, fmt.Errorf("encode validation run ID: %w", err)
 	}
-	row, err := store.queries.FinishValidationRun(ctx, dbgen.FinishValidationRunParams{
+	tx, err := store.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return governance.ValidationRun{}, governanceRepositoryError("begin validation finish", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	queries := dbgen.New(tx)
+	row, err := queries.FinishValidationRun(ctx, dbgen.FinishValidationRunParams{
 		WorkspaceID: workspaceID, ValidationRunID: runID, Status: string(command.Status),
 		FinishedAt: timestamp(command.FinishedAt),
 	})
 	if err != nil {
 		return governance.ValidationRun{}, governanceRepositoryError("finish validation run", err)
 	}
-	return validationRunFromRow(row)
+	finished, err := validationRunFromRow(row)
+	if err != nil {
+		return governance.ValidationRun{}, err
+	}
+	stored, err := queries.GetOperationsRuntimeRunBySource(ctx, dbgen.GetOperationsRuntimeRunBySourceParams{
+		WorkspaceID: workspaceID, Kind: string(operationsdomain.RunKindValidation),
+		SourceType: "validation_run", SourceID: command.RunID.String()})
+	if err != nil {
+		return governance.ValidationRun{}, governanceRepositoryError("load validation runtime projection", err)
+	}
+	projected, err := runtimeRunFromRow(stored)
+	if err != nil {
+		return governance.ValidationRun{}, err
+	}
+	projected.State, projected.Phase, projected.FinishedAt, projected.UpdatedAt = operationsdomain.RunState(command.Status),
+		string(command.Status), timePointer(command.FinishedAt), command.FinishedAt.UTC()
+	if projected.State == operationsdomain.RunFailed {
+		projected.ErrorCode, projected.ErrorSummary = "VALIDATION_FAILED", "validation run failed"
+	}
+	event, err := newRuntimeEvent(command.WorkspaceID, projected.ID, "state:"+string(command.Status), operationsdomain.RunEventState,
+		projected.State, projected.Phase, projected.ErrorCode, projected.ErrorSummary, command.FinishedAt)
+	if err != nil {
+		return governance.ValidationRun{}, err
+	}
+	if err := projectRuntime(ctx, queries, projected, event); err != nil {
+		return governance.ValidationRun{}, governanceRepositoryError("project validation finish", err)
+	}
+	if err := projectValidationAttention(ctx, queries, row, command.FinishedAt); err != nil {
+		return governance.ValidationRun{}, governanceRepositoryError("project validation attention", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return governance.ValidationRun{}, governanceRepositoryError("commit validation finish", err)
+	}
+	return finished, nil
 }
 
 func (store *Store) CreateValidationResult(ctx context.Context, result governance.ValidationResult) (governance.ValidationResult, error) {
@@ -1059,7 +1160,13 @@ func (store *Store) CreateAgentRun(ctx context.Context, run governance.AgentRun)
 			return governance.AgentRun{}, fmt.Errorf("encode principal ID: %w", err)
 		}
 	}
-	row, err := store.queries.CreateAgentRun(ctx, dbgen.CreateAgentRunParams{
+	tx, err := store.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return governance.AgentRun{}, governanceRepositoryError("begin agent run", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	queries := dbgen.New(tx)
+	row, err := queries.CreateAgentRun(ctx, dbgen.CreateAgentRunParams{
 		ID: runID, WorkspaceID: workspaceID, PrincipalID: principalID,
 		Model: run.Model, ConfigRevision: run.ConfigRevision, InputHash: run.InputHash,
 		Status: string(run.Status), CostMicros: run.CostMicros,
@@ -1068,7 +1175,30 @@ func (store *Store) CreateAgentRun(ctx context.Context, run governance.AgentRun)
 	if err != nil {
 		return governance.AgentRun{}, governanceRepositoryError("create agent run", err)
 	}
-	return agentRunFromRow(row)
+	created, err := agentRunFromRow(row)
+	if err != nil {
+		return governance.AgentRun{}, err
+	}
+	runtimeID, err := identity.NewRunID()
+	if err != nil {
+		return governance.AgentRun{}, err
+	}
+	event, err := newRuntimeEvent(run.WorkspaceID, runtimeID, "running", operationsdomain.RunEventState,
+		operationsdomain.RunRunning, "running", "", "", run.StartedAt)
+	if err != nil {
+		return governance.AgentRun{}, err
+	}
+	if err := projectRuntime(ctx, queries, operationsdomain.RuntimeRun{ID: runtimeID, WorkspaceID: run.WorkspaceID,
+		Kind: operationsdomain.RunKindAgent, SourceType: "agent_run", SourceID: run.ID.String(),
+		SourceVersionDigest: normalizedRuntimeDigest(run.InputHash), IdempotencyKey: boundedRuntimeIdempotencyKey("runtime:agent:", run.ID.String()),
+		RequestedByPrincipalID: run.PrincipalID, State: operationsdomain.RunRunning, Phase: "running", MaxAttempts: 1,
+		StartedAt: timePointer(run.StartedAt), Version: 1, CreatedAt: run.CreatedAt.UTC(), UpdatedAt: run.CreatedAt.UTC()}, event); err != nil {
+		return governance.AgentRun{}, governanceRepositoryError("project agent run", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return governance.AgentRun{}, governanceRepositoryError("commit agent run", err)
+	}
+	return created, nil
 }
 
 func (store *Store) GetAgentRun(
@@ -1098,7 +1228,13 @@ func (store *Store) FinishAgentRun(ctx context.Context, command governanceapp.Ag
 	if err != nil {
 		return governance.AgentRun{}, fmt.Errorf("encode agent run ID: %w", err)
 	}
-	row, err := store.queries.FinishAgentRun(ctx, dbgen.FinishAgentRunParams{
+	tx, err := store.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return governance.AgentRun{}, governanceRepositoryError("begin agent finish", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	queries := dbgen.New(tx)
+	row, err := queries.FinishAgentRun(ctx, dbgen.FinishAgentRunParams{
 		WorkspaceID: workspaceID, AgentRunID: runID, Status: string(command.FinalState),
 		OutputDigest: optionalTextFromPointer(command.OutputDigest), CostMicros: command.CostMicros,
 		FinishedAt: timestamp(command.FinishedAt), DurationMs: pgtype.Int8{Int64: command.DurationMS, Valid: true},
@@ -1106,7 +1242,36 @@ func (store *Store) FinishAgentRun(ctx context.Context, command governanceapp.Ag
 	if err != nil {
 		return governance.AgentRun{}, governanceRepositoryError("finish agent run", err)
 	}
-	return agentRunFromRow(row)
+	finished, err := agentRunFromRow(row)
+	if err != nil {
+		return governance.AgentRun{}, err
+	}
+	stored, err := queries.GetOperationsRuntimeRunBySource(ctx, dbgen.GetOperationsRuntimeRunBySourceParams{
+		WorkspaceID: workspaceID, Kind: string(operationsdomain.RunKindAgent), SourceType: "agent_run", SourceID: command.RunID.String()})
+	if err != nil {
+		return governance.AgentRun{}, governanceRepositoryError("load agent runtime projection", err)
+	}
+	projected, err := runtimeRunFromRow(stored)
+	if err != nil {
+		return governance.AgentRun{}, err
+	}
+	projected.State, projected.Phase, projected.FinishedAt, projected.UpdatedAt = operationsdomain.RunState(command.FinalState),
+		string(command.FinalState), timePointer(command.FinishedAt), command.FinishedAt.UTC()
+	if projected.State == operationsdomain.RunFailed {
+		projected.ErrorCode, projected.ErrorSummary = "AGENT_FAILED", "agent run failed"
+	}
+	event, err := newRuntimeEvent(command.WorkspaceID, projected.ID, "state:"+string(command.FinalState), operationsdomain.RunEventState,
+		projected.State, projected.Phase, projected.ErrorCode, projected.ErrorSummary, command.FinishedAt)
+	if err != nil {
+		return governance.AgentRun{}, err
+	}
+	if err := projectRuntime(ctx, queries, projected, event); err != nil {
+		return governance.AgentRun{}, governanceRepositoryError("project agent finish", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return governance.AgentRun{}, governanceRepositoryError("commit agent finish", err)
+	}
+	return finished, nil
 }
 
 func (store *Store) CreateAgentStep(ctx context.Context, step governance.AgentStep) (governance.AgentStep, error) {
@@ -1192,6 +1357,17 @@ func proposalFromRow(row dbgen.Proposal) (governance.Proposal, error) {
 	if row.DecidedAt.Valid {
 		decidedAt := row.DecidedAt.Time.UTC()
 		proposal.DecidedAt = &decidedAt
+	}
+	if row.ProductionOperationID.Valid {
+		opID, opErr := identity.ProductionOperationIDFromUUIDBytes(row.ProductionOperationID.Bytes)
+		if opErr != nil {
+			return governance.Proposal{}, opErr
+		}
+		proposal.ProductionOperationID = &opID
+	}
+	if row.ProductionVersion.Valid {
+		v := int(row.ProductionVersion.Int32)
+		proposal.ProductionVersion = &v
 	}
 	return proposal, nil
 }
@@ -1330,6 +1506,24 @@ func releaseFromRow(row dbgen.Release) (governance.Release, error) {
 			return governance.Release{}, proposalErr
 		}
 		release.OriginProposalID = &proposalID
+	}
+	if row.ProductionRootReleaseID.Valid {
+		rootID, rootErr := identity.ReleaseIDFromUUIDBytes(row.ProductionRootReleaseID.Bytes)
+		if rootErr != nil {
+			return governance.Release{}, rootErr
+		}
+		release.ProductionRootReleaseID = &rootID
+	}
+	if row.ProductionRollbackParentID.Valid {
+		parentID, parentErr := identity.ReleaseIDFromUUIDBytes(row.ProductionRollbackParentID.Bytes)
+		if parentErr != nil {
+			return governance.Release{}, parentErr
+		}
+		release.ProductionRollbackParentID = &parentID
+	}
+	if row.ProductionRollbackDepth.Valid {
+		d := int(row.ProductionRollbackDepth.Int32)
+		release.ProductionRollbackDepth = &d
 	}
 	return release, nil
 }

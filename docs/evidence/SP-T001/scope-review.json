@@ -1,0 +1,64 @@
+{
+  "checkedAt": "2026-09-09T04:54:14.233Z",
+  "changedSincePreflight": [
+    "docs/README.md",
+    "docs/SSOT.md",
+    "docs/specs/semantic-production/checklists/requirements.md",
+    "docs/specs/semantic-production/packets/SP-T001.yaml",
+    "docs/specs/semantic-production/plan.md",
+    "docs/specs/semantic-production/product-design.md",
+    "docs/specs/semantic-production/tasks.md"
+  ],
+  "newPaths": [
+    "docs/evidence/SP-T001/attempts/SP-T001-A001.md",
+    "docs/evidence/SP-T001/baseline-integration.jsonl",
+    "docs/evidence/SP-T001/baseline-integration.result.json",
+    "docs/evidence/SP-T001/baseline-unit.jsonl",
+    "docs/evidence/SP-T001/baseline-unit.result.json",
+    "docs/evidence/SP-T001/baseline.md",
+    "docs/evidence/SP-T001/checkout.json",
+    "docs/evidence/SP-T001/coverage.md",
+    "docs/evidence/SP-T001/environment-after.json",
+    "docs/evidence/SP-T001/pm-verification.jsonl",
+    "docs/evidence/SP-T001/pm-verification.result.json",
+    "docs/evidence/SP-T001/worker/artifact-hashes.json",
+    "docs/evidence/SP-T001/worker/diff-check.json",
+    "docs/evidence/SP-T001/worker/green-01.json",
+    "docs/evidence/SP-T001/worker/green-final.json",
+    "docs/evidence/SP-T001/worker/green-handoff.json",
+    "docs/evidence/SP-T001/worker/red.json",
+    "docs/evidence/SP-T001/worker/test-contracts.json",
+    "docs/evidence/SP-T001/worker/test-repository-rerun.json",
+    "docs/evidence/SP-T001/worker/test-repository.json",
+    "docs/evidence/SP-T001/worker/timing.json",
+    "docs/evidence/SP-T001/worker/untracked-diff-check.json",
+    "docs/specs/semantic-production/contracts/production.md",
+    "docs/specs/semantic-production/contracts/production.openapi.yaml",
+    "docs/specs/semantic-production/data-model.md",
+    "tests/contracts/semantic_production_contract_test.go"
+  ],
+  "outOfScope": [],
+  "artifactHashes": [
+    {
+      "path": "docs/specs/semantic-production/data-model.md",
+      "sha256": "ecf988070f67a565c61b8cbd4461742cb7f3997202e3464999df34ab2f2e912e",
+      "bytes": 32326
+    },
+    {
+      "path": "docs/specs/semantic-production/contracts/production.openapi.yaml",
+      "sha256": "76625eb6787c5f3dd66f222dd8349e7d529ecb86d7c948a2f6a6165adb3f1143",
+      "bytes": 55175
+    },
+    {
+      "path": "docs/specs/semantic-production/contracts/production.md",
+      "sha256": "54b03d36f24f60da4c5eae7034566f136aad24bc788fa536fe0668232ab5890b",
+      "bytes": 24417
+    },
+    {
+      "path": "tests/contracts/semantic_production_contract_test.go",
+      "sha256": "02acb94fea8078ef4434c3d93983aa21180849c59563ca7a3f7d9c4bb7e51f6f",
+      "bytes": 14833
+    }
+  ],
+  "diffScope": "Only four new worker implementation artifacts; PM metadata/status edits are described in summary, not mixed with pre-existing dirty diffs."
+}

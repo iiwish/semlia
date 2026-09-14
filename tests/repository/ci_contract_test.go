@@ -21,8 +21,31 @@ type workflowDocument struct {
 }
 
 type workflowJob struct {
+	Uses        string            `yaml:"uses"`
+	Needs       []string          `yaml:"needs"`
 	Permissions map[string]string `yaml:"permissions"`
 	Steps       []workflowStep    `yaml:"steps"`
+}
+
+func TestReleaseRequiresSameRevisionGates(t *testing.T) {
+	release := readWorkflow(t, "release.yml")
+	for job, file := range map[string]string{"source-and-smoke": "ci.yml", "security": "security.yml"} {
+		if release.Jobs[job].Uses != "./.github/workflows/"+file {
+			t.Fatalf("missing local reusable gate %s", job)
+		}
+		found := false
+		for _, dependency := range release.Jobs["build"].Needs {
+			if dependency == job {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("release build does not depend on %s", job)
+		}
+		if _, ok := readWorkflow(t, file).On["workflow_call"]; !ok {
+			t.Fatalf("%s cannot be called", file)
+		}
+	}
 }
 
 type workflowStep struct {
@@ -89,7 +112,7 @@ func TestCIRequiredFilesAndLocalCommandsExist(t *testing.T) {
 	}
 
 	checkRecipe := regexp.MustCompile(`(?ms)^check:.*?(?:\n\S|\z)`).FindString(makefile)
-	for _, requiredTarget := range []string{"check-source", "check-smoke", "security-check"} {
+	for _, requiredTarget := range []string{"check-source", "check-browser", "check-smoke", "security-check"} {
 		if !strings.Contains(checkRecipe, requiredTarget) {
 			t.Errorf("make check does not include %s", requiredTarget)
 		}
@@ -98,7 +121,7 @@ func TestCIRequiredFilesAndLocalCommandsExist(t *testing.T) {
 
 func TestCIWorkflowsMapValidationToMake(t *testing.T) {
 	expected := map[string][]string{
-		"ci.yml":       {"make check-smoke", "make check-source"},
+		"ci.yml":       {"make check-smoke", "make check-source", "make browser-bootstrap", "make check-browser"},
 		"security.yml": {"make security-check"},
 		"release.yml":  {"make release"},
 	}
@@ -275,7 +298,7 @@ func TestDockerRunScriptsApplyValidatedTaskResourceLabel(t *testing.T) {
 		runs    int
 	}{
 		{path: "scripts/ci/security-check.sh", runs: 2},
-		{path: "scripts/release/sbom.sh", runArgs: []string{"build/semlia", "build/release/semlia.sbom.cdx.json"}, runs: 1},
+		{path: "scripts/release/sbom.sh", runArgs: []string{"build/semlia", "build/release/semlia.sbom.cdx.json"}, runs: 4},
 	}
 	for _, test := range tests {
 		t.Run(filepath.Base(test.path), func(t *testing.T) {
@@ -321,6 +344,18 @@ func runDockerScriptWithLabel(t *testing.T, relativePath string, args []string, 
 	}
 	if err := os.WriteFile(filepath.Join(scratch, "build", "semlia"), []byte("test binary\n"), 0o755); err != nil {
 		t.Fatal(err)
+	}
+	if relativePath == "scripts/release/sbom.sh" {
+		if err := os.WriteFile(filepath.Join(scratch, "scripts/release/normalize-sbom.mjs"), []byte(read(t, "scripts/release/normalize-sbom.mjs")), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(filepath.Join(scratch, "build/release"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		// Docker is a call-recording stub in this resource-label test.
+		if err := os.WriteFile(filepath.Join(scratch, "build/release/semlia.sbom.cdx.json"), []byte(`{"components":[]}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	bin := filepath.Join(scratch, "bin")

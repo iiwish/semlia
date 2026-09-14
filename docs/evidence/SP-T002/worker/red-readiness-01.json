@@ -1,0 +1,25 @@
+{
+  "command": [
+    "go",
+    "test",
+    "./cmd/semlia",
+    "-run",
+    "TestSourceSnapshotReadiness|TestReadinessRequiresSource",
+    "-count=1",
+    "-v",
+    "-timeout",
+    "5m"
+  ],
+  "clearedEnvironment": [
+    "SEMLIA_INGESTION_TEST_DATABASE_URL",
+    "SEMLIA_EXECUTION_CRASH_HELPER",
+    "SEMLIA_EXECUTION_TEST_DB",
+    "SEMLIA_DATABASE_URL"
+  ],
+  "start": "2026-09-09T06:57:36.327Z",
+  "end": "2026-09-09T06:57:45.163Z",
+  "exitStatus": 1,
+  "signal": null,
+  "stdout": "=== RUN   TestReadinessRequiresSourceSnapshotMigration\n    readiness_test.go:58: required migration version = 21, want 22\n--- FAIL: TestReadinessRequiresSourceSnapshotMigration (0.00s)\n=== RUN   TestSourceSnapshotReadinessRejectsSchemaDrift\n2026/09/09 14:57:41 github.com/testcontainers/testcontainers-go - Connected to docker: \n  Server Version: 29.4.0\n  API Version: 1.54\n  Operating System: OrbStack\n  Total Memory: 16040 MB\n  Testcontainers for Go Version: v0.44.0\n  Resolved Docker Host: unix:///var/run/docker.sock\n  Resolved Docker Socket Path: /var/run/docker.sock\n  Test SessionID: 8f8906553608fc63b35ff1692c78898e6aa73586c9300c4bf68f954869ce06b7\n  Test ProcessID: f17eb997-2c40-4c06-a6e4-bd859db08940\n2026/09/09 14:57:41 🐳 Creating container for image postgres:18-alpine\n2026/09/09 14:57:41 🐳 Creating container for image testcontainers/ryuk:0.14.0\n2026/09/09 14:57:41 ✅ Container created: 2ad3664fa658\n2026/09/09 14:57:41 🐳 Starting container: 2ad3664fa658\n2026/09/09 14:57:41 ✅ Container started: 2ad3664fa658\n2026/09/09 14:57:41 ⏳ Waiting for container id 2ad3664fa658 image: testcontainers/ryuk:0.14.0. Waiting for: all of: [log message \"Started\", port 8080/tcp to be listening]\n2026/09/09 14:57:42 Shell not found in container\n2026/09/09 14:57:42 🔔 Container is ready: 2ad3664fa658\n2026/09/09 14:57:42 ✅ Container created: dfd1567e0bcd\n2026/09/09 14:57:42 🐳 Starting container: dfd1567e0bcd\n2026/09/09 14:57:42 ✅ Container started: dfd1567e0bcd\n2026/09/09 14:57:42 ⏳ Waiting for container id dfd1567e0bcd image: postgres:18-alpine. Waiting for: all of: [log message \"database system is ready to accept connections\" (occurrence: 2), port 5432/tcp to be listening]\n2026/09/09 14:57:44 🔔 Container is ready: dfd1567e0bcd\n    readiness_test.go:78: valid schema rejected: required dependency is unavailable\n2026/09/09 14:57:44 🐳 Stopping container: dfd1567e0bcd\n2026/09/09 14:57:44 ✅ Container stopped: dfd1567e0bcd\n2026/09/09 14:57:44 🐳 Terminating container: dfd1567e0bcd\n2026/09/09 14:57:45 🚫 Container terminated: dfd1567e0bcd\n--- FAIL: TestSourceSnapshotReadinessRejectsSchemaDrift (3.62s)\nFAIL\nFAIL\tgithub.com/iiwish/semlia/cmd/semlia\t4.397s\nFAIL\n",
+  "stderr": ""
+}

@@ -159,7 +159,9 @@ func governanceRouteMethods(kind routeKind) []string {
 	case routeGovernanceProposals, routeGovernanceReviewBatches, routeGovernanceReleases,
 		routeGovernanceModelProviders, routeGovernanceModelSettings:
 		return []string{http.MethodGet, http.MethodPost}
-	case routeGovernanceProposalSubmit, routeGovernanceProposalReviews,
+	case routeGovernanceProposalReviews:
+		return []string{http.MethodGet, http.MethodPost}
+	case routeGovernanceProposalSubmit,
 		routeGovernanceReviewBatchConfirm, routeGovernanceReleaseRollback,
 		routeGovernanceModelSettingDefault, routeGovernanceGenerateProposal:
 		return []string{http.MethodPost}
@@ -191,14 +193,14 @@ func (handler *Handler) routeGovernance(
 		if parseErr != nil {
 			return writeGovernanceError(response, domain.ErrInvalidArgument, traceID)
 		}
-		release, getErr := handler.governance.Publishing().GetRelease(request.Context(), governanceapp.GetReleaseRequest{
+		detail, getErr := handler.governance.Publishing().GetRelease(request.Context(), governanceapp.GetReleaseRequest{
 			WorkspaceID: workspaceID, ReleaseID: releaseID,
-			PrincipalRef: strings.TrimSpace(request.Header.Get(headerPrincipal)), TraceID: traceID,
+			PrincipalRef: principalRef(request), TraceID: traceID,
 		})
 		if getErr != nil {
 			return writeGovernanceError(response, getErr, traceID)
 		}
-		writeJSON(response, http.StatusOK, governanceReleaseDetailResponse(release))
+		writeJSON(response, http.StatusOK, governanceReleaseDetailResponse(detail))
 		return ""
 	case routeGovernanceReleaseRollback:
 		releaseID, parseErr := identity.ParseReleaseID(route.release)
@@ -211,12 +213,18 @@ func (handler *Handler) routeGovernance(
 		}
 		release, rollbackErr := handler.governance.Publishing().RollbackRelease(request.Context(), governanceapp.RollbackReleaseRequest{
 			WorkspaceID: workspaceID, ReleaseID: releaseID,
-			PrincipalRef: strings.TrimSpace(request.Header.Get(headerPrincipal)), TraceID: traceID,
+			PrincipalRef: principalRef(request), TraceID: traceID,
 		})
 		if rollbackErr != nil {
 			return writeGovernanceError(response, rollbackErr, traceID)
 		}
-		writeJSON(response, http.StatusCreated, governanceReleaseDetailResponse(release))
+		detail, getErr := handler.governance.Publishing().CommittedReleaseDetail(
+			request.Context(), workspaceID, release.ID, principalRef(request), traceID,
+		)
+		if getErr != nil {
+			detail = unavailableReleaseDetail(release)
+		}
+		writeJSON(response, http.StatusCreated, governanceReleaseDetailResponse(detail))
 		return ""
 	case routeGovernanceProposals:
 		if request.Method == http.MethodPost {
@@ -230,7 +238,7 @@ func (handler *Handler) routeGovernance(
 		}
 		detail, getErr := handler.governance.GetProposal(request.Context(), governanceapp.GetAuthoringProposalRequest{
 			WorkspaceID: workspaceID, ProposalID: proposalID,
-			PrincipalRef: strings.TrimSpace(request.Header.Get(headerPrincipal)), TraceID: traceID,
+			PrincipalRef: principalRef(request), TraceID: traceID,
 		})
 		if getErr != nil {
 			return writeGovernanceError(response, getErr, traceID)
@@ -244,7 +252,7 @@ func (handler *Handler) routeGovernance(
 		}
 		detail, submitErr := handler.governance.SubmitProposal(request.Context(), governanceapp.SubmitAuthoringProposalRequest{
 			WorkspaceID: workspaceID, ProposalID: proposalID,
-			PrincipalRef: strings.TrimSpace(request.Header.Get(headerPrincipal)), TraceID: traceID,
+			PrincipalRef: principalRef(request), TraceID: traceID,
 		})
 		if submitErr != nil {
 			return writeGovernanceError(response, submitErr, traceID)
@@ -258,7 +266,7 @@ func (handler *Handler) routeGovernance(
 		}
 		records, listErr := handler.governance.ListValidationRuns(request.Context(), governanceapp.ListValidationRunsRequest{
 			WorkspaceID: workspaceID, ProposalID: proposalID,
-			PrincipalRef: strings.TrimSpace(request.Header.Get(headerPrincipal)), TraceID: traceID,
+			PrincipalRef: principalRef(request), TraceID: traceID,
 		})
 		if listErr != nil {
 			return writeGovernanceError(response, listErr, traceID)
@@ -276,7 +284,7 @@ func (handler *Handler) routeGovernance(
 		}
 		detail, decisionErr := handler.governance.GetPolicyDecision(request.Context(), governanceapp.GetPolicyDecisionRequest{
 			WorkspaceID: workspaceID, ProposalID: proposalID,
-			PrincipalRef: strings.TrimSpace(request.Header.Get(headerPrincipal)), TraceID: traceID,
+			PrincipalRef: principalRef(request), TraceID: traceID,
 		})
 		if decisionErr != nil {
 			return writeGovernanceError(response, decisionErr, traceID)
@@ -287,6 +295,21 @@ func (handler *Handler) routeGovernance(
 		proposalID, parseErr := identity.ParseProposalID(route.proposal)
 		if parseErr != nil {
 			return writeGovernanceError(response, domain.ErrInvalidArgument, traceID)
+		}
+		if request.Method == http.MethodGet {
+			reviews, listErr := handler.governance.ListProposalReviews(request.Context(), governanceapp.ListProposalReviewsRequest{
+				WorkspaceID: workspaceID, ProposalID: proposalID,
+				PrincipalRef: principalRef(request), TraceID: traceID,
+			})
+			if listErr != nil {
+				return writeGovernanceError(response, listErr, traceID)
+			}
+			items := make([]contract.GovernanceReview, 0, len(reviews))
+			for _, review := range reviews {
+				items = append(items, governanceReviewResponse(review))
+			}
+			writeJSON(response, http.StatusOK, contract.GovernanceReviewPage{Items: items})
+			return ""
 		}
 		outcome, reviewErr := handler.createProposalReview(request, traceID, workspaceID, proposalID)
 		if reviewErr != nil {
@@ -306,7 +329,7 @@ func (handler *Handler) routeGovernance(
 		}
 		detail, getErr := handler.governance.GetReviewBatch(request.Context(), governanceapp.GetReviewBatchRequest{
 			WorkspaceID: workspaceID, BatchID: batchID,
-			PrincipalRef: strings.TrimSpace(request.Header.Get(headerPrincipal)), TraceID: traceID,
+			PrincipalRef: principalRef(request), TraceID: traceID,
 		})
 		if getErr != nil {
 			return writeGovernanceError(response, getErr, traceID)
@@ -374,7 +397,7 @@ func (handler *Handler) routeGovernance(
 		}
 		setting, defaultErr := handler.governance.ModelConfig().SetDefault(request.Context(), governanceapp.SetDefaultModelSettingRequest{
 			WorkspaceID: workspaceID, SettingID: settingID,
-			PrincipalRef: strings.TrimSpace(request.Header.Get(headerPrincipal)), TraceID: traceID,
+			PrincipalRef: principalRef(request), TraceID: traceID,
 		})
 		if defaultErr != nil {
 			return writeGovernanceError(response, defaultErr, traceID)
@@ -420,7 +443,7 @@ func (handler *Handler) createProposalReview(
 	return handler.governance.ReviewProposal(request.Context(), governanceapp.ReviewProposalRequest{
 		WorkspaceID: workspaceID, ProposalID: proposalID,
 		Decision: governanceapp.ReviewCommandDecision(body.Decision), Reason: body.Reason,
-		PrincipalRef: strings.TrimSpace(request.Header.Get(headerPrincipal)), TraceID: traceID,
+		PrincipalRef: principalRef(request), TraceID: traceID,
 	})
 }
 
@@ -439,7 +462,7 @@ func (handler *Handler) createReviewBatches(
 	}
 	details, err := handler.governance.CreateReviewBatches(request.Context(), governanceapp.CreateReviewBatchesRequest{
 		WorkspaceID:  workspaceID,
-		PrincipalRef: strings.TrimSpace(request.Header.Get(headerPrincipal)), TraceID: traceID,
+		PrincipalRef: principalRef(request), TraceID: traceID,
 	})
 	if err != nil {
 		return writeGovernanceError(response, err, traceID)
@@ -460,7 +483,7 @@ func (handler *Handler) listReviewBatches(
 	}
 	page, err := handler.governance.ListOpenReviewBatches(request.Context(), governanceapp.ListReviewBatchesRequest{
 		WorkspaceID: workspaceID, Limit: limit, Cursor: request.URL.Query().Get("cursor"),
-		PrincipalRef: strings.TrimSpace(request.Header.Get(headerPrincipal)), TraceID: traceID,
+		PrincipalRef: principalRef(request), TraceID: traceID,
 	})
 	if err != nil {
 		return writeGovernanceError(response, err, traceID)
@@ -486,7 +509,7 @@ func (handler *Handler) confirmReviewBatch(
 	return handler.governance.ConfirmReviewBatch(request.Context(), governanceapp.ConfirmReviewBatchRequest{
 		WorkspaceID: workspaceID, BatchID: batchID,
 		Decision: governanceapp.ReviewCommandDecision(body.Decision), Reason: body.Reason,
-		PrincipalRef: strings.TrimSpace(request.Header.Get(headerPrincipal)), TraceID: traceID,
+		PrincipalRef: principalRef(request), TraceID: traceID,
 	})
 }
 
@@ -506,12 +529,18 @@ func (handler *Handler) publishGovernanceRelease(
 	}
 	release, err := handler.governance.Publishing().PublishProposal(request.Context(), governanceapp.PublishProposalRequest{
 		WorkspaceID: workspaceID, ProposalID: body.ProposalId,
-		PrincipalRef: strings.TrimSpace(request.Header.Get(headerPrincipal)), TraceID: traceID,
+		PrincipalRef: principalRef(request), TraceID: traceID,
 	})
 	if err != nil {
 		return writeGovernanceError(response, err, traceID)
 	}
-	writeJSON(response, http.StatusCreated, governanceReleaseDetailResponse(release))
+	detail, getErr := handler.governance.Publishing().CommittedReleaseDetail(
+		request.Context(), workspaceID, release.ID, principalRef(request), traceID,
+	)
+	if getErr != nil {
+		detail = unavailableReleaseDetail(release)
+	}
+	writeJSON(response, http.StatusCreated, governanceReleaseDetailResponse(detail))
 	return ""
 }
 
@@ -527,7 +556,7 @@ func (handler *Handler) listGovernanceReleases(
 	}
 	page, err := handler.governance.Publishing().ListReleases(request.Context(), governanceapp.ListReleasesRequest{
 		WorkspaceID: workspaceID, Limit: limit, Cursor: request.URL.Query().Get("cursor"),
-		PrincipalRef: strings.TrimSpace(request.Header.Get(headerPrincipal)), TraceID: traceID,
+		PrincipalRef: principalRef(request), TraceID: traceID,
 	})
 	if err != nil {
 		return writeGovernanceError(response, err, traceID)
@@ -536,7 +565,8 @@ func (handler *Handler) listGovernanceReleases(
 	for _, item := range page.Items {
 		items = append(items, governanceReleaseSummaryResponse(item))
 	}
-	result := contract.GovernanceReleasePage{Items: items, Page: contract.PageInfo{Limit: page.Limit}}
+	total := page.Total
+	result := contract.GovernanceReleasePage{Items: items, Page: contract.PageInfo{Limit: page.Limit, Total: &total}}
 	if page.NextCursor != "" {
 		result.Page.NextCursor = &page.NextCursor
 	}
@@ -565,7 +595,8 @@ func governanceReleaseSummaryResponse(release domain.Release) contract.Governanc
 	return result
 }
 
-func governanceReleaseDetailResponse(release domain.Release) contract.GovernanceReleaseDetail {
+func governanceReleaseDetailResponse(value governanceapp.ReleaseDetail) contract.GovernanceReleaseDetail {
+	release := value.Release
 	summary := governanceReleaseSummaryResponse(release)
 	detail := contract.GovernanceReleaseDetail{
 		Id: summary.Id, Sequence: summary.Sequence, State: summary.State,
@@ -574,11 +605,40 @@ func governanceReleaseDetailResponse(release domain.Release) contract.Governance
 		OriginProposalId:      summary.OriginProposalId,
 		PublishedBy:           summary.PublishedBy, PublishedAt: summary.PublishedAt,
 		CreatedAt: summary.CreatedAt,
+		Authority: value.Authority, Availability: contract.CatalogAuthorityAvailability(value.Availability),
+		ObjectAvailability:         contract.CatalogAuthorityAvailability(value.ObjectAvailability),
+		ConsumerImpactAvailability: contract.CatalogAuthorityAvailability(value.ConsumerImpactAvailability),
+		DiffAvailability:           contract.CatalogAuthorityAvailability(value.DiffAvailability),
+		PriorPinDiff:               make([]contract.GovernanceReleaseDiffEntry, 0, len(value.PriorPinDiff)),
+		CurrentRegistryDiff:        make([]contract.GovernanceReleaseDiffEntry, 0, len(value.CurrentRegistryDiff)),
 		Manifest: contract.GovernanceReleaseManifest{
 			Assets:  make([]contract.GovernanceReleaseManifestAsset, 0, len(release.Entries)),
 			Objects: make([]contract.GovernanceReleaseManifestObject, 0, len(release.Objects)),
 		},
 	}
+	if value.ConsumerImpact != nil {
+		detail.ConsumerImpact = &contract.GovernanceReleaseConsumerImpact{
+			Current: value.ConsumerImpact.Current, Pinned: value.ConsumerImpact.Pinned,
+		}
+	}
+	mapDiff := func(entries []governanceapp.ReleaseDiffEntry) []contract.GovernanceReleaseDiffEntry {
+		result := make([]contract.GovernanceReleaseDiffEntry, 0, len(entries))
+		for _, entry := range entries {
+			var baseline *string
+			if entry.BaselineVersion != "" {
+				value := entry.BaselineVersion
+				baseline = &value
+			}
+			result = append(result, contract.GovernanceReleaseDiffEntry{
+				TargetType: contract.GovernanceTargetObjectType(entry.TargetType), TargetId: entry.TargetID,
+				Change: contract.GovernanceReleaseDiffEntryChange(entry.Change), BaselineVersion: baseline,
+				SelectedVersion: entry.SelectedVersion,
+			})
+		}
+		return result
+	}
+	detail.PriorPinDiff = mapDiff(value.PriorPinDiff)
+	detail.CurrentRegistryDiff = mapDiff(value.CurrentRegistryDiff)
 	for _, entry := range release.Entries {
 		compatibility := entry.Compatibility
 		if len(compatibility) == 0 {
@@ -600,6 +660,14 @@ func governanceReleaseDetailResponse(release domain.Release) contract.Governance
 		})
 	}
 	return detail
+}
+
+func unavailableReleaseDetail(release domain.Release) governanceapp.ReleaseDetail {
+	release.Objects = []domain.ObjectManifestEntry{}
+	return governanceapp.ReleaseDetail{Release: release,
+		Authority: "releases/release_assets/release_object_snapshots", Availability: "failed",
+		ObjectAvailability: "failed", ConsumerImpactAvailability: "failed", DiffAvailability: "failed",
+		PriorPinDiff: []governanceapp.ReleaseDiffEntry{}, CurrentRegistryDiff: []governanceapp.ReleaseDiffEntry{}}
 }
 
 func governancePolicyDecisionResponse(detail governanceapp.PolicyDecisionDetail) contract.GovernancePolicyDecision {
@@ -633,7 +701,7 @@ func (handler *Handler) listGovernanceProposals(
 	}
 	page, err := handler.governance.ListProposals(request.Context(), governanceapp.ListAuthoringProposalsRequest{
 		WorkspaceID: workspaceID, Limit: limit, Cursor: request.URL.Query().Get("cursor"),
-		PrincipalRef: strings.TrimSpace(request.Header.Get(headerPrincipal)), TraceID: traceID,
+		PrincipalRef: principalRef(request), TraceID: traceID,
 	})
 	if err != nil {
 		return writeGovernanceError(response, err, traceID)
@@ -684,7 +752,7 @@ func (handler *Handler) createGovernanceProposal(
 		Reason:         dereferenceString(body.Reason),
 		ChangeSet:      changeSet,
 		CreatedBy:      dereferenceString(body.CreatedBy),
-		PrincipalRef:   strings.TrimSpace(request.Header.Get(headerPrincipal)),
+		PrincipalRef:   principalRef(request),
 		TraceID:        traceID,
 	}
 	if body.BaseRevisionId != nil {
@@ -1048,13 +1116,17 @@ func writeGovernanceError(response http.ResponseWriter, err error, traceID strin
 		return "PROVIDER_UNAVAILABLE"
 	case errors.As(err, &aiOutputInvalid):
 		writeErrorWithDetails(response, http.StatusUnprocessableEntity, "AI_OUTPUT_INVALID",
-			"the agent structured output does not match semlia.proposal-input/v1", traceID,
+			"the agent structured output does not match the required schema", traceID,
 			map[string]any{"violations": aiOutputInvalid.Violations})
 		return "AI_OUTPUT_INVALID"
 	case errors.Is(err, governanceapp.ErrNoSubstantiveChange):
 		writeError(response, http.StatusUnprocessableEntity, "NO_SUBSTANTIVE_CHANGE",
 			"the proposal change-set contains no substantive change", traceID, false)
 		return "NO_SUBSTANTIVE_CHANGE"
+	case errors.Is(err, domain.ErrProductionSetRequired):
+		writeError(response, http.StatusConflict, "PRODUCTION_SET_REQUIRED",
+			"the proposal or release belongs to a semantic production set; use the production endpoints", traceID, false)
+		return "PRODUCTION_SET_REQUIRED"
 	case errors.Is(err, authz.ErrNotFound):
 		writeError(response, http.StatusNotFound, "NOT_FOUND", "the requested resource was not found", traceID, false)
 		return "NOT_FOUND"

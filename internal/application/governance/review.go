@@ -217,6 +217,9 @@ func (service *AuthoringService) ReviewProposal(ctx context.Context, request Rev
 	if err != nil {
 		return ReviewOutcome{}, err
 	}
+	if proposal.IsProductionMember() {
+		return ReviewOutcome{}, domain.ErrProductionSetRequired
+	}
 	if proposal.State != domain.ProposalInReview {
 		return ReviewOutcome{}, fmt.Errorf("%w: proposal is %s, review is no longer applicable",
 			domain.ErrConflict, proposal.State)

@@ -48,7 +48,7 @@ const (
 	acceptanceHostLock            = "/tmp/semlia-t008-acceptance.lock"
 	composeServiceContainerLimit  = 4 // compose.yaml defines postgres, migrate, server, and worker.
 	composeNetworkLimit           = 1 // compose.yaml defines the backend network.
-	composeVolumeLimit            = 2 // compose.yaml defines postgres-data and git-content volumes.
+	composeVolumeLimit            = 3 // compose.yaml defines postgres-data, git-content, and artifact-data volumes.
 	toolContainerLimit            = 3 // Two security scans plus one release SBOM invocation.
 	testcontainersContainerLimit  = 3 // Two integration PostgreSQL containers plus one shared Ryuk container.
 	testcontainersNetworkLimit    = 1 // No current journey network; one failure-probe network is bounded and owned.

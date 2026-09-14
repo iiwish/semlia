@@ -14,21 +14,40 @@ import (
 const traceID = "4bf92f3577b34da6a3ce929d0e0e4736"
 
 type fakeRepository struct {
-	principals       map[string]authorization.Principal
-	defaultPrincipal map[string]authorization.Principal
-	bindings         map[string][]authorization.RoleBinding
-	version          int64
-	versionMissing   bool
-	events           []authorization.DecisionEvent
+	principals          map[string]authorization.Principal
+	defaultPrincipal    map[string]authorization.Principal
+	localPrincipals     map[string]authorization.Principal
+	bindings            map[string][]authorization.RoleBinding
+	version             int64
+	versionMissing      bool
+	events              []authorization.DecisionEvent
+	policyDenials       []authorizationapp.PolicyDenial
+	roles               map[string]authorization.Role
+	lastRoleMutation    authorizationapp.CustomRoleMutation
+	bumpAfterAction     authorization.Action
+	bindingLoadCalls    int
+	mutateOnBindingLoad func(*fakeRepository, identity.PrincipalID)
 }
 
 func newFakeRepository() *fakeRepository {
 	return &fakeRepository{
 		principals:       map[string]authorization.Principal{},
 		defaultPrincipal: map[string]authorization.Principal{},
+		localPrincipals:  map[string]authorization.Principal{},
 		bindings:         map[string][]authorization.RoleBinding{},
+		roles:            map[string]authorization.Role{},
 		version:          1,
 	}
+}
+
+func (repository *fakeRepository) LoadLocalUATPrincipal(
+	_ context.Context, workspace identity.WorkspaceID, seedNamespace, roleID string,
+) (authorization.Principal, error) {
+	value, ok := repository.localPrincipals[workspace.UUID()+"/"+seedNamespace+"/"+roleID]
+	if !ok {
+		return authorization.Principal{}, authorization.ErrNotFound
+	}
+	return value, nil
 }
 
 func (repository *fakeRepository) key(workspace identity.WorkspaceID, principal identity.PrincipalID) string {
@@ -58,7 +77,12 @@ func (repository *fakeRepository) LoadDefaultPrincipal(
 func (repository *fakeRepository) LoadPrincipalBindings(
 	_ context.Context, principal identity.PrincipalID,
 ) ([]authorization.RoleBinding, error) {
-	return repository.bindings[principal.UUID()], nil
+	repository.bindingLoadCalls++
+	result := append([]authorization.RoleBinding(nil), repository.bindings[principal.UUID()]...)
+	if repository.mutateOnBindingLoad != nil {
+		repository.mutateOnBindingLoad(repository, principal)
+	}
+	return result, nil
 }
 
 func (repository *fakeRepository) AuthorizationVersion(context.Context, identity.WorkspaceID) (int64, error) {
@@ -70,6 +94,58 @@ func (repository *fakeRepository) AuthorizationVersion(context.Context, identity
 
 func (repository *fakeRepository) RecordDecision(_ context.Context, event authorization.DecisionEvent) error {
 	repository.events = append(repository.events, event)
+	if event.Action == repository.bumpAfterAction && event.Decision == "allow" {
+		repository.version++
+	}
+	return nil
+}
+
+func (repository *fakeRepository) ListAuthorizationRoles(context.Context, identity.WorkspaceID) ([]authorization.Role, error) {
+	result := make([]authorization.Role, 0, len(repository.roles))
+	for _, role := range repository.roles {
+		result = append(result, role)
+	}
+	return result, nil
+}
+
+func (repository *fakeRepository) GetAuthorizationRole(_ context.Context, _ identity.WorkspaceID, roleID string) (authorization.Role, error) {
+	role, ok := repository.roles[roleID]
+	if !ok {
+		return authorization.Role{}, authorization.ErrNotFound
+	}
+	return role, nil
+}
+
+func (repository *fakeRepository) CreateCustomRole(_ context.Context, mutation authorizationapp.CustomRoleMutation) (authorization.Role, int64, error) {
+	repository.lastRoleMutation = mutation
+	if mutation.ExpectedAuthorizationVersion != repository.version {
+		return authorization.Role{}, 0, authorization.ErrVersionConflict
+	}
+	return authorization.Role{WorkspaceID: mutation.WorkspaceID, ID: mutation.RoleID, Name: mutation.Name, Description: mutation.Description, Category: "custom", Actions: mutation.Actions, Version: 1}, repository.version + 1, nil
+}
+
+func (repository *fakeRepository) UpdateCustomRole(context.Context, authorizationapp.CustomRoleMutation) (authorization.Role, int64, error) {
+	return authorization.Role{}, 0, authorization.ErrNotFound
+}
+
+func (repository *fakeRepository) ListAuthorizationRoleBindings(context.Context, identity.WorkspaceID) ([]authorization.RoleBinding, error) {
+	return nil, nil
+}
+
+func (repository *fakeRepository) CreateManagedRoleBinding(context.Context, authorizationapp.RoleBindingMutation) (authorization.RoleBinding, int64, error) {
+	return authorization.RoleBinding{}, 0, authorization.ErrNotFound
+}
+
+func (repository *fakeRepository) RevokeManagedRoleBinding(context.Context, authorizationapp.RoleBindingRevocation) (authorization.RoleBinding, int64, error) {
+	return authorization.RoleBinding{}, 0, authorization.ErrNotFound
+}
+
+func (repository *fakeRepository) AuthorizationScopeExists(context.Context, identity.WorkspaceID, authorization.Resource) (bool, error) {
+	return true, nil
+}
+
+func (repository *fakeRepository) RecordPolicyDenial(_ context.Context, denial authorizationapp.PolicyDenial) error {
+	repository.policyDenials = append(repository.policyDenials, denial)
 	return nil
 }
 
@@ -274,23 +350,116 @@ func TestAllowUsesRoleGrantWorkspaceVersionAndScopedAssetResource(t *testing.T) 
 	}
 }
 
-func TestMissingHeaderFallsBackToSeededWorkspaceAdmin(t *testing.T) {
+func TestRoleCreationUsesTheAuthorizationDecisionVersionForPersistence(t *testing.T) {
 	repository := newFakeRepository()
+	workspace := mustID(t, identity.NewWorkspaceID)
+	principalID, principal := humanPrincipal(t, workspace)
+	repository.principals[repository.key(workspace, principalID)] = principal
+	repository.bindings[principalID.UUID()] = []authorization.RoleBinding{{
+		ID: mustID(t, identity.NewBindingID), WorkspaceID: workspace, PrincipalID: principalID,
+		RoleID: "workspace_admin", ScopeType: authorization.ScopeWorkspace, ScopeID: workspace.UUID(),
+		Actions: []authorization.Action{authorization.ActionRoleManage, authorization.ActionAssetRead},
+	}}
+	repository.bumpAfterAction = authorization.ActionAssetRead
 	service := authorizationapp.NewService(repository, authorizationapp.ClockFunc(time.Now))
+	_, _, err := service.CreateCustomRole(context.Background(), authorizationapp.CreateCustomRoleRequest{
+		AccessRequest: authorizationapp.AccessRequest{WorkspaceID: workspace, PrincipalRef: principalID.String(), TraceID: traceID},
+		Name:          "Race proof", Description: "Rejects an intervening authorization mutation.",
+		Actions: []authorization.Action{authorization.ActionAssetRead},
+	})
+	if !errors.Is(err, authorization.ErrVersionConflict) {
+		t.Fatalf("intervening authorization mutation error = %v", err)
+	}
+	if repository.lastRoleMutation.ExpectedAuthorizationVersion != 1 || repository.version != 2 {
+		t.Fatalf("mutation expected version = %d, current = %d", repository.lastRoleMutation.ExpectedAuthorizationVersion, repository.version)
+	}
+}
+
+func TestMissingHeaderIsDeniedEvenWhenLocalUATIdentitiesAreEnabled(t *testing.T) {
+	repository := newFakeRepository()
 	workspace := mustID(t, identity.NewWorkspaceID)
 	defaultID, defaultPrincipal := humanPrincipal(t, workspace)
 	defaultPrincipal.DisplayName = "Workspace Admin"
 	repository.defaultPrincipal[workspace.UUID()] = defaultPrincipal
 	repository.bindings[defaultID.UUID()] = []authorization.RoleBinding{adminBinding(t, defaultID, workspace)}
 
-	decision, err := service.Evaluate(context.Background(), evaluationRequest(
-		workspace, "", authorization.ActionAssetPropose, workspaceResource(workspace),
+	for _, service := range []*authorizationapp.Service{
+		authorizationapp.NewService(repository, authorizationapp.ClockFunc(time.Now)),
+		authorizationapp.NewService(
+			repository, authorizationapp.ClockFunc(time.Now), authorizationapp.WithLocalUATIdentities(),
+		),
+	} {
+		decision, err := service.Evaluate(context.Background(), evaluationRequest(
+			workspace, "", authorization.ActionAssetPropose, workspaceResource(workspace),
+		))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if decision.Allowed || decision.ReasonCode != authorization.ReasonNoMatchingGrant {
+			t.Fatalf("anonymous decision = %+v", decision)
+		}
+	}
+}
+
+func TestLocalUATIdentityAliasesResolveSeededPrincipalsOnlyWhenEnabled(t *testing.T) {
+	repository := newFakeRepository()
+	workspace := mustID(t, identity.NewWorkspaceID)
+	adminID, admin := humanPrincipal(t, workspace)
+	reviewerID, reviewer := humanPrincipal(t, workspace)
+	publisherID, publisher := humanPrincipal(t, workspace)
+	reviewer.DisplayName = "Independent Reviewer"
+	publisher.DisplayName = "Independent Publisher"
+	repository.defaultPrincipal[workspace.UUID()] = admin
+	repository.localPrincipals[workspace.UUID()+"/principal/workspace_admin"] = admin
+	repository.localPrincipals[workspace.UUID()+"/independent_reviewer/reviewer"] = reviewer
+	repository.localPrincipals[workspace.UUID()+"/independent_publisher/publisher"] = publisher
+	repository.bindings[adminID.UUID()] = []authorization.RoleBinding{adminBinding(t, adminID, workspace)}
+	repository.bindings[reviewerID.UUID()] = []authorization.RoleBinding{{
+		ID: mustID(t, identity.NewBindingID), PrincipalID: reviewerID, RoleID: "reviewer",
+		ScopeType: authorization.ScopeWorkspace, ScopeID: workspace.UUID(),
+		Actions: []authorization.Action{authorization.ActionProposalReview},
+	}}
+	repository.bindings[publisherID.UUID()] = []authorization.RoleBinding{{
+		ID: mustID(t, identity.NewBindingID), PrincipalID: publisherID, RoleID: "publisher",
+		ScopeType: authorization.ScopeWorkspace, ScopeID: workspace.UUID(),
+		Actions: []authorization.Action{authorization.ActionReleasePublish},
+	}}
+
+	disabled := authorizationapp.NewService(repository, authorizationapp.ClockFunc(time.Now))
+	denied, err := disabled.Evaluate(context.Background(), evaluationRequest(
+		workspace, authorizationapp.LocalUATReviewerPrincipalRef,
+		authorization.ActionProposalReview, workspaceResource(workspace),
 	))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !decision.Allowed || decision.PrincipalID != defaultID {
-		t.Fatalf("default principal decision = %+v", decision)
+	if denied.Allowed {
+		t.Fatalf("disabled local identity was allowed: %+v", denied)
+	}
+
+	enabled := authorizationapp.NewService(
+		repository, authorizationapp.ClockFunc(time.Now), authorizationapp.WithLocalUATIdentities(),
+	)
+	for _, test := range []struct {
+		name, reference string
+		action          authorization.Action
+		principal       identity.PrincipalID
+	}{
+		{name: "author", reference: authorizationapp.LocalUATAuthorPrincipalRef, action: authorization.ActionAssetPropose, principal: adminID},
+		{name: "reviewer", reference: authorizationapp.LocalUATReviewerPrincipalRef, action: authorization.ActionProposalReview, principal: reviewerID},
+		{name: "publisher", reference: authorizationapp.LocalUATPublisherPrincipalRef, action: authorization.ActionReleasePublish, principal: publisherID},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			decision, evaluateErr := enabled.Evaluate(context.Background(), evaluationRequest(
+				workspace, test.reference, test.action, workspaceResource(workspace),
+			))
+			if evaluateErr != nil {
+				t.Fatal(evaluateErr)
+			}
+			if !decision.Allowed || decision.PrincipalID != test.principal {
+				t.Fatalf("local identity decision = %+v", decision)
+			}
+		})
 	}
 }
 
@@ -307,6 +476,140 @@ func TestUnknownActionIsDenied(t *testing.T) {
 	}
 	if decision.Allowed || decision.ReasonCode != authorization.ReasonNoMatchingGrant {
 		t.Fatalf("unknown action decision = %+v", decision)
+	}
+}
+
+func TestSessionCapabilitiesOnlyProjectsActiveWorkspaceBindings(t *testing.T) {
+	repository := newFakeRepository()
+	workspace := mustID(t, identity.NewWorkspaceID)
+	otherWorkspace := mustID(t, identity.NewWorkspaceID)
+	principalID, principal := humanPrincipal(t, workspace)
+	repository.principals[repository.key(workspace, principalID)] = principal
+	now := time.Date(2026, 9, 4, 10, 0, 0, 0, time.UTC)
+	expiredAt := now.Add(-time.Minute)
+	revokedAt := now.Add(-time.Hour)
+	repository.bindings[principalID.UUID()] = []authorization.RoleBinding{
+		{WorkspaceID: workspace, RoleID: "reader", Actions: []authorization.Action{authorization.ActionAssetRead, authorization.ActionRoleRead}},
+		{WorkspaceID: workspace, RoleID: "manager", ExpiresAt: &expiredAt, Actions: []authorization.Action{authorization.ActionRoleManage}},
+		{WorkspaceID: workspace, RoleID: "assigner", RevokedAt: &revokedAt, Actions: []authorization.Action{authorization.ActionRoleAssign}},
+		{WorkspaceID: otherWorkspace, RoleID: "other", Actions: []authorization.Action{authorization.ActionWorkspaceManage}},
+	}
+	service := authorizationapp.NewService(repository, authorizationapp.ClockFunc(func() time.Time { return now }))
+
+	actions, roleIDs, version, err := service.SessionCapabilities(context.Background(), workspace, principalID, traceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(actions) != 2 || actions[0] != authorization.ActionAssetRead || actions[1] != authorization.ActionRoleRead {
+		t.Fatalf("capabilities = %v, want active workspace actions only", actions)
+	}
+	if version != 1 {
+		t.Fatalf("authorization version = %d, want 1", version)
+	}
+	if len(roleIDs) != 1 || roleIDs[0] != "reader" {
+		t.Fatalf("role IDs = %v", roleIDs)
+	}
+	if len(repository.events) != 0 {
+		t.Fatalf("session projection recorded authorization decisions: %+v", repository.events)
+	}
+}
+
+func TestSnapshotUsesFrozenActiveBindingsWithoutAuditing(t *testing.T) {
+	repository := newFakeRepository()
+	workspace := mustID(t, identity.NewWorkspaceID)
+	otherWorkspace := mustID(t, identity.NewWorkspaceID)
+	principalID, principal := humanPrincipal(t, workspace)
+	repository.principals[repository.key(workspace, principalID)] = principal
+	now := time.Date(2026, 9, 5, 14, 0, 0, 0, time.UTC)
+	expired := now.Add(-time.Second)
+	repository.bindings[principalID.UUID()] = []authorization.RoleBinding{
+		{WorkspaceID: workspace, ID: mustID(t, identity.NewBindingID), PrincipalID: principalID,
+			RoleID: "reviewer", RoleVersion: 3, ScopeType: authorization.ScopeWorkspace, ScopeID: workspace.UUID(),
+			GrantedAt: now.Add(-time.Hour), Version: 1, Actions: []authorization.Action{authorization.ActionAssetRead}},
+		{WorkspaceID: workspace, ID: mustID(t, identity.NewBindingID), PrincipalID: principalID,
+			RoleID: "expired", RoleVersion: 1, ScopeType: authorization.ScopeWorkspace, ScopeID: workspace.UUID(),
+			GrantedAt: now.Add(-time.Hour), ExpiresAt: &expired, Version: 1,
+			Actions: []authorization.Action{authorization.ActionWorkspaceManage}},
+		{WorkspaceID: otherWorkspace, ID: mustID(t, identity.NewBindingID), PrincipalID: principalID,
+			RoleID: "foreign", RoleVersion: 1, ScopeType: authorization.ScopeWorkspace, ScopeID: otherWorkspace.UUID(),
+			GrantedAt: now.Add(-time.Hour), Version: 1, Actions: []authorization.Action{authorization.ActionWorkspaceManage}},
+	}
+	repository.version = 9
+	service := authorizationapp.NewService(repository, authorizationapp.ClockFunc(func() time.Time { return now }))
+
+	snapshot, err := service.Snapshot(context.Background(), workspace, principalID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resource := authorization.Resource{Type: authorization.ScopeWorkspace, ID: workspace.UUID()}
+	if !snapshot.Allows(authorization.ActionAssetRead, resource) || snapshot.Allows(authorization.ActionWorkspaceManage, resource) {
+		t.Fatalf("snapshot grants are not frozen/active/workspace scoped: %+v", snapshot)
+	}
+	if got := snapshot.ActiveRoleIDs(); len(got) != 1 || got[0] != "reviewer" {
+		t.Fatalf("active role IDs = %v", got)
+	}
+	if snapshot.AuthorizationVersion != 9 || len(repository.events) != 0 {
+		t.Fatalf("snapshot version/events = %d/%d", snapshot.AuthorizationVersion, len(repository.events))
+	}
+}
+
+func TestSnapshotRetriesConcurrentBindingRevocation(t *testing.T) {
+	repository := newFakeRepository()
+	workspace := mustID(t, identity.NewWorkspaceID)
+	principalID, principal := humanPrincipal(t, workspace)
+	repository.principals[repository.key(workspace, principalID)] = principal
+	now := time.Date(2026, 9, 5, 14, 0, 0, 0, time.UTC)
+	repository.bindings[principalID.UUID()] = []authorization.RoleBinding{{
+		WorkspaceID: workspace, ID: mustID(t, identity.NewBindingID), PrincipalID: principalID,
+		RoleID: "reader", RoleVersion: 1, ScopeType: authorization.ScopeWorkspace,
+		ScopeID: workspace.UUID(), GrantedAt: now.Add(-time.Hour), Version: 1,
+		Actions: []authorization.Action{authorization.ActionAssetRead},
+	}}
+	repository.mutateOnBindingLoad = func(repo *fakeRepository, principal identity.PrincipalID) {
+		repo.mutateOnBindingLoad = nil
+		repo.bindings[principal.UUID()] = nil
+		repo.version++
+	}
+	service := authorizationapp.NewService(repository, authorizationapp.ClockFunc(func() time.Time { return now }))
+	snapshot, err := service.Snapshot(context.Background(), workspace, principalID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.Allows(authorization.ActionAssetRead, authorization.Resource{Type: authorization.ScopeWorkspace, ID: workspace.UUID()}) ||
+		snapshot.AuthorizationVersion != 2 || repository.bindingLoadCalls != 2 {
+		t.Fatalf("stale revoked grant escaped snapshot: %+v calls=%d", snapshot, repository.bindingLoadCalls)
+	}
+}
+
+func TestSnapshotRetriesConcurrentRoleVersionAdvance(t *testing.T) {
+	repository := newFakeRepository()
+	workspace := mustID(t, identity.NewWorkspaceID)
+	principalID, principal := humanPrincipal(t, workspace)
+	repository.principals[repository.key(workspace, principalID)] = principal
+	now := time.Date(2026, 9, 5, 14, 0, 0, 0, time.UTC)
+	repository.bindings[principalID.UUID()] = []authorization.RoleBinding{{
+		WorkspaceID: workspace, ID: mustID(t, identity.NewBindingID), PrincipalID: principalID,
+		RoleID: "custom", RoleVersion: 1, ScopeType: authorization.ScopeWorkspace,
+		ScopeID: workspace.UUID(), GrantedAt: now.Add(-time.Hour), Version: 1,
+		Actions: []authorization.Action{authorization.ActionAssetRead},
+	}}
+	repository.mutateOnBindingLoad = func(repo *fakeRepository, principal identity.PrincipalID) {
+		repo.mutateOnBindingLoad = nil
+		updated := append([]authorization.RoleBinding(nil), repo.bindings[principal.UUID()]...)
+		updated[0].RoleVersion = 2
+		updated[0].Actions = []authorization.Action{authorization.ActionProposalReview}
+		repo.bindings[principal.UUID()] = updated
+		repo.version++
+	}
+	service := authorizationapp.NewService(repository, authorizationapp.ClockFunc(func() time.Time { return now }))
+	snapshot, err := service.Snapshot(context.Background(), workspace, principalID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resource := authorization.Resource{Type: authorization.ScopeWorkspace, ID: workspace.UUID()}
+	if snapshot.Allows(authorization.ActionAssetRead, resource) || !snapshot.Allows(authorization.ActionProposalReview, resource) ||
+		snapshot.AuthorizationVersion != 2 || repository.bindingLoadCalls != 2 {
+		t.Fatalf("stale role version escaped snapshot: %+v calls=%d", snapshot, repository.bindingLoadCalls)
 	}
 }
 

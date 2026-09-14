@@ -212,10 +212,19 @@ milestone acceptance remains with the founder.
 
 ### T011 Production acceptance
 
-Status: Blocked
+Status: Running
 Depends on: T007, T010
 Blocks: M2 milestone acceptance
 
 Condition: packet authored after T010 acceptance. Exact-ref journey covering propose (seeded and
 live LLM) → validate → review → publish → rollback, golden recompute cases, migration/recovery
 suites, contract drift, security/release gates and independent reviews.
+
+Packet: `docs/specs/m2-governed-authoring/packets/T011.yaml`.
+
+Execution: the founder's local acceptance stack provides explicit development-only
+author/reviewer/publisher identities, persisted review readback, and a real browser journey through
+worker validation, independent approval, publish, reload and rollback. Source, smoke, security,
+release and both supported desktop viewport gates pass. Live-provider and external-authentication
+evidence remain milestone gates and are not inferred from local UAT. Evidence:
+`docs/evidence/M2-T011/summary.md`.

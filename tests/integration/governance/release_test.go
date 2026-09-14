@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	authorizationapp "github.com/iiwish/semlia/internal/application/authorization"
 	catalogapp "github.com/iiwish/semlia/internal/application/catalog"
 	governanceapp "github.com/iiwish/semlia/internal/application/governance"
 	"github.com/iiwish/semlia/internal/domain/authorization"
@@ -134,6 +135,131 @@ func releaseDeniedAuditCount(t *testing.T, environment *fixture, workspace ident
 		t.Fatal(err)
 	}
 	return count
+}
+
+func TestReleaseDetailUsesNearestSameTargetPinAndExactConsumerImpact(t *testing.T) {
+	environment := newFixture(t)
+	workspace := createWorkspace(t, environment.pool, "release-detail-authority")
+	assetID, firstRevision := environment.createAsset(t, workspace)
+	catalog := catalogapp.NewService(environment.store, catalogapp.ClockFunc(time.Now))
+	second, err := catalog.AppendRevision(context.Background(), catalogapp.AppendRevisionRequest{
+		WorkspaceID: workspace, AssetID: assetID, SchemaVersion: "1.0.0",
+		Content: json.RawMessage(`{"name":"Revenue","definition":"v2"}`), CreatedBy: "founder", TraceID: traceID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstRelease, _ := identity.NewReleaseID()
+	secondRelease, _ := identity.NewReleaseID()
+	now := time.Now().UTC()
+	for index, value := range []struct {
+		id       identity.ReleaseID
+		revision identity.RevisionID
+	}{{firstRelease, firstRevision}, {secondRelease, second.ID}} {
+		if _, err := environment.pool.Exec(context.Background(), `
+			INSERT INTO releases (id, workspace_id, sequence, manifest_digest, state, published_by, published_at, created_at)
+			VALUES ($1,$2,$3,$4,'published','publisher',$5,$5)`, value.id.UUID(), workspace.UUID(), index+1,
+			"sha256:"+strings.Repeat(fmt.Sprintf("%x", index+1), 64), now.Add(time.Duration(index)*time.Minute)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := environment.pool.Exec(context.Background(), `
+			INSERT INTO release_assets (workspace_id, release_id, asset_id, revision_id, compatibility, position, created_at)
+			VALUES ($1,$2,$3,$4,'{}',1,$5)`, workspace.UUID(), value.id.UUID(), assetID.UUID(),
+			value.revision.UUID(), now.Add(time.Duration(index)*time.Minute)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	consumerID, _ := identity.NewConsumerID()
+	currentBinding, _ := identity.NewConsumerBindingID()
+	pinnedBinding, _ := identity.NewConsumerBindingID()
+	if _, err := environment.pool.Exec(context.Background(), `
+		INSERT INTO consumers (id,workspace_id,stable_key,name,kind,status,owner_principal_ref,created_at,updated_at)
+		VALUES ($1,$2,'release-detail','Release detail','application','active','owner',$3,$3)`,
+		consumerID.UUID(), workspace.UUID(), now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := environment.pool.Exec(context.Background(), `
+		INSERT INTO consumer_bindings (id,workspace_id,consumer_id,environment,purpose,mode,release_id,status,version,created_at,updated_at)
+		VALUES ($1,$2,$3,'prod','current','current',NULL,'active',1,$4,$4),
+		       ($5,$2,$3,'archive','pinned','pinned',$6,'active',1,$4,$4)`,
+		currentBinding.UUID(), workspace.UUID(), consumerID.UUID(), now, pinnedBinding.UUID(), firstRelease.UUID()); err != nil {
+		t.Fatal(err)
+	}
+	oldImpact, err := environment.store.GetReleaseConsumerImpact(context.Background(), workspace, firstRelease)
+	if err != nil {
+		t.Fatal(err)
+	}
+	currentImpact, err := environment.store.GetReleaseConsumerImpact(context.Background(), workspace, secondRelease)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if oldImpact.Current != 0 || oldImpact.Pinned != 1 || currentImpact.Current != 1 || currentImpact.Pinned != 0 {
+		t.Fatalf("consumer impact old=%+v current=%+v", oldImpact, currentImpact)
+	}
+	third, err := catalog.AppendRevision(context.Background(), catalogapp.AppendRevisionRequest{
+		WorkspaceID: workspace, AssetID: assetID, SchemaVersion: "1.0.0",
+		Content: json.RawMessage(`{"name":"Revenue","definition":"v3"}`), CreatedBy: "founder", TraceID: traceID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	diff, err := environment.store.ListReleaseStableDiff(context.Background(), workspace, secondRelease)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(diff) != 2 {
+		t.Fatalf("stable release diff = %+v", diff)
+	}
+	byKind := map[string]governanceapp.ReleaseDiffEntry{}
+	for _, entry := range diff {
+		byKind[entry.ComparisonKind] = entry
+	}
+	prior, current := byKind["prior_pin"], byKind["current_registry"]
+	if prior.TargetID != assetID.String() || prior.BaselineVersion != firstRevision.String() ||
+		prior.SelectedVersion != second.ID.String() || prior.Change != "changed" ||
+		current.TargetID != assetID.String() || current.BaselineVersion != third.ID.String() ||
+		current.SelectedVersion != second.ID.String() || current.Change != "changed" {
+		t.Fatalf("stable release diff = %+v", diff)
+	}
+}
+
+func TestLocalUATAliasesCompleteIndependentReleaseJourney(t *testing.T) {
+	environment := newFixture(t)
+	workspace := createWorkspace(t, environment.pool, "release-local-uat")
+	assetID, baseRevisionID := environment.createAsset(t, workspace)
+	path := environment.proposalsPath(t, workspace)
+
+	created := environment.request(t, http.MethodPost, path, authorizationapp.LocalUATAuthorPrincipalRef,
+		authorProposalBody(assetID.String(), baseRevisionID.String(), "spoofed-browser-author"))
+	if created.Code != http.StatusCreated {
+		t.Fatalf("local author create status = %d, body = %s", created.Code, created.Body.String())
+	}
+	author, err := environment.store.LoadDefaultPrincipal(context.Background(), workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertJSONField(t, created.Body.Bytes(), "createdBy", author.ID.String())
+	proposalID, _ := decodeProposalDetail(t, created.Body.Bytes())["id"].(string)
+
+	submitted := environment.request(t, http.MethodPost, path+"/"+proposalID+"/submit",
+		authorizationapp.LocalUATAuthorPrincipalRef, "")
+	if submitted.Code != http.StatusOK {
+		t.Fatalf("local author submit status = %d, body = %s", submitted.Code, submitted.Body.String())
+	}
+	environment.runValidationWorker(t)
+
+	reviewed := environment.request(t, http.MethodPost, path+"/"+proposalID+"/reviews",
+		authorizationapp.LocalUATReviewerPrincipalRef, reviewBody("approve", "independent local acceptance review"))
+	if reviewed.Code != http.StatusCreated {
+		t.Fatalf("local reviewer status = %d, body = %s", reviewed.Code, reviewed.Body.String())
+	}
+
+	published := environment.request(t, http.MethodPost, releasesPath(t, workspace),
+		authorizationapp.LocalUATPublisherPrincipalRef, fmt.Sprintf(`{"proposalId":%q}`, proposalID))
+	if published.Code != http.StatusCreated {
+		t.Fatalf("local publisher status = %d, body = %s", published.Code, published.Body.String())
+	}
+	assertJSONField(t, published.Body.Bytes(), "state", "published")
 }
 
 func TestPublishRequiresApprovingReviewAndAuditsTheRefusal(t *testing.T) {
@@ -396,6 +522,7 @@ func TestPublishObjectProposalBumpsGovernedObjectVersion(t *testing.T) {
 	author := createPrincipalWithRoles(t, environment, workspace, "author", []string{"asset_owner"})
 	publisher := createPrincipalWithRoles(t, environment, workspace, "publisher", []string{"publisher"})
 	reviewer := createReviewerPrincipal(t, environment, workspace, "reviewer")
+	bindingReader := createPrincipalWithRoles(t, environment, workspace, "binding reader", []string{"semantic_steward"})
 
 	objectService := governanceapp.NewGovernedObjectService(
 		environment.store, governanceapp.ClockFunc(func() time.Time { return time.Now().UTC() }))
@@ -409,6 +536,26 @@ func TestPublishObjectProposalBumpsGovernedObjectVersion(t *testing.T) {
 	if published.Code != http.StatusCreated {
 		t.Fatalf("object publish status = %d, body = %s", published.Code, published.Body.String())
 	}
+	var commandResponse struct {
+		ID                 string `json:"id"`
+		ObjectAvailability string `json:"objectAvailability"`
+		Manifest           struct {
+			Objects []any             `json:"objects"`
+			Assets  []json.RawMessage `json:"assets"`
+		} `json:"manifest"`
+	}
+	if err := json.Unmarshal(published.Body.Bytes(), &commandResponse); err != nil {
+		t.Fatalf("decode object release: %v\n%s", err, published.Body.String())
+	}
+	if commandResponse.ObjectAvailability != "forbidden" || len(commandResponse.Manifest.Objects) != 0 ||
+		len(commandResponse.Manifest.Assets) != 0 {
+		t.Fatalf("publisher command response leaked binding-protected manifest: %s", published.Body.String())
+	}
+	readWithBinding := environment.request(t, http.MethodGet,
+		releasesPath(t, workspace)+"/"+commandResponse.ID, bindingReader.String(), "")
+	if readWithBinding.Code != http.StatusOK {
+		t.Fatalf("binding reader release status = %d, body = %s", readWithBinding.Code, readWithBinding.Body.String())
+	}
 	var release struct {
 		Manifest struct {
 			Objects []struct {
@@ -419,15 +566,38 @@ func TestPublishObjectProposalBumpsGovernedObjectVersion(t *testing.T) {
 			Assets []json.RawMessage `json:"assets"`
 		} `json:"manifest"`
 	}
-	if err := json.Unmarshal(published.Body.Bytes(), &release); err != nil {
-		t.Fatalf("decode object release: %v\n%s", err, published.Body.String())
+	if err := json.Unmarshal(readWithBinding.Body.Bytes(), &release); err != nil {
+		t.Fatal(err)
 	}
 	if len(release.Manifest.Objects) != 1 || len(release.Manifest.Assets) != 0 {
-		t.Fatalf("object release manifest = %+v", release.Manifest)
+		t.Fatalf("binding reader object release manifest = %+v", release.Manifest)
 	}
 	pin := release.Manifest.Objects[0]
 	if pin.ObjectType != "join_contract" || pin.ObjectID != contractID.String() || pin.Version != 2 {
 		t.Fatalf("object pin = %+v", pin)
+	}
+	read := environment.request(t, http.MethodGet, releasesPath(t, workspace)+"/"+commandResponse.ID, reviewer.String(), "")
+	if read.Code != http.StatusOK {
+		t.Fatalf("asset-read-only release read status = %d, body = %s", read.Code, read.Body.String())
+	}
+	var redacted struct {
+		ObjectAvailability         string `json:"objectAvailability"`
+		ConsumerImpactAvailability string `json:"consumerImpactAvailability"`
+		DiffAvailability           string `json:"diffAvailability"`
+		ConsumerImpact             any    `json:"consumerImpact"`
+		PriorPinDiff               []any  `json:"priorPinDiff"`
+		CurrentRegistryDiff        []any  `json:"currentRegistryDiff"`
+		Manifest                   struct {
+			Objects []any `json:"objects"`
+		} `json:"manifest"`
+	}
+	if err := json.Unmarshal(read.Body.Bytes(), &redacted); err != nil {
+		t.Fatal(err)
+	}
+	if redacted.ObjectAvailability != "forbidden" || redacted.ConsumerImpactAvailability != "forbidden" ||
+		redacted.DiffAvailability != "forbidden" || redacted.ConsumerImpact != nil ||
+		len(redacted.Manifest.Objects) != 0 || len(redacted.PriorPinDiff) != 0 || len(redacted.CurrentRegistryDiff) != 0 {
+		t.Fatalf("asset-read-only release detail leaked protected sections: %s", read.Body.String())
 	}
 
 	after, err := objectService.Get(context.Background(), workspace, governance.TargetJoinContract, contractID.String())
@@ -546,6 +716,7 @@ func TestRollbackRestoresGovernedObjectContent(t *testing.T) {
 	author := createPrincipalWithRoles(t, environment, workspace, "author", []string{"asset_owner"})
 	publisher := createPrincipalWithRoles(t, environment, workspace, "publisher", []string{"publisher"})
 	reviewer := createReviewerPrincipal(t, environment, workspace, "reviewer")
+	bindingReader := createPrincipalWithRoles(t, environment, workspace, "binding reader", []string{"semantic_steward"})
 
 	proposalID := objectProposalToInReview(t, environment, workspace, author, reviewer, contractID.String())
 	published := publishProposal(t, environment, workspace, publisher, proposalID)
@@ -563,6 +734,24 @@ func TestRollbackRestoresGovernedObjectContent(t *testing.T) {
 	if rolledBack.Code != http.StatusCreated {
 		t.Fatalf("rollback status = %d, body = %s", rolledBack.Code, rolledBack.Body.String())
 	}
+	var commandResponse struct {
+		ID                 string `json:"id"`
+		ObjectAvailability string `json:"objectAvailability"`
+		Manifest           struct {
+			Objects []any `json:"objects"`
+		} `json:"manifest"`
+	}
+	if err := json.Unmarshal(rolledBack.Body.Bytes(), &commandResponse); err != nil {
+		t.Fatal(err)
+	}
+	if commandResponse.ObjectAvailability != "forbidden" || len(commandResponse.Manifest.Objects) != 0 {
+		t.Fatalf("rollback command response leaked binding-protected manifest: %s", rolledBack.Body.String())
+	}
+	readWithBinding := environment.request(t, http.MethodGet,
+		releasesPath(t, workspace)+"/"+commandResponse.ID, bindingReader.String(), "")
+	if readWithBinding.Code != http.StatusOK {
+		t.Fatalf("binding reader rollback release status = %d, body = %s", readWithBinding.Code, readWithBinding.Body.String())
+	}
 	var rollback struct {
 		Manifest struct {
 			Objects []struct {
@@ -571,7 +760,7 @@ func TestRollbackRestoresGovernedObjectContent(t *testing.T) {
 			} `json:"objects"`
 		} `json:"manifest"`
 	}
-	if err := json.Unmarshal(rolledBack.Body.Bytes(), &rollback); err != nil {
+	if err := json.Unmarshal(readWithBinding.Body.Bytes(), &rollback); err != nil {
 		t.Fatal(err)
 	}
 	if len(rollback.Manifest.Objects) != 1 || rollback.Manifest.Objects[0].Version != 3 {
@@ -671,12 +860,13 @@ func TestReleasesListAndDetailKeysetPagination(t *testing.T) {
 		} `json:"items"`
 		Page struct {
 			NextCursor string `json:"nextCursor"`
+			Total      int64  `json:"total"`
 		} `json:"page"`
 	}
 	if err := json.Unmarshal(firstPage.Body.Bytes(), &page); err != nil {
 		t.Fatal(err)
 	}
-	if len(page.Items) != 1 || page.Page.NextCursor == "" {
+	if len(page.Items) != 1 || page.Page.NextCursor == "" || page.Page.Total != 2 {
 		t.Fatalf("first page = %+v", page)
 	}
 	secondPage := environment.request(t, http.MethodGet, releasesPath(t, workspace)+"?limit=1&cursor="+page.Page.NextCursor,
@@ -690,6 +880,7 @@ func TestReleasesListAndDetailKeysetPagination(t *testing.T) {
 		} `json:"items"`
 		Page struct {
 			NextCursor string `json:"nextCursor"`
+			Total      int64  `json:"total"`
 		} `json:"page"`
 	}
 	if err := json.Unmarshal(secondPage.Body.Bytes(), &next); err != nil {
@@ -698,7 +889,7 @@ func TestReleasesListAndDetailKeysetPagination(t *testing.T) {
 	if len(next.Items) != 1 || next.Items[0].Sequence == page.Items[0].Sequence {
 		t.Fatalf("second page = %+v", next)
 	}
-	if next.Page.NextCursor != "" {
+	if next.Page.NextCursor != "" || next.Page.Total != 2 {
 		t.Fatal("last page must not carry a cursor")
 	}
 

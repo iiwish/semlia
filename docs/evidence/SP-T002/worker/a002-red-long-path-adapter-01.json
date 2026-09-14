@@ -1,0 +1,23 @@
+{
+  "command": [
+    "go",
+    "test",
+    "-count=1",
+    "./internal/adapters/discovery/postgresql",
+    "-run",
+    "^TestPostgreSQLAdapterPreservesLongLogicalPaths$",
+    "-v"
+  ],
+  "clearedEnvironment": [
+    "SEMLIA_INGESTION_TEST_DATABASE_URL",
+    "SEMLIA_EXECUTION_CRASH_HELPER",
+    "SEMLIA_EXECUTION_TEST_DB",
+    "SEMLIA_DATABASE_URL"
+  ],
+  "start": "2026-09-09T07:34:13.681Z",
+  "end": "2026-09-09T07:34:16.508Z",
+  "exitStatus": 1,
+  "signal": null,
+  "stdout": "=== RUN   TestPostgreSQLAdapterPreservesLongLogicalPaths\n    adapter_test.go:65: logical path of 253 bytes rejected: invalid discovery snapshot\n--- FAIL: TestPostgreSQLAdapterPreservesLongLogicalPaths (0.41s)\nFAIL\nFAIL\tgithub.com/iiwish/semlia/internal/adapters/discovery/postgresql\t1.673s\nFAIL\n",
+  "stderr": ""
+}

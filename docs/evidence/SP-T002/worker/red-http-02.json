@@ -1,0 +1,23 @@
+{
+  "command": [
+    "go",
+    "test",
+    "-count=1",
+    "./internal/platform/http",
+    "-run",
+    "^TestSourceSnapshot",
+    "-v"
+  ],
+  "clearedEnvironment": [
+    "SEMLIA_INGESTION_TEST_DATABASE_URL",
+    "SEMLIA_EXECUTION_CRASH_HELPER",
+    "SEMLIA_EXECUTION_TEST_DB",
+    "SEMLIA_DATABASE_URL"
+  ],
+  "start": "2026-09-09T05:55:46.165Z",
+  "end": "2026-09-09T05:55:48.427Z",
+  "exitStatus": 1,
+  "signal": null,
+  "stdout": "=== RUN   TestSourceSnapshotRoutesReauthorizeAndHideWrongRelations\n    source_snapshot_test.go:45:  status=404 body={\"code\":\"NOT_FOUND\",\"details\":{},\"message\":\"the requested resource was not found\",\"retryable\":false,\"traceId\":\"00000000000000000000000000000000\"}\n--- FAIL: TestSourceSnapshotRoutesReauthorizeAndHideWrongRelations (0.00s)\nFAIL\nFAIL\tgithub.com/iiwish/semlia/internal/platform/http\t1.313s\nFAIL\n",
+  "stderr": ""
+}

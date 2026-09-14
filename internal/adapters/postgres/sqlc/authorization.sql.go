@@ -11,6 +11,114 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const advanceActiveCustomRoleBindings = `-- name: AdvanceActiveCustomRoleBindings :execrows
+UPDATE role_bindings
+SET role_version = $1, version = version + 1
+WHERE workspace_id = $2
+  AND role_id = $3
+  AND role_version = $4
+  AND revoked_at IS NULL
+  AND expired_at IS NULL
+  AND (expires_at IS NULL OR expires_at > $5)
+`
+
+type AdvanceActiveCustomRoleBindingsParams struct {
+	NextVersion     int64              `json:"next_version"`
+	WorkspaceID     pgtype.UUID        `json:"workspace_id"`
+	RoleID          string             `json:"role_id"`
+	ExpectedVersion int64              `json:"expected_version"`
+	Now             pgtype.Timestamptz `json:"now"`
+}
+
+func (q *Queries) AdvanceActiveCustomRoleBindings(ctx context.Context, arg AdvanceActiveCustomRoleBindingsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, advanceActiveCustomRoleBindings,
+		arg.NextVersion,
+		arg.WorkspaceID,
+		arg.RoleID,
+		arg.ExpectedVersion,
+		arg.Now,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const advanceCustomRoleVersion = `-- name: AdvanceCustomRoleVersion :one
+UPDATE roles
+SET name = $1, description = $2,
+    active_version = $3
+WHERE workspace_id = $4
+  AND id = $5
+  AND category = 'custom'
+  AND active_version = $6
+RETURNING active_version
+`
+
+type AdvanceCustomRoleVersionParams struct {
+	Name            string      `json:"name"`
+	Description     string      `json:"description"`
+	NextVersion     pgtype.Int8 `json:"next_version"`
+	WorkspaceID     pgtype.UUID `json:"workspace_id"`
+	RoleID          string      `json:"role_id"`
+	ExpectedVersion pgtype.Int8 `json:"expected_version"`
+}
+
+func (q *Queries) AdvanceCustomRoleVersion(ctx context.Context, arg AdvanceCustomRoleVersionParams) (pgtype.Int8, error) {
+	row := q.db.QueryRow(ctx, advanceCustomRoleVersion,
+		arg.Name,
+		arg.Description,
+		arg.NextVersion,
+		arg.WorkspaceID,
+		arg.RoleID,
+		arg.ExpectedVersion,
+	)
+	var active_version pgtype.Int8
+	err := row.Scan(&active_version)
+	return active_version, err
+}
+
+const authorizationScopeExists = `-- name: AuthorizationScopeExists :one
+SELECT CASE $1::text
+    WHEN 'workspace' THEN EXISTS (
+        SELECT 1 FROM workspaces AS workspace
+        WHERE workspace.id::text = $2::text AND workspace.id = $3
+    )
+    WHEN 'asset' THEN EXISTS (
+        SELECT 1 FROM semantic_assets AS asset
+        WHERE asset.id::text = $2::text AND asset.workspace_id = $3
+    )
+    WHEN 'source' THEN EXISTS (
+        SELECT 1 FROM source_connections AS source
+        WHERE source.id::text = $2::text AND source.workspace_id = $3
+    )
+    WHEN 'release' THEN EXISTS (
+        SELECT 1 FROM releases AS release
+        WHERE release.id::text = $2::text AND release.workspace_id = $3
+    )
+    WHEN 'consumer' THEN EXISTS (
+        SELECT 1 FROM consumers AS consumer
+        WHERE consumer.id::text = $2::text AND consumer.workspace_id = $3
+    )
+    WHEN 'domain' THEN true
+    WHEN 'environment' THEN true
+    ELSE false
+END
+`
+
+type AuthorizationScopeExistsParams struct {
+	ScopeType   string      `json:"scope_type"`
+	ScopeID     string      `json:"scope_id"`
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+}
+
+func (q *Queries) AuthorizationScopeExists(ctx context.Context, arg AuthorizationScopeExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, authorizationScopeExists, arg.ScopeType, arg.ScopeID, arg.WorkspaceID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const bumpWorkspaceAuthorizationVersion = `-- name: BumpWorkspaceAuthorizationVersion :one
 UPDATE workspaces
 SET authorization_version = authorization_version + 1, updated_at = CURRENT_TIMESTAMP
@@ -23,6 +131,38 @@ func (q *Queries) BumpWorkspaceAuthorizationVersion(ctx context.Context, workspa
 	var authorization_version int64
 	err := row.Scan(&authorization_version)
 	return authorization_version, err
+}
+
+const countActiveAuthorizationAdministrators = `-- name: CountActiveAuthorizationAdministrators :one
+SELECT count(*)
+FROM role_bindings AS binding
+JOIN principals AS principal
+  ON principal.workspace_id = binding.workspace_id AND principal.id = binding.principal_id
+JOIN workspace_memberships AS membership
+  ON membership.workspace_id = binding.workspace_id
+ AND membership.principal_id = binding.principal_id
+WHERE binding.workspace_id = $1
+  AND binding.role_id = 'workspace_admin'
+  AND binding.scope_type = 'workspace'
+  AND binding.scope_id = binding.workspace_id::text
+  AND binding.revoked_at IS NULL
+  AND binding.expired_at IS NULL
+  AND (binding.expires_at IS NULL OR binding.expires_at > $2)
+  AND principal.kind = 'human'
+  AND principal.status = 'active'
+  AND membership.status = 'active'
+`
+
+type CountActiveAuthorizationAdministratorsParams struct {
+	WorkspaceID pgtype.UUID        `json:"workspace_id"`
+	Now         pgtype.Timestamptz `json:"now"`
+}
+
+func (q *Queries) CountActiveAuthorizationAdministrators(ctx context.Context, arg CountActiveAuthorizationAdministratorsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveAuthorizationAdministrators, arg.WorkspaceID, arg.Now)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
 }
 
 const createAuthorizationEvent = `-- name: CreateAuthorizationEvent :exec
@@ -69,6 +209,87 @@ func (q *Queries) CreateAuthorizationEvent(ctx context.Context, arg CreateAuthor
 	return err
 }
 
+const createCustomRoleBase = `-- name: CreateCustomRoleBase :exec
+INSERT INTO roles (id, workspace_id, name, description, category, active_version)
+VALUES (
+    $1, $2, $3,
+    $4, 'custom', 1
+)
+`
+
+type CreateCustomRoleBaseParams struct {
+	RoleID      string      `json:"role_id"`
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	Name        string      `json:"name"`
+	Description string      `json:"description"`
+}
+
+func (q *Queries) CreateCustomRoleBase(ctx context.Context, arg CreateCustomRoleBaseParams) error {
+	_, err := q.db.Exec(ctx, createCustomRoleBase,
+		arg.RoleID,
+		arg.WorkspaceID,
+		arg.Name,
+		arg.Description,
+	)
+	return err
+}
+
+const createCustomRoleVersion = `-- name: CreateCustomRoleVersion :exec
+INSERT INTO custom_role_versions (
+    id, workspace_id, role_id, version, name, description, created_by, created_at
+) VALUES (
+    $1, $2, $3, $4,
+    $5, $6, $7, $8
+)
+`
+
+type CreateCustomRoleVersionParams struct {
+	ID          pgtype.UUID        `json:"id"`
+	WorkspaceID pgtype.UUID        `json:"workspace_id"`
+	RoleID      string             `json:"role_id"`
+	Version     int64              `json:"version"`
+	Name        string             `json:"name"`
+	Description string             `json:"description"`
+	CreatedBy   pgtype.UUID        `json:"created_by"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) CreateCustomRoleVersion(ctx context.Context, arg CreateCustomRoleVersionParams) error {
+	_, err := q.db.Exec(ctx, createCustomRoleVersion,
+		arg.ID,
+		arg.WorkspaceID,
+		arg.RoleID,
+		arg.Version,
+		arg.Name,
+		arg.Description,
+		arg.CreatedBy,
+		arg.CreatedAt,
+	)
+	return err
+}
+
+const createCustomRoleVersionAction = `-- name: CreateCustomRoleVersionAction :exec
+INSERT INTO custom_role_version_actions (workspace_id, role_id, role_version, action)
+VALUES ($1, $2, $3, $4)
+`
+
+type CreateCustomRoleVersionActionParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	RoleID      string      `json:"role_id"`
+	RoleVersion int64       `json:"role_version"`
+	Action      string      `json:"action"`
+}
+
+func (q *Queries) CreateCustomRoleVersionAction(ctx context.Context, arg CreateCustomRoleVersionActionParams) error {
+	_, err := q.db.Exec(ctx, createCustomRoleVersionAction,
+		arg.WorkspaceID,
+		arg.RoleID,
+		arg.RoleVersion,
+		arg.Action,
+	)
+	return err
+}
+
 const createPrincipal = `-- name: CreatePrincipal :one
 INSERT INTO principals (id, workspace_id, kind, display_name, owner_principal_id, status)
 VALUES (
@@ -110,31 +331,43 @@ func (q *Queries) CreatePrincipal(ctx context.Context, arg CreatePrincipalParams
 }
 
 const createRoleBinding = `-- name: CreateRoleBinding :one
-INSERT INTO role_bindings (id, principal_id, role_id, scope_type, scope_id, granted_by)
+INSERT INTO role_bindings (
+    id, workspace_id, principal_id, role_id, role_version, scope_type, scope_id,
+    granted_by, granted_at, expires_at
+)
 VALUES (
     $1, $2, $3, $4,
-    $5, $6
+    $5, $6, $7,
+    $8, $9, $10
 )
-RETURNING id, principal_id, role_id, scope_type, scope_id, granted_by, granted_at
+RETURNING id, principal_id, role_id, scope_type, scope_id, granted_by, granted_at, workspace_id, role_version, expires_at, expired_at, revoked_at, revoked_by, revocation_reason, version
 `
 
 type CreateRoleBindingParams struct {
-	ID          pgtype.UUID `json:"id"`
-	PrincipalID pgtype.UUID `json:"principal_id"`
-	RoleID      string      `json:"role_id"`
-	ScopeType   string      `json:"scope_type"`
-	ScopeID     string      `json:"scope_id"`
-	GrantedBy   pgtype.UUID `json:"granted_by"`
+	ID          pgtype.UUID        `json:"id"`
+	WorkspaceID pgtype.UUID        `json:"workspace_id"`
+	PrincipalID pgtype.UUID        `json:"principal_id"`
+	RoleID      string             `json:"role_id"`
+	RoleVersion int64              `json:"role_version"`
+	ScopeType   string             `json:"scope_type"`
+	ScopeID     string             `json:"scope_id"`
+	GrantedBy   pgtype.UUID        `json:"granted_by"`
+	GrantedAt   pgtype.Timestamptz `json:"granted_at"`
+	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
 }
 
 func (q *Queries) CreateRoleBinding(ctx context.Context, arg CreateRoleBindingParams) (RoleBinding, error) {
 	row := q.db.QueryRow(ctx, createRoleBinding,
 		arg.ID,
+		arg.WorkspaceID,
 		arg.PrincipalID,
 		arg.RoleID,
+		arg.RoleVersion,
 		arg.ScopeType,
 		arg.ScopeID,
 		arg.GrantedBy,
+		arg.GrantedAt,
+		arg.ExpiresAt,
 	)
 	var i RoleBinding
 	err := row.Scan(
@@ -145,6 +378,158 @@ func (q *Queries) CreateRoleBinding(ctx context.Context, arg CreateRoleBindingPa
 		&i.ScopeID,
 		&i.GrantedBy,
 		&i.GrantedAt,
+		&i.WorkspaceID,
+		&i.RoleVersion,
+		&i.ExpiresAt,
+		&i.ExpiredAt,
+		&i.RevokedAt,
+		&i.RevokedBy,
+		&i.RevocationReason,
+		&i.Version,
+	)
+	return i, err
+}
+
+const expireAuthorizationRoleBindings = `-- name: ExpireAuthorizationRoleBindings :many
+UPDATE role_bindings
+SET expired_at = expires_at, version = version + 1
+WHERE workspace_id = $1
+  AND revoked_at IS NULL
+  AND expired_at IS NULL
+  AND expires_at IS NOT NULL
+  AND expires_at <= $2
+RETURNING id
+`
+
+type ExpireAuthorizationRoleBindingsParams struct {
+	WorkspaceID pgtype.UUID        `json:"workspace_id"`
+	ExpiredAt   pgtype.Timestamptz `json:"expired_at"`
+}
+
+func (q *Queries) ExpireAuthorizationRoleBindings(ctx context.Context, arg ExpireAuthorizationRoleBindingsParams) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, expireAuthorizationRoleBindings, arg.WorkspaceID, arg.ExpiredAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var id pgtype.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getAuthorizationRole = `-- name: GetAuthorizationRole :one
+SELECT
+    role.id, role.workspace_id, role.name, role.description, role.category,
+    COALESCE(role.active_version, 1)::bigint AS version,
+    version.created_at
+FROM roles AS role
+LEFT JOIN custom_role_versions AS version
+  ON version.workspace_id = role.workspace_id
+ AND version.role_id = role.id
+ AND version.version = role.active_version
+WHERE role.id = $1
+  AND (role.category = 'system' OR role.workspace_id = $2)
+`
+
+type GetAuthorizationRoleParams struct {
+	RoleID      string      `json:"role_id"`
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+}
+
+type GetAuthorizationRoleRow struct {
+	ID          string             `json:"id"`
+	WorkspaceID pgtype.UUID        `json:"workspace_id"`
+	Name        string             `json:"name"`
+	Description string             `json:"description"`
+	Category    string             `json:"category"`
+	Version     int64              `json:"version"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) GetAuthorizationRole(ctx context.Context, arg GetAuthorizationRoleParams) (GetAuthorizationRoleRow, error) {
+	row := q.db.QueryRow(ctx, getAuthorizationRole, arg.RoleID, arg.WorkspaceID)
+	var i GetAuthorizationRoleRow
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Name,
+		&i.Description,
+		&i.Category,
+		&i.Version,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getAuthorizationRoleBinding = `-- name: GetAuthorizationRoleBinding :one
+SELECT
+    binding.id, binding.principal_id, binding.role_id, binding.scope_type, binding.scope_id, binding.granted_by, binding.granted_at, binding.workspace_id, binding.role_version, binding.expires_at, binding.expired_at, binding.revoked_at, binding.revoked_by, binding.revocation_reason, binding.version, principal.display_name AS principal_display_name,
+    role.category AS role_category,
+    COALESCE(role.active_version, 1)::bigint AS current_role_version
+FROM role_bindings AS binding
+JOIN principals AS principal
+  ON principal.workspace_id = binding.workspace_id AND principal.id = binding.principal_id
+JOIN roles AS role ON role.id = binding.role_id
+WHERE binding.workspace_id = $1 AND binding.id = $2
+`
+
+type GetAuthorizationRoleBindingParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	BindingID   pgtype.UUID `json:"binding_id"`
+}
+
+type GetAuthorizationRoleBindingRow struct {
+	ID                   pgtype.UUID        `json:"id"`
+	PrincipalID          pgtype.UUID        `json:"principal_id"`
+	RoleID               string             `json:"role_id"`
+	ScopeType            string             `json:"scope_type"`
+	ScopeID              string             `json:"scope_id"`
+	GrantedBy            pgtype.UUID        `json:"granted_by"`
+	GrantedAt            pgtype.Timestamptz `json:"granted_at"`
+	WorkspaceID          pgtype.UUID        `json:"workspace_id"`
+	RoleVersion          int64              `json:"role_version"`
+	ExpiresAt            pgtype.Timestamptz `json:"expires_at"`
+	ExpiredAt            pgtype.Timestamptz `json:"expired_at"`
+	RevokedAt            pgtype.Timestamptz `json:"revoked_at"`
+	RevokedBy            pgtype.UUID        `json:"revoked_by"`
+	RevocationReason     pgtype.Text        `json:"revocation_reason"`
+	Version              int64              `json:"version"`
+	PrincipalDisplayName string             `json:"principal_display_name"`
+	RoleCategory         string             `json:"role_category"`
+	CurrentRoleVersion   int64              `json:"current_role_version"`
+}
+
+func (q *Queries) GetAuthorizationRoleBinding(ctx context.Context, arg GetAuthorizationRoleBindingParams) (GetAuthorizationRoleBindingRow, error) {
+	row := q.db.QueryRow(ctx, getAuthorizationRoleBinding, arg.WorkspaceID, arg.BindingID)
+	var i GetAuthorizationRoleBindingRow
+	err := row.Scan(
+		&i.ID,
+		&i.PrincipalID,
+		&i.RoleID,
+		&i.ScopeType,
+		&i.ScopeID,
+		&i.GrantedBy,
+		&i.GrantedAt,
+		&i.WorkspaceID,
+		&i.RoleVersion,
+		&i.ExpiresAt,
+		&i.ExpiredAt,
+		&i.RevokedAt,
+		&i.RevokedBy,
+		&i.RevocationReason,
+		&i.Version,
+		&i.PrincipalDisplayName,
+		&i.RoleCategory,
+		&i.CurrentRoleVersion,
 	)
 	return i, err
 }
@@ -163,6 +548,62 @@ LIMIT 1
 
 func (q *Queries) GetDefaultWorkspacePrincipal(ctx context.Context, workspaceID pgtype.UUID) (Principal, error) {
 	row := q.db.QueryRow(ctx, getDefaultWorkspacePrincipal, workspaceID)
+	var i Principal
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Kind,
+		&i.DisplayName,
+		&i.OwnerPrincipalID,
+		&i.Status,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getLocalUATPrincipal = `-- name: GetLocalUATPrincipal :one
+SELECT principal.id, principal.workspace_id, principal.kind, principal.display_name, principal.owner_principal_id, principal.status, principal.created_at FROM workspaces AS workspace
+JOIN principals AS principal
+  ON principal.workspace_id = workspace.id
+ AND principal.id = semlia_seed_uuidv7(
+      $1::text, workspace.id::text, workspace.created_at
+ )
+JOIN role_bindings AS binding ON binding.principal_id = principal.id
+WHERE workspace.id = $2
+  AND binding.role_id = $3
+  AND binding.scope_type = 'workspace'
+  AND binding.scope_id = workspace.id::text
+  AND principal.status = 'active'
+LIMIT 1
+`
+
+type GetLocalUATPrincipalParams struct {
+	SeedNamespace string      `json:"seed_namespace"`
+	WorkspaceID   pgtype.UUID `json:"workspace_id"`
+	RoleID        string      `json:"role_id"`
+}
+
+func (q *Queries) GetLocalUATPrincipal(ctx context.Context, arg GetLocalUATPrincipalParams) (Principal, error) {
+	row := q.db.QueryRow(ctx, getLocalUATPrincipal, arg.SeedNamespace, arg.WorkspaceID, arg.RoleID)
+	var i Principal
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Kind,
+		&i.DisplayName,
+		&i.OwnerPrincipalID,
+		&i.Status,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getPrincipalByID = `-- name: GetPrincipalByID :one
+SELECT id, workspace_id, kind, display_name, owner_principal_id, status, created_at FROM principals WHERE id = $1
+`
+
+func (q *Queries) GetPrincipalByID(ctx context.Context, principalID pgtype.UUID) (Principal, error) {
+	row := q.db.QueryRow(ctx, getPrincipalByID, principalID)
 	var i Principal
 	err := row.Scan(
 		&i.ID,
@@ -212,9 +653,324 @@ func (q *Queries) GetWorkspacePrincipal(ctx context.Context, arg GetWorkspacePri
 	return i, err
 }
 
-const listPrincipalRoleBindings = `-- name: ListPrincipalRoleBindings :many
-SELECT id, principal_id, role_id, scope_type, scope_id, granted_by, granted_at FROM role_bindings
+const isActiveWorkspaceAdministrator = `-- name: IsActiveWorkspaceAdministrator :one
+SELECT EXISTS (
+    SELECT 1
+    FROM role_bindings AS binding
+    JOIN principals AS principal
+      ON principal.workspace_id = binding.workspace_id AND principal.id = binding.principal_id
+    JOIN workspace_memberships AS membership
+      ON membership.workspace_id = binding.workspace_id
+     AND membership.principal_id = binding.principal_id
+    WHERE binding.workspace_id = $1
+      AND binding.principal_id = $2
+      AND binding.role_id = 'workspace_admin'
+      AND binding.scope_type = 'workspace'
+      AND binding.scope_id = binding.workspace_id::text
+      AND binding.revoked_at IS NULL
+      AND binding.expired_at IS NULL
+      AND (binding.expires_at IS NULL OR binding.expires_at > $3)
+      AND principal.kind = 'human'
+      AND principal.status = 'active'
+      AND membership.status = 'active'
+)
+`
+
+type IsActiveWorkspaceAdministratorParams struct {
+	WorkspaceID pgtype.UUID        `json:"workspace_id"`
+	PrincipalID pgtype.UUID        `json:"principal_id"`
+	Now         pgtype.Timestamptz `json:"now"`
+}
+
+func (q *Queries) IsActiveWorkspaceAdministrator(ctx context.Context, arg IsActiveWorkspaceAdministratorParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isActiveWorkspaceAdministrator, arg.WorkspaceID, arg.PrincipalID, arg.Now)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const listActivePrincipalRoleBindingsAt = `-- name: ListActivePrincipalRoleBindingsAt :many
+SELECT id, principal_id, role_id, scope_type, scope_id, granted_by, granted_at, workspace_id, role_version, expires_at, expired_at, revoked_at, revoked_by, revocation_reason, version FROM role_bindings
 WHERE principal_id = $1
+  AND revoked_at IS NULL
+  AND expired_at IS NULL
+  AND (expires_at IS NULL OR expires_at > $2)
+ORDER BY granted_at, id
+`
+
+type ListActivePrincipalRoleBindingsAtParams struct {
+	PrincipalID pgtype.UUID        `json:"principal_id"`
+	Now         pgtype.Timestamptz `json:"now"`
+}
+
+func (q *Queries) ListActivePrincipalRoleBindingsAt(ctx context.Context, arg ListActivePrincipalRoleBindingsAtParams) ([]RoleBinding, error) {
+	rows, err := q.db.Query(ctx, listActivePrincipalRoleBindingsAt, arg.PrincipalID, arg.Now)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RoleBinding{}
+	for rows.Next() {
+		var i RoleBinding
+		if err := rows.Scan(
+			&i.ID,
+			&i.PrincipalID,
+			&i.RoleID,
+			&i.ScopeType,
+			&i.ScopeID,
+			&i.GrantedBy,
+			&i.GrantedAt,
+			&i.WorkspaceID,
+			&i.RoleVersion,
+			&i.ExpiresAt,
+			&i.ExpiredAt,
+			&i.RevokedAt,
+			&i.RevokedBy,
+			&i.RevocationReason,
+			&i.Version,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listActiveRoleBindingsForRoleAt = `-- name: ListActiveRoleBindingsForRoleAt :many
+SELECT id, principal_id, role_id, scope_type, scope_id, granted_by, granted_at, workspace_id, role_version, expires_at, expired_at, revoked_at, revoked_by, revocation_reason, version FROM role_bindings
+WHERE workspace_id = $1
+  AND role_id = $2
+  AND role_version = $3
+  AND revoked_at IS NULL
+  AND expired_at IS NULL
+  AND (expires_at IS NULL OR expires_at > $4)
+ORDER BY principal_id, scope_type, scope_id, id
+FOR UPDATE
+`
+
+type ListActiveRoleBindingsForRoleAtParams struct {
+	WorkspaceID pgtype.UUID        `json:"workspace_id"`
+	RoleID      string             `json:"role_id"`
+	RoleVersion int64              `json:"role_version"`
+	Now         pgtype.Timestamptz `json:"now"`
+}
+
+func (q *Queries) ListActiveRoleBindingsForRoleAt(ctx context.Context, arg ListActiveRoleBindingsForRoleAtParams) ([]RoleBinding, error) {
+	rows, err := q.db.Query(ctx, listActiveRoleBindingsForRoleAt,
+		arg.WorkspaceID,
+		arg.RoleID,
+		arg.RoleVersion,
+		arg.Now,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RoleBinding{}
+	for rows.Next() {
+		var i RoleBinding
+		if err := rows.Scan(
+			&i.ID,
+			&i.PrincipalID,
+			&i.RoleID,
+			&i.ScopeType,
+			&i.ScopeID,
+			&i.GrantedBy,
+			&i.GrantedAt,
+			&i.WorkspaceID,
+			&i.RoleVersion,
+			&i.ExpiresAt,
+			&i.ExpiredAt,
+			&i.RevokedAt,
+			&i.RevokedBy,
+			&i.RevocationReason,
+			&i.Version,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAuthorizationRoleBindings = `-- name: ListAuthorizationRoleBindings :many
+SELECT
+    binding.id, binding.principal_id, binding.role_id, binding.scope_type, binding.scope_id, binding.granted_by, binding.granted_at, binding.workspace_id, binding.role_version, binding.expires_at, binding.expired_at, binding.revoked_at, binding.revoked_by, binding.revocation_reason, binding.version, principal.display_name AS principal_display_name,
+    role.category AS role_category,
+    COALESCE(role.active_version, 1)::bigint AS current_role_version
+FROM role_bindings AS binding
+JOIN principals AS principal
+  ON principal.workspace_id = binding.workspace_id AND principal.id = binding.principal_id
+JOIN roles AS role ON role.id = binding.role_id
+WHERE binding.workspace_id = $1
+ORDER BY binding.granted_at DESC, binding.id DESC
+`
+
+type ListAuthorizationRoleBindingsRow struct {
+	ID                   pgtype.UUID        `json:"id"`
+	PrincipalID          pgtype.UUID        `json:"principal_id"`
+	RoleID               string             `json:"role_id"`
+	ScopeType            string             `json:"scope_type"`
+	ScopeID              string             `json:"scope_id"`
+	GrantedBy            pgtype.UUID        `json:"granted_by"`
+	GrantedAt            pgtype.Timestamptz `json:"granted_at"`
+	WorkspaceID          pgtype.UUID        `json:"workspace_id"`
+	RoleVersion          int64              `json:"role_version"`
+	ExpiresAt            pgtype.Timestamptz `json:"expires_at"`
+	ExpiredAt            pgtype.Timestamptz `json:"expired_at"`
+	RevokedAt            pgtype.Timestamptz `json:"revoked_at"`
+	RevokedBy            pgtype.UUID        `json:"revoked_by"`
+	RevocationReason     pgtype.Text        `json:"revocation_reason"`
+	Version              int64              `json:"version"`
+	PrincipalDisplayName string             `json:"principal_display_name"`
+	RoleCategory         string             `json:"role_category"`
+	CurrentRoleVersion   int64              `json:"current_role_version"`
+}
+
+func (q *Queries) ListAuthorizationRoleBindings(ctx context.Context, workspaceID pgtype.UUID) ([]ListAuthorizationRoleBindingsRow, error) {
+	rows, err := q.db.Query(ctx, listAuthorizationRoleBindings, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAuthorizationRoleBindingsRow{}
+	for rows.Next() {
+		var i ListAuthorizationRoleBindingsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PrincipalID,
+			&i.RoleID,
+			&i.ScopeType,
+			&i.ScopeID,
+			&i.GrantedBy,
+			&i.GrantedAt,
+			&i.WorkspaceID,
+			&i.RoleVersion,
+			&i.ExpiresAt,
+			&i.ExpiredAt,
+			&i.RevokedAt,
+			&i.RevokedBy,
+			&i.RevocationReason,
+			&i.Version,
+			&i.PrincipalDisplayName,
+			&i.RoleCategory,
+			&i.CurrentRoleVersion,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAuthorizationRoles = `-- name: ListAuthorizationRoles :many
+SELECT
+    role.id, role.workspace_id, role.name, role.description, role.category,
+    COALESCE(role.active_version, 1)::bigint AS version,
+    version.created_at
+FROM roles AS role
+LEFT JOIN custom_role_versions AS version
+  ON version.workspace_id = role.workspace_id
+ AND version.role_id = role.id
+ AND version.version = role.active_version
+WHERE role.category = 'system' OR role.workspace_id = $1
+ORDER BY role.category DESC, role.name, role.id
+`
+
+type ListAuthorizationRolesRow struct {
+	ID          string             `json:"id"`
+	WorkspaceID pgtype.UUID        `json:"workspace_id"`
+	Name        string             `json:"name"`
+	Description string             `json:"description"`
+	Category    string             `json:"category"`
+	Version     int64              `json:"version"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) ListAuthorizationRoles(ctx context.Context, workspaceID pgtype.UUID) ([]ListAuthorizationRolesRow, error) {
+	rows, err := q.db.Query(ctx, listAuthorizationRoles, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAuthorizationRolesRow{}
+	for rows.Next() {
+		var i ListAuthorizationRolesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.Name,
+			&i.Description,
+			&i.Category,
+			&i.Version,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPrincipalRoleBindingActions = `-- name: ListPrincipalRoleBindingActions :many
+SELECT binding.id AS binding_id, system_action.action
+FROM role_bindings AS binding
+JOIN role_actions AS system_action ON system_action.role_id = binding.role_id
+WHERE binding.principal_id = $1
+UNION ALL
+SELECT binding.id AS binding_id, custom.action
+FROM role_bindings AS binding
+JOIN custom_role_version_actions AS custom
+  ON custom.workspace_id = binding.workspace_id
+ AND custom.role_id = binding.role_id
+ AND custom.role_version = binding.role_version
+WHERE binding.principal_id = $1
+ORDER BY binding_id, action
+`
+
+type ListPrincipalRoleBindingActionsRow struct {
+	BindingID pgtype.UUID `json:"binding_id"`
+	Action    string      `json:"action"`
+}
+
+func (q *Queries) ListPrincipalRoleBindingActions(ctx context.Context, principalID pgtype.UUID) ([]ListPrincipalRoleBindingActionsRow, error) {
+	rows, err := q.db.Query(ctx, listPrincipalRoleBindingActions, principalID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListPrincipalRoleBindingActionsRow{}
+	for rows.Next() {
+		var i ListPrincipalRoleBindingActionsRow
+		if err := rows.Scan(&i.BindingID, &i.Action); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPrincipalRoleBindings = `-- name: ListPrincipalRoleBindings :many
+SELECT id, principal_id, role_id, scope_type, scope_id, granted_by, granted_at, workspace_id, role_version, expires_at, expired_at, revoked_at, revoked_by, revocation_reason, version FROM role_bindings
+WHERE principal_id = $1
+  AND revoked_at IS NULL
+  AND expired_at IS NULL
+  AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
 ORDER BY granted_at, id
 `
 
@@ -235,6 +991,14 @@ func (q *Queries) ListPrincipalRoleBindings(ctx context.Context, principalID pgt
 			&i.ScopeID,
 			&i.GrantedBy,
 			&i.GrantedAt,
+			&i.WorkspaceID,
+			&i.RoleVersion,
+			&i.ExpiresAt,
+			&i.ExpiredAt,
+			&i.RevokedAt,
+			&i.RevokedBy,
+			&i.RevocationReason,
+			&i.Version,
 		); err != nil {
 			return nil, err
 		}
@@ -247,8 +1011,17 @@ func (q *Queries) ListPrincipalRoleBindings(ctx context.Context, principalID pgt
 }
 
 const listRoleActionsForRoles = `-- name: ListRoleActionsForRoles :many
-SELECT role_id, action FROM role_actions
-WHERE role_id = ANY ($1::text[])
+SELECT system_action.role_id, system_action.action FROM role_actions AS system_action
+WHERE system_action.role_id = ANY ($1::text[])
+UNION ALL
+SELECT custom.role_id, custom.action
+FROM custom_role_version_actions AS custom
+JOIN roles AS role
+  ON role.workspace_id = custom.workspace_id
+ AND role.id = custom.role_id
+ AND role.active_version = custom.role_version
+WHERE custom.role_id = ANY ($1::text[])
+ORDER BY role_id, action
 `
 
 func (q *Queries) ListRoleActionsForRoles(ctx context.Context, roleIds []string) ([]RoleAction, error) {
@@ -269,4 +1042,108 @@ func (q *Queries) ListRoleActionsForRoles(ctx context.Context, roleIds []string)
 		return nil, err
 	}
 	return items, nil
+}
+
+const listWorkspaceRoleBindingActions = `-- name: ListWorkspaceRoleBindingActions :many
+SELECT binding.id AS binding_id, system_action.action
+FROM role_bindings AS binding
+JOIN role_actions AS system_action ON system_action.role_id = binding.role_id
+WHERE binding.workspace_id = $1
+UNION ALL
+SELECT binding.id AS binding_id, custom.action
+FROM role_bindings AS binding
+JOIN custom_role_version_actions AS custom
+  ON custom.workspace_id = binding.workspace_id
+ AND custom.role_id = binding.role_id
+ AND custom.role_version = binding.role_version
+WHERE binding.workspace_id = $1
+ORDER BY binding_id, action
+`
+
+type ListWorkspaceRoleBindingActionsRow struct {
+	BindingID pgtype.UUID `json:"binding_id"`
+	Action    string      `json:"action"`
+}
+
+func (q *Queries) ListWorkspaceRoleBindingActions(ctx context.Context, workspaceID pgtype.UUID) ([]ListWorkspaceRoleBindingActionsRow, error) {
+	rows, err := q.db.Query(ctx, listWorkspaceRoleBindingActions, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListWorkspaceRoleBindingActionsRow{}
+	for rows.Next() {
+		var i ListWorkspaceRoleBindingActionsRow
+		if err := rows.Scan(&i.BindingID, &i.Action); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockAuthorizationWorkspace = `-- name: LockAuthorizationWorkspace :one
+SELECT authorization_version FROM workspaces
+WHERE id = $1
+FOR UPDATE
+`
+
+func (q *Queries) LockAuthorizationWorkspace(ctx context.Context, workspaceID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, lockAuthorizationWorkspace, workspaceID)
+	var authorization_version int64
+	err := row.Scan(&authorization_version)
+	return authorization_version, err
+}
+
+const revokeAuthorizationRoleBinding = `-- name: RevokeAuthorizationRoleBinding :one
+UPDATE role_bindings
+SET revoked_at = $1, revoked_by = $2,
+    revocation_reason = $3, version = version + 1
+WHERE workspace_id = $4
+  AND id = $5
+  AND version = $6
+  AND revoked_at IS NULL
+RETURNING id, principal_id, role_id, scope_type, scope_id, granted_by, granted_at, workspace_id, role_version, expires_at, expired_at, revoked_at, revoked_by, revocation_reason, version
+`
+
+type RevokeAuthorizationRoleBindingParams struct {
+	RevokedAt        pgtype.Timestamptz `json:"revoked_at"`
+	RevokedBy        pgtype.UUID        `json:"revoked_by"`
+	RevocationReason pgtype.Text        `json:"revocation_reason"`
+	WorkspaceID      pgtype.UUID        `json:"workspace_id"`
+	BindingID        pgtype.UUID        `json:"binding_id"`
+	ExpectedVersion  int64              `json:"expected_version"`
+}
+
+func (q *Queries) RevokeAuthorizationRoleBinding(ctx context.Context, arg RevokeAuthorizationRoleBindingParams) (RoleBinding, error) {
+	row := q.db.QueryRow(ctx, revokeAuthorizationRoleBinding,
+		arg.RevokedAt,
+		arg.RevokedBy,
+		arg.RevocationReason,
+		arg.WorkspaceID,
+		arg.BindingID,
+		arg.ExpectedVersion,
+	)
+	var i RoleBinding
+	err := row.Scan(
+		&i.ID,
+		&i.PrincipalID,
+		&i.RoleID,
+		&i.ScopeType,
+		&i.ScopeID,
+		&i.GrantedBy,
+		&i.GrantedAt,
+		&i.WorkspaceID,
+		&i.RoleVersion,
+		&i.ExpiresAt,
+		&i.ExpiredAt,
+		&i.RevokedAt,
+		&i.RevokedBy,
+		&i.RevocationReason,
+		&i.Version,
+	)
+	return i, err
 }

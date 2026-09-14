@@ -1,0 +1,77 @@
+{
+  "contextLimit": 128000,
+  "goldIncluded": false,
+  "instruction": "Suggest structural definitions and scope for the three existing skeleton targets using only the supplied physical evidence. Preserve target identities and owner references. Revenue business rules are not supplied; keep unsupported commercial policy unresolved. Do not invent paid/cancelled status meaning. Return JSON only.",
+  "maxOutputTokens": 16384,
+  "model": "deepseek-v4-flash",
+  "payload": {
+    "input": {
+      "candidates": [],
+      "dependencies": [],
+      "evidence": [],
+      "snapshots": [
+        {
+          "coverageKeys": [
+            "catalog"
+          ],
+          "digest": "sha256:e6132712a369881fd073dd0f65610549220048b565bfcb96c0af50177195c1b9",
+          "snapshotId": "ssnp_01m27sz1p4fjbv9pb5p7znttqm",
+          "sourceId": "src_01m27sz1h0fjbv7ekj2jvf0fk8"
+        }
+      ]
+    },
+    "targets": [
+      {
+        "changes": [],
+        "content": {
+          "address": "commerce.orders",
+          "assetType": "entity",
+          "definition": null,
+          "displayName": "orders",
+          "ownerPrincipalId": "prn_01m27sz1g6fjbspd1tft2m0x35",
+          "scope": null
+        },
+        "evidenceIds": [],
+        "identityKey": "commerce.orders",
+        "intent": "create",
+        "kind": "semantic_asset",
+        "localKey": "orders",
+        "title": "orders"
+      },
+      {
+        "changes": [],
+        "content": {
+          "address": "commerce.customers",
+          "assetType": "entity",
+          "definition": null,
+          "displayName": "customers",
+          "ownerPrincipalId": "prn_01m27sz1g6fjbspd1tft2m0x35",
+          "scope": null
+        },
+        "evidenceIds": [],
+        "identityKey": "commerce.customers",
+        "intent": "create",
+        "kind": "semantic_asset",
+        "localKey": "customers",
+        "title": "customers"
+      },
+      {
+        "changes": [],
+        "content": {
+          "address": "commerce.revenue",
+          "assetType": "metric",
+          "definition": null,
+          "displayName": "revenue",
+          "ownerPrincipalId": "prn_01m27sz1g6fjbspd1tft2m0x35",
+          "scope": null
+        },
+        "evidenceIds": [],
+        "identityKey": "commerce.revenue",
+        "intent": "create",
+        "kind": "semantic_asset",
+        "localKey": "revenue",
+        "title": "revenue"
+      }
+    ]
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "command": "go test -count=1 ./tests/contracts -run '^TestSemanticProductionContract$'",
+  "start": {
+    "current_time": "2026-09-09 04:45:15 UTC"
+  },
+  "end": {
+    "current_time": "2026-09-09 04:45:18 UTC"
+  },
+  "chunk_id": "1b1c27",
+  "wall_time_seconds": 2.34153975,
+  "exit_code": 0,
+  "original_token_count": 14,
+  "output": "ok  \tgithub.com/iiwish/semlia/tests/contracts\t1.715s\n"
+}

@@ -1,0 +1,145 @@
+task_id: SP-T004
+attempt_id: SP-T004-A002
+status: Needs_Review
+attempt_status: Completed
+mode: Direct Execute
+approval: 2026-09-10 用户要求复核 T003、无阻断后验收并继续 T004；T003 复核修复后 Accepted。本轮按已说明计划复核修复组合验证、审批、原子发布、受保护回滚及兼容性，保留 migration 23–25，允许 additive migration 26 与生产模块辅助文件/对应测试。
+baseline_archive: .semlia/evidence-work/SP-T004-A002-baseline.tar
+input_review: docs/evidence/SP-T003/acceptance-A003/review.md
+execution_reason: 在现有共享工作区串行执行；用户未授权子代理委派，保留全部既有改动。
+goal: 用原有治理机制完成新建及更新的组合语义生产，任一相关对象未满足门禁都不能部分发布；支持多提案组合验证、审批、原子发布与受保护回滚。
+context:
+  root: .
+  root_resolution: Resolve all paths from git rev-parse --show-toplevel.
+  product: docs/specs/semantic-production/product-design.md
+  plan: docs/specs/semantic-production/plan.md
+  tasks: docs/specs/semantic-production/tasks.md
+  checklist: docs/specs/semantic-production/checklists/requirements.md
+  analysis: docs/specs/semantic-production/analysis.md
+  data_model: docs/specs/semantic-production/data-model.md
+  wire_semantics: docs/specs/semantic-production/contracts/production.md
+  wire_schema: docs/specs/semantic-production/contracts/production.openapi.yaml
+  input_handoff: docs/evidence/SP-T003/summary.md
+requirements: [SP-US-003, SP-US-004, SP-FR-002, SP-FR-005, SP-FR-006, SP-FR-007, SP-FR-008, SP-NFR-001, SP-NFR-002, SP-NFR-003, SP-NFR-005, SP-TD-002, SP-TD-003, SP-TD-005, SP-TD-008]
+dependencies: [SP-T003 Accepted, explicit user authorization, migration 000026 unoccupied, local isolated PostgreSQL available]
+parallel: false
+conflicts: 所有验证、风险策略、审核、发布、回滚、目录权威投影和 release 消费读取改动
+allowed_files:
+  - migrations/000026_semantic_production_release_integrity.up.sql
+  - migrations/000026_semantic_production_release_integrity.down.sql
+  - internal/domain/governance/production_*.go
+  - internal/application/governance/production_*.go
+  - internal/adapters/postgres/production_*.go
+  - internal/platform/http/production_*.go
+  - tests/integration/governance/production_*.go
+  - tests/integration/projection/production_*.go
+  - db/sqlc.yaml
+  - db/queries/governance.sql
+  - db/queries/semantic_production.sql
+  - db/queries/catalog.sql
+  - db/queries/registry.sql
+  - db/queries/audit.sql
+  - db/queries/authorization.sql
+  - db/queries/projection.sql
+  - internal/adapters/postgres/sqlc/*.go
+  - internal/domain/governance/production.go
+  - internal/domain/governance/production_test.go
+  - internal/domain/governance/release.go
+  - internal/domain/governance/reviewbatch.go
+  - internal/application/governance/production.go
+  - internal/application/governance/production_test.go
+  - internal/application/governance/validation.go
+  - internal/application/governance/orchestration.go
+  - internal/application/governance/validatejob.go
+  - internal/application/governance/validators.go
+  - internal/application/governance/validators_test.go
+  - internal/application/governance/decisioninputs.go
+  - internal/application/governance/decisioninputs_test.go
+  - internal/application/governance/review.go
+  - internal/application/governance/review_test.go
+  - internal/application/governance/publishing.go
+  - internal/application/governance/publishing_access_test.go
+  - internal/application/governance/authoring.go
+  - internal/adapters/postgres/semantic_production.go
+  - internal/adapters/postgres/governance.go
+  - internal/adapters/postgres/release_publishing.go
+  - internal/adapters/postgres/reviewbatch.go
+  - internal/adapters/postgres/catalog.go
+  - internal/domain/projection/model.go
+  - internal/application/projection/publisher.go
+  - internal/application/projection/publisher_test.go
+  - internal/adapters/postgres/projection.go
+  - internal/adapters/gitcontent/adapter.go
+  - internal/adapters/gitcontent/adapter_test.go
+  - internal/platform/http/semantic_production.go
+  - internal/platform/http/semantic_production_test.go
+  - internal/platform/http/governance.go
+  - api/openapi/semlia.v1.yaml
+  - api/gen/go/types.gen.go
+  - sdk/typescript/src/schema.gen.ts
+  - sdk/typescript/src/client.ts
+  - sdk/typescript/src/client.test.ts
+  - sdk/typescript/src/index.ts
+  - api/README.md
+  - cmd/semlia/readiness.go
+  - cmd/semlia/readiness_test.go
+  - tests/contracts/contract_test.go
+  - tests/integration/governance/production_release_test.go
+  - tests/integration/governance/release_test.go
+  - tests/integration/governance/production_authoring_test.go
+  - tests/integration/projection/production_test.go
+  - tests/integration/db/semantic_production_migrations_test.go
+  - tests/integration/db/database_test.go
+  - docs/evidence/SP-T004/
+orchestrator_allowed_files:
+  - docs/evidence/SP-T004/
+  - docs/specs/semantic-production/packets/SP-T004.yaml
+  - docs/specs/semantic-production/tasks.md
+  - docs/specs/semantic-production/analysis.md
+  - docs/specs/semantic-production/checklists/requirements.md
+  - docs/specs/semantic-production/plan.md
+  - docs/specs/semantic-production/product-design.md
+  - docs/SSOT.md
+  - docs/README.md
+scope_rules:
+  - Allowed list is a maximum. Preserve the entire dirty checkout.
+  - Generate Go/sqlc/SDK only with existing generators.
+  - Add submit, validations, reviews, publish, and rollback endpoints for production operations.
+  - Intercept legacy endpoints for production members and protected releases with 409 PRODUCTION_SET_REQUIRED.
+  - Migrations 23–25 remain byte-identical. Migration 26 is atomic, expand-first, preserves unverifiable existing history and refuses unsafe downgrade; no existing database migrations.
+  - Preserve T003 authoring invariants and accepted tests. Shared production helpers may add trusted release proof integration, never fabricate history or implement T005 model jobs.
+implementation_obligations:
+  - Replace synthetic succeeded validation records with atomic queued attempt/job intent, real deterministic registry checks outside the write transaction, and a fenced complete result commit. New manual attempts rerun every required check; job retries remain on the same attempt.
+  - Bind exact version/set/input/freshness/validator-policy/check results in attempt, review and publish. Reauthorize full input and target scopes at mutation commit and every replay/read; active attempt CAS, current reviewer grants and whole-set SoD are mandatory.
+  - Preserve complete prior release manifest and unchanged pins. Publish exact canonical target business content for all five kinds, include real governed registry snapshots, adopted review IDs, attribution, binding inputs, outbox and audit atomically. No empty-content fallback, ignored SQL failure, synthetic success or missing object-row shortcut.
+  - Rollback restores exact trusted before manifest, verifies dependency closure and current head under lock, retains absent identities/history, and carries protection plus original attribution through repeated rollback. Integrate legitimate reintroduction proof without accepting unknown legacy history.
+  - Review original API, service, repository and DB bypass paths. Validation history uses complete bounded attempts with version-bound keyset cursors rather than mixed/latest runs.
+  - Validate and strengthen existing migration-24 tables via migration 26: production_validation_attempts, production_validation_bindings, production_review_bindings, release_proposals, release protection extensions, production_release_manifests, production_release_before_pins, production_release_binding_inputs.
+  - Implement Submit: freezes version, sets state to proposed -> validating, enqueues validation job with attempt=1.
+  - Implement Validations: CAS attempt increment, full deterministic check set, validation digest calculation.
+  - Implement Reviews: bind to active validation attempt & setDigest, enforce SoD (author, editors, AI actors cannot review), approve keeps in_review, reject moves to rejected.
+  - Implement Atomic Publish: verify active completed attempt, all required reviews, expectedHead CAS, write all new revisions/rows, manifest, before pins, release protection, catalog pointers, outbox, audit in one transaction. Any failure rolls back entire transaction.
+  - Implement Protected Rollback: latest release only, expectedHead CAS, restore before manifest, increment rollback depth, maintain audit.
+  - Implement Legacy Guard: legacy submit/publish/review/rollback reject production members and protected releases with PRODUCTION_SET_REQUIRED.
+tdd:
+  red: Test multi-object submit, validation job enqueue, review binding, SoD rejection, atomic publish failure rollback, absent pin rollback, and legacy bypass rejection.
+  green: Minimal transactional implementation adhering to SSOT state machines and constraints.
+  refactor: Clean helper boundaries without introducing new dependencies or altering public behavior.
+validation:
+  - go test -p=1 -count=1 ./internal/domain/governance ./internal/application/governance ./internal/platform/http
+  - env -u SEMLIA_INGESTION_TEST_DATABASE_URL -u SEMLIA_EXECUTION_CRASH_HELPER -u SEMLIA_EXECUTION_TEST_DB -u SEMLIA_DATABASE_URL go test -p=1 -count=1 -timeout=20m ./tests/integration/governance ./tests/integration/projection ./tests/integration/catalog
+  - env -u SEMLIA_DATABASE_URL go test -p=1 -count=1 -timeout=15m ./tests/integration/db -run '^TestSemanticProduction|^TestMigrationLifecycleAndTenantSchema$|^TestPostgres17MigrationLifecycle$|^TestMachineCredentialLifecycleAndChannelParity$'
+  - go test -p=1 -count=1 ./internal/application/distribution ./internal/adapters/mcp ./cmd/semlia
+  - make db-generate-check
+  - make contracts-check
+  - make test-contracts
+  - make test-repository
+  - pnpm --filter @semlia/sdk-typescript test
+  - git diff --check
+environment:
+  database: Owned local PostgreSQL 18-alpine testcontainers.
+  concurrency: Serial tests with -p=1.
+  prohibited: No paid/live model calls, Git commit/push, or production deployments.
+stop_conditions:
+  - Do not expand to T005 or frontend work, deploy, commit/push, modify shared databases, overwrite user changes, or treat failing/skipped tests as passes.
+  - Request exact ownership approval for required files outside this packet. Keep all published contract limits and security requirements; report genuine blockers rather than silently reducing the task.

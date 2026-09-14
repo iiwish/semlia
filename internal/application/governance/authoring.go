@@ -104,6 +104,13 @@ type ListAuthoringProposalsRequest struct {
 	TraceID      string
 }
 
+type ListProposalReviewsRequest struct {
+	WorkspaceID  identity.WorkspaceID
+	ProposalID   identity.ProposalID
+	PrincipalRef string
+	TraceID      string
+}
+
 // ProposalDetail is the read model of one proposal aggregate: the proposal
 // with its target expressed as the wire TypeID, plus the frozen-or-editable
 // change-set. Review facts stay absent until the review task ships them.
@@ -225,14 +232,20 @@ func (service *AuthoringService) CreateProposal(ctx context.Context, request Cre
 	} else if request.CreatedBy == "" {
 		return ProposalDetail{}, domain.ErrInvalidArgument
 	}
-	if err := service.authorize(ctx, authorizationapp.EvaluationRequest{
+	authorizationDecision, err := service.authorizeDecision(ctx, authorizationapp.EvaluationRequest{
 		PrincipalRef: request.PrincipalRef,
 		WorkspaceID:  request.WorkspaceID,
 		Action:       authorization.ActionAssetPropose,
 		Resource:     proposalResource(request.TargetType, targetUUID, request.WorkspaceID),
 		TraceID:      request.TraceID,
-	}); err != nil {
+	})
+	if err != nil {
 		return ProposalDetail{}, err
+	}
+	if attribution.RunID == nil && !authorizationDecision.PrincipalID.IsZero() {
+		// Human authorship is derived from the authorized principal, never from
+		// the client-provided display value. This keeps the SoD check meaningful.
+		request.CreatedBy = authorizationDecision.PrincipalID.String()
 	}
 	items, err := buildChangeSetItems(request.WorkspaceID, request.ChangeSet)
 	if err != nil {
@@ -282,6 +295,9 @@ func (service *AuthoringService) SubmitProposal(ctx context.Context, request Sub
 	proposal, err := service.proposals.GetProposal(ctx, request.WorkspaceID, request.ProposalID)
 	if err != nil {
 		return ProposalDetail{}, err
+	}
+	if proposal.IsProductionMember() {
+		return ProposalDetail{}, domain.ErrProductionSetRequired
 	}
 	if err := service.authorize(ctx, authorizationapp.EvaluationRequest{
 		PrincipalRef: request.PrincipalRef,
@@ -402,6 +418,24 @@ func (service *AuthoringService) ListProposals(ctx context.Context, request List
 		}
 	}
 	return page, nil
+}
+
+// ListProposalReviews restores the immutable human decision facts after a
+// browser reload or actor switch. Reads require the same asset visibility as
+// proposal detail and remain scoped to one proposal.
+func (service *AuthoringService) ListProposalReviews(
+	ctx context.Context, request ListProposalReviewsRequest,
+) ([]domain.Review, error) {
+	if err := service.authorize(ctx, authorizationapp.EvaluationRequest{
+		PrincipalRef: request.PrincipalRef,
+		WorkspaceID:  request.WorkspaceID,
+		Action:       authorization.ActionAssetRead,
+		Resource:     authorization.Resource{Type: authorization.ScopeWorkspace, ID: request.WorkspaceID.UUID()},
+		TraceID:      request.TraceID,
+	}); err != nil {
+		return nil, err
+	}
+	return service.proposals.ListReviews(ctx, request.WorkspaceID, request.ProposalID)
 }
 
 // PolicyDecisionDetail is the read model of one proposal's policy decision:
@@ -558,17 +592,24 @@ func (service *AuthoringService) resolveAttribution(ctx context.Context, request
 }
 
 func (service *AuthoringService) authorize(ctx context.Context, request authorizationapp.EvaluationRequest) error {
+	_, err := service.authorizeDecision(ctx, request)
+	return err
+}
+
+func (service *AuthoringService) authorizeDecision(
+	ctx context.Context, request authorizationapp.EvaluationRequest,
+) (authorization.Decision, error) {
 	if service.authorizer == nil {
-		return nil
+		return authorization.Decision{Allowed: true}, nil
 	}
 	decision, err := service.authorizer.Evaluate(ctx, request)
 	if err != nil {
-		return err
+		return authorization.Decision{}, err
 	}
 	if decision.Allowed {
-		return nil
+		return decision, nil
 	}
-	return &authorization.DenialError{Decision: decision}
+	return decision, &authorization.DenialError{Decision: decision}
 }
 
 // proposalResource maps a proposal target into authorization scope

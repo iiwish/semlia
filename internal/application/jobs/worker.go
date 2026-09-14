@@ -58,7 +58,10 @@ func (worker *Worker) RunOne(ctx context.Context, owner string) (bool, error) {
 		return false, nil
 	}
 
-	errorCode := worker.execute(ctx, *job)
+	errorCode, permanent, executionErr := worker.executeWithLease(ctx, owner, *job)
+	if executionErr != nil {
+		return true, executionErr
+	}
 	finishedAt := worker.clock.Now().UTC()
 	if errorCode == "" {
 		if err := worker.repository.MarkJobSucceeded(ctx, job.ID, owner, finishedAt); err != nil {
@@ -71,10 +74,54 @@ func (worker *Worker) RunOne(ctx context.Context, owner string) (bool, error) {
 	if delay < 0 {
 		delay = 0
 	}
-	if err := worker.repository.MarkJobFailed(ctx, job.ID, owner, errorCode, finishedAt.Add(delay), finishedAt); err != nil {
+	if err := worker.repository.MarkJobFailedWithDisposition(ctx, job.ID, owner, errorCode, permanent, finishedAt.Add(delay), finishedAt); err != nil {
 		return true, fmt.Errorf("mark job failed: %w", err)
 	}
 	return true, nil
+}
+
+func (worker *Worker) executeWithLease(ctx context.Context, owner string, job Job) (string, bool, error) {
+	handlerCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	type result struct {
+		code      string
+		permanent bool
+	}
+	done := make(chan result, 1)
+	go func() {
+		code, permanent := worker.execute(handlerCtx, job)
+		done <- result{code: code, permanent: permanent}
+	}()
+
+	heartbeatEvery := worker.leaseDuration / 3
+	if heartbeatEvery <= 0 {
+		heartbeatEvery = time.Millisecond
+	}
+	ticker := time.NewTicker(heartbeatEvery)
+	defer ticker.Stop()
+	for {
+		select {
+		case completed := <-done:
+			return completed.code, completed.permanent, nil
+		case <-ticker.C:
+			renewedAt := worker.clock.Now().UTC()
+			if err := worker.repository.ExtendJobLease(handlerCtx, job.ID, owner, renewedAt, worker.leaseDuration); err != nil {
+				cancel()
+				select {
+				case <-done:
+				case <-time.After(heartbeatEvery):
+				}
+				return "", false, fmt.Errorf("extend job lease: %w", err)
+			}
+		case <-ctx.Done():
+			cancel()
+			select {
+			case <-done:
+			case <-time.After(heartbeatEvery):
+			}
+			return "", false, ctx.Err()
+		}
+	}
 }
 
 func (worker *Worker) Run(ctx context.Context, owner string, pollInterval time.Duration) error {
@@ -104,18 +151,25 @@ func (worker *Worker) Run(ctx context.Context, owner string, pollInterval time.D
 	}
 }
 
-func (worker *Worker) execute(ctx context.Context, job Job) (code string) {
+func (worker *Worker) execute(ctx context.Context, job Job) (code string, permanent bool) {
 	handler := worker.handlers[job.Type]
 	if handler == nil {
-		return HandlerNotFound
+		return HandlerNotFound, true
 	}
 	defer func() {
 		if recover() != nil {
-			code = HandlerPanic
+			code, permanent = HandlerPanic, false
 		}
 	}()
 	if err := handler(ctx, job); err != nil {
-		return HandlerFailed
+		var failure *HandlerError
+		if errors.As(err, &failure) {
+			if failure.Code != "" {
+				return failure.Code, failure.Permanent
+			}
+			return HandlerFailed, failure.Permanent
+		}
+		return HandlerFailed, false
 	}
-	return ""
+	return "", false
 }

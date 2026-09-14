@@ -1,0 +1,46 @@
+{
+  "workspace": {
+    "createdAt": "2026-09-06T01:57:29.704506Z",
+    "displayName": "OrbStack 订单演示（模拟数据）",
+    "id": "wsp_01m1t6ypf8eye8yn23y0a62q9z",
+    "slug": "orbstack-demo-20260906",
+    "updatedAt": "2026-09-06T01:57:29.704506Z"
+  },
+  "source": {
+    "adapterKind": "postgresql_catalog",
+    "createdAt": "2026-09-06T01:57:29.778334Z",
+    "credentialVersion": 1,
+    "database": "semlia_demo_20260906",
+    "host": "host.docker.internal",
+    "id": "src_01m1t6yphjeyevg3g39zbe9qfv",
+    "name": "OrbStack PostgreSQL 订单测试库（模拟数据）",
+    "port": 5432,
+    "sourceKind": "postgresql",
+    "sslMode": "disable",
+    "status": "active",
+    "updatedAt": "2026-09-06T01:57:29.778334Z",
+    "username": "semlia_demo_discovery_20260906",
+    "version": 1
+  },
+  "connectionTest": {
+    "status": "succeeded"
+  },
+  "discovery": {
+    "completedAt": "2026-09-06T01:57:30.357653Z",
+    "createdAt": "2026-09-06T01:57:30.084755Z",
+    "credentialVersion": 1,
+    "id": "run_01m1t6ypv4eyfajzpr8e0w01zr",
+    "operationsPath": "/operations/runtime?run=run_01m1t6ypv4eyfajzpr8e0w01zr",
+    "sourceConnectionId": "src_01m1t6yphjeyevg3g39zbe9qfv",
+    "sourceInputFingerprint": "sha256:e223891b24ac71416c80c0770d3119ddc5010f9e99ef780008718fd409f89ce1",
+    "startedAt": "2026-09-06T01:57:30.345553Z",
+    "stats": {
+      "fields": 31,
+      "lineage": 0,
+      "datasets": 7,
+      "findings": 0
+    },
+    "status": "succeeded",
+    "updatedAt": "2026-09-06T01:57:30.357653Z"
+  }
+}

@@ -42,3 +42,125 @@ func (q *Queries) CreateAuditEvent(ctx context.Context, arg CreateAuditEventPara
 	)
 	return err
 }
+
+const listOperationsAuditEvents = `-- name: ListOperationsAuditEvents :many
+SELECT event.id, event.workspace_id, event.event_type, event.actor_id, event.payload,
+    event.trace_id, event.created_at, COALESCE(primary_target.object_type, '') AS object_type,
+    COALESCE(primary_target.object_id, '') AS object_id
+FROM audit_events AS event
+LEFT JOIN LATERAL (
+    SELECT target.object_type, target.object_id
+    FROM audit_event_targets AS target
+    WHERE target.workspace_id = event.workspace_id AND target.audit_event_id = event.id
+      AND (NOT $1::boolean OR target.object_type = $2::text)
+      AND (NOT $3::boolean OR target.object_id = $4::text)
+    ORDER BY target.ordinal, target.object_type, target.object_id
+    LIMIT 1
+) AS primary_target ON true
+WHERE event.workspace_id = $5
+  AND (NOT $6::boolean OR event.actor_id = $7)
+  AND (NOT $8::boolean OR event.event_type = $9)
+  AND (
+      NOT ($1::boolean OR $3::boolean)
+      OR EXISTS (
+          SELECT 1 FROM audit_event_targets AS target
+          WHERE target.workspace_id = event.workspace_id AND target.audit_event_id = event.id
+            AND (NOT $1::boolean OR target.object_type = $2::text)
+            AND (NOT $3::boolean OR target.object_id = $4::text)
+      )
+  )
+  AND (NOT $10::boolean OR event.trace_id = $11)
+  AND (NOT $12::boolean OR event.created_at >= $13)
+  AND (NOT $14::boolean OR event.created_at <= $15)
+  AND (
+      NOT $16::boolean
+      OR event.created_at < $17
+      OR (event.created_at = $17 AND event.id < $18::uuid)
+  )
+ORDER BY event.created_at DESC, event.id DESC
+LIMIT $19
+`
+
+type ListOperationsAuditEventsParams struct {
+	HasObjectType bool               `json:"has_object_type"`
+	ObjectType    string             `json:"object_type"`
+	HasObjectID   bool               `json:"has_object_id"`
+	ObjectID      string             `json:"object_id"`
+	WorkspaceID   pgtype.UUID        `json:"workspace_id"`
+	HasActor      bool               `json:"has_actor"`
+	ActorID       pgtype.Text        `json:"actor_id"`
+	HasEventType  bool               `json:"has_event_type"`
+	EventType     string             `json:"event_type"`
+	HasTrace      bool               `json:"has_trace"`
+	TraceID       string             `json:"trace_id"`
+	HasFrom       bool               `json:"has_from"`
+	FromTime      pgtype.Timestamptz `json:"from_time"`
+	HasTo         bool               `json:"has_to"`
+	ToTime        pgtype.Timestamptz `json:"to_time"`
+	HasCursor     bool               `json:"has_cursor"`
+	CursorTime    pgtype.Timestamptz `json:"cursor_time"`
+	CursorID      pgtype.UUID        `json:"cursor_id"`
+	PageLimit     int32              `json:"page_limit"`
+}
+
+type ListOperationsAuditEventsRow struct {
+	ID          pgtype.UUID        `json:"id"`
+	WorkspaceID pgtype.UUID        `json:"workspace_id"`
+	EventType   string             `json:"event_type"`
+	ActorID     pgtype.Text        `json:"actor_id"`
+	Payload     []byte             `json:"payload"`
+	TraceID     string             `json:"trace_id"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	ObjectType  string             `json:"object_type"`
+	ObjectID    string             `json:"object_id"`
+}
+
+func (q *Queries) ListOperationsAuditEvents(ctx context.Context, arg ListOperationsAuditEventsParams) ([]ListOperationsAuditEventsRow, error) {
+	rows, err := q.db.Query(ctx, listOperationsAuditEvents,
+		arg.HasObjectType,
+		arg.ObjectType,
+		arg.HasObjectID,
+		arg.ObjectID,
+		arg.WorkspaceID,
+		arg.HasActor,
+		arg.ActorID,
+		arg.HasEventType,
+		arg.EventType,
+		arg.HasTrace,
+		arg.TraceID,
+		arg.HasFrom,
+		arg.FromTime,
+		arg.HasTo,
+		arg.ToTime,
+		arg.HasCursor,
+		arg.CursorTime,
+		arg.CursorID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListOperationsAuditEventsRow{}
+	for rows.Next() {
+		var i ListOperationsAuditEventsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.EventType,
+			&i.ActorID,
+			&i.Payload,
+			&i.TraceID,
+			&i.CreatedAt,
+			&i.ObjectType,
+			&i.ObjectID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

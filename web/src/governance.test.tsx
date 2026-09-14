@@ -1,12 +1,19 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, renderHook, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, vi } from "vitest";
 
-import { CatalogRuntimeProvider, useCatalogRuntime } from "./catalogRuntime";
+import { CatalogRuntimeProvider } from "./testing/catalogFixture";
+import { useCatalogRuntime } from "./catalogRuntime";
 import { ProductApp } from "./ProductApp";
 import { GovernanceApiError } from "./governance";
-import { assets } from "./data";
+import { GovernanceRuntimeProvider, useGovernanceRuntime } from "./governanceRuntime";
+import { assets, authorizationSession } from "./testing/data";
 import type { Asset } from "./types";
+
+vi.mock("./sessionRuntime", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./sessionRuntime")>();
+  return { ...actual, useSessionRuntime: () => ({ activeWorkspaceId: "wsp_01arz3ndektsv4rrffq69g5fav", session: null }) };
+});
 
 const governanceMocks = vi.hoisted(() => ({
   listProposals: vi.fn(),
@@ -16,6 +23,7 @@ const governanceMocks = vi.hoisted(() => ({
   listValidationRuns: vi.fn(),
   getPolicyDecision: vi.fn(),
   createReview: vi.fn(),
+  listReviews: vi.fn(),
   listReviewBatches: vi.fn(),
   assembleReviewBatches: vi.fn(),
   getReviewBatch: vi.fn(),
@@ -40,13 +48,13 @@ vi.mock("./governance", async (importOriginal) => {
 
 const netRevenue = assets.find((asset) => asset.name === "净收入") as Asset;
 
-function App({ session }: { session?: Parameters<typeof ProductApp>[0]["session"] }) {
+function App({ session = authorizationSession }: { session?: Parameters<typeof ProductApp>[0]["session"] }) {
   return <CatalogRuntimeProvider fixtureAssets={assets}><ProductApp session={session} /></CatalogRuntimeProvider>;
 }
 
 function emptyWorkspace() {
   governanceMocks.listProposals.mockResolvedValue([]);
-  governanceMocks.listReleases.mockResolvedValue([]);
+  governanceMocks.listReleases.mockResolvedValue({ items: [], page: { limit: 50, total: 0 } });
   governanceMocks.listReviewBatches.mockResolvedValue([]);
   governanceMocks.listModelProviders.mockResolvedValue([]);
 }
@@ -58,9 +66,31 @@ beforeEach(() => {
   governanceMocks.getRelease.mockResolvedValue({});
   governanceMocks.listValidationRuns.mockResolvedValue([]);
   governanceMocks.getPolicyDecision.mockResolvedValue(null);
+  governanceMocks.listReviews.mockResolvedValue([]);
 });
 
 describe("governance API convergence", () => {
+  it("checkpoints a created draft before attempting submission", async () => {
+    governanceMocks.createProposal.mockResolvedValue({ id: "prp_checkpoint", state: "draft" });
+    governanceMocks.submitProposal.mockRejectedValue(new Error("submit unavailable"));
+    const created = vi.fn();
+    const { result } = renderHook(() => useGovernanceRuntime(), { wrapper: ({ children }) => <GovernanceRuntimeProvider workspaceId="wsp_checkpoint">{children}</GovernanceRuntimeProvider> });
+    await act(async () => {
+      await expect(result.current.createAndSubmitProposal({ targetObjectType: "semantic_asset", targetObjectId: "asset", title: "Candidate", summary: "Evidence", reason: "Reviewed", changeSet: [], createdBy: "test" }, created)).rejects.toThrow("submit unavailable");
+    });
+    expect(created).toHaveBeenCalledWith(expect.objectContaining({ id: "prp_checkpoint" }));
+    expect(created.mock.invocationCallOrder[0]).toBeLessThan(governanceMocks.submitProposal.mock.invocationCallOrder[0]);
+  });
+
+  it("does not submit when the draft checkpoint cannot be saved", async () => {
+    governanceMocks.createProposal.mockResolvedValue({ id: "prp_checkpoint", state: "draft" });
+    const { result } = renderHook(() => useGovernanceRuntime(), { wrapper: ({ children }) => <GovernanceRuntimeProvider workspaceId="wsp_checkpoint">{children}</GovernanceRuntimeProvider> });
+    await act(async () => {
+      await expect(result.current.createAndSubmitProposal({ targetObjectType: "semantic_asset", targetObjectId: "asset", title: "Candidate", summary: "Evidence", reason: "Reviewed", changeSet: [], createdBy: "test" }, () => { throw new Error("checkpoint unavailable"); })).rejects.toThrow("checkpoint unavailable");
+    });
+    expect(governanceMocks.submitProposal).not.toHaveBeenCalled();
+  });
+
   it("renders governance failures as error states and never falls back to fixture data", async () => {
     const user = userEvent.setup();
     governanceMocks.listProposals.mockRejectedValue(new GovernanceApiError("governance storage unreachable", "CONFLICT"));
@@ -80,6 +110,46 @@ describe("governance API convergence", () => {
     expect(within(configuration).getByRole("alert")).toHaveTextContent("governance storage unreachable");
     expect(within(configuration).queryByText("OpenAI Enterprise")).not.toBeInTheDocument();
     expect(within(configuration).queryByText("gpt-4.1")).not.toBeInTheDocument();
+  });
+
+  it("loads release history with the server cursor and authoritative total", async () => {
+    const first = { id: "rls_01arz3ndektsv4rrffq69g5fav", sequence: 2, state: "published" as const, manifestDigest: `sha256:${"a".repeat(64)}`, publishedBy: "prn_publisher", publishedAt: "2026-09-05T04:00:00Z", createdAt: "2026-09-05T04:00:00Z" };
+    const second = { ...first, id: "rls_01arz3ndektsv4rrffq69g5faw", sequence: 1, manifestDigest: `sha256:${"b".repeat(64)}`, publishedAt: "2026-09-04T04:00:00Z", createdAt: "2026-09-04T04:00:00Z" };
+    governanceMocks.listReleases.mockImplementation(async (_workspaceId: string, cursor?: string) => cursor
+      ? { items: [second], page: { limit: 1, total: 2 } }
+      : { items: [first], page: { limit: 1, total: 2, nextCursor: "release-next" } });
+    governanceMocks.getRelease.mockImplementation(async (_workspaceId: string, releaseId: string) => {
+      const release = releaseId === first.id ? first : second;
+      return { ...release, manifest: { assets: [], objects: [] }, authority: "release_manifests", availability: "available", objectAvailability: "available", consumerImpactAvailability: "available", diffAvailability: "available", consumerImpact: { current: 0, pinned: 0 }, priorPinDiff: [], currentRegistryDiff: [] };
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "变更与发布" }));
+    await vi.waitFor(() => expect(document.querySelector(".governance-list-summary")).toHaveTextContent("发布记录总计 2"));
+    await user.click(screen.getByRole("button", { name: "加载更多发布记录" }));
+    expect(await screen.findByRole("button", { name: /查看发布记录 #1/ })).toBeVisible();
+    expect(governanceMocks.listReleases).toHaveBeenLastCalledWith(expect.any(String), "release-next");
+  });
+
+  it("shows an explicit release-detail failure instead of an endless loading claim", async () => {
+    const release = { id: "rls_01arz3ndektsv4rrffq69g5fav", sequence: 1, state: "published" as const, manifestDigest: `sha256:${"a".repeat(64)}`, publishedBy: "prn_publisher", publishedAt: "2026-09-05T04:00:00Z", createdAt: "2026-09-05T04:00:00Z" };
+    governanceMocks.listReleases.mockResolvedValue({ items: [release], page: { limit: 1, total: 1 } });
+    governanceMocks.getRelease.mockRejectedValue(new GovernanceApiError("release manifest store unavailable", "DEPENDENCY_UNAVAILABLE"));
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "变更与发布" }));
+    const releaseRow = await screen.findByRole("button", { name: /查看发布记录 #1 #1/ });
+    expect(releaseRow).toHaveTextContent("清单读取失败");
+    expect(releaseRow).toHaveTextContent("release manifest store unavailable");
+    expect(releaseRow).not.toHaveTextContent("清单加载中");
+
+    await user.click(releaseRow);
+    const failure = await screen.findByRole("alert");
+    expect(failure).toHaveTextContent("发布记录加载失败");
+    expect(failure).toHaveTextContent("release manifest store unavailable");
+    expect(governanceMocks.getRelease).toHaveBeenCalledTimes(2);
   });
 
   it("creates and submits real proposals from the revision workbench", async () => {
@@ -390,11 +460,43 @@ describe("governance API convergence", () => {
       const untouched = runtime.assets.find((asset) => asset.name === "客单价")?.revisionRecord.workflowState ?? "none";
       return <div data-testid="workflow-probe">{projected}|{untouched}</div>;
     }
-    render(<CatalogRuntimeProvider fixtureAssets={assets}><WorkflowProbe /><ProductApp /></CatalogRuntimeProvider>);
+    render(<CatalogRuntimeProvider fixtureAssets={assets}><WorkflowProbe /><ProductApp session={authorizationSession} /></CatalogRuntimeProvider>);
     await screen.findByRole("button", { name: "系统设置" });
     await vi.waitFor(() => {
-      expect(screen.getByTestId("workflow-probe")).toHaveTextContent(/^proposed\|in_review$/);
+      expect(screen.getByTestId("workflow-probe")).toHaveTextContent(`${netRevenue.revisionRecord.workflowState}|${assets.find(asset => asset.name === "客单价")?.revisionRecord.workflowState}`);
     });
+  });
+
+  it("restores persisted approval facts when proposal data is reloaded", async () => {
+    const user = userEvent.setup();
+    governanceMocks.listProposals.mockResolvedValue([{
+      id: "prp_test_reviewed",
+      targetObjectType: "semantic_asset",
+      targetObjectId: netRevenue.id,
+      assetId: netRevenue.id,
+      state: "in_review",
+      title: "修订净收入的业务定义",
+      summary: "补充退款边界。",
+      reason: "补充退款边界。",
+      createdBy: "prn_test_author",
+      createdAt: "2026-09-03T09:00:00Z",
+      updatedAt: "2026-09-03T09:00:00Z",
+    }]);
+    governanceMocks.listReviews.mockResolvedValue([{
+      id: "rvw_test_approved",
+      proposalId: "prp_test_reviewed",
+      reviewerPrincipalId: "prn_test_reviewer",
+      channel: "expert",
+      decision: "approved",
+      note: "独立评审通过。",
+      createdAt: "2026-09-03T10:00:00Z",
+    }]);
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "变更与发布" }));
+    expect(await screen.findByText("待发布")).toBeInTheDocument();
+    expect(governanceMocks.listReviews).toHaveBeenCalledWith(
+      expect.any(String), "prp_test_reviewed", expect.any(AbortSignal));
   });
 
   it("renders the separation-of-duty explanation returned by the review API", async () => {

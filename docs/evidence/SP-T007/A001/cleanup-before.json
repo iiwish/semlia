@@ -1,0 +1,41 @@
+{
+  "time": "2026-09-11T10:40:39.212Z",
+  "machine": {
+    "id": "01M27SHHEPNQ4GTQ5FAA1RXBPB",
+    "name": "semlia-t007-20260911",
+    "image": {
+      "distro": "ubuntu",
+      "version": "noble",
+      "arch": "arm64",
+      "variant": "default"
+    },
+    "config": {
+      "isolated": true,
+      "forward_ssh_agent": false,
+      "isolate_network": true,
+      "default_username": "iiwish",
+      "http_port": 0,
+      "https_port": 0,
+      "memory_limit_mib": 8192,
+      "cpu_limit": 4,
+      "disk_limit_bytes": 42949672960
+    },
+    "builtin": false,
+    "state": "running"
+  },
+  "dockerId": "18839ed8-aec8-4f47-87e5-a427960b8e96",
+  "hostDockerId": "d743259d-6bd2-47c5-a84f-bcbfe8d353ad",
+  "sourceHashesMatched": 22,
+  "remainingContainers": 0,
+  "remainingOwnedVolumes": [
+    "semlia-local_artifact-data",
+    "semlia-local_git-content",
+    "semlia-local_postgres-data"
+  ],
+  "defaultStack": [
+    "c730f3eb928e semlia-local-server-1 Up 4 days (healthy)",
+    "b271bdc288e7 semlia-local-worker-1 Up 4 days",
+    "cd0dac4bcf38 semlia-local-postgres-1 Up 4 days (healthy)"
+  ],
+  "gateExitCode": 0
+}

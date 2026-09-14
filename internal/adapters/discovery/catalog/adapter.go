@@ -77,6 +77,7 @@ func (Adapter) Discover(_ context.Context, input discovery.Input) (discovery.Sna
 		}
 		snapshot.Datasets = append(snapshot.Datasets, dataset)
 	}
+	snapshot.DeclareCoverage("catalog", "catalog.json")
 	if err := snapshot.Canonicalize(); err != nil {
 		return discovery.Snapshot{}, err
 	}

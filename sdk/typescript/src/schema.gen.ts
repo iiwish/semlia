@@ -4,6 +4,284 @@
  */
 
 export interface paths {
+    "/api/v1/workspaces/{workspaceId}/client-credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        get: operations["listClientCredentials"];
+        put?: never;
+        post: operations["issueClientCredential"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/client-credentials/{credentialId}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                credentialId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["revokeClientCredential"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/client-credentials/{credentialId}/rotate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                credentialId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["rotateClientCredential"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/machine-principals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createMachinePrincipal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/webhooks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        get: operations["listWebhookSubscriptions"];
+        put?: never;
+        post: operations["createWebhookSubscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/webhooks/{subscriptionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                subscriptionId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["updateWebhookSubscription"];
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/webhooks/{subscriptionId}/rotate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                subscriptionId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["rotateWebhookSigningSecret"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/webhook-deliveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        get: operations["listWebhookDeliveries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/webhook-deliveries/{deliveryId}/replay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                deliveryId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Requires runtime.manage. Requeues a dead-letter delivery once with eight additional attempts, preserving event identity, payload and subscription version. Disabled or changed subscriptions cannot replay historical deliveries. */
+        post: operations["replayWebhookDelivery"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/semantic-describe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["describeSemantics"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/semantic-search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        get: operations["searchReleasedSemantics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/mcp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Stateless Streamable HTTP with semantic_resolve, semantic_describe, semantic_search, semantic_plan, semantic_query and semlia://contract. No execution tools. */
+        post: operations["callMCP"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/embedding-index": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        get: operations["getEmbeddingIndexStatus"];
+        put?: never;
+        post: operations["startEmbeddingRebuild"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/embedding-index/{indexId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                indexId: components["schemas"]["RunId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["cancelEmbeddingRebuild"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/embedding-search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        get: operations["searchEmbeddingIndex"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health/live": {
         parameters: {
             query?: never;
@@ -55,6 +333,172 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Start an OIDC Authorization Code plus PKCE sign-in */
+        get: operations["beginOIDCLogin"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Complete an OIDC Authorization Code plus PKCE sign-in */
+        get: operations["completeOIDCLogin"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/methods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read configured authentication methods */
+        get: operations["getAuthMethods"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/password/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Establish a local account session
+         * @description Requires an exact configured Origin and JSON content type. Login names are not verified email identities. Rate limits are shared across processes.
+         */
+        post: operations["passwordLogin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/session/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Change the current local password and revoke all account sessions */
+        post: operations["changePassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the authenticated account and active workspace memberships */
+        get: operations["getSession"];
+        put?: never;
+        post?: never;
+        /** Revoke the current opaque session */
+        delete: operations["deleteSession"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        /** List workspace account memberships */
+        get: operations["listWorkspaceMembers"];
+        put?: never;
+        /** Create a local account with an authorized workspace role */
+        post: operations["createPasswordMember"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/members/{membershipId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                membershipId: components["parameters"]["MembershipId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Activate, suspend or revoke a workspace membership */
+        patch: operations["updateWorkspaceMembership"];
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/invitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        /** List workspace invitations */
+        get: operations["listWorkspaceInvitations"];
+        put?: never;
+        /** Invite one OIDC identity by subject or verified email */
+        post: operations["createWorkspaceInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces": {
         parameters: {
             query?: never;
@@ -71,6 +515,46 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/workbench/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        /** List authorized persisted attention items */
+        get: operations["listWorkbenchAttentionItems"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/workbench/items/{attentionItemId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                attentionItemId: components["parameters"]["AttentionItemId"];
+            };
+            cookie?: never;
+        };
+        /** Read one authorized persisted attention item */
+        get: operations["getWorkbenchAttentionItem"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Assign or change operator-owned attention state */
+        patch: operations["updateWorkbenchAttentionItem"];
         trace?: never;
     };
     "/api/v1/workspaces/{workspaceId}/catalog/assets": {
@@ -105,6 +589,27 @@ export interface paths {
         };
         /** Read an asset and its current revision */
         get: operations["getCatalogAsset"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/catalog/assets/{assetId}/authority/{sectionKind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                assetId: components["parameters"]["AssetId"];
+                sectionKind: "relations" | "physical_bindings" | "join_contracts" | "validation" | "lineage" | "consumer_impact";
+            };
+            cookie?: never;
+        };
+        /** Page one authorized asset authority section */
+        get: operations["listCatalogAssetAuthorityRecords"];
         put?: never;
         post?: never;
         delete?: never;
@@ -297,7 +802,11 @@ export interface paths {
             };
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List the immutable review facts of one proposal
+         * @description Returns persisted expert and batch review facts newest first so an authorized client can restore the publish gate after a reload or actor switch. Requires asset.read in the workspace.
+         */
+        get: operations["listGovernanceProposalReviews"];
         put?: never;
         /**
          * Record an expert review decision for one proposal
@@ -596,6 +1105,686 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspaceId}/ask": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Interpret a natural-language question and resolve released semantics
+         * @description The configured model emits only a schema-constrained semantic interpretation. Semlia then uses the same immutable-release resolver as direct SemanticQuery. Raw questions and prompts are represented in persistence only by hashes, and no execution result is fabricated.
+         */
+        post: operations["askReleasedSemantics"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/consumers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        /** List registered semantic consumers */
+        get: operations["listConsumers"];
+        put?: never;
+        /** Register a semantic consumer */
+        post: operations["createConsumer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/consumers/{consumerId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                consumerId: components["parameters"]["ConsumerId"];
+            };
+            cookie?: never;
+        };
+        /** Read one semantic consumer */
+        get: operations["getConsumer"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update or revoke a semantic consumer */
+        patch: operations["updateConsumer"];
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/consumer-bindings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        /** List release-selection bindings */
+        get: operations["listConsumerBindings"];
+        put?: never;
+        /** Create a current or pinned consumer binding */
+        post: operations["createConsumerBinding"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/consumer-bindings/{bindingId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                bindingId: components["parameters"]["ConsumerBindingId"];
+            };
+            cookie?: never;
+        };
+        /** Read one release-selection binding */
+        get: operations["getConsumerBinding"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update, suspend or revoke a consumer binding */
+        patch: operations["updateConsumerBinding"];
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/semantic-queries:resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resolve a typed SemanticQuery against one immutable release */
+        post: operations["resolveSemanticQuery"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/semantic-queries/{queryId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                queryId: components["parameters"]["SemanticQueryId"];
+            };
+            cookie?: never;
+        };
+        /** Read a persisted resolution or refusal */
+        get: operations["getSemanticQuery"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/resolved-semantic-plans/{planId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                planId: components["parameters"]["ResolvedSemanticPlanId"];
+            };
+            cookie?: never;
+        };
+        /** Read one immutable resolved semantic plan */
+        get: operations["getResolvedSemanticPlan"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/resolved-semantic-plans/{planId}:execute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                planId: components["schemas"]["ResolvedSemanticPlanId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Execute one persisted plan with current authorization and read-only bounds */
+        post: operations["executeSemanticPlan"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/query-executions/{runId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                runId: components["schemas"]["RunId"];
+            };
+            cookie?: never;
+        };
+        /** Read authorized execution metadata without retained rows */
+        get: operations["getQueryExecution"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/query-executions/{runId}:cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                runId: components["schemas"]["RunId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Request cancellation without releasing capacity until the query stops */
+        post: operations["cancelQueryExecution"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        /** List redacted PostgreSQL and artifact source configurations */
+        get: operations["listSources"];
+        put?: never;
+        /** Create a PostgreSQL source with a write-only credential */
+        post: operations["createSource"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/sources/{sourceId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                sourceId: components["parameters"]["SourceId"];
+            };
+            cookie?: never;
+        };
+        get: operations["getSource"];
+        put?: never;
+        post?: never;
+        delete: operations["deleteSource"];
+        options?: never;
+        head?: never;
+        patch: operations["updateSource"];
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/sources/{sourceId}/credential": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                sourceId: components["parameters"]["SourceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Rotate a write-only source password */
+        put: operations["rotateSourceCredential"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/sources/{sourceId}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                sourceId: components["parameters"]["SourceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Test metadata-only access with the active credential */
+        post: operations["testSourceConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/sources/{sourceId}/discovery-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                sourceId: components["parameters"]["SourceId"];
+            };
+            cookie?: never;
+        };
+        get: operations["listSourceDiscoveryRuns"];
+        put?: never;
+        post: operations["startSourceDiscoveryRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/sources/{sourceId}/snapshots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                sourceId: components["parameters"]["SourceId"];
+            };
+            cookie?: never;
+        };
+        /** List immutable source snapshots, including incomplete and unverifiable history */
+        get: operations["listProductionSourceSnapshots"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/sources/{sourceId}/snapshots/{snapshotId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                sourceId: components["parameters"]["SourceId"];
+                snapshotId: components["parameters"]["SnapshotId"];
+            };
+            cookie?: never;
+        };
+        /** Read immutable scope, coverage and digest */
+        get: operations["getProductionSourceSnapshot"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/sources/{sourceId}/snapshots/{snapshotId}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                sourceId: components["parameters"]["SourceId"];
+                snapshotId: components["parameters"]["SnapshotId"];
+            };
+            cookie?: never;
+        };
+        /** Read exact observed members, including reused revisions and historical names */
+        get: operations["listProductionSnapshotMembers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/sources/{sourceId}/snapshots/{snapshotId}/diagnostics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                sourceId: components["parameters"]["SourceId"];
+                snapshotId: components["parameters"]["SnapshotId"];
+            };
+            cookie?: never;
+        };
+        /** Read bounded sanitized coverage diagnostics */
+        get: operations["listProductionSnapshotDiagnostics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/ingestion/artifacts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        /** List safe staged artifact metadata */
+        get: operations["listIngestionArtifacts"];
+        put?: never;
+        /** Safely validate and stage one bounded upload */
+        post: operations["stageIngestionArtifact"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/ingestion/artifact-sets/{artifactSetId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                artifactSetId: components["schemas"]["ArtifactSetId"];
+            };
+            cookie?: never;
+        };
+        /** Read one immutable ordered artifact set */
+        get: operations["getIngestionArtifactSet"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/ingestion/artifact-sets:finalize": {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Workspace-scoped command replay key. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests. */
+                "X-Semlia-CSRF": components["parameters"]["CSRF"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Finalize staged members as a new immutable source version */
+        post: operations["finalizeIngestionArtifactSet"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/ingestion/sql-registrations": {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Workspace-scoped command replay key. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests. */
+                "X-Semlia-CSRF": components["parameters"]["CSRF"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Register exact SQL bytes from the configured server root */
+        post: operations["registerConfiguredSQLArtifacts"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/sources/{sourceId}/schedules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                sourceId: components["parameters"]["SourceId"];
+            };
+            cookie?: never;
+        };
+        /** List schedules for one authorized source */
+        get: operations["listSourceSchedules"];
+        put?: never;
+        /** Create an enabled five-field cron schedule */
+        post: operations["createSourceSchedule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/schedules/{scheduleId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                scheduleId: components["schemas"]["SourceScheduleId"];
+            };
+            cookie?: never;
+        };
+        get: operations["getSourceSchedule"];
+        put?: never;
+        post?: never;
+        delete: operations["deleteSourceSchedule"];
+        options?: never;
+        head?: never;
+        patch: operations["updateSourceSchedule"];
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/schedules/{scheduleId}:pause": {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Workspace-scoped command replay key. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests. */
+                "X-Semlia-CSRF": components["parameters"]["CSRF"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                scheduleId: components["schemas"]["SourceScheduleId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["pauseSourceSchedule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/schedules/{scheduleId}:resume": {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Workspace-scoped command replay key. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests. */
+                "X-Semlia-CSRF": components["parameters"]["CSRF"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                scheduleId: components["schemas"]["SourceScheduleId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resumeSourceSchedule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/schedules/{scheduleId}:run-now": {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Workspace-scoped command replay key. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests. */
+                "X-Semlia-CSRF": components["parameters"]["CSRF"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                scheduleId: components["schemas"]["SourceScheduleId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["runSourceScheduleNow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/schedules/{scheduleId}/occurrences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                scheduleId: components["schemas"]["SourceScheduleId"];
+            };
+            cookie?: never;
+        };
+        get: operations["listSourceScheduleOccurrences"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/semantic-candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        get: operations["listSemanticCandidates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/semantic-candidates/{candidateId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                candidateId: components["parameters"]["CandidateId"];
+            };
+            cookie?: never;
+        };
+        get: operations["getSemanticCandidate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/semantic-candidates/{candidateId}/decisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                candidateId: components["parameters"]["CandidateId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Append an idempotent dismiss or conversion decision */
+        post: operations["decideSemanticCandidate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspaceId}/discovery-runs/{runId}": {
         parameters: {
             query?: never;
@@ -616,10 +1805,639 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspaceId}/authorization/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        /** List system and workspace custom roles */
+        get: operations["listAuthorizationRoles"];
+        put?: never;
+        /** Create the first immutable version of a workspace custom role */
+        post: operations["createAuthorizationRole"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/authorization/roles/{roleId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                roleId: components["parameters"]["AuthorizationRoleId"];
+            };
+            cookie?: never;
+        };
+        /** Read one authorized role and its active immutable version */
+        get: operations["getAuthorizationRole"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Append and activate a new immutable custom-role version */
+        patch: operations["updateAuthorizationRole"];
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/authorization/role-bindings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        /** List scoped role assignments and lifecycle state */
+        get: operations["listAuthorizationRoleBindings"];
+        put?: never;
+        /** Create a scoped role assignment */
+        post: operations["createAuthorizationRoleBinding"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/authorization/role-bindings/{bindingId}:revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                bindingId: components["parameters"]["AuthorizationRoleBindingId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revoke a role assignment immediately */
+        post: operations["revokeAuthorizationRoleBinding"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/authorization:inspect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Evaluate one principal action through the production authorizer */
+        post: operations["inspectEffectiveAuthorization"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/operations/audit-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List immutable redacted audit events
+         * @description Requires audit.read. Payloads are projected through a server-side allowlist.
+         */
+        get: operations["listOperationsAuditEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/operations/audit-exports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a bounded redacted audit export
+         * @description Requires audit.read and applies the exact same filters and projection as audit listing.
+         */
+        post: operations["createOperationsAuditExport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/operations/audit-exports/{exportId}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download a persisted redacted audit export
+         * @description Requires audit.read. The response bytes are the immutable export snapshot identified by contentDigest.
+         */
+        get: operations["getOperationsAuditExportContent"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/operations/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List normalized durable runtime runs
+         * @description Requires runtime.read.
+         */
+        get: operations["listOperationsRuntimeRuns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/operations/runs/{runId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Inspect a normalized runtime run and its bounded event stream
+         * @description Requires runtime.read.
+         */
+        get: operations["getOperationsRuntimeRun"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/operations/runs/{runId}:retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry a runtime run when the owning domain supports safe retry
+         * @description Requires runtime.manage. Beta 0.2.0 rejects kinds without an owning retry contract.
+         */
+        post: operations["retryOperationsRuntimeRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/operations/runs/{runId}:cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel a runtime run when the owning domain supports safe cancellation
+         * @description Requires runtime.manage. Beta 0.2.0 rejects kinds without an owning cancellation contract.
+         */
+        post: operations["cancelOperationsRuntimeRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/runtime-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read workspace future-run defaults and safe deployment status
+         * @description Requires runtime.read. Deployment-owned settings are status-only.
+         */
+        get: operations["getRuntimePolicy"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update bounded future-run defaults
+         * @description Requires runtime.manage. The request cannot change deployment-owned trust configuration.
+         */
+        patch: operations["updateRuntimePolicy"];
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/production-operations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        /** Recover authorized operations without browser state */
+        get: operations["listProductionOperations"];
+        put?: never;
+        /** Atomically reserve identities and create linked draft proposals */
+        post: operations["createProductionOperation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/production-operations/{operationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                operationId: components["parameters"]["OperationId"];
+            };
+            cookie?: never;
+        };
+        /** Read server-authoritative input, targets, links and derived progress */
+        get: operations["getProductionOperation"];
+        /** Replace the entire draft with a CAS-protected new immutable version */
+        put: operations["replaceProductionDraft"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/production-operations/{operationId}/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                operationId: components["parameters"]["OperationId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Freeze all members, submit existing proposals and enqueue initial validation atomically */
+        post: operations["submitProductionOperation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/production-operations/{operationId}/validations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                operationId: components["parameters"]["OperationId"];
+            };
+            cookie?: never;
+        };
+        /** Read complete immutable validation attempt groups without mixing their runs */
+        get: operations["listProductionValidationAttempts"];
+        put?: never;
+        /** Queue a fresh validation attempt for the identical frozen set */
+        post: operations["validateProductionOperation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/production-operations/{operationId}/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                operationId: components["parameters"]["OperationId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add existing Review facts to selected members of one exact frozen set */
+        post: operations["reviewProductionOperation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/production-operations/{operationId}/business-rule-confirmations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                operationId: components["parameters"]["OperationId"];
+            };
+            cookie?: never;
+        };
+        /** Read latest confirmation events and current validity for an exact version */
+        get: operations["listProductionBusinessRules"];
+        put?: never;
+        /** Confirm or revoke business definitions as an authorized human contributor */
+        post: operations["recordProductionBusinessRule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/production-operations/{operationId}/generation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                operationId: components["parameters"]["OperationId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Queue an authorized model run against a pinned draft */
+        post: operations["generateProductionSuggestions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/production-operations/{operationId}/generation/{runId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                operationId: components["parameters"]["OperationId"];
+                runId: components["schemas"]["GovernanceAgentRunId"];
+            };
+            cookie?: never;
+        };
+        /** Recover exact generation provenance without resending */
+        get: operations["getProductionGeneration"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/production-operations/{operationId}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                operationId: components["parameters"]["OperationId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Publish all proposals and complete manifest in one transaction */
+        post: operations["publishProductionOperation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/production-releases/{releaseId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                releaseId: components["parameters"]["ReleaseId"];
+            };
+            cookie?: never;
+        };
+        /** Read complete production attribution and exact before/after pins */
+        get: operations["getProductionRelease"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspaceId}/production-releases/{releaseId}/rollback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                releaseId: components["parameters"]["ReleaseId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create a latest-only release restoring the exact before manifest including absence */
+        post: operations["rollbackProductionRelease"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        ClientCredentialId: string;
+        ClientCredentialSummary: {
+            id: string;
+            workspaceId: components["schemas"]["WorkspaceId"];
+            consumerId: components["schemas"]["ConsumerId"];
+            bindingId: components["schemas"]["ConsumerBindingId"];
+            principalId: string;
+            name: string;
+            tokenPrefix: string;
+            allowedActions: ("asset.read" | "semantic.resolve" | "semantic.execute")[];
+            /** @enum {string} */
+            scopeType: "workspace" | "asset" | "release";
+            scopeId: string;
+            issuedBy: string;
+            /** Format: date-time */
+            issuedAt: string;
+            /** Format: date-time */
+            expiresAt: string;
+            /** Format: date-time */
+            revokedAt?: string;
+            rotatedFromId?: string;
+            /** Format: date-time */
+            lastUsedAt?: string;
+        };
+        IssueClientCredential: {
+            consumerId: components["schemas"]["ConsumerId"];
+            bindingId: components["schemas"]["ConsumerBindingId"];
+            principalId: string;
+            name: string;
+            allowedActions: ("asset.read" | "semantic.resolve" | "semantic.execute")[];
+            /** @enum {string} */
+            scopeType: "workspace" | "asset" | "release";
+            scopeId: string;
+            /** Format: date-time */
+            expiresAt: string;
+        };
+        IssuedCredential: {
+            credential: components["schemas"]["ClientCredentialSummary"];
+            /** @description Returned exactly once; never store in browser storage. Rotation revokes the prior credential atomically with zero grace. */
+            token: string;
+        };
+        CreateMachinePrincipal: {
+            name: string;
+        };
+        MachinePrincipal: {
+            id: string;
+            name: string;
+            status: string;
+        };
+        WebhookSubscription: {
+            id: string;
+            workspaceId: components["schemas"]["WorkspaceId"];
+            name: string;
+            /** Format: uri */
+            endpoint: string;
+            enabled: boolean;
+            eventTypes: ("release.published" | "catalog.asset.changed")[];
+            version: number;
+            signingVersion: number;
+            secretSuffix: string;
+            createdBy: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        SaveWebhookSubscription: {
+            name: string;
+            /** Format: uri */
+            endpoint: string;
+            enabled: boolean;
+            eventTypes: ("release.published" | "catalog.asset.changed")[];
+            expectedVersion?: number;
+        };
+        WebhookRotation: {
+            expectedVersion: number;
+        };
+        IssuedWebhookSubscription: {
+            subscription: components["schemas"]["WebhookSubscription"];
+            /** @description One-time create or rotate secret. Empty on ordinary updates. Pending deliveries from older subscription versions are cancelled before transport; in-flight attempts may finish with their captured version. */
+            signingSecret: string;
+        };
+        WebhookDelivery: {
+            id: string;
+            workspaceId: components["schemas"]["WorkspaceId"];
+            subscriptionId: string;
+            subscriptionVersion: number;
+            signingVersion: number;
+            eventId: string;
+            eventType: string;
+            /** @enum {string} */
+            state: "queued" | "running" | "succeeded" | "cancelled" | "dead_letter";
+            attempt: number;
+            maxAttempts: number;
+            httpStatus: number;
+            errorCode?: string;
+            payloadDigest: string;
+            traceId: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            /** Format: date-time */
+            nextAttemptAt: string;
+            runtimeRunId: string;
+        };
+        EmbeddingIndexVersion: {
+            id: components["schemas"]["RunId"];
+            workspaceId: components["schemas"]["WorkspaceId"];
+            releaseId: components["schemas"]["GovernanceReleaseId"];
+            model: string;
+            dimension: number;
+            corpusDigest: string;
+            chunkCount: number;
+            vectorCount: number;
+            /** @enum {string} */
+            state: "building" | "active" | "retired" | "failed" | "cancelled";
+            errorCode: string;
+            runtimeRunId: components["schemas"]["RunId"];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        EmbeddingIndexStatus: {
+            configured: boolean;
+            reason: string;
+            active: components["schemas"]["EmbeddingIndexVersion"] | null;
+            latest: components["schemas"]["EmbeddingIndexVersion"] | null;
+        };
+        EmbeddingSearchResult: {
+            /** @enum {string} */
+            mode: "vector" | "lexical";
+            fallbackReason: string;
+            items: {
+                assetId: components["schemas"]["SemanticAssetId"];
+                revisionId: components["schemas"]["AssetRevisionId"];
+                address: string;
+                score: number;
+            }[];
+        };
         /**
          * @description Major version used in public API paths and payloads.
          * @example v1
@@ -644,6 +2462,179 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
+        };
+        /** Format: typeid */
+        UserAccountId: string;
+        /** Format: typeid */
+        PrincipalId: string;
+        AuthorizationRoleId: string;
+        /** Format: typeid */
+        AuthorizationRoleBindingId: string;
+        /** @enum {string} */
+        AuthorizationAction: "workspace.read" | "workspace.manage" | "member.read" | "member.manage" | "group.manage" | "role.read" | "role.manage" | "role.assign" | "authorization.inspect" | "asset.read" | "asset.propose" | "asset.edit" | "evidence.read" | "proposal.review" | "validation.run" | "release.publish" | "release.rollback" | "source.read" | "source.manage" | "ingestion.run" | "binding.read" | "binding.manage" | "semantic.resolve" | "semantic.execute" | "audit.read" | "runtime.read" | "runtime.manage";
+        /** @enum {string} */
+        AuthorizationScopeType: "workspace" | "domain" | "asset" | "source" | "environment" | "release" | "consumer";
+        AuthorizationScope: {
+            type: components["schemas"]["AuthorizationScopeType"];
+            id: string;
+            domainId?: string;
+        };
+        AuthorizationRole: {
+            id: components["schemas"]["AuthorizationRoleId"];
+            workspaceId?: components["schemas"]["WorkspaceId"];
+            name: string;
+            description: string;
+            /** @enum {string} */
+            category: "system" | "custom";
+            actions: components["schemas"]["AuthorizationAction"][];
+            /** Format: int64 */
+            version: number;
+            createdAt?: components["schemas"]["Timestamp"];
+        };
+        AuthorizationRolePage: {
+            items: components["schemas"]["AuthorizationRole"][];
+        };
+        CreateAuthorizationRoleRequest: {
+            name: string;
+            description: string;
+            actions: components["schemas"]["AuthorizationAction"][];
+        };
+        UpdateAuthorizationRoleRequest: {
+            /** Format: int64 */
+            expectedVersion: number;
+            name: string;
+            description: string;
+            actions: components["schemas"]["AuthorizationAction"][];
+        };
+        AuthorizationRoleMutationResult: {
+            role: components["schemas"]["AuthorizationRole"];
+            /** Format: int64 */
+            authorizationVersion: number;
+        };
+        AuthorizationRoleBinding: {
+            id: components["schemas"]["AuthorizationRoleBindingId"];
+            workspaceId: components["schemas"]["WorkspaceId"];
+            principalId: components["schemas"]["PrincipalId"];
+            roleId: components["schemas"]["AuthorizationRoleId"];
+            /** Format: int64 */
+            roleVersion: number;
+            scope: components["schemas"]["AuthorizationScope"];
+            grantedBy?: components["schemas"]["PrincipalId"];
+            grantedAt: components["schemas"]["Timestamp"];
+            expiresAt?: components["schemas"]["Timestamp"];
+            expiredAt?: components["schemas"]["Timestamp"];
+            revokedAt?: components["schemas"]["Timestamp"];
+            revokedBy?: components["schemas"]["PrincipalId"];
+            revocationReason?: string;
+            /** @enum {string} */
+            status: "active" | "expired" | "revoked";
+            /** Format: int64 */
+            version: number;
+        };
+        AuthorizationRoleBindingPage: {
+            items: components["schemas"]["AuthorizationRoleBinding"][];
+        };
+        CreateAuthorizationRoleBindingRequest: {
+            principalId: components["schemas"]["PrincipalId"];
+            roleId: components["schemas"]["AuthorizationRoleId"];
+            /** Format: int64 */
+            expectedRoleVersion: number;
+            scope: components["schemas"]["AuthorizationScope"];
+            expiresAt?: components["schemas"]["Timestamp"];
+        };
+        RevokeAuthorizationRoleBindingRequest: {
+            /** Format: int64 */
+            expectedVersion: number;
+            reason: string;
+        };
+        AuthorizationRoleBindingMutationResult: {
+            binding: components["schemas"]["AuthorizationRoleBinding"];
+            /** Format: int64 */
+            authorizationVersion: number;
+        };
+        InspectAuthorizationRequest: {
+            principalId: components["schemas"]["PrincipalId"];
+            action: components["schemas"]["AuthorizationAction"];
+            resource: components["schemas"]["AuthorizationScope"];
+        };
+        AuthorizationDecision: {
+            allowed: boolean;
+            action: components["schemas"]["AuthorizationAction"];
+            principalId: components["schemas"]["PrincipalId"];
+            /** @enum {string} */
+            reasonCode: "ROLE_GRANT" | "SESSION_CAPABILITY" | "NO_MATCHING_GRANT" | "PRINCIPAL_INACTIVE" | "SEPARATION_OF_DUTY";
+            /** Format: int64 */
+            authorizationVersion: number;
+            roleId?: components["schemas"]["AuthorizationRoleId"];
+            bindingId?: components["schemas"]["AuthorizationRoleBindingId"];
+        };
+        /** Format: typeid */
+        MembershipId: string;
+        /** Format: typeid */
+        InvitationId: string;
+        SessionAccount: {
+            /** @description This account has an independently managed local password. */
+            localPassword?: boolean;
+            id: components["schemas"]["UserAccountId"];
+            displayName: string;
+        };
+        SessionWorkspace: {
+            id: components["schemas"]["WorkspaceId"];
+            slug: string;
+            displayName: string;
+            principalId: components["schemas"]["PrincipalId"];
+            roleIds: string[];
+            capabilities: components["schemas"]["AuthorizationAction"][];
+            /** Format: int64 */
+            authorizationVersion: number;
+        };
+        SessionResponse: {
+            account: components["schemas"]["SessionAccount"];
+            workspaces: components["schemas"]["SessionWorkspace"][];
+            /** Format: date-time */
+            expiresAt: string;
+            traceId: components["schemas"]["TraceId"];
+        };
+        /** @enum {string} */
+        MembershipStatus: "active" | "suspended" | "revoked";
+        WorkspaceMembership: {
+            id: components["schemas"]["MembershipId"];
+            accountId: components["schemas"]["UserAccountId"];
+            displayName: string;
+            principalId: components["schemas"]["PrincipalId"];
+            status: components["schemas"]["MembershipStatus"];
+            roleIds: string[];
+            /** Format: date-time */
+            admittedAt: string;
+        };
+        WorkspaceMembershipPage: {
+            items: components["schemas"]["WorkspaceMembership"][];
+        };
+        UpdateWorkspaceMembershipRequest: {
+            status: components["schemas"]["MembershipStatus"];
+        };
+        /** @enum {string} */
+        InvitationStatus: "pending" | "accepted" | "revoked" | "expired";
+        WorkspaceInvitation: {
+            id: components["schemas"]["InvitationId"];
+            /** Format: uri */
+            issuer: string;
+            subject?: string;
+            email?: string;
+            roleId: string;
+            status: components["schemas"]["InvitationStatus"];
+            /** Format: date-time */
+            expiresAt: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        WorkspaceInvitationPage: {
+            items: components["schemas"]["WorkspaceInvitation"][];
+        };
+        CreateWorkspaceInvitationRequest: {
+            subject?: string;
+            email?: string;
+            roleId: string;
         };
         CreateWorkspaceRequest: {
             slug: string;
@@ -689,8 +2680,23 @@ export interface components {
          * @example evt_01arz3ndektsv4rrffq69g5fav
          */
         EventId: string;
+        /**
+         * Format: typeid
+         * @example ati_01arz3ndektsv4rrffq69g5fav
+         */
+        AttentionItemId: string;
         /** Format: typeid */
         SourceConnectionId: string;
+        /** Format: typeid */
+        ArtifactId: string;
+        /** Format: typeid */
+        ArtifactSetId: string;
+        /** Format: typeid */
+        SourceScheduleId: string;
+        /** Format: typeid */
+        ScheduleOccurrenceId: string;
+        /** Format: typeid */
+        SemanticCandidateId: string;
         /** Format: typeid */
         SourceRevisionId: string;
         /** Format: typeid */
@@ -735,7 +2741,147 @@ export interface components {
         Cursor: string;
         PageInfo: {
             limit: number;
+            /** Format: int64 */
+            total?: number;
             nextCursor?: components["schemas"]["Cursor"];
+        };
+        OperationsAuditEvent: {
+            id: components["schemas"]["EventId"];
+            eventType: string;
+            actorId: string;
+            objectType: string;
+            objectId: string;
+            channel: string;
+            outcome: string;
+            reasonCode: string;
+            traceId: components["schemas"]["TraceId"];
+            summary: string;
+            createdAt: components["schemas"]["Timestamp"];
+        };
+        OperationsAuditEventPage: {
+            items: components["schemas"]["OperationsAuditEvent"][];
+            page: components["schemas"]["PageInfo"];
+        };
+        OperationsAuditFilter: {
+            actorId?: string;
+            eventType?: string;
+            objectType?: string;
+            objectId?: string;
+            traceId?: components["schemas"]["TraceId"];
+            from?: components["schemas"]["Timestamp"];
+            to?: components["schemas"]["Timestamp"];
+        };
+        CreateOperationsAuditExportRequest: {
+            idempotencyKey: string;
+            filter: components["schemas"]["OperationsAuditFilter"];
+        };
+        OperationsAuditExport: {
+            id: components["schemas"]["EventId"];
+            runtimeRunId: components["schemas"]["RunId"];
+            artifactId: string;
+            /** @enum {string} */
+            format: "json";
+            rowCount: number;
+            contentDigest: string;
+            createdAt: components["schemas"]["Timestamp"];
+            expiresAt: components["schemas"]["Timestamp"];
+        };
+        OperationsAuditExportContent: components["schemas"]["OperationsAuditEvent"][];
+        /** @enum {string} */
+        OperationsRuntimeRunKind: "discovery" | "validation" | "agent" | "semantic_resolution" | "embedding_rebuild" | "webhook_delivery" | "query_execution" | "audit_export";
+        /** @enum {string} */
+        OperationsRuntimeRunState: "queued" | "running" | "succeeded" | "degraded" | "failed" | "cancelled" | "dead_letter";
+        OperationsRuntimeRunCapabilities: {
+            retry: boolean;
+            cancel: boolean;
+        };
+        OperationsRuntimeRun: {
+            id: components["schemas"]["RunId"];
+            kind: components["schemas"]["OperationsRuntimeRunKind"];
+            sourceType: string;
+            sourceId: string;
+            sourceVersionDigest: string;
+            jobId?: components["schemas"]["RunId"];
+            traceId?: components["schemas"]["TraceId"];
+            idempotencyKey: string;
+            requestedByPrincipalId?: components["schemas"]["PrincipalId"];
+            state: components["schemas"]["OperationsRuntimeRunState"];
+            phase?: string;
+            /** Format: int64 */
+            progressCurrent?: number;
+            /** Format: int64 */
+            progressTotal?: number;
+            attempt: number;
+            maxAttempts: number;
+            startedAt?: components["schemas"]["Timestamp"];
+            finishedAt?: components["schemas"]["Timestamp"];
+            errorCode?: components["schemas"]["ErrorCode"];
+            errorSummary?: string;
+            capabilities: components["schemas"]["OperationsRuntimeRunCapabilities"];
+            /** Format: int64 */
+            version: number;
+            createdAt: components["schemas"]["Timestamp"];
+            updatedAt: components["schemas"]["Timestamp"];
+        };
+        OperationsRuntimeRunEvent: {
+            id: components["schemas"]["EventId"];
+            /** Format: int64 */
+            sequence: number;
+            /** @enum {string} */
+            eventType: "state" | "phase" | "progress" | "diagnostic";
+            phase?: string;
+            /** Format: int64 */
+            progressCurrent?: number;
+            /** Format: int64 */
+            progressTotal?: number;
+            state?: components["schemas"]["OperationsRuntimeRunState"];
+            errorCode?: components["schemas"]["ErrorCode"];
+            summary?: string;
+            createdAt: components["schemas"]["Timestamp"];
+        };
+        OperationsRuntimeRunDetail: {
+            run: components["schemas"]["OperationsRuntimeRun"];
+            events: components["schemas"]["OperationsRuntimeRunEvent"][];
+        };
+        OperationsRuntimeRunPage: {
+            items: components["schemas"]["OperationsRuntimeRun"][];
+            page: components["schemas"]["PageInfo"];
+        };
+        OperationsRuntimeSettings: {
+            retryCeiling: number;
+            statementTimeoutMs: number;
+            webhookTimeoutMs: number;
+            queryRowLimit: number;
+            /** Format: int64 */
+            queryByteLimit: number;
+            runMetadataRetentionDays: number;
+            /** Format: int64 */
+            version: number;
+            updatedAt: components["schemas"]["Timestamp"];
+        };
+        /** @description Safe booleans and policy labels only; values, endpoints and secret references are never returned. */
+        OperationsDeploymentStatus: {
+            workerConfigured: boolean;
+            telemetryConfigured: boolean;
+            oidcConfigured: boolean;
+            encryptionConfigured: boolean;
+            /** @enum {string} */
+            auditRetention: "deployment_managed";
+        };
+        OperationsRuntimePolicy: {
+            settings: components["schemas"]["OperationsRuntimeSettings"];
+            deployment: components["schemas"]["OperationsDeploymentStatus"];
+        };
+        UpdateOperationsRuntimeSettingsRequest: {
+            /** Format: int64 */
+            expectedVersion: number;
+            retryCeiling: number;
+            statementTimeoutMs: number;
+            webhookTimeoutMs: number;
+            queryRowLimit: number;
+            /** Format: int64 */
+            queryByteLimit: number;
+            runMetadataRetentionDays: number;
         };
         /**
          * @description Stable machine-readable error identifier.
@@ -827,6 +2973,64 @@ export interface components {
             summary: string;
             updatedAt: components["schemas"]["Timestamp"];
         };
+        /** @enum {string} */
+        WorkbenchView: "mine" | "team" | "initiated";
+        /** @enum {string} */
+        WorkbenchAttentionKind: "review" | "validation" | "source" | "runtime" | "compatibility";
+        /** @enum {string} */
+        WorkbenchAttentionState: "open" | "in_progress" | "resolved" | "dismissed";
+        /** @enum {string} */
+        WorkbenchPriority: "low" | "medium" | "high" | "critical";
+        /** @enum {string} */
+        WorkbenchSort: "updated_desc" | "priority_desc" | "due_asc";
+        /** @enum {string} */
+        WorkbenchAction: "review" | "run_validation" | "manage_source" | "publish" | "assign" | "dismiss" | "open_target";
+        WorkbenchAttentionItem: {
+            id: components["schemas"]["AttentionItemId"];
+            kind: components["schemas"]["WorkbenchAttentionKind"];
+            state: components["schemas"]["WorkbenchAttentionState"];
+            priority: components["schemas"]["WorkbenchPriority"];
+            risk: components["schemas"]["WorkbenchPriority"];
+            targetType: string;
+            targetId: string;
+            targetRoute: string;
+            assigneePrincipalId?: components["schemas"]["PrincipalId"] | null;
+            audienceRoleId?: string;
+            initiatorPrincipalId?: components["schemas"]["PrincipalId"] | null;
+            ruleVersion: string;
+            title: string;
+            summary: string;
+            reasonCode: string;
+            evidenceRef?: string;
+            traceId: components["schemas"]["TraceId"];
+            openedAt: components["schemas"]["Timestamp"];
+            dueAt?: components["schemas"]["Timestamp"];
+            resolvedAt?: components["schemas"]["Timestamp"];
+            updatedAt: components["schemas"]["Timestamp"];
+            /** Format: int64 */
+            version: number;
+            nextActions: components["schemas"]["WorkbenchAction"][];
+        };
+        WorkbenchAttentionCounts: {
+            total: number;
+            open: number;
+            inProgress: number;
+            critical: number;
+        };
+        WorkbenchAttentionPage: {
+            items: components["schemas"]["WorkbenchAttentionItem"][];
+            counts: components["schemas"]["WorkbenchAttentionCounts"];
+            page: components["schemas"]["PageInfo"];
+        };
+        UpdateWorkbenchAttentionItemRequest: {
+            assigneePrincipalId?: components["schemas"]["PrincipalId"] | null;
+            /** @default false */
+            setAssignee: boolean;
+            /** @enum {string} */
+            state?: "open" | "in_progress" | "dismissed";
+            /** Format: int64 */
+            expectedVersion: number;
+        };
         CatalogAssetDetail: {
             id: components["schemas"]["SemanticAssetId"];
             address: components["schemas"]["SemanticAddress"];
@@ -839,6 +3043,124 @@ export interface components {
             createdAt: components["schemas"]["Timestamp"];
             currentRevision?: components["schemas"]["AssetRevision"];
             relationCount: number;
+            authoritySections: components["schemas"]["CatalogAuthoritySection"][];
+        };
+        /** @enum {string} */
+        CatalogAuthorityAvailability: "available" | "not_configured" | "not_released" | "forbidden" | "failed";
+        /** @description Bounded aggregate facts with an explicit persisted authority and version basis. */
+        CatalogAuthoritySection: {
+            /** @enum {string} */
+            kind: "definition" | "released_state" | "relations" | "physical_bindings" | "join_contracts" | "validation" | "lineage" | "evidence" | "trust" | "consumer_impact";
+            authority: string;
+            availability: components["schemas"]["CatalogAuthorityAvailability"];
+            revisionId?: components["schemas"]["AssetRevisionId"];
+            releaseId?: components["schemas"]["GovernanceReleaseId"];
+            /** Format: int64 */
+            releaseSequence?: number;
+            relation?: components["schemas"]["CatalogRelationAuthority"];
+            values: {
+                [key: string]: number;
+            };
+            records: components["schemas"]["CatalogAuthorityRecord"][];
+            recordsPage: components["schemas"]["CatalogAuthorityRecordPageInfo"];
+        };
+        CatalogAuthorityRecord: {
+            /** @enum {string} */
+            kind: "relation" | "physical_binding" | "model_grain" | "entity_key" | "join_contract" | "validation_run" | "lineage" | "consumer_binding";
+            /** Format: typeid */
+            id: string;
+            authority: string;
+            status: string;
+            label: string;
+            /** Format: typeid */
+            relatedId?: string;
+            version: number;
+            releaseId?: components["schemas"]["GovernanceReleaseId"];
+            /** Format: int64 */
+            releaseSequence?: number;
+            relation?: components["schemas"]["CatalogRelationAuthority"];
+            physicalBinding?: components["schemas"]["CatalogPhysicalBindingAuthority"];
+            modelGrain?: components["schemas"]["CatalogModelGrainAuthority"];
+            entityKey?: components["schemas"]["CatalogEntityKeyAuthority"];
+            joinContract?: components["schemas"]["CatalogJoinContractAuthority"];
+            lineage?: components["schemas"]["CatalogLineageAuthority"];
+            consumerBinding?: components["schemas"]["CatalogConsumerBindingAuthority"];
+        };
+        CatalogRelationAuthority: {
+            /** @enum {string} */
+            direction: "incoming" | "outgoing";
+            predicate: components["schemas"]["RelationPredicate"];
+            plane: components["schemas"]["RelationPlane"];
+            assertionState: components["schemas"]["RelationAssertionState"];
+            subjectAssetId: components["schemas"]["SemanticAssetId"];
+            objectAssetId: components["schemas"]["SemanticAssetId"];
+        };
+        CatalogPhysicalBindingAuthority: {
+            assetId: components["schemas"]["SemanticAssetId"];
+            datasetId: components["schemas"]["PhysicalDatasetId"];
+            fieldId?: components["schemas"]["PhysicalFieldId"];
+            transform?: string;
+        };
+        CatalogModelGrainAuthority: {
+            assetId: components["schemas"]["SemanticAssetId"];
+            grainExpression: string;
+            grainFieldRefs: components["schemas"]["PhysicalFieldId"][];
+            documentedBy?: components["schemas"]["EvidenceArtifactId"];
+        };
+        CatalogEntityKeyAuthority: {
+            assetId: components["schemas"]["SemanticAssetId"];
+            keyFieldRefs: components["schemas"]["PhysicalFieldId"][];
+            /** @enum {string} */
+            uniquenessSemantics: "exact" | "deduplicated";
+        };
+        CatalogJoinContractAuthority: {
+            /** @enum {string} */
+            direction: "incoming" | "outgoing" | "both";
+            leftDatasetId: components["schemas"]["PhysicalDatasetId"];
+            rightDatasetId: components["schemas"]["PhysicalDatasetId"];
+            leftFieldRefs: components["schemas"]["PhysicalFieldId"][];
+            rightFieldRefs: components["schemas"]["PhysicalFieldId"][];
+            /** @enum {string} */
+            joinType: "inner" | "left" | "right" | "full";
+            /** @enum {string} */
+            cardinality: "one_to_one" | "one_to_many" | "many_to_one" | "many_to_many";
+            joinExpression: string;
+        };
+        CatalogLineageAuthority: {
+            /** @enum {string} */
+            direction: "incoming" | "outgoing";
+            upstreamDatasetId: components["schemas"]["PhysicalDatasetId"];
+            downstreamDatasetId: components["schemas"]["PhysicalDatasetId"];
+            /** @enum {string} */
+            edgeKind: "reads_from" | "writes_to" | "derived_from";
+            sourceRevisionId: components["schemas"]["SourceRevisionId"];
+            codeArtifactId?: components["schemas"]["CodeArtifactId"];
+            /** Format: double */
+            confidence: number;
+        };
+        CatalogConsumerBindingAuthority: {
+            consumerId: components["schemas"]["ConsumerId"];
+            effectiveReleaseId: components["schemas"]["GovernanceReleaseId"];
+            environment: string;
+            purpose: string;
+            /** @enum {string} */
+            mode: "current" | "pinned";
+            /** @enum {string} */
+            status: "active" | "suspended" | "revoked";
+            compatibilityConstraint: {
+                [key: string]: unknown;
+            };
+            expiresAt?: components["schemas"]["Timestamp"];
+        };
+        CatalogAuthorityRecordPage: {
+            items: components["schemas"]["CatalogAuthorityRecord"][];
+            page: components["schemas"]["CatalogAuthorityRecordPageInfo"];
+        };
+        CatalogAuthorityRecordPageInfo: {
+            limit: number;
+            /** Format: int64 */
+            total: number;
+            nextCursor?: components["schemas"]["Cursor"];
         };
         CatalogPage: {
             items: components["schemas"]["CatalogAssetSummary"][];
@@ -867,6 +3189,393 @@ export interface components {
             items: components["schemas"]["AssetRelation"][];
             maxDepth: number;
         };
+        /** @enum {string} */
+        ArtifactKind: "csv" | "xlsx" | "markdown" | "sql" | "dbt_manifest" | "dbt_catalog";
+        /** @enum {string} */
+        PublicArtifactKind: "csv" | "xlsx" | "markdown" | "dbt_manifest" | "dbt_catalog";
+        /** @enum {string} */
+        ArtifactStatus: "uploaded" | "validated" | "rejected" | "consumed";
+        /** @enum {string} */
+        ArtifactContentAvailability: "available" | "expired" | "not_stored";
+        IngestionArtifact: {
+            id: components["schemas"]["ArtifactId"];
+            sourceId?: components["schemas"]["SourceConnectionId"];
+            kind: components["schemas"]["ArtifactKind"];
+            schemaVersion: string;
+            contentDigest?: string;
+            /** Format: int64 */
+            byteSize: number;
+            mediaType: string;
+            originalName: string;
+            status: components["schemas"]["ArtifactStatus"];
+            contentAvailability: components["schemas"]["ArtifactContentAvailability"];
+            failureCode?: string;
+            validationSummary?: components["schemas"]["ArtifactValidationSummary"];
+            expiresAt?: components["schemas"]["Timestamp"];
+            createdAt: components["schemas"]["Timestamp"];
+            finalizedAt?: components["schemas"]["Timestamp"];
+        };
+        ArtifactValidationSummary: {
+            adapterKind: string;
+            adapterVersion: string;
+            datasetCount: number;
+            fieldCount: number;
+            codeArtifactCount: number;
+            lineageCount: number;
+            keyCount: number;
+            joinCount: number;
+            findingCount: number;
+        };
+        ArtifactPage: {
+            items: components["schemas"]["IngestionArtifact"][];
+            /** Format: int64 */
+            total: number;
+            limit: number;
+            nextCursor?: components["schemas"]["Cursor"];
+        };
+        ArtifactSetMember: {
+            artifactId: components["schemas"]["ArtifactId"];
+            logicalPath: string;
+            ordinal: number;
+            contentDigest: string;
+            /** Format: int64 */
+            byteSize: number;
+            mediaType: string;
+            kind: components["schemas"]["ArtifactKind"];
+            contentAvailability: components["schemas"]["ArtifactContentAvailability"];
+        };
+        ArtifactSet: {
+            id: components["schemas"]["ArtifactSetId"];
+            sourceId: components["schemas"]["SourceConnectionId"];
+            /** @enum {string} */
+            sourceKind: "file" | "sql_bundle" | "dbt_bundle";
+            setDigest: string;
+            members: components["schemas"]["ArtifactSetMember"][];
+            createdAt: components["schemas"]["Timestamp"];
+        };
+        FinalizeArtifactSetRequest: {
+            sourceName: string;
+            sourceId?: components["schemas"]["SourceConnectionId"];
+            /** Format: int64 */
+            expectedSourceVersion?: number;
+            artifactIds: components["schemas"]["ArtifactId"][];
+        };
+        RegisterSQLArtifactsRequest: {
+            sourceName: string;
+            sourceId?: components["schemas"]["SourceConnectionId"];
+            /** Format: int64 */
+            expectedSourceVersion?: number;
+            paths: string[];
+        };
+        /** @enum {string} */
+        ScheduleMisfirePolicy: "skip" | "run_once";
+        SourceSchedule: {
+            id: components["schemas"]["SourceScheduleId"];
+            sourceId: components["schemas"]["SourceConnectionId"];
+            expression: string;
+            timezone: string;
+            misfirePolicy: components["schemas"]["ScheduleMisfirePolicy"];
+            enabled: boolean;
+            nextRunAt?: components["schemas"]["Timestamp"];
+            nextWallClockKey?: string;
+            lastRunAt?: components["schemas"]["Timestamp"];
+            /** Format: int64 */
+            credentialVersion?: number;
+            /** Format: int64 */
+            version: number;
+            deletedAt?: components["schemas"]["Timestamp"];
+            createdAt: components["schemas"]["Timestamp"];
+            updatedAt: components["schemas"]["Timestamp"];
+        };
+        SourceSchedulePage: {
+            items: components["schemas"]["SourceSchedule"][];
+            /** Format: int64 */
+            total: number;
+            limit: number;
+            nextCursor?: components["schemas"]["Cursor"];
+        };
+        CreateSourceScheduleRequest: {
+            expression: string;
+            timezone: string;
+            misfirePolicy: components["schemas"]["ScheduleMisfirePolicy"];
+        };
+        UpdateSourceScheduleRequest: {
+            /** Format: int64 */
+            expectedVersion: number;
+            expression: string;
+            timezone: string;
+            misfirePolicy: components["schemas"]["ScheduleMisfirePolicy"];
+            enabled: boolean;
+        };
+        SourceScheduleCommandRequest: {
+            /** Format: int64 */
+            expectedVersion: number;
+        };
+        SourceScheduleOccurrence: {
+            id: components["schemas"]["ScheduleOccurrenceId"];
+            scheduleId: components["schemas"]["SourceScheduleId"];
+            sourceId: components["schemas"]["SourceConnectionId"];
+            /** @enum {string} */
+            triggerKind: "scheduled" | "run_now";
+            /** Format: int64 */
+            scheduleVersion: number;
+            scheduledFor?: components["schemas"]["Timestamp"];
+            eligibleAt: components["schemas"]["Timestamp"];
+            wallClockKey: string;
+            /** @enum {string} */
+            state: "enqueued" | "skipped";
+            /** @enum {string} */
+            reasonCode?: "DST_GAP" | "MISFIRE_SKIPPED" | "OVERLAP_ACTIVE_RUN" | "SOURCE_UNAVAILABLE" | "CREDENTIAL_UNAVAILABLE" | "ARTIFACT_SET_UNAVAILABLE";
+            /** @enum {string} */
+            misfireDisposition?: "on_time" | "coalesced";
+            discoveryRunId?: components["schemas"]["RunId"];
+            jobId?: components["schemas"]["RunId"];
+            runtimeRunId?: components["schemas"]["RunId"];
+            artifactSetId?: components["schemas"]["ArtifactSetId"];
+            /** Format: int64 */
+            credentialVersion?: number;
+            sourceFingerprint?: string;
+            operationsPath?: string;
+            idempotencyKey: string;
+            createdAt: components["schemas"]["Timestamp"];
+        };
+        SourceScheduleOccurrencePage: {
+            items: components["schemas"]["SourceScheduleOccurrence"][];
+            /** Format: int64 */
+            total: number;
+            limit: number;
+            nextCursor?: components["schemas"]["Cursor"];
+        };
+        /** @description Redacted discriminated source configuration; reusable credentials and raw artifacts are never readable. */
+        SourceConnection: components["schemas"]["PostgreSQLSourceConnection"] | components["schemas"]["ArtifactSourceConnection"];
+        SourceConnectionPage: {
+            items: components["schemas"]["SourceConnection"][];
+            /** Format: int64 */
+            total: number;
+            limit: number;
+            nextCursor?: components["schemas"]["Cursor"];
+        };
+        PostgreSQLSourceConnection: {
+            id: components["schemas"]["SourceConnectionId"];
+            name: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            sourceKind: "postgresql";
+            /** @enum {string} */
+            adapterKind: "postgresql_catalog";
+            host: string;
+            port: number;
+            database: string;
+            username: string;
+            /** @enum {string} */
+            sslMode: "disable" | "require" | "verify-ca" | "verify-full";
+            artifactPaths?: string[];
+            /** @enum {string} */
+            status: "active" | "paused" | "deleted";
+            credentialVersion: number;
+            /** Format: int64 */
+            version: number;
+            createdAt: components["schemas"]["Timestamp"];
+            updatedAt: components["schemas"]["Timestamp"];
+        };
+        ArtifactSourceConnection: {
+            id: components["schemas"]["SourceConnectionId"];
+            name: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            sourceKind: "file" | "sql_bundle" | "dbt_bundle";
+            /** @enum {string} */
+            adapterKind: "file_catalog" | "postgresql_sql" | "dbt";
+            activeArtifactSetId: components["schemas"]["ArtifactSetId"];
+            /** @enum {string} */
+            status: "active" | "paused" | "deleted";
+            /** Format: int64 */
+            version: number;
+            createdAt: components["schemas"]["Timestamp"];
+            updatedAt: components["schemas"]["Timestamp"];
+        };
+        CreateSourceRequest: {
+            name: string;
+            host: string;
+            port: number;
+            database: string;
+            username: string;
+            password: string;
+            /** @enum {string} */
+            sslMode: "disable" | "require" | "verify-ca" | "verify-full";
+            artifactPaths?: string[];
+        };
+        UpdateSourceRequest: {
+            name: string;
+            /** @enum {string} */
+            status: "active" | "paused" | "deleted";
+            artifactPaths: string[];
+            /** Format: int64 */
+            expectedVersion: number;
+        };
+        RotateSourceCredentialRequest: {
+            password: string;
+            /** Format: int64 */
+            expectedVersion: number;
+        };
+        DeleteSourceRequest: {
+            /** Format: int64 */
+            expectedVersion: number;
+        };
+        SourceTestResult: {
+            /** @enum {string} */
+            status: "succeeded";
+        };
+        StartDiscoveryRunRequest: {
+            idempotencyKey: string;
+        };
+        /** Format: typeid */
+        SourceSnapshotId: string;
+        /** Format: typeid */
+        SourceCodeRevisionId: string;
+        /** Format: typeid */
+        SourceLineageRevisionId: string;
+        /** @enum {string} */
+        MemberKind: "dataset" | "field" | "code" | "lineage";
+        /** @enum {string} */
+        HistoryQuality: "verified" | "unverifiable";
+        SnapshotDigest: string;
+        SourceSnapshot: {
+            id: components["schemas"]["SourceSnapshotId"];
+            sourceId: components["schemas"]["SourceConnectionId"];
+            sourceRevisionId: components["schemas"]["SourceRevisionId"];
+            adapterVersion: string;
+            scopeDigest: components["schemas"]["SnapshotDigest"];
+            contentDigest: components["schemas"]["SnapshotDigest"];
+            historyQuality: components["schemas"]["HistoryQuality"];
+            /** @enum {string} */
+            coverageStatus: "complete" | "partial" | "failed";
+            coverage: components["schemas"]["CoverageUnit"][];
+            memberCount: number;
+            diagnosticCount: number;
+            createdAt: components["schemas"]["Timestamp"];
+        };
+        CoverageUnit: {
+            key: string;
+            selector?: string;
+            /** @enum {string} */
+            status: "complete" | "partial" | "failed";
+            enumerationComplete: boolean;
+            diagnosticCodes: string[];
+        };
+        SnapshotMember: {
+            kind: components["schemas"]["MemberKind"];
+            objectId: components["schemas"]["ResourceId"];
+            revisionId: components["schemas"]["ResourceId"];
+            name: string;
+            locator: string;
+            contentDigest: components["schemas"]["SnapshotDigest"];
+            coverageKey: string;
+            parentObjectId?: components["schemas"]["PhysicalDatasetId"];
+            parentRevisionId?: components["schemas"]["PhysicalDatasetRevisionId"];
+        };
+        Diagnostic: {
+            ordinal: number;
+            code: string;
+            /** @enum {string} */
+            severity: "info" | "warning" | "blocker";
+            coverageKey: string;
+            locator?: string;
+            message: string;
+        };
+        SnapshotPage: {
+            items: components["schemas"]["SourceSnapshot"][];
+            nextCursor: string | null;
+        };
+        SnapshotMemberPage: {
+            snapshotId: components["schemas"]["SourceSnapshotId"];
+            historyQuality: components["schemas"]["HistoryQuality"];
+            items: components["schemas"]["SnapshotMember"][];
+            nextCursor: string | null;
+        };
+        DiagnosticPage: {
+            snapshotId: components["schemas"]["SourceSnapshotId"];
+            items: components["schemas"]["Diagnostic"][];
+            nextCursor: string | null;
+        };
+        SourceDiscoveryRun: {
+            id: components["schemas"]["RunId"];
+            sourceConnectionId: components["schemas"]["SourceConnectionId"];
+            snapshotId?: string | null;
+            credentialVersion?: number;
+            artifactSetId?: components["schemas"]["ArtifactSetId"];
+            sourceInputFingerprint?: string;
+            operationsPath: string;
+            /** @enum {string} */
+            status: "queued" | "running" | "succeeded" | "degraded" | "failed" | "cancelled";
+            errorCode?: components["schemas"]["ErrorCode"];
+            stats: {
+                [key: string]: unknown;
+            };
+            startedAt?: components["schemas"]["Timestamp"];
+            completedAt?: components["schemas"]["Timestamp"];
+            createdAt: components["schemas"]["Timestamp"];
+            updatedAt: components["schemas"]["Timestamp"];
+        };
+        SourceDiscoveryRunPage: {
+            items: components["schemas"]["SourceDiscoveryRun"][];
+            /** Format: int64 */
+            total: number;
+            limit: number;
+            nextCursor?: components["schemas"]["Cursor"];
+        };
+        /** @enum {string} */
+        SemanticCandidateStatus: "pending" | "dismissed" | "converted";
+        SemanticCandidate: {
+            id: components["schemas"]["SemanticCandidateId"];
+            sourceConnectionId: components["schemas"]["SourceConnectionId"];
+            sourceRevisionId: components["schemas"]["SourceRevisionId"];
+            discoveryRunId: components["schemas"]["RunId"];
+            candidateKey: string;
+            /** @enum {string} */
+            candidateKind: "entity" | "dimension" | "metric" | "join";
+            title: string;
+            proposalInput: {
+                [key: string]: unknown;
+            };
+            evidence: {
+                [key: string]: unknown;
+            }[];
+            contentDigest: string;
+            status: components["schemas"]["SemanticCandidateStatus"];
+            proposalId?: components["schemas"]["GovernanceProposalId"];
+            createdAt: components["schemas"]["Timestamp"];
+            updatedAt: components["schemas"]["Timestamp"];
+        };
+        SemanticCandidatePage: {
+            items: components["schemas"]["SemanticCandidate"][];
+            /** Format: int64 */
+            total: number;
+            limit: number;
+            nextCursor?: components["schemas"]["Cursor"];
+        };
+        SemanticCandidateDecisionRequest: {
+            /** @enum {string} */
+            action: "dismiss" | "convert";
+            proposalId?: components["schemas"]["GovernanceProposalId"];
+            reason: string;
+            idempotencyKey: string;
+        };
+        SemanticCandidateDecision: {
+            id: components["schemas"]["RunId"];
+            candidateId: components["schemas"]["SemanticCandidateId"];
+            /** @enum {string} */
+            action: "dismiss" | "convert";
+            proposalId?: components["schemas"]["GovernanceProposalId"];
+            actor: string;
+            reason: string;
+            idempotencyKey: string;
+            createdAt: components["schemas"]["Timestamp"];
+        };
         DiscoveryFinding: {
             sequence: number;
             code: components["schemas"]["ErrorCode"];
@@ -883,7 +3592,7 @@ export interface components {
             sourceRevisionId?: components["schemas"]["SourceRevisionId"];
             adapterVersion: string;
             /** @enum {string} */
-            status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+            status: "queued" | "running" | "succeeded" | "degraded" | "failed" | "cancelled";
             errorCode?: components["schemas"]["ErrorCode"];
             stats: {
                 [key: string]: unknown;
@@ -1004,6 +3713,12 @@ export interface components {
             decidedAt?: components["schemas"]["Timestamp"];
             createdAt: components["schemas"]["Timestamp"];
             updatedAt: components["schemas"]["Timestamp"];
+            /** @enum {string} */
+            intent?: "create" | "update";
+            operationId?: components["schemas"]["ProductionOperationId"];
+            operationVersion?: number;
+            targetLocalKey?: string;
+            originReleaseId?: components["schemas"]["GovernanceReleaseId"];
         };
         GovernanceProposalDetail: {
             id: components["schemas"]["GovernanceProposalId"];
@@ -1022,6 +3737,12 @@ export interface components {
             createdAt: components["schemas"]["Timestamp"];
             updatedAt: components["schemas"]["Timestamp"];
             changeSet: components["schemas"]["GovernanceChangeSetItemRecord"][];
+            /** @enum {string} */
+            intent?: "create" | "update";
+            operationId?: components["schemas"]["ProductionOperationId"];
+            operationVersion?: number;
+            targetLocalKey?: string;
+            originReleaseId?: components["schemas"]["GovernanceReleaseId"];
         };
         GovernanceProposalPage: {
             items: components["schemas"]["GovernanceProposalSummary"][];
@@ -1171,6 +3892,34 @@ export interface components {
             publishedAt: components["schemas"]["Timestamp"];
             createdAt: components["schemas"]["Timestamp"];
             manifest: components["schemas"]["GovernanceReleaseManifest"];
+            authority: string;
+            availability: components["schemas"]["CatalogAuthorityAvailability"];
+            /** @description Authorization and source availability for governed-object manifest pins. */
+            objectAvailability: components["schemas"]["CatalogAuthorityAvailability"];
+            /** @description Authorization and source availability for exact consumer binding impact. */
+            consumerImpactAvailability: components["schemas"]["CatalogAuthorityAvailability"];
+            /** @description Authorization and source availability shared by both persisted comparison sets. */
+            diffAvailability: components["schemas"]["CatalogAuthorityAvailability"];
+            consumerImpact?: components["schemas"]["GovernanceReleaseConsumerImpact"];
+            /** @description Selected release pins compared with each target's nearest earlier release pin. */
+            priorPinDiff: components["schemas"]["GovernanceReleaseDiffEntry"][];
+            /** @description Selected release pins compared independently with each target's live registry pointer or version. */
+            currentRegistryDiff: components["schemas"]["GovernanceReleaseDiffEntry"][];
+        };
+        GovernanceReleaseConsumerImpact: {
+            /** Format: int64 */
+            current: number;
+            /** Format: int64 */
+            pinned: number;
+        };
+        GovernanceReleaseDiffEntry: {
+            targetType: components["schemas"]["GovernanceTargetObjectType"];
+            /** Format: typeid */
+            targetId: string;
+            /** @enum {string} */
+            change: "added" | "changed" | "unchanged";
+            baselineVersion?: string;
+            selectedVersion: string;
         };
         GovernanceReleasePage: {
             items: components["schemas"]["GovernanceRelease"][];
@@ -1212,6 +3961,9 @@ export interface components {
             decision: components["schemas"]["GovernanceReviewRecordedDecision"];
             note: string;
             createdAt: components["schemas"]["Timestamp"];
+        };
+        GovernanceReviewPage: {
+            items: components["schemas"]["GovernanceReview"][];
         };
         /**
          * @description Closed §8.3 structured-diff category; the grouping-rule component.
@@ -1327,6 +4079,8 @@ export interface components {
             embeddingDimension?: number;
             createdAt: components["schemas"]["Timestamp"];
             updatedAt: components["schemas"]["Timestamp"];
+            /** @description Returned by model/provider lists; pins both setting and provider for production generation. This digest does not grant spending permission. */
+            generationConfigRevision?: string;
         };
         GovernanceModelProviderDetail: {
             provider: components["schemas"]["GovernanceModelProvider"];
@@ -1397,6 +4151,839 @@ export interface components {
             agentRun: components["schemas"]["GovernanceAgentRun"];
             proposal: components["schemas"]["GovernanceProposalDetail"];
         };
+        AskRequest: {
+            /** @description Used for this provider call and retained only as an attributable digest. */
+            question: string;
+            context?: components["schemas"]["ResolutionContext"];
+            idempotencyKey: string;
+        };
+        AskInterpretation: {
+            /** @enum {string} */
+            schema: "semlia.ask-interpretation/v1";
+            /** @enum {string} */
+            outcome: "query" | "clarification";
+            query?: components["schemas"]["SemanticQuery"];
+            clarification?: string;
+        };
+        ReleasedDefinition: {
+            assetId: components["schemas"]["SemanticAssetId"];
+            revisionId: components["schemas"]["AssetRevisionId"];
+            address: components["schemas"]["SemanticAddress"];
+            assetType: components["schemas"]["SemanticAssetType"];
+            name: string;
+            definition: string;
+            contentDigest: components["schemas"]["GovernanceChangeDigest"];
+        };
+        AskResponse: {
+            agentRun: components["schemas"]["GovernanceAgentRun"];
+            interpretation: components["schemas"]["AskInterpretation"];
+            resolution?: components["schemas"]["SemanticResolution"];
+            definitions: components["schemas"]["ReleasedDefinition"][];
+        };
+        /** Format: typeid */
+        ConsumerId: string;
+        /** Format: typeid */
+        ConsumerBindingId: string;
+        /** Format: typeid */
+        SemanticQueryId: string;
+        /** Format: typeid */
+        ResolvedSemanticPlanId: string;
+        /** Format: typeid */
+        QueryValidationRunId: string;
+        Consumer: {
+            id: components["schemas"]["ConsumerId"];
+            stableKey: string;
+            name: string;
+            /** @enum {string} */
+            kind: "application" | "agent" | "human";
+            /** @enum {string} */
+            status: "active" | "suspended" | "revoked";
+            ownerPrincipalRef: string;
+            metadata: {
+                [key: string]: unknown;
+            };
+            createdAt: components["schemas"]["Timestamp"];
+            updatedAt: components["schemas"]["Timestamp"];
+        };
+        ConsumerPage: {
+            items: components["schemas"]["Consumer"][];
+        };
+        CreateConsumerRequest: {
+            stableKey: string;
+            name: string;
+            /** @enum {string} */
+            kind: "application" | "agent" | "human";
+            ownerPrincipalRef?: string;
+            /** @default {} */
+            metadata: {
+                [key: string]: unknown;
+            };
+        };
+        UpdateConsumerRequest: {
+            name: string;
+            /** @enum {string} */
+            status: "active" | "suspended" | "revoked";
+            metadata: {
+                [key: string]: unknown;
+            };
+        };
+        ConsumerBinding: {
+            id: components["schemas"]["ConsumerBindingId"];
+            consumerId: components["schemas"]["ConsumerId"];
+            environment: string;
+            purpose: string;
+            /** @enum {string} */
+            mode: "current" | "pinned";
+            releaseId?: components["schemas"]["GovernanceReleaseId"];
+            compatibilityConstraint: {
+                [key: string]: unknown;
+            };
+            expiresAt?: components["schemas"]["Timestamp"];
+            /** @enum {string} */
+            status: "active" | "suspended" | "revoked";
+            version: number;
+            createdAt: components["schemas"]["Timestamp"];
+            updatedAt: components["schemas"]["Timestamp"];
+        };
+        ConsumerBindingPage: {
+            items: components["schemas"]["ConsumerBinding"][];
+        };
+        CreateConsumerBindingRequest: {
+            consumerId: components["schemas"]["ConsumerId"];
+            environment: string;
+            purpose: string;
+            /** @enum {string} */
+            mode: "current" | "pinned";
+            releaseId?: components["schemas"]["GovernanceReleaseId"];
+            /** @default {} */
+            compatibilityConstraint: {
+                [key: string]: unknown;
+            };
+            expiresAt?: components["schemas"]["Timestamp"];
+        };
+        UpdateConsumerBindingRequest: {
+            expectedVersion: number;
+            purpose: string;
+            /** @enum {string} */
+            mode: "current" | "pinned";
+            releaseId?: components["schemas"]["GovernanceReleaseId"];
+            compatibilityConstraint: {
+                [key: string]: unknown;
+            };
+            expiresAt?: components["schemas"]["Timestamp"];
+            /** @enum {string} */
+            status: "active" | "suspended" | "revoked";
+        };
+        /** @description Exactly one of assetId, address or search is accepted by the service. */
+        SemanticSelector: {
+            assetId?: components["schemas"]["SemanticAssetId"];
+            address?: components["schemas"]["SemanticAddress"];
+            search?: string;
+        };
+        SemanticFilter: {
+            selector: components["schemas"]["SemanticSelector"];
+            /** @enum {string} */
+            operator: "eq" | "neq" | "gt" | "gte" | "lt" | "lte" | "in" | "not_in" | "contains";
+            value: unknown;
+        };
+        SemanticTimeRange: {
+            selector: components["schemas"]["SemanticSelector"];
+            from: components["schemas"]["Timestamp"];
+            to: components["schemas"]["Timestamp"];
+            /** @enum {string} */
+            granularity?: "day" | "week" | "month" | "quarter" | "year";
+        };
+        SemanticOrder: {
+            selector: components["schemas"]["SemanticSelector"];
+            /** @enum {string} */
+            direction: "asc" | "desc";
+        };
+        /** @description current has no reference; explicit requires releaseId; binding requires bindingId. */
+        ResolutionContext: {
+            /** @enum {string} */
+            mode: "current" | "explicit" | "binding";
+            releaseId?: components["schemas"]["GovernanceReleaseId"];
+            bindingId?: components["schemas"]["ConsumerBindingId"];
+        };
+        SemanticQuery: {
+            /** @enum {string} */
+            schemaVersion: "1.0.0";
+            /** @enum {string} */
+            intent: "describe" | "aggregate" | "breakdown" | "compare";
+            measures?: components["schemas"]["SemanticSelector"][];
+            dimensions?: components["schemas"]["SemanticSelector"][];
+            filters?: components["schemas"]["SemanticFilter"][];
+            timeRange?: components["schemas"]["SemanticTimeRange"];
+            order?: components["schemas"]["SemanticOrder"][];
+            limit?: number;
+            context: components["schemas"]["ResolutionContext"];
+        };
+        ResolveSemanticQueryRequest: {
+            query: components["schemas"]["SemanticQuery"];
+            /** @enum {string} */
+            channel: "api" | "ask" | "agent" | "system" | "cli" | "sdk" | "mcp";
+            idempotencyKey: string;
+        };
+        ResolvedSemanticAsset: {
+            assetId: components["schemas"]["SemanticAssetId"];
+            revisionId: components["schemas"]["AssetRevisionId"];
+            address: components["schemas"]["SemanticAddress"];
+            assetType: components["schemas"]["SemanticAssetType"];
+        };
+        ResolvedSemanticObject: {
+            /** @enum {string} */
+            objectType: "physical_binding" | "model_grain" | "entity_key" | "join_contract";
+            objectId: components["schemas"]["GovernanceTargetObjectId"];
+            version: number;
+        };
+        /** @description The plan digest is an opaque server-owned fingerprint including private immutable execution provenance; clients do not recompute it. */
+        ResolvedSemanticPlan: {
+            id: components["schemas"]["ResolvedSemanticPlanId"];
+            queryId: components["schemas"]["SemanticQueryId"];
+            releaseId: components["schemas"]["GovernanceReleaseId"];
+            resolverVersion: string;
+            /** @enum {string} */
+            intent: "describe" | "aggregate" | "breakdown" | "compare";
+            assets: components["schemas"]["ResolvedSemanticAsset"][];
+            objects: components["schemas"]["ResolvedSemanticObject"][];
+            measures?: components["schemas"]["SemanticSelector"][];
+            filters?: components["schemas"]["SemanticFilter"][];
+            grouping?: components["schemas"]["SemanticSelector"][];
+            timeRange?: components["schemas"]["SemanticTimeRange"];
+            order?: components["schemas"]["SemanticOrder"][];
+            limit?: number;
+            /** @enum {string} */
+            executionStatus: "not_configured" | "ready" | "requires_execution_validation";
+            planDigest: components["schemas"]["GovernanceChangeDigest"];
+            createdAt: components["schemas"]["Timestamp"];
+        };
+        QueryExecutionRequest: {
+            planId: components["schemas"]["ResolvedSemanticPlanId"];
+            planDigest: components["schemas"]["GovernanceChangeDigest"];
+            idempotencyKey: string;
+            /** @enum {string} */
+            channel?: "api" | "sdk" | "cli" | "web";
+        };
+        QueryExecutionRun: {
+            id: components["schemas"]["RunId"];
+            workspaceId: components["schemas"]["WorkspaceId"];
+            queryId: components["schemas"]["SemanticQueryId"];
+            planId: components["schemas"]["ResolvedSemanticPlanId"];
+            planDigest: components["schemas"]["GovernanceChangeDigest"];
+            principalId: components["schemas"]["PrincipalId"];
+            consumerId?: components["schemas"]["ConsumerId"];
+            credentialId?: components["schemas"]["ClientCredentialId"];
+            /** @enum {string} */
+            channel: "api" | "mcp" | "sdk" | "cli" | "web";
+            sourceId: components["schemas"]["SourceConnectionId"];
+            sourceRevisionId: components["schemas"]["SourceRevisionId"];
+            adapterVersion: string;
+            policyVersion: number;
+            timeoutMs: number;
+            maxRows: number;
+            maxBytes: number;
+            cancelRequested: boolean;
+            /** @enum {string} */
+            state: "running" | "succeeded" | "failed" | "cancelled" | "unknown";
+            errorCode?: string;
+            rowCount: number;
+            byteCount: number;
+            resultDigest?: components["schemas"]["GovernanceChangeDigest"];
+            startedAt: components["schemas"]["Timestamp"];
+            finishedAt?: components["schemas"]["Timestamp"];
+            traceId: string;
+        };
+        QueryExecutionResult: {
+            run: components["schemas"]["QueryExecutionRun"];
+            /** @enum {string} */
+            availability: "ephemeral" | "metadata_only" | "unavailable";
+            replay: boolean;
+            columns?: string[];
+            /** @description Ephemeral cells; numeric and integer values use exact decimal strings to avoid client precision loss. Never retained for replay. */
+            rows?: unknown[][];
+        };
+        SemanticRefusal: {
+            /** @enum {string} */
+            code: "NO_RELEASE" | "BINDING_INACTIVE" | "BINDING_EXPIRED" | "CONSUMER_INACTIVE" | "UNAUTHORIZED_CONSUMER" | "STALE_RELEASE_BINDING" | "NO_MATCH" | "AMBIGUOUS_MATCH" | "UNAUTHORIZED_ASSET" | "MISSING_PHYSICAL_BINDING" | "MISSING_JOIN_PATH" | "INCOMPATIBLE_GRAIN" | "INVALID_QUERY" | "INVALID_FILTER" | "INVALID_TIME_RANGE" | "INVALID_ORDERING" | "INVALID_LIMIT" | "INVALID_PLAN";
+            candidateIds: components["schemas"]["SemanticAssetId"][];
+            clarification: string;
+            details: {
+                [key: string]: unknown;
+            };
+        };
+        QueryValidationResult: {
+            /** @enum {string} */
+            severity: "info" | "warning" | "blocker";
+            code: string;
+            message: string;
+            details: {
+                [key: string]: unknown;
+            };
+        };
+        QueryValidation: {
+            id: components["schemas"]["QueryValidationRunId"];
+            queryId: components["schemas"]["SemanticQueryId"];
+            planId?: components["schemas"]["ResolvedSemanticPlanId"];
+            validator: string;
+            validatorVersion: string;
+            inputDigest: components["schemas"]["GovernanceChangeDigest"];
+            /** @enum {string} */
+            status: "passed" | "failed";
+            results: components["schemas"]["QueryValidationResult"][];
+            createdAt: components["schemas"]["Timestamp"];
+            completedAt: components["schemas"]["Timestamp"];
+        };
+        SemanticResolution: {
+            definitions?: components["schemas"]["ReleasedDefinition"][];
+            id: components["schemas"]["SemanticQueryId"];
+            /** @enum {string} */
+            schemaVersion: "1.0.0";
+            resolverVersion: string;
+            requestDigest: components["schemas"]["GovernanceChangeDigest"];
+            /** @enum {string} */
+            outcome: "resolved" | "refused";
+            /** @enum {string} */
+            channel: "api" | "ask" | "agent" | "system" | "cli" | "sdk" | "mcp";
+            releaseId?: components["schemas"]["GovernanceReleaseId"];
+            consumerId?: components["schemas"]["ConsumerId"];
+            bindingId?: components["schemas"]["ConsumerBindingId"];
+            plan?: components["schemas"]["ResolvedSemanticPlan"];
+            refusal?: components["schemas"]["SemanticRefusal"];
+            validation: components["schemas"]["QueryValidation"];
+            createdAt: components["schemas"]["Timestamp"];
+        };
+        /**
+         * Format: typeid
+         * @example prodop_01arz3ndektsv4rrffq69g5fav
+         */
+        ProductionOperationId: string;
+        Digest: string;
+        Version: number;
+        LocalKey: string;
+        /** @enum {string} */
+        TargetKind: "semantic_asset" | "physical_binding" | "model_grain" | "entity_key" | "join_contract";
+        /** @enum {string} */
+        ObjectKind: "physical_binding" | "model_grain" | "entity_key" | "join_contract";
+        SnapshotSelection: {
+            sourceId: components["schemas"]["ResourceId"];
+            snapshotId: components["schemas"]["ResourceId"];
+            digest: components["schemas"]["Digest"];
+            coverageKeys: string[];
+        };
+        CandidateSelection: {
+            candidateId: components["schemas"]["ResourceId"];
+            digest: components["schemas"]["Digest"];
+            snapshotId: components["schemas"]["ResourceId"];
+            targetKeys: components["schemas"]["LocalKey"][];
+            primaryTargetKey: components["schemas"]["LocalKey"];
+        };
+        EvidenceSelection: {
+            evidenceId: components["schemas"]["ResourceId"];
+            digest: components["schemas"]["Digest"];
+            snapshotId?: components["schemas"]["ResourceId"];
+        };
+        ProductionInput: {
+            snapshots: components["schemas"]["SnapshotSelection"][];
+            candidates: components["schemas"]["CandidateSelection"][];
+            evidence: components["schemas"]["EvidenceSelection"][];
+            dependencies: components["schemas"]["PublishedReference"][];
+        };
+        PhysicalReference: {
+            snapshotId: components["schemas"]["ResourceId"];
+            /** @enum {string} */
+            kind: "dataset" | "field";
+            objectId: components["schemas"]["ResourceId"];
+            revisionId: components["schemas"]["ResourceId"];
+        };
+        PublishedReference: {
+            /** @enum {string} */
+            kind: "semantic_asset";
+            targetId: components["schemas"]["ResourceId"];
+            releaseId: components["schemas"]["ResourceId"];
+            revisionId: components["schemas"]["ResourceId"];
+        } | {
+            kind: components["schemas"]["ObjectKind"];
+            targetId: components["schemas"]["ResourceId"];
+            releaseId: components["schemas"]["ResourceId"];
+            objectVersion: components["schemas"]["Version"];
+            contentDigest: components["schemas"]["Digest"];
+        };
+        SemanticReference: {
+            localKey: components["schemas"]["LocalKey"];
+        } | components["schemas"]["PublishedReference"];
+        AssetContent: {
+            address: string;
+            /** @enum {string} */
+            assetType: "concept" | "entity" | "semantic_model" | "dimension" | "measure" | "metric" | "segment";
+            displayName: string;
+            definition: string | null;
+            scope: string | null;
+            ownerPrincipalId: components["schemas"]["ResourceId"];
+        };
+        BindingContent: {
+            asset: components["schemas"]["SemanticReference"];
+            dataset: components["schemas"]["PhysicalReference"];
+            field?: components["schemas"]["PhysicalReference"];
+            transform?: string;
+        };
+        FieldReferences: components["schemas"]["PhysicalReference"][];
+        GrainContent: {
+            asset: components["schemas"]["SemanticReference"];
+            expression: string;
+            fields: components["schemas"]["FieldReferences"];
+        };
+        EntityKeyContent: {
+            asset: components["schemas"]["SemanticReference"];
+            fields: components["schemas"]["FieldReferences"];
+            /** @enum {string} */
+            uniqueness: "exact" | "deduplicated";
+        };
+        JoinContent: {
+            leftDataset: components["schemas"]["PhysicalReference"];
+            rightDataset: components["schemas"]["PhysicalReference"];
+            pairs: {
+                left: components["schemas"]["PhysicalReference"];
+                right: components["schemas"]["PhysicalReference"];
+            }[];
+            /** @enum {string} */
+            joinType: "inner" | "left" | "right" | "full";
+            /** @enum {string} */
+            cardinality: "one_to_one" | "one_to_many" | "many_to_one" | "many_to_many";
+            expression: string;
+            notes?: string;
+        };
+        TargetKindContent: {
+            /** @enum {string} */
+            kind?: "semantic_asset";
+            content?: components["schemas"]["AssetContent"];
+        } | {
+            /** @enum {string} */
+            kind?: "physical_binding";
+            content?: components["schemas"]["BindingContent"];
+        } | {
+            /** @enum {string} */
+            kind?: "model_grain";
+            content?: components["schemas"]["GrainContent"];
+        } | {
+            /** @enum {string} */
+            kind?: "entity_key";
+            content?: components["schemas"]["EntityKeyContent"];
+        } | {
+            /** @enum {string} */
+            kind?: "join_contract";
+            content?: components["schemas"]["JoinContent"];
+        };
+        JSONValue: unknown;
+        Change: {
+            fieldPath: string;
+            /** @enum {string} */
+            op: "add";
+            afterValue: components["schemas"]["JSONValue"];
+        } | {
+            fieldPath: string;
+            /** @enum {string} */
+            op: "update";
+            beforeValue: components["schemas"]["JSONValue"];
+            afterValue: components["schemas"]["JSONValue"];
+        } | {
+            fieldPath: string;
+            /** @enum {string} */
+            op: "remove";
+            beforeValue: components["schemas"]["JSONValue"];
+        };
+        ChangeList: components["schemas"]["Change"][];
+        ReintroductionIdentity: {
+            targetId: components["schemas"]["ResourceId"];
+            creationOperationId: components["schemas"]["ResourceId"];
+            creationReleaseId: components["schemas"]["ResourceId"];
+            absenceReleaseId: components["schemas"]["ResourceId"];
+            expectedHead: components["schemas"]["PresentHeadReference"];
+        };
+        PresentHeadReference: {
+            /** @enum {string} */
+            presence: "present";
+            releaseId: components["schemas"]["ResourceId"];
+            manifestDigest: components["schemas"]["Digest"];
+        };
+        HeadReference: {
+            /** @enum {string} */
+            presence: "absent";
+        } | components["schemas"]["PresentHeadReference"];
+        CreateTarget: {
+            /** @enum {string} */
+            intent: "create";
+            kind: components["schemas"]["TargetKind"];
+            localKey: components["schemas"]["LocalKey"];
+            identityKey: string;
+            reuseIdentity?: components["schemas"]["ReintroductionIdentity"];
+            title: string;
+            content: Record<string, never>;
+            changes: components["schemas"]["Change"][];
+            evidenceIds: components["schemas"]["ResourceId"][];
+        } & components["schemas"]["TargetKindContent"];
+        UpdateAssetTarget: {
+            /** @enum {string} */
+            intent: "update";
+            /** @enum {string} */
+            kind: "semantic_asset";
+            localKey: components["schemas"]["LocalKey"];
+            targetId: components["schemas"]["ResourceId"];
+            baseRevisionId: components["schemas"]["ResourceId"];
+            title: string;
+            content: components["schemas"]["AssetContent"];
+            changes: components["schemas"]["ChangeList"];
+            evidenceIds: components["schemas"]["ResourceId"][];
+        };
+        UpdateObjectTarget: {
+            /** @enum {string} */
+            intent: "update";
+            kind: components["schemas"]["ObjectKind"];
+            localKey: components["schemas"]["LocalKey"];
+            targetId: components["schemas"]["ResourceId"];
+            baseObjectVersion: components["schemas"]["Version"];
+            title: string;
+            content: Record<string, never>;
+            changes: components["schemas"]["ChangeList"];
+            evidenceIds: components["schemas"]["ResourceId"][];
+        } & components["schemas"]["TargetKindContent"];
+        ProductionTarget: components["schemas"]["CreateTarget"] | components["schemas"]["UpdateAssetTarget"] | components["schemas"]["UpdateObjectTarget"];
+        CreateProductionRequest: {
+            input: components["schemas"]["ProductionInput"];
+            targets: components["schemas"]["ProductionTarget"][];
+            supersedesOperationId?: components["schemas"]["ResourceId"];
+        };
+        ReplaceProductionRequest: {
+            expectedVersion: components["schemas"]["Version"];
+            input: components["schemas"]["ProductionInput"];
+            targets: components["schemas"]["ProductionTarget"][];
+            suggestionRunId?: components["schemas"]["ResourceId"];
+        };
+        ValidationCheckResult: {
+            runId: components["schemas"]["ResourceId"];
+            proposalId: components["schemas"]["ResourceId"];
+            validatorId: string;
+            validatorVersion: string;
+            /** @enum {string} */
+            status: "running" | "succeeded" | "failed" | "cancelled";
+            results: {
+                /** @enum {string} */
+                severity: "blocker" | "warning" | "info" | "not_applicable";
+                code: string;
+                message: string;
+                inputDigest: components["schemas"]["Digest"];
+                details: {
+                    [key: string]: components["schemas"]["JSONValue"];
+                };
+            }[];
+        };
+        ValidationAttemptResult: {
+            attemptNo: number;
+            /** @enum {string} */
+            status: "queued" | "running" | "succeeded" | "failed";
+            setDigest: components["schemas"]["Digest"];
+            freshnessDigest: components["schemas"]["Digest"];
+            requiredChecksDigest: components["schemas"]["Digest"];
+            validationDigest: string | null;
+            runIds: components["schemas"]["ResourceId"][];
+            checks: components["schemas"]["ValidationCheckResult"][];
+            /** Format: date-time */
+            completedAt: string | null;
+        };
+        ValidationStatus: {
+            /** @enum {string} */
+            status: "not_requested";
+        } | components["schemas"]["ValidationAttemptResult"];
+        /** @description Server derives actor, evidence origin and all digests. Confirm either selects declared evidence or atomically records an explicit human declaration supporting the exact target definition and scope. Revoke withdraws the current confirmation. Maximum 256 events per version; replay does not add an event. */
+        ProductionBusinessRuleRequest: {
+            expectedVersion: components["schemas"]["Version"];
+            setDigest: components["schemas"]["Digest"];
+            targetKey: string;
+            /** @enum {string} */
+            action: "confirm";
+            evidenceId: components["schemas"]["EvidenceArtifactId"];
+        } | {
+            expectedVersion: components["schemas"]["Version"];
+            setDigest: components["schemas"]["Digest"];
+            targetKey: string;
+            /** @enum {string} */
+            action: "confirm";
+            declaration: string;
+        } | {
+            expectedVersion: components["schemas"]["Version"];
+            setDigest: components["schemas"]["Digest"];
+            targetKey: string;
+            /** @enum {string} */
+            action: "revoke";
+        };
+        ProductionBusinessRuleEvent: {
+            /** Format: int64 */
+            sequence: number;
+            workspaceId: components["schemas"]["WorkspaceId"];
+            operationId: components["schemas"]["ProductionOperationId"];
+            productionVersion: components["schemas"]["Version"];
+            targetKey: string;
+            /** @enum {string} */
+            action: "confirm" | "revoke";
+            setDigest: components["schemas"]["Digest"];
+            contentDigest: components["schemas"]["Digest"];
+            evidenceId?: components["schemas"]["EvidenceArtifactId"];
+            evidenceDigest?: components["schemas"]["Digest"];
+            /** @enum {string} */
+            evidenceOrigin: "selected_evidence" | "human_declaration" | "none";
+            principalId: components["schemas"]["PrincipalId"];
+            /** Format: int64 */
+            authorizationVersion: number;
+            /** Format: date-time */
+            createdAt: string;
+            replayed: boolean;
+        };
+        ProductionBusinessRuleWitness: {
+            event: components["schemas"]["ProductionBusinessRuleEvent"];
+            valid: boolean;
+            declaration?: string;
+        };
+        /** @description Client ceilings only narrow a current server grant; they never authorize spending. Generation does not apply or publish drafts. */
+        GenerateProductionRequest: {
+            expectedVersion: components["schemas"]["Version"];
+            inputDigest: components["schemas"]["Digest"];
+            modelSettingId: components["schemas"]["ResourceId"];
+            modelConfigRevision: string;
+            instruction: string;
+            maxOutputTokens: number;
+            /** Format: int64 */
+            maxCostMicros: number;
+        };
+        StructuredGenerationOutput: {
+            /** @enum {string} */
+            schemaVersion: "semlia.production-suggestions/v1";
+            targets: components["schemas"]["ProductionTarget"][];
+        };
+        GenerationResult: {
+            runId: components["schemas"]["ResourceId"];
+            operationId: components["schemas"]["ResourceId"];
+            inputVersion: components["schemas"]["Version"];
+            inputDigest: components["schemas"]["Digest"];
+            /** @enum {string} */
+            status: "queued" | "running" | "succeeded" | "failed" | "cancelled" | "outcome_unknown";
+            /** @enum {string} */
+            providerMode: "protocol_stub" | "actual_model";
+            model: string;
+            modelConfigRevision: string;
+            replayed: boolean;
+            outputDigest: string | null;
+            output: unknown;
+            errorCode: string | null;
+            /** Format: int64 */
+            costMicros: number | null;
+            /** Format: int64 */
+            durationMs: number | null;
+        } & ({
+            /** @enum {string} */
+            status?: "succeeded";
+            output?: components["schemas"]["StructuredGenerationOutput"];
+            outputDigest?: components["schemas"]["Digest"];
+            /** @enum {unknown|null} */
+            errorCode?: null;
+        } | {
+            /** @enum {string} */
+            status?: "queued" | "running" | "failed" | "cancelled" | "outcome_unknown";
+            /** @enum {unknown|null} */
+            output?: null;
+            /** @enum {unknown|null} */
+            outputDigest?: null;
+        });
+        GenerationApplication: {
+            runId: components["schemas"]["ResourceId"];
+            sourceVersion: components["schemas"]["Version"];
+            sourceOutputDigest: components["schemas"]["Digest"];
+            appliedVersion: components["schemas"]["Version"];
+            appliedContentDigest: components["schemas"]["Digest"];
+            actorPrincipalId: components["schemas"]["ResourceId"];
+            deltaDigest: components["schemas"]["Digest"];
+            delta: {
+                localKey: components["schemas"]["LocalKey"];
+                change: components["schemas"]["Change"];
+            }[];
+        };
+        /** @enum {string} */
+        ProposalState: "draft" | "proposed" | "validating" | "in_review" | "released" | "rejected";
+        TargetResult: {
+            localKey: components["schemas"]["LocalKey"];
+            targetId: components["schemas"]["ResourceId"];
+            declaration: components["schemas"]["ProductionTarget"];
+            /** @enum {string} */
+            outcome: "proposal" | "no_change";
+            contentDigest: components["schemas"]["Digest"];
+            proposalId: string | null;
+            /** @enum {string|null} */
+            proposalState: "draft" | "proposed" | "validating" | "in_review" | "released" | "rejected" | null;
+            validationRunIds: components["schemas"]["ResourceId"][];
+            reviewIds: components["schemas"]["ResourceId"][];
+        };
+        OperationSummary: {
+            id: components["schemas"]["ResourceId"];
+            currentVersion: components["schemas"]["Version"];
+            createdBy: components["schemas"]["ResourceId"];
+            createdAt: components["schemas"]["Timestamp"];
+            updatedAt: components["schemas"]["Timestamp"];
+            frozen: boolean;
+            /** @enum {string} */
+            progress: "draft" | "no_change" | "validating" | "needs_correction" | "in_review" | "ready_to_publish" | "released" | "rejected";
+            targetCount: number;
+            releaseId: string | null;
+        };
+        ProductionOperation: {
+            summary: components["schemas"]["OperationSummary"];
+            version: components["schemas"]["Version"];
+            input: components["schemas"]["ProductionInput"];
+            inputDigest: components["schemas"]["Digest"];
+            setDigest: components["schemas"]["Digest"];
+            baselineHead: components["schemas"]["HeadReference"];
+            targets: components["schemas"]["TargetResult"][];
+            activeValidation: components["schemas"]["ValidationStatus"];
+            generationRunIds: components["schemas"]["ResourceId"][];
+            generationApplications: components["schemas"]["GenerationApplication"][];
+            unresolvedCodes: string[];
+        };
+        ProductionOperationPage: {
+            items: components["schemas"]["OperationSummary"][];
+            nextCursor: string | null;
+        };
+        ProductionCommandResult: {
+            operationId: components["schemas"]["ResourceId"];
+            version: components["schemas"]["Version"];
+            setDigest: components["schemas"]["Digest"];
+            replayed: boolean;
+            /** @enum {string} */
+            outcome: "created" | "updated" | "no_change" | "submitted" | "validation_queued" | "reviewed";
+            proposalIds: components["schemas"]["ResourceId"][];
+            validationAttemptNo: number | null;
+            validationRunIds: components["schemas"]["ResourceId"][];
+            reviewIds: components["schemas"]["ResourceId"][];
+        };
+        SubmitProductionRequest: {
+            expectedVersion: components["schemas"]["Version"];
+            setDigest: components["schemas"]["Digest"];
+        };
+        ValidateProductionRequest: {
+            expectedVersion: components["schemas"]["Version"];
+            setDigest: components["schemas"]["Digest"];
+            previousAttemptNo: number;
+            reason: string;
+        };
+        ValidationReference: {
+            attemptNo: number;
+            validationDigest: components["schemas"]["Digest"];
+        };
+        ReviewProductionRequest: {
+            expectedVersion: components["schemas"]["Version"];
+            setDigest: components["schemas"]["Digest"];
+            validation: components["schemas"]["ValidationReference"];
+            proposalIds: components["schemas"]["ResourceId"][];
+            /** @enum {string} */
+            decision: "approve" | "reject";
+            note: string;
+        };
+        ValidationAttemptPage: {
+            operationId: components["schemas"]["ResourceId"];
+            version: components["schemas"]["Version"];
+            items: components["schemas"]["ValidationAttemptResult"][];
+            nextCursor: string | null;
+        };
+        PublishProductionRequest: {
+            expectedVersion: components["schemas"]["Version"];
+            setDigest: components["schemas"]["Digest"];
+            validation: components["schemas"]["ValidationReference"];
+            expectedHead: components["schemas"]["HeadReference"];
+        };
+        RollbackProductionRequest: {
+            expectedVersion: components["schemas"]["Version"];
+            setDigest: components["schemas"]["Digest"];
+            expectedHead: components["schemas"]["HeadReference"];
+            reason: string;
+        };
+        BeforePin: {
+            kind: components["schemas"]["TargetKind"];
+            targetId: components["schemas"]["ResourceId"];
+            /** @enum {string} */
+            presence: "absent";
+        } | {
+            /** @enum {string} */
+            kind: "semantic_asset";
+            targetId: components["schemas"]["ResourceId"];
+            /** @enum {string} */
+            presence: "present";
+            revisionId: components["schemas"]["ResourceId"];
+        } | {
+            kind: components["schemas"]["ObjectKind"];
+            targetId: components["schemas"]["ResourceId"];
+            /** @enum {string} */
+            presence: "present";
+            objectVersion: components["schemas"]["Version"];
+            contentDigest: components["schemas"]["Digest"];
+        };
+        Manifest: {
+            assets: {
+                assetId: components["schemas"]["ResourceId"];
+                revisionId: components["schemas"]["ResourceId"];
+                position: number;
+                compatibility: {
+                    [key: string]: components["schemas"]["JSONValue"];
+                };
+            }[];
+            objects: {
+                kind: components["schemas"]["ObjectKind"];
+                targetId: components["schemas"]["ResourceId"];
+                objectVersion: components["schemas"]["Version"];
+                contentDigest: components["schemas"]["Digest"];
+                position: number;
+            }[];
+            digest: components["schemas"]["Digest"];
+        };
+        ReleaseAttribution: {
+            operationId: components["schemas"]["ResourceId"];
+            version: components["schemas"]["Version"];
+            setDigest: components["schemas"]["Digest"];
+            validation: components["schemas"]["ValidationReference"];
+            reviewIds: components["schemas"]["ResourceId"][];
+            proposalIds: components["schemas"]["ResourceId"][];
+            contributors: components["schemas"]["ResourceId"][];
+            /** @enum {string} */
+            role: "applied" | "reverted";
+        };
+        ProductionReleaseProtection: {
+            rootReleaseId: components["schemas"]["ResourceId"];
+            /** @enum {integer} */
+            rollbackDepth: 0;
+        } | {
+            rootReleaseId: components["schemas"]["ResourceId"];
+            rollbackDepth: number;
+            rollbackParentReleaseId: components["schemas"]["ResourceId"];
+        };
+        ProductionRelease: {
+            id: components["schemas"]["ResourceId"];
+            /** Format: int64 */
+            sequence: number;
+            publishedBy: components["schemas"]["ResourceId"];
+            publishedAt: components["schemas"]["Timestamp"];
+            attribution: components["schemas"]["ReleaseAttribution"];
+            protection: components["schemas"]["ProductionReleaseProtection"];
+            beforeHead: components["schemas"]["HeadReference"];
+            beforeManifest: components["schemas"]["Manifest"];
+            afterManifest: components["schemas"]["Manifest"];
+            beforePins: components["schemas"]["BeforePin"][];
+            originProposalId: string | null;
+            originProposalIds: components["schemas"]["ResourceId"][];
+            rolledBackReleaseId: string | null;
+            /** @enum {string} */
+            projectionStatus: "pending" | "ready" | "failed";
+        };
+        ReleaseCommandResult: {
+            releaseId: components["schemas"]["ResourceId"];
+            operationId: components["schemas"]["ResourceId"];
+            replayed: boolean;
+            manifestDigest: components["schemas"]["Digest"];
+        };
     };
     responses: {
         /** @description The request failed. */
@@ -1423,6 +5010,16 @@ export interface components {
         };
         /** @description The request is invalid. */
         BadRequest: {
+            headers: {
+                "X-Trace-ID": components["headers"]["TraceId"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description A valid active server-side session is required. */
+        Unauthorized: {
             headers: {
                 "X-Trace-ID": components["headers"]["TraceId"];
                 [name: string]: unknown;
@@ -1477,11 +5074,28 @@ export interface components {
         AssetId: components["schemas"]["SemanticAssetId"];
         RevisionId: components["schemas"]["AssetRevisionId"];
         RunId: components["schemas"]["RunId"];
+        AuditExportId: components["schemas"]["EventId"];
+        AuthorizationRoleId: components["schemas"]["AuthorizationRoleId"];
+        AuthorizationRoleBindingId: components["schemas"]["AuthorizationRoleBindingId"];
+        SourceId: components["schemas"]["SourceConnectionId"];
+        CandidateId: components["schemas"]["SemanticCandidateId"];
+        SnapshotId: components["schemas"]["SourceSnapshotId"];
+        OperationId: components["schemas"]["ProductionOperationId"];
         ProposalId: components["schemas"]["GovernanceProposalId"];
         ReviewBatchId: components["schemas"]["GovernanceReviewBatchId"];
         ReleaseId: components["schemas"]["GovernanceReleaseId"];
         ProviderId: components["schemas"]["GovernanceModelProviderId"];
         SettingId: components["schemas"]["GovernanceModelSettingId"];
+        MembershipId: components["schemas"]["MembershipId"];
+        ConsumerId: components["schemas"]["ConsumerId"];
+        ConsumerBindingId: components["schemas"]["ConsumerBindingId"];
+        SemanticQueryId: components["schemas"]["SemanticQueryId"];
+        ResolvedSemanticPlanId: components["schemas"]["ResolvedSemanticPlanId"];
+        AttentionItemId: components["schemas"]["AttentionItemId"];
+        /** @description Workspace-scoped command replay key. */
+        IdempotencyKey: string;
+        /** @description Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests. */
+        CSRF: string;
         Limit: number;
         Cursor: components["schemas"]["Cursor"];
     };
@@ -1489,11 +5103,615 @@ export interface components {
     headers: {
         /** @description W3C-compatible trace identifier for support and correlation. */
         TraceId: components["schemas"]["TraceId"];
+        /** @description Session-bound CSRF verifier. Never persisted in plaintext. */
+        CSRF: string;
     };
     pathItems: never;
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    listClientCredentials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authoritative server response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["ClientCredentialSummary"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            /** @description Machine credential or workspace rate limit exceeded */
+            429: {
+                headers: {
+                    /** @description Seconds before retry */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    issueClientCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IssueClientCredential"];
+            };
+        };
+        responses: {
+            /** @description Authoritative server response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuedCredential"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            /** @description Machine credential or workspace rate limit exceeded */
+            429: {
+                headers: {
+                    /** @description Seconds before retry */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    revokeClientCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                credentialId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authoritative server response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            /** @description Machine credential or workspace rate limit exceeded */
+            429: {
+                headers: {
+                    /** @description Seconds before retry */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    rotateClientCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                credentialId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authoritative server response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuedCredential"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            /** @description Machine credential or workspace rate limit exceeded */
+            429: {
+                headers: {
+                    /** @description Seconds before retry */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    createMachinePrincipal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateMachinePrincipal"];
+            };
+        };
+        responses: {
+            /** @description Authoritative server response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachinePrincipal"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            /** @description Machine credential or workspace rate limit exceeded */
+            429: {
+                headers: {
+                    /** @description Seconds before retry */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listWebhookSubscriptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authoritative server response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["WebhookSubscription"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            /** @description Machine credential or workspace rate limit exceeded */
+            429: {
+                headers: {
+                    /** @description Seconds before retry */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    createWebhookSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveWebhookSubscription"];
+            };
+        };
+        responses: {
+            /** @description Authoritative server response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuedWebhookSubscription"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            /** @description Machine credential or workspace rate limit exceeded */
+            429: {
+                headers: {
+                    /** @description Seconds before retry */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    updateWebhookSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                subscriptionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveWebhookSubscription"];
+            };
+        };
+        responses: {
+            /** @description Authoritative server response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuedWebhookSubscription"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            /** @description Machine credential or workspace rate limit exceeded */
+            429: {
+                headers: {
+                    /** @description Seconds before retry */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    rotateWebhookSigningSecret: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                subscriptionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WebhookRotation"];
+            };
+        };
+        responses: {
+            /** @description Authoritative server response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuedWebhookSubscription"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            /** @description Machine credential or workspace rate limit exceeded */
+            429: {
+                headers: {
+                    /** @description Seconds before retry */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listWebhookDeliveries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authoritative server response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["WebhookDelivery"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            /** @description Machine credential or workspace rate limit exceeded */
+            429: {
+                headers: {
+                    /** @description Seconds before retry */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    replayWebhookDelivery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                deliveryId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    expectedAttempt: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Persisted delivery queued for replay */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookDelivery"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    describeSemantics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResolveSemanticQueryRequest"];
+            };
+        };
+        responses: {
+            /** @description Authoritative server response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SemanticResolution"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            /** @description Machine credential or workspace rate limit exceeded */
+            429: {
+                headers: {
+                    /** @description Seconds before retry */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    searchReleasedSemantics: {
+        parameters: {
+            query?: {
+                q?: string;
+            };
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authorized released definitions */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["ReleasedDefinition"][];
+                    };
+                };
+            };
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    callMCP: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description MCP JSON-RPC response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description MCP notification accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getEmbeddingIndexStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Persistent embedding capability and generations */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmbeddingIndexStatus"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    startEmbeddingRebuild: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Durable rebuild queued */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmbeddingIndexVersion"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    cancelEmbeddingRebuild: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                indexId: components["schemas"]["RunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rebuild cancelled without changing the active index */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    searchEmbeddingIndex: {
+        parameters: {
+            query: {
+                q: string;
+            };
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Currently authorized released candidates with explicit retrieval mode */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmbeddingSearchResult"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+        };
+    };
     getLiveness: {
         parameters: {
             query?: never;
@@ -1559,6 +5777,344 @@ export interface operations {
             default: components["responses"]["Error"];
         };
     };
+    beginOIDCLogin: {
+        parameters: {
+            query?: {
+                returnTo?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Redirect to the configured OIDC authorization endpoint. */
+            302: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            default: components["responses"]["Error"];
+        };
+    };
+    completeOIDCLogin: {
+        parameters: {
+            query: {
+                state: string;
+                code: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Set the opaque session cookie and redirect into the application. */
+            302: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getAuthMethods: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authentication providers available in this deployment. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        password: boolean;
+                        oidc: boolean;
+                    };
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    passwordLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    username: string;
+                    password: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Opaque HttpOnly session cookie issued. Read the session endpoint for CSRF and membership information. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Authentication attempts are temporarily limited. */
+            429: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    changePassword: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests. */
+                "X-Semlia-CSRF": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    currentPassword: string;
+                    newPassword: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Password changed and all account sessions revoked. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    getSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current session. The CSRF verifier is returned only in the X-Semlia-CSRF response header. */
+            200: {
+                headers: {
+                    "X-Trace-ID": components["headers"]["TraceId"];
+                    "X-Semlia-CSRF": components["headers"]["CSRF"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            default: components["responses"]["Error"];
+        };
+    };
+    deleteSession: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests. */
+                "X-Semlia-CSRF": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Session revoked and cookie expired. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            default: components["responses"]["Error"];
+        };
+    };
+    listWorkspaceMembers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Workspace memberships. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceMembershipPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            default: components["responses"]["Error"];
+        };
+    };
+    createPasswordMember: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests. */
+                "X-Semlia-CSRF": components["parameters"]["CSRF"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    username: string;
+                    displayName: string;
+                    password: string;
+                    roleId: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Local account admitted to the workspace. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionAccount"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    updateWorkspaceMembership: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests. */
+                "X-Semlia-CSRF": components["parameters"]["CSRF"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                membershipId: components["parameters"]["MembershipId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateWorkspaceMembershipRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated membership. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceMembership"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Error"];
+        };
+    };
+    listWorkspaceInvitations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Workspace invitations without acceptance token material. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceInvitationPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            default: components["responses"]["Error"];
+        };
+    };
+    createWorkspaceInvitation: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests. */
+                "X-Semlia-CSRF": components["parameters"]["CSRF"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateWorkspaceInvitationRequest"];
+            };
+        };
+        responses: {
+            /** @description Created invitation without acceptance token material. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceInvitation"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Error"];
+        };
+    };
     listWorkspaces: {
         parameters: {
             query?: never;
@@ -1607,6 +6163,103 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Error"];
+        };
+    };
+    listWorkbenchAttentionItems: {
+        parameters: {
+            query?: {
+                view?: components["schemas"]["WorkbenchView"];
+                search?: string;
+                kind?: components["schemas"]["WorkbenchAttentionKind"];
+                state?: components["schemas"]["WorkbenchAttentionState"];
+                priority?: components["schemas"]["WorkbenchPriority"];
+                risk?: components["schemas"]["WorkbenchPriority"];
+                sort?: components["schemas"]["WorkbenchSort"];
+                limit?: number;
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authorized workbench rows and counts under one authorization snapshot. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkbenchAttentionPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getWorkbenchAttentionItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                attentionItemId: components["parameters"]["AttentionItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One attention item. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkbenchAttentionItem"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    updateWorkbenchAttentionItem: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests. */
+                "X-Semlia-CSRF": components["parameters"]["CSRF"];
+                /** @description Workspace-scoped command replay key. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                attentionItemId: components["parameters"]["AttentionItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateWorkbenchAttentionItemRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated or idempotently replayed attention item. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkbenchAttentionItem"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             default: components["responses"]["Error"];
         };
@@ -1695,6 +6348,37 @@ export interface operations {
                     "application/json": components["schemas"]["CatalogAssetDetail"];
                 };
             };
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    listCatalogAssetAuthorityRecords: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                assetId: components["parameters"]["AssetId"];
+                sectionKind: "relations" | "physical_bindings" | "join_contracts" | "validation" | "lineage" | "consumer_impact";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A stable, bounded page of persisted authority records. */
+            200: {
+                headers: {
+                    "X-Trace-ID": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogAuthorityRecordPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
             404: components["responses"]["NotFound"];
             default: components["responses"]["Error"];
         };
@@ -1794,6 +6478,8 @@ export interface operations {
                 direction?: "incoming" | "outgoing" | "both";
                 plane?: components["schemas"]["RelationPlane"];
                 depth?: number;
+                /** @description Hard cap for this legacy bounded graph projection. Use the authority relations endpoint for cursor paging. */
+                limit?: number;
             };
             header?: never;
             path: {
@@ -1816,6 +6502,15 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             404: components["responses"]["NotFound"];
+            /** @description The bounded legacy graph exceeded the requested limit; use the cursor-paged authority relations endpoint. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             default: components["responses"]["Error"];
         };
     };
@@ -1986,6 +6681,34 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GovernancePolicyDecision"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    listGovernanceProposalReviews: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                proposalId: components["parameters"]["ProposalId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The proposal's immutable review facts. */
+            200: {
+                headers: {
+                    "X-Trace-ID": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GovernanceReviewPage"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -2560,6 +7283,1430 @@ export interface operations {
             default: components["responses"]["Error"];
         };
     };
+    askReleasedSemantics: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests. */
+                "X-Semlia-CSRF": components["parameters"]["CSRF"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AskRequest"];
+            };
+        };
+        responses: {
+            /** @description Clarification, released definition and plan, or explicit semantic refusal. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AskResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
+        };
+    };
+    listConsumers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Registered consumers. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsumerPage"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            default: components["responses"]["Error"];
+        };
+    };
+    createConsumer: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests. */
+                "X-Semlia-CSRF": components["parameters"]["CSRF"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateConsumerRequest"];
+            };
+        };
+        responses: {
+            /** @description Registered consumer. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Consumer"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getConsumer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                consumerId: components["parameters"]["ConsumerId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Registered consumer. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Consumer"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    updateConsumer: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests. */
+                "X-Semlia-CSRF": components["parameters"]["CSRF"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                consumerId: components["parameters"]["ConsumerId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateConsumerRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated consumer. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Consumer"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    listConsumerBindings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Consumer bindings. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsumerBindingPage"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            default: components["responses"]["Error"];
+        };
+    };
+    createConsumerBinding: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests. */
+                "X-Semlia-CSRF": components["parameters"]["CSRF"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateConsumerBindingRequest"];
+            };
+        };
+        responses: {
+            /** @description Created binding. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsumerBinding"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getConsumerBinding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                bindingId: components["parameters"]["ConsumerBindingId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Consumer binding. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsumerBinding"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    updateConsumerBinding: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests. */
+                "X-Semlia-CSRF": components["parameters"]["CSRF"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                bindingId: components["parameters"]["ConsumerBindingId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateConsumerBindingRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated binding. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsumerBinding"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Error"];
+        };
+    };
+    resolveSemanticQuery: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Required for browser session requests; omitted for bearer requests. */
+                "X-Semlia-CSRF"?: string;
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResolveSemanticQueryRequest"];
+            };
+        };
+        responses: {
+            /** @description Immutable plan or explicit semantic refusal. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SemanticResolution"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getSemanticQuery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                queryId: components["parameters"]["SemanticQueryId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Persisted resolution outcome. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SemanticResolution"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getResolvedSemanticPlan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                planId: components["parameters"]["ResolvedSemanticPlanId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Immutable resolved plan. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResolvedSemanticPlan"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    executeSemanticPlan: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Semlia-CSRF"?: string;
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                planId: components["schemas"]["ResolvedSemanticPlanId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QueryExecutionRequest"];
+            };
+        };
+        responses: {
+            /** @description Terminal execution or metadata-only idempotency replay. Responses are never cached. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueryExecutionResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Error"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getQueryExecution: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                runId: components["schemas"]["RunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Metadata only; result rows are not stored. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueryExecutionResult"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    cancelQueryExecution: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Semlia-CSRF"?: string;
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                runId: components["schemas"]["RunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authorized metadata and monotonic cancellation request; a terminal outcome is observed with getQueryExecution. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueryExecutionResult"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    listSources: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                cursor?: components["parameters"]["Cursor"];
+                sourceId?: components["schemas"]["SourceConnectionId"];
+            };
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Workspace sources without reusable credentials or raw artifact content. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceConnectionPage"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            default: components["responses"]["Error"];
+        };
+    };
+    createSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSourceRequest"];
+            };
+        };
+        responses: {
+            /** @description Source created; password is never returned. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceConnection"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                sourceId: components["parameters"]["SourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Redacted source configuration. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceConnection"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    deleteSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                sourceId: components["parameters"]["SourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeleteSourceRequest"];
+            };
+        };
+        responses: {
+            /** @description Soft-deleted source configuration. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceConnection"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    updateSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                sourceId: components["parameters"]["SourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateSourceRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated redacted source configuration. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceConnection"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    rotateSourceCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                sourceId: components["parameters"]["SourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RotateSourceCredentialRequest"];
+            };
+        };
+        responses: {
+            /** @description Source with incremented credential version. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceConnection"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Error"];
+        };
+    };
+    testSourceConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                sourceId: components["parameters"]["SourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Connection and read-only role verified. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceTestResult"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["UnprocessableEntity"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
+        };
+    };
+    listSourceDiscoveryRuns: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                sourceId: components["parameters"]["SourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Runs for the source, newest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceDiscoveryRunPage"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            default: components["responses"]["Error"];
+        };
+    };
+    startSourceDiscoveryRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                sourceId: components["parameters"]["SourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartDiscoveryRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Exact queued run atomically linked to its worker job. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceDiscoveryRun"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Error"];
+        };
+    };
+    listProductionSourceSnapshots: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                sourceId: components["parameters"]["SourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Byte-bounded snapshot page, newest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SnapshotPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getProductionSourceSnapshot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                sourceId: components["parameters"]["SourceId"];
+                snapshotId: components["parameters"]["SnapshotId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Exact snapshot metadata without unbounded members or diagnostics. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceSnapshot"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    listProductionSnapshotMembers: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                cursor?: components["parameters"]["Cursor"];
+                kind?: components["schemas"]["MemberKind"];
+            };
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                sourceId: components["parameters"]["SourceId"];
+                snapshotId: components["parameters"]["SnapshotId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Byte-bounded page ordered by kind and object identity. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SnapshotMemberPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    listProductionSnapshotDiagnostics: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                sourceId: components["parameters"]["SourceId"];
+                snapshotId: components["parameters"]["SnapshotId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Byte-bounded diagnostics page ordered by ordinal. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiagnosticPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    listIngestionArtifacts: {
+        parameters: {
+            query?: {
+                kind?: components["schemas"]["ArtifactKind"];
+                status?: components["schemas"]["ArtifactStatus"];
+                sourceId?: components["schemas"]["SourceConnectionId"];
+                limit?: components["parameters"]["Limit"];
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A cursor-paged, authorized artifact metadata page. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            default: components["responses"]["Error"];
+        };
+    };
+    stageIngestionArtifact: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Workspace-scoped command replay key. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests. */
+                "X-Semlia-CSRF": components["parameters"]["CSRF"];
+                "X-Artifact-Kind": components["schemas"]["PublicArtifactKind"];
+                "X-File-Name": string;
+                /** @description Existing source receiving this staged version. Omit when creating a source. */
+                "X-Source-Id"?: components["schemas"]["SourceConnectionId"];
+                /** @description Required optimistic source version when X-Source-Id is present. */
+                "X-Expected-Source-Version"?: number;
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "text/csv": string;
+                "text/markdown": string;
+                "application/json": string;
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+            };
+        };
+        responses: {
+            /** @description Durable staged artifact metadata; raw bytes are never returned. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IngestionArtifact"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            /** @description The upload or parsed representation exceeds a fixed ingestion limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            422: components["responses"]["UnprocessableEntity"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getIngestionArtifactSet: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                artifactSetId: components["schemas"]["ArtifactSetId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The exact source-authorized artifact membership pinned by runs. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactSet"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    finalizeIngestionArtifactSet: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Workspace-scoped command replay key. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests. */
+                "X-Semlia-CSRF": components["parameters"]["CSRF"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FinalizeArtifactSetRequest"];
+            };
+        };
+        responses: {
+            /** @description The immutable set and exact ordered membership. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactSet"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            /** @description The finalized set exceeds a fixed byte or member limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            422: components["responses"]["UnprocessableEntity"];
+            default: components["responses"]["Error"];
+        };
+    };
+    registerConfiguredSQLArtifacts: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Workspace-scoped command replay key. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests. */
+                "X-Semlia-CSRF": components["parameters"]["CSRF"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterSQLArtifactsRequest"];
+            };
+        };
+        responses: {
+            /** @description The immutable SQL artifact set. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactSet"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            /** @description The configured SQL set exceeds a fixed byte or member limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            422: components["responses"]["UnprocessableEntity"];
+            default: components["responses"]["Error"];
+        };
+    };
+    listSourceSchedules: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                sourceId: components["parameters"]["SourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A cursor-paged schedule list with server total. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceSchedulePage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            default: components["responses"]["Error"];
+        };
+    };
+    createSourceSchedule: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Workspace-scoped command replay key. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests. */
+                "X-Semlia-CSRF": components["parameters"]["CSRF"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                sourceId: components["parameters"]["SourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSourceScheduleRequest"];
+            };
+        };
+        responses: {
+            /** @description The durable schedule and its next nominal occurrence. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceSchedule"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getSourceSchedule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                scheduleId: components["schemas"]["SourceScheduleId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One source-authorized schedule. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceSchedule"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    deleteSourceSchedule: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Workspace-scoped command replay key. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests. */
+                "X-Semlia-CSRF": components["parameters"]["CSRF"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                scheduleId: components["schemas"]["SourceScheduleId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourceScheduleCommandRequest"];
+            };
+        };
+        responses: {
+            /** @description The exact deleted schedule state produced by this command. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceSchedule"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Error"];
+        };
+    };
+    updateSourceSchedule: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Workspace-scoped command replay key. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests. */
+                "X-Semlia-CSRF": components["parameters"]["CSRF"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                scheduleId: components["schemas"]["SourceScheduleId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateSourceScheduleRequest"];
+            };
+        };
+        responses: {
+            /** @description The exact schedule state produced by this idempotent command. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceSchedule"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Error"];
+        };
+    };
+    pauseSourceSchedule: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Workspace-scoped command replay key. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests. */
+                "X-Semlia-CSRF": components["parameters"]["CSRF"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                scheduleId: components["schemas"]["SourceScheduleId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourceScheduleCommandRequest"];
+            };
+        };
+        responses: {
+            /** @description Paused schedule. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceSchedule"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Error"];
+        };
+    };
+    resumeSourceSchedule: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Workspace-scoped command replay key. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests. */
+                "X-Semlia-CSRF": components["parameters"]["CSRF"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                scheduleId: components["schemas"]["SourceScheduleId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourceScheduleCommandRequest"];
+            };
+        };
+        responses: {
+            /** @description Resumed schedule. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceSchedule"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Error"];
+        };
+    };
+    runSourceScheduleNow: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Workspace-scoped command replay key. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests. */
+                "X-Semlia-CSRF": components["parameters"]["CSRF"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                scheduleId: components["schemas"]["SourceScheduleId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourceScheduleCommandRequest"];
+            };
+        };
+        responses: {
+            /** @description One enqueued or terminal skipped occurrence. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceScheduleOccurrence"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Error"];
+        };
+    };
+    listSourceScheduleOccurrences: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                scheduleId: components["schemas"]["SourceScheduleId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cursor-paged immutable occurrence history with exact run pins. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceScheduleOccurrencePage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    listSemanticCandidates: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["SemanticCandidateStatus"];
+                limit?: components["parameters"]["Limit"];
+                cursor?: components["parameters"]["Cursor"];
+                sourceId?: components["schemas"]["SourceConnectionId"];
+            };
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deterministic candidates derived from terminal discovery runs. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SemanticCandidatePage"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getSemanticCandidate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                candidateId: components["parameters"]["CandidateId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Candidate with immutable source evidence. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SemanticCandidate"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    decideSemanticCandidate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                candidateId: components["parameters"]["CandidateId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SemanticCandidateDecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Append-only candidate decision. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SemanticCandidateDecision"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Error"];
+        };
+    };
     getDiscoveryRun: {
         parameters: {
             query?: never;
@@ -2583,6 +8730,1122 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    listAuthorizationRoles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authorized role catalogue. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthorizationRolePage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            default: components["responses"]["Error"];
+        };
+    };
+    createAuthorizationRole: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests. */
+                "X-Semlia-CSRF": components["parameters"]["CSRF"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAuthorizationRoleRequest"];
+            };
+        };
+        responses: {
+            /** @description Created custom role. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthorizationRoleMutationResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getAuthorizationRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                roleId: components["parameters"]["AuthorizationRoleId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Role detail. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthorizationRole"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    updateAuthorizationRole: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests. */
+                "X-Semlia-CSRF": components["parameters"]["CSRF"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                roleId: components["parameters"]["AuthorizationRoleId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateAuthorizationRoleRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated custom role. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthorizationRoleMutationResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Error"];
+        };
+    };
+    listAuthorizationRoleBindings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authorized role assignments. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthorizationRoleBindingPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            default: components["responses"]["Error"];
+        };
+    };
+    createAuthorizationRoleBinding: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests. */
+                "X-Semlia-CSRF": components["parameters"]["CSRF"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAuthorizationRoleBindingRequest"];
+            };
+        };
+        responses: {
+            /** @description Created role assignment. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthorizationRoleBindingMutationResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Error"];
+        };
+    };
+    revokeAuthorizationRoleBinding: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests. */
+                "X-Semlia-CSRF": components["parameters"]["CSRF"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                bindingId: components["parameters"]["AuthorizationRoleBindingId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RevokeAuthorizationRoleBindingRequest"];
+            };
+        };
+        responses: {
+            /** @description Revoked role assignment. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthorizationRoleBindingMutationResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Error"];
+        };
+    };
+    inspectEffectiveAuthorization: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests. */
+                "X-Semlia-CSRF": components["parameters"]["CSRF"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InspectAuthorizationRequest"];
+            };
+        };
+        responses: {
+            /** @description Explainable effective-access decision. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthorizationDecision"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            default: components["responses"]["Error"];
+        };
+    };
+    listOperationsAuditEvents: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                cursor?: components["parameters"]["Cursor"];
+                actorId?: string;
+                eventType?: string;
+                objectType?: string;
+                objectId?: string;
+                traceId?: components["schemas"]["TraceId"];
+                from?: components["schemas"]["Timestamp"];
+                to?: components["schemas"]["Timestamp"];
+            };
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cursor-paged redacted audit events. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationsAuditEventPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            default: components["responses"]["Error"];
+        };
+    };
+    createOperationsAuditExport: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests. */
+                "X-Semlia-CSRF": components["parameters"]["CSRF"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateOperationsAuditExportRequest"];
+            };
+        };
+        responses: {
+            /** @description Export metadata and short-lived artifact identity. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationsAuditExport"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getOperationsAuditExportContent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                exportId: components["parameters"]["AuditExportId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Exact persisted JSON export bytes. */
+            200: {
+                headers: {
+                    ETag?: string;
+                    "X-Content-SHA256"?: string;
+                    "Content-Disposition"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationsAuditExportContent"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    listOperationsRuntimeRuns: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                cursor?: components["parameters"]["Cursor"];
+                kind?: components["schemas"]["OperationsRuntimeRunKind"];
+                state?: components["schemas"]["OperationsRuntimeRunState"];
+                sourceType?: string;
+                sourceId?: string;
+                traceId?: components["schemas"]["TraceId"];
+            };
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cursor-paged runtime runs. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationsRuntimeRunPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getOperationsRuntimeRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                runId: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Runtime detail. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationsRuntimeRunDetail"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    retryOperationsRuntimeRun: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests. */
+                "X-Semlia-CSRF": components["parameters"]["CSRF"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                runId: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Retry accepted by the owning domain. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Error"];
+        };
+    };
+    cancelOperationsRuntimeRun: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests. */
+                "X-Semlia-CSRF": components["parameters"]["CSRF"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                runId: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cancellation accepted by the owning domain. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getRuntimePolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Runtime policy. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationsRuntimePolicy"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            default: components["responses"]["Error"];
+        };
+    };
+    updateRuntimePolicy: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Session-bound CSRF verifier required with an allowlisted Origin on unsafe requests. */
+                "X-Semlia-CSRF": components["parameters"]["CSRF"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateOperationsRuntimeSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated runtime policy. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationsRuntimePolicy"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    listProductionOperations: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                cursor?: components["parameters"]["Cursor"];
+                sourceId?: components["schemas"]["ResourceId"];
+                candidateId?: components["schemas"]["ResourceId"];
+                createdBy?: components["schemas"]["ResourceId"];
+            };
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scope-filtered summaries, not all-workspace counts or full target content */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductionOperationPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    createProductionOperation: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Workspace-scoped command replay key. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateProductionRequest"];
+            };
+        };
+        responses: {
+            /** @description Committed result, including replay or a no_change operation */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductionCommandResult"];
+                };
+            };
+            /** @description Newly committed operation; Location points to the operation GET */
+            201: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductionCommandResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getProductionOperation: {
+        parameters: {
+            query?: {
+                /** @description Exact immutable version; omitted selects current, never rewrites history */
+                version?: number;
+            };
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                operationId: components["parameters"]["OperationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authorized operation version with exact governance references */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductionOperation"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    replaceProductionDraft: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Workspace-scoped command replay key. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                operationId: components["parameters"]["OperationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplaceProductionRequest"];
+            };
+        };
+        responses: {
+            /** @description Committed result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductionCommandResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
+            default: components["responses"]["Error"];
+        };
+    };
+    submitProductionOperation: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Workspace-scoped command replay key. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                operationId: components["parameters"]["OperationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubmitProductionRequest"];
+            };
+        };
+        responses: {
+            /** @description Replayed committed command or completed result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductionCommandResult"];
+                };
+            };
+            /** @description Durable validation job references committed; poll the operation */
+            202: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductionCommandResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
+            default: components["responses"]["Error"];
+        };
+    };
+    listProductionValidationAttempts: {
+        parameters: {
+            query: {
+                version: components["schemas"]["Version"];
+                limit?: components["parameters"]["Limit"];
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                operationId: components["parameters"]["OperationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Attempt-number descending page fixed to one operation version; no implicit active-attempt fallback */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationAttemptPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    validateProductionOperation: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Workspace-scoped command replay key. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                operationId: components["parameters"]["OperationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ValidateProductionRequest"];
+            };
+        };
+        responses: {
+            /** @description Replayed committed command or completed result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductionCommandResult"];
+                };
+            };
+            /** @description Durable validation job references committed; poll the operation */
+            202: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductionCommandResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
+            default: components["responses"]["Error"];
+        };
+    };
+    reviewProductionOperation: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Workspace-scoped command replay key. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                operationId: components["parameters"]["OperationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewProductionRequest"];
+            };
+        };
+        responses: {
+            /** @description Committed result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductionCommandResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
+            default: components["responses"]["Error"];
+        };
+    };
+    listProductionBusinessRules: {
+        parameters: {
+            query: {
+                version: components["schemas"]["Version"];
+            };
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                operationId: components["parameters"]["OperationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Latest event per target, ordered by target key */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["ProductionBusinessRuleWitness"][];
+                    };
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            503: components["responses"]["Error"];
+        };
+    };
+    recordProductionBusinessRule: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Workspace-scoped command replay key. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                operationId: components["parameters"]["OperationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProductionBusinessRuleRequest"];
+            };
+        };
+        responses: {
+            /** @description Authorized replay of the original event, not a fresh confirmation */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductionBusinessRuleEvent"];
+                };
+            };
+            /** @description Immutable event committed; existing validation must be rerun */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductionBusinessRuleEvent"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+            413: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+            503: components["responses"]["Error"];
+        };
+    };
+    generateProductionSuggestions: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Workspace-scoped command replay key. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                operationId: components["parameters"]["OperationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GenerateProductionRequest"];
+            };
+        };
+        responses: {
+            /** @description Authorized replay without another model call */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenerationResult"];
+                };
+            };
+            /** @description Durable run queued; Location is its recovery URL */
+            202: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenerationResult"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+            413: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+            503: components["responses"]["Error"];
+        };
+    };
+    getProductionGeneration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                operationId: components["parameters"]["OperationId"];
+                runId: components["schemas"]["GovernanceAgentRunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Stored status and schema-gated output; unknown vendor cost is null */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenerationResult"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    publishProductionOperation: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Workspace-scoped command replay key. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                operationId: components["parameters"]["OperationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublishProductionRequest"];
+            };
+        };
+        responses: {
+            /** @description Authorized replay of the committed release */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReleaseCommandResult"];
+                };
+            };
+            /** @description All members committed as one immutable release */
+            201: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReleaseCommandResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getProductionRelease: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                releaseId: components["parameters"]["ReleaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Complete production detail, not a second release authority */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductionRelease"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["UnprocessableEntity"];
+            default: components["responses"]["Error"];
+        };
+    };
+    rollbackProductionRelease: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Workspace-scoped command replay key. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                releaseId: components["parameters"]["ReleaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RollbackProductionRequest"];
+            };
+        };
+        responses: {
+            /** @description Authorized replay of the committed release */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReleaseCommandResult"];
+                };
+            };
+            /** @description All members committed as one immutable release */
+            201: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReleaseCommandResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
             default: components["responses"]["Error"];
         };
     };

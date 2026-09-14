@@ -1,0 +1,23 @@
+{
+  "command": [
+    "go",
+    "test",
+    "-count=1",
+    "./internal/platform/http",
+    "-run",
+    "^TestSourceSnapshot",
+    "-v"
+  ],
+  "clearedEnvironment": [
+    "SEMLIA_INGESTION_TEST_DATABASE_URL",
+    "SEMLIA_EXECUTION_CRASH_HELPER",
+    "SEMLIA_EXECUTION_TEST_DB",
+    "SEMLIA_DATABASE_URL"
+  ],
+  "start": "2026-09-09T05:55:34.150Z",
+  "end": "2026-09-09T05:55:34.858Z",
+  "exitStatus": 1,
+  "signal": null,
+  "stdout": "FAIL\tgithub.com/iiwish/semlia/internal/platform/http [build failed]\nFAIL\n",
+  "stderr": "# github.com/iiwish/semlia/internal/platform/http_test [github.com/iiwish/semlia/internal/platform/http.test]\ninternal/platform/http/source_snapshot_test.go:39:14: assignment mismatch: 2 variables but application.NewSystemService returns 1 value\ninternal/platform/http/source_snapshot_test.go:39:50: undefined: domain.RuntimeDescriptor\ninternal/platform/http/source_snapshot_test.go:39:103: cannot use application.UnavailableReadinessProbe{} (value of struct type application.UnavailableReadinessProbe) as domain.SystemInfo value in argument to application.NewSystemService\n"
+}

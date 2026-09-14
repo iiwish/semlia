@@ -18,6 +18,84 @@ import (
 )
 
 var _ governanceapp.PublishingRepository = (*Store)(nil)
+var _ governanceapp.ReleaseDetailRepository = (*Store)(nil)
+
+func (store *Store) GetReleaseConsumerImpact(
+	ctx context.Context, workspace identity.WorkspaceID, release identity.ReleaseID,
+) (governanceapp.ReleaseConsumerImpact, error) {
+	workspaceID, releaseID, err := releaseIDs(workspace, release)
+	if err != nil {
+		return governanceapp.ReleaseConsumerImpact{}, err
+	}
+	row, err := store.queries.GetReleaseConsumerImpact(ctx, dbgen.GetReleaseConsumerImpactParams{
+		WorkspaceID: workspaceID, ReleaseID: releaseID,
+	})
+	if err != nil {
+		return governanceapp.ReleaseConsumerImpact{}, governanceRepositoryError("get release consumer impact", err)
+	}
+	return governanceapp.ReleaseConsumerImpact{Current: row.CurrentCount, Pinned: row.PinnedCount}, nil
+}
+
+func (store *Store) ListReleaseStableDiff(
+	ctx context.Context, workspace identity.WorkspaceID, release identity.ReleaseID,
+) ([]governanceapp.ReleaseDiffEntry, error) {
+	workspaceID, releaseID, err := releaseIDs(workspace, release)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := store.queries.ListReleaseStableDiff(ctx, dbgen.ListReleaseStableDiffParams{
+		WorkspaceID: workspaceID, ReleaseID: releaseID,
+	})
+	if err != nil {
+		return nil, governanceRepositoryError("list stable release diff", err)
+	}
+	result := make([]governanceapp.ReleaseDiffEntry, 0, len(rows))
+	for _, row := range rows {
+		targetID, previousVersion, currentVersion, mapErr := releaseDiffIdentity(row)
+		if mapErr != nil {
+			return nil, mapErr
+		}
+		result = append(result, governanceapp.ReleaseDiffEntry{
+			ComparisonKind: row.ComparisonKind, TargetType: row.TargetType,
+			TargetID: targetID, Change: row.Change, BaselineVersion: previousVersion,
+			SelectedVersion: currentVersion,
+		})
+	}
+	return result, nil
+}
+
+func releaseDiffIdentity(row dbgen.ListReleaseStableDiffRow) (string, string, string, error) {
+	var prefix identity.Prefix
+	if row.TargetType == string(governance.TargetSemanticAsset) {
+		prefix = identity.Asset
+	} else {
+		var err error
+		prefix, err = governance.TargetObjectType(row.TargetType).Prefix()
+		if err != nil {
+			return "", "", "", err
+		}
+	}
+	target, err := identity.FromUUIDBytes(prefix, row.TargetID.Bytes)
+	if err != nil {
+		return "", "", "", err
+	}
+	previous, current := row.BaselineVersion, row.SelectedVersion
+	if row.TargetType == string(governance.TargetSemanticAsset) {
+		if previous != "" {
+			value, parseErr := identity.FromUUID(identity.Revision, previous)
+			if parseErr != nil {
+				return "", "", "", parseErr
+			}
+			previous = value.String()
+		}
+		value, parseErr := identity.FromUUID(identity.Revision, current)
+		if parseErr != nil {
+			return "", "", "", parseErr
+		}
+		current = value.String()
+	}
+	return target.String(), previous, current, nil
+}
 
 func (store *Store) ListApprovingReviews(
 	ctx context.Context, workspace identity.WorkspaceID, proposal identity.ProposalID,
@@ -95,6 +173,18 @@ func (store *Store) ListReleases(
 		releases = append(releases, release)
 	}
 	return releases, nil
+}
+
+func (store *Store) CountReleases(ctx context.Context, workspace identity.WorkspaceID) (int64, error) {
+	workspaceID, err := uuidValue(workspace)
+	if err != nil {
+		return 0, fmt.Errorf("encode workspace ID: %w", err)
+	}
+	count, err := store.queries.CountReleases(ctx, workspaceID)
+	if err != nil {
+		return 0, governanceRepositoryError("count releases", err)
+	}
+	return count, nil
 }
 
 func (store *Store) MaxReleaseSequence(ctx context.Context, workspace identity.WorkspaceID) (int64, error) {
@@ -223,6 +313,10 @@ func (store *Store) PublishRelease(
 		return governance.Release{}, fmt.Errorf(
 			"%w: proposal target type %q is not publishable", governance.ErrInvariant, proposal.TargetObjectType)
 	}
+	entries, objects, err = carryPublishedPins(ctx, queries, workspaceID, entries, objects)
+	if err != nil {
+		return governance.Release{}, err
+	}
 
 	manifestPayload, err := governance.ManifestDigestPayloadWithObjects(entries, objects)
 	if err != nil {
@@ -256,11 +350,12 @@ func (store *Store) PublishRelease(
 		}
 	}
 	decidedAt := command.AppliedAt
-	if _, err := queries.TransitionProposal(ctx, dbgen.TransitionProposalParams{
+	releasedProposal, err := queries.TransitionProposal(ctx, dbgen.TransitionProposalParams{
 		WorkspaceID: workspaceID, ProposalID: proposalID, State: string(governance.ProposalReleased),
 		DecidedAt: timestamp(decidedAt), ExpectedState: string(governance.ProposalInReview),
 		UpdatedAt: timestamp(decidedAt),
-	}); err != nil {
+	})
+	if err != nil {
 		return governance.Release{}, governanceRepositoryError("release proposal", err)
 	}
 	var assetID *identity.AssetID
@@ -280,6 +375,9 @@ func (store *Store) PublishRelease(
 	}); err != nil {
 		return governance.Release{}, governanceRepositoryError("record released proposal events", err)
 	}
+	if err := projectProposalAttention(ctx, queries, releasedProposal, command.TraceID, command.AppliedAt); err != nil {
+		return governance.Release{}, governanceRepositoryError("resolve released proposal attention", err)
+	}
 	if err := createReleaseMutationEvents(ctx, queries, releaseEvent{
 		WorkspaceID: command.WorkspaceID, ReleaseID: command.ReleaseID,
 		AuditID: command.ReleaseEvents.AuditEventID, OutboxID: command.ReleaseEvents.OutboxEventID,
@@ -298,6 +396,53 @@ func (store *Store) PublishRelease(
 	release.Entries = entries
 	release.Objects = objects
 	return release, nil
+}
+
+// A release is a complete published manifest, not a view of mutable drafts.
+func carryPublishedPins(ctx context.Context, q *dbgen.Queries, w pgtype.UUID, entries []governance.ManifestEntry, objects []governance.ObjectManifestEntry) ([]governance.ManifestEntry, []governance.ObjectManifestEntry, error) {
+	assets, err := q.LatestPublishedAssetPins(ctx, w)
+	if err != nil {
+		return nil, nil, governanceRepositoryError("load published asset pins", err)
+	}
+	for _, a := range assets {
+		found := false
+		for _, e := range entries {
+			if e.AssetID.UUID() == a.AssetID.String() {
+				found = true
+				break
+			}
+		}
+		if found {
+			continue
+		}
+		id, _ := identity.AssetIDFromUUIDBytes(a.AssetID.Bytes)
+		rev, _ := identity.RevisionIDFromUUIDBytes(a.RevisionID.Bytes)
+		entries = append(entries, governance.ManifestEntry{AssetID: id, RevisionID: rev, Compatibility: a.Compatibility})
+	}
+	pins, err := q.LatestPublishedObjectPins(ctx, w)
+	if err != nil {
+		return nil, nil, governanceRepositoryError("load published object pins", err)
+	}
+	for _, p := range pins {
+		found := false
+		for _, o := range objects {
+			if string(o.ObjectType) == p.ObjectType && o.ObjectID == p.ObjectID.String() {
+				found = true
+				break
+			}
+		}
+		if found {
+			continue
+		}
+		objects = append(objects, governance.ObjectManifestEntry{ObjectType: governance.TargetObjectType(p.ObjectType), ObjectID: p.ObjectID.String(), Version: int(p.Version)})
+	}
+	for i := range entries {
+		entries[i].Position = i + 1
+	}
+	for i := range objects {
+		objects[i].Position = i + 1
+	}
+	return entries, objects, nil
 }
 
 func (store *Store) publishAssetRevision(
@@ -473,6 +618,13 @@ func (store *Store) RestoreRelease(
 	if _, err := queries.LockWorkspace(ctx, workspaceID); err != nil {
 		return governance.Release{}, governanceRepositoryError("lock workspace for rollback", err)
 	}
+	latest, err := queries.GetMaxReleaseSequence(ctx, workspaceID)
+	if err != nil {
+		return governance.Release{}, governanceRepositoryError("recheck rollback release sequence", err)
+	}
+	if latest != command.Target.Sequence {
+		return governance.Release{}, governance.ErrConflict
+	}
 	rollbacks, err := queries.CountReleaseRollbacks(ctx, dbgen.CountReleaseRollbacksParams{
 		WorkspaceID: workspaceID, ReleaseID: targetID,
 	})
@@ -488,15 +640,20 @@ func (store *Store) RestoreRelease(
 			return governance.Release{}, err
 		}
 	}
-	objects := make([]governance.ObjectManifestEntry, 0, len(command.Objects))
+	objects := append([]governance.ObjectManifestEntry(nil), command.Objects...)
 	if command.ObjectRestore != nil {
 		restored, restoreErr := store.restoreGovernedObject(ctx, queries, command, *command.ObjectRestore)
 		if restoreErr != nil {
 			return governance.Release{}, restoreErr
 		}
-		objects = append(objects, restored)
+		for i := range objects {
+			if objects[i].ObjectType == restored.ObjectType && objects[i].ObjectID == restored.ObjectID {
+				restored.Position = objects[i].Position
+				objects[i] = restored
+			}
+		}
 	}
-	manifestPayload, err := governance.ManifestDigestPayloadWithObjects(command.Entries, command.Objects)
+	manifestPayload, err := governance.ManifestDigestPayloadWithObjects(command.Entries, objects)
 	if err != nil {
 		return governance.Release{}, err
 	}
@@ -569,6 +726,11 @@ func (store *Store) restoreAssetRevision(
 	if err != nil {
 		return governanceRepositoryError("lock catalog asset for rollback", err)
 	}
+	for _, entry := range command.Target.Entries {
+		if entry.AssetID == restore.AssetID && (!lockedAsset.CurrentRevisionID.Valid || lockedAsset.CurrentRevisionID.String() != entry.RevisionID.UUID()) {
+			return governance.ErrConflict
+		}
+	}
 	if _, err := queries.GetAssetRevisionOwnership(ctx, dbgen.GetAssetRevisionOwnershipParams{
 		WorkspaceID: workspaceID, AssetID: assetID, RevisionID: revisionID,
 	}); err != nil {
@@ -624,6 +786,11 @@ func (store *Store) restoreGovernedObject(
 	version, err := spec.lock(ctx, queries, workspaceID, objectID)
 	if err != nil {
 		return governance.ObjectManifestEntry{}, governanceRepositoryError("lock governed object for rollback", err)
+	}
+	for _, entry := range command.Target.Objects {
+		if entry.ObjectType == restore.ObjectType && entry.ObjectID == restore.ObjectID && entry.Version != int(version) {
+			return governance.ObjectManifestEntry{}, governance.ErrConflict
+		}
 	}
 	object, err := spec.get(ctx, queries, workspaceID, objectID)
 	if err != nil {

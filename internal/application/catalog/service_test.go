@@ -8,8 +8,10 @@ import (
 	"testing"
 	"time"
 
+	authorizationapp "github.com/iiwish/semlia/internal/application/authorization"
 	application "github.com/iiwish/semlia/internal/application/catalog"
 	usageapp "github.com/iiwish/semlia/internal/application/usage"
+	"github.com/iiwish/semlia/internal/domain/authorization"
 	domain "github.com/iiwish/semlia/internal/domain/catalog"
 	"github.com/iiwish/semlia/internal/domain/semantic"
 	usagedomain "github.com/iiwish/semlia/internal/domain/usage"
@@ -110,12 +112,153 @@ func TestCatalogRecordsFailedSearchWithoutChangingRepositoryError(t *testing.T) 
 	}
 }
 
+func TestCatalogAssetSubresourceReadsAuthorizeExactAssetAndHideDenials(t *testing.T) {
+	workspace := mustID(t, identity.NewWorkspaceID)
+	otherWorkspace := mustID(t, identity.NewWorkspaceID)
+	asset := mustID(t, identity.NewAssetID)
+	revision := mustID(t, identity.NewRevisionID)
+	repository := &fakeRepository{}
+	evaluator := &catalogEvaluator{decision: authorization.Decision{
+		Allowed: false, ReasonCode: authorization.ReasonNoMatchingGrant,
+	}}
+	service := application.NewService(repository, application.ClockFunc(time.Now), application.WithAuthorizer(evaluator))
+
+	_, err := service.ListRevisions(context.Background(), application.ListRevisionsRequest{
+		WorkspaceID: workspace, AssetID: asset, Limit: 10, PrincipalRef: "prn_reader", TraceID: strings.Repeat("a", 32),
+	})
+	if !errors.Is(err, domain.ErrNotFound) || repository.revisionListCalls != 0 {
+		t.Fatalf("denied revision list = %v, repository calls = %d", err, repository.revisionListCalls)
+	}
+	assertAssetReadEvaluation(t, evaluator.captured[len(evaluator.captured)-1], workspace, asset)
+
+	_, err = service.GetRevision(context.Background(), application.GetRevisionRequest{
+		WorkspaceID: otherWorkspace, AssetID: asset, RevisionID: revision,
+		PrincipalRef: "prn_reader", TraceID: strings.Repeat("b", 32),
+	})
+	if !errors.Is(err, domain.ErrNotFound) || repository.revisionGetCalls != 0 {
+		t.Fatalf("cross-workspace denied revision = %v, repository calls = %d", err, repository.revisionGetCalls)
+	}
+	assertAssetReadEvaluation(t, evaluator.captured[len(evaluator.captured)-1], otherWorkspace, asset)
+
+	_, err = service.ListRelations(context.Background(), application.ListRelationsRequest{
+		WorkspaceID: workspace, AssetID: asset, Direction: "both", Depth: 1,
+		PrincipalRef: "prn_reader", TraceID: strings.Repeat("c", 32),
+	})
+	if !errors.Is(err, domain.ErrNotFound) || repository.relationListCalls != 0 {
+		t.Fatalf("denied relations = %v, repository calls = %d", err, repository.relationListCalls)
+	}
+	assertAssetReadEvaluation(t, evaluator.captured[len(evaluator.captured)-1], workspace, asset)
+}
+
+func TestCatalogAssetDetailRedactsSectionsWithoutSectionCapabilities(t *testing.T) {
+	workspace := mustID(t, identity.NewWorkspaceID)
+	asset := mustID(t, identity.NewAssetID)
+	principal := mustID(t, identity.NewPrincipalID)
+	revision := mustID(t, identity.NewRevisionID)
+	evidence := mustID(t, identity.NewEvidenceID)
+	repository := &fakeRepository{detail: domain.AssetDetail{CurrentRevision: &domain.Revision{
+		ID: revision, AssetID: asset, Evidence: []domain.Evidence{{ID: evidence}},
+	}, AuthoritySections: []domain.AuthoritySection{
+		{Kind: "definition", Authority: "asset_revisions", Availability: domain.AvailabilityAvailable,
+			Values: map[string]int64{"count": 1}, Records: []domain.AuthorityRecord{}},
+		{Kind: "evidence", Authority: "evidence_artifacts", Availability: domain.AvailabilityAvailable,
+			Values: map[string]int64{"count": 1}, Records: []domain.AuthorityRecord{}},
+		{Kind: "validation", Authority: "validation_runs", Availability: domain.AvailabilityAvailable,
+			Values: map[string]int64{"count": 1}, Records: []domain.AuthorityRecord{{Kind: "validation_run", ID: "val_example"}}},
+		{Kind: "consumer_impact", Authority: "consumer_bindings", Availability: domain.AvailabilityAvailable,
+			Values: map[string]int64{"count": 1}, Records: []domain.AuthorityRecord{{Kind: "consumer_binding", ID: "cbd_example"}}},
+	}}}
+	evaluator := &catalogSnapshotEvaluator{
+		catalogEvaluator: catalogEvaluator{decision: authorization.Decision{
+			Allowed: true, PrincipalID: principal, Action: authorization.ActionAssetRead,
+		}},
+		snapshot: authorizationapp.AccessSnapshot{
+			Principal: authorization.Principal{ID: principal, WorkspaceID: workspace, Kind: authorization.PrincipalHuman, Status: authorization.PrincipalActive},
+			Bindings: []authorization.RoleBinding{{
+				WorkspaceID: workspace, PrincipalID: principal, RoleID: "asset-reader", RoleVersion: 1,
+				ScopeType: authorization.ScopeAsset, ScopeID: asset.UUID(), Actions: []authorization.Action{authorization.ActionAssetRead},
+			}},
+			EvaluatedAt: time.Now().UTC(),
+		},
+	}
+	service := application.NewService(repository, application.ClockFunc(time.Now), application.WithAuthorizer(evaluator))
+	detail, err := service.GetAssetObserved(context.Background(), workspace, asset, application.ReadObservation{
+		PrincipalRef: principal.String(), TraceID: strings.Repeat("d", 32),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sections := make(map[string]domain.AuthoritySection, len(detail.AuthoritySections))
+	for _, section := range detail.AuthoritySections {
+		sections[section.Kind] = section
+	}
+	if sections["definition"].Availability != domain.AvailabilityAvailable {
+		t.Fatalf("core section = %+v", sections["definition"])
+	}
+	for _, kind := range []string{"validation", "consumer_impact"} {
+		section := sections[kind]
+		if section.Availability != domain.AvailabilityForbidden || len(section.Values) != 0 || len(section.Records) != 0 ||
+			section.ReleaseID != nil || section.RevisionID != nil {
+			t.Fatalf("%s section not redacted = %+v", kind, section)
+		}
+	}
+	if detail.CurrentRevision == nil || len(detail.CurrentRevision.Evidence) != 0 {
+		t.Fatalf("nested revision evidence leaked without evidence.read: %+v", detail.CurrentRevision)
+	}
+}
+
+func assertAssetReadEvaluation(
+	t *testing.T,
+	request authorizationapp.EvaluationRequest,
+	workspace identity.WorkspaceID,
+	asset identity.AssetID,
+) {
+	t.Helper()
+	if request.WorkspaceID != workspace || request.Action != authorization.ActionAssetRead ||
+		request.Resource.Type != authorization.ScopeAsset || request.Resource.ID != asset.UUID() ||
+		request.PrincipalRef != "prn_reader" {
+		t.Fatalf("asset read evaluation = %+v", request)
+	}
+}
+
+type catalogEvaluator struct {
+	decision authorization.Decision
+	err      error
+	captured []authorizationapp.EvaluationRequest
+}
+
+func (evaluator *catalogEvaluator) Evaluate(
+	_ context.Context,
+	request authorizationapp.EvaluationRequest,
+) (authorization.Decision, error) {
+	evaluator.captured = append(evaluator.captured, request)
+	return evaluator.decision, evaluator.err
+}
+
+type catalogSnapshotEvaluator struct {
+	catalogEvaluator
+	snapshot authorizationapp.AccessSnapshot
+	err      error
+}
+
+func (evaluator *catalogSnapshotEvaluator) Snapshot(
+	context.Context,
+	identity.WorkspaceID,
+	identity.PrincipalID,
+) (authorizationapp.AccessSnapshot, error) {
+	return evaluator.snapshot, evaluator.err
+}
+
 type fakeRepository struct {
-	assets         []domain.AssetSummary
-	lastAssetQuery domain.ListAssetsQuery
-	created        domain.CreateAssetCommand
-	createCalls    int
-	listErr        error
+	assets            []domain.AssetSummary
+	lastAssetQuery    domain.ListAssetsQuery
+	created           domain.CreateAssetCommand
+	createCalls       int
+	listErr           error
+	revisionListCalls int
+	revisionGetCalls  int
+	relationListCalls int
+	detail            domain.AssetDetail
 }
 
 func (repository *fakeRepository) ListCatalogWorkspaces(context.Context) ([]domain.Workspace, error) {
@@ -137,6 +280,10 @@ func (repository *fakeRepository) ListCatalogAssets(_ context.Context, query dom
 	return nil, nil
 }
 
+func (repository *fakeRepository) CountCatalogAssets(context.Context, domain.ListAssetsQuery) (int64, error) {
+	return int64(len(repository.assets)), repository.listErr
+}
+
 type usageRepository struct{ events []usagedomain.Event }
 
 func (repository *usageRepository) RecordUsageEvent(_ context.Context, event usagedomain.Event) error {
@@ -149,7 +296,11 @@ func (repository *usageRepository) DeleteExpiredUsageEvents(context.Context, tim
 }
 
 func (repository *fakeRepository) GetCatalogAsset(context.Context, identity.WorkspaceID, identity.AssetID) (domain.AssetDetail, error) {
-	return domain.AssetDetail{}, nil
+	return repository.detail, nil
+}
+
+func (repository *fakeRepository) ListCatalogAuthorityRecords(context.Context, domain.ListAuthorityRecordsQuery) (domain.AuthorityRecordResult, error) {
+	return domain.AuthorityRecordResult{}, nil
 }
 
 func (repository *fakeRepository) CreateCatalogAsset(_ context.Context, command domain.CreateAssetCommand) (domain.AssetDetail, error) {
@@ -159,10 +310,16 @@ func (repository *fakeRepository) CreateCatalogAsset(_ context.Context, command 
 }
 
 func (repository *fakeRepository) ListCatalogRevisions(context.Context, domain.ListRevisionsQuery) ([]domain.Revision, error) {
+	repository.revisionListCalls++
 	return nil, nil
 }
 
+func (repository *fakeRepository) CountCatalogRevisions(context.Context, identity.WorkspaceID, identity.AssetID) (int64, error) {
+	return 0, nil
+}
+
 func (repository *fakeRepository) GetCatalogRevision(context.Context, identity.WorkspaceID, identity.AssetID, identity.RevisionID) (domain.Revision, error) {
+	repository.revisionGetCalls++
 	return domain.Revision{}, nil
 }
 
@@ -171,6 +328,7 @@ func (repository *fakeRepository) AppendCatalogRevision(context.Context, domain.
 }
 
 func (repository *fakeRepository) ListCatalogRelations(context.Context, domain.ListRelationsQuery) ([]domain.Relation, error) {
+	repository.relationListCalls++
 	return nil, nil
 }
 

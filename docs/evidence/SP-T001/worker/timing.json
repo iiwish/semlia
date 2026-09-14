@@ -1,0 +1,52 @@
+{
+  "attempt": "SP-T001-A001",
+  "started": "2026-09-09 04:20:25 UTC",
+  "finished": "2026-09-09 04:53:31 UTC",
+  "elapsed_seconds": 1986,
+  "clock_precision_seconds": 1,
+  "stages": [
+    {
+      "phase": "code_read_and_red_test_authoring",
+      "start": "2026-09-09 04:20:25 UTC",
+      "end": "2026-09-09 04:25:07 UTC",
+      "elapsed_seconds": 282
+    },
+    {
+      "phase": "red_execution",
+      "start": "2026-09-09 04:25:07 UTC",
+      "end": "2026-09-09 04:25:15 UTC",
+      "elapsed_seconds": 8
+    },
+    {
+      "phase": "contract_design_and_authoring",
+      "start": "2026-09-09 04:25:15 UTC",
+      "end": "2026-09-09 04:45:15 UTC",
+      "elapsed_seconds": 1200
+    },
+    {
+      "phase": "first_green_execution",
+      "start": "2026-09-09 04:45:15 UTC",
+      "end": "2026-09-09 04:45:18 UTC",
+      "elapsed_seconds": 3
+    },
+    {
+      "phase": "consistency_hardening",
+      "start": "2026-09-09 04:45:18 UTC",
+      "end": "2026-09-09 04:48:44 UTC",
+      "elapsed_seconds": 206
+    },
+    {
+      "phase": "required_validation_and_out_of_scope_packet_fix_wait",
+      "start": "2026-09-09 04:48:44 UTC",
+      "end": "2026-09-09 04:50:13 UTC",
+      "elapsed_seconds": 89
+    },
+    {
+      "phase": "final_freshness_clarification_validation_and_evidence",
+      "start": "2026-09-09 04:50:13 UTC",
+      "end": "2026-09-09 04:53:31 UTC",
+      "elapsed_seconds": 198
+    }
+  ],
+  "note": "Worker wall-clock only; PM concurrent baseline/review time is excluded. Command logs retain higher-precision tool wall_time_seconds. No actual model calls or deployments."
+}

@@ -1,0 +1,28 @@
+schema_version: 1
+task_id: LAD-T001
+status: Running
+mode: direct_execute
+approval: 用户明确确认按 plan.md 执行，并于 2026-09-14 批准发布检查整改、遗留原型分支清理及既有未提交改动的整理和本地提交冻结；不推送、不打发布标签、不部署。
+contract: docs/specs/local-auth-native-dev/plan.md
+baseline: .semlia/evidence-work/LAD-T001-before.tar
+ownership: 保留全部既有工作；本任务增量以前像为准。冻结包含同项目累计源码、契约、迁移、测试及交付文档，不纳入本机配置、备份、原始浏览器 trace 和临时构建文件。
+allowed_groups:
+  identity: internal/domain/identity; internal/application/identity; internal/adapters/postgres/identity*.go; internal/platform/http/identity*.go; internal/platform/http/handler*.go; internal/platform/http/catalog*.go; internal/platform/config; cmd/semlia
+  contracts: migrations/000029_*; db/queries/identity.sql; db/sqlc.yaml; internal/adapters/postgres/sqlc; api/openapi/semlia.v1.yaml; api/gen/go; sdk/typescript/src
+  frontend: web/src 正常身份接线与 fixture/UAT 清除及对应测试，不重设计正式业务页面; web/e2e* 的正常认证验收; web/vite.config.ts; web/package.json
+  lifecycle: Makefile; scripts/dev; scripts/ci 的启动及验收身份接线; compose*.yaml; deploy/local/Dockerfile 构建参数; internal/testsupport/productionacceptance
+  validation: tests/integration/identity; tests/integration/db; tests/acceptance; tests/contracts; tests/repository; tests/smoke 仅保留完整容器验收入口与超时断言
+  dependencies: go.mod/go.sum 仅 x/crypto 已锁定版本直接依赖归类; package.json 启动脚本
+  documents: docs/specs/local-auth-native-dev; docs/evidence/LAD-T001; docs/operations/local-development.md
+  release_fixes: .github/workflows; scripts/release; internal/platform/schema; tests/repository; .gitignore
+  freeze: 经清单核对的 Semlia 既有项目改动，仅整理和本地提交，不重写历史验收或无关实现
+validation:
+  - 认证 RED/GREEN 单元与真实 PostgreSQL 集成、并发会话撤销、成员权限
+  - 前端 lint/typecheck/test/build、两尺寸真实登录与生产流程
+  - 启动进程归属和失败清理、独立库备份恢复及迁移
+  - 契约/SQLC/嵌入一致性和完整隔离门禁
+stop_conditions:
+  - 备份未验证或默认数据库归属不明时不切换
+  - 范围外业务修改或新增依赖升级需重新批准
+  - 不调用模型、不开放匿名注册、不修改历史验收、不清理其他项目资源
+handoff: 新服务可用后提交 Needs_Review；真实管理员密码由用户本机设置。

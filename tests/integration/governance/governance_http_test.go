@@ -21,6 +21,7 @@ import (
 	catalogapp "github.com/iiwish/semlia/internal/application/catalog"
 	governanceapp "github.com/iiwish/semlia/internal/application/governance"
 	"github.com/iiwish/semlia/internal/application/jobs"
+	workbenchapp "github.com/iiwish/semlia/internal/application/workbench"
 	"github.com/iiwish/semlia/internal/domain"
 	"github.com/iiwish/semlia/internal/domain/governance"
 	"github.com/iiwish/semlia/internal/domain/semantic"
@@ -36,6 +37,10 @@ const traceID = "4bf92f3577b34da6a3ce929d0e0e4736"
 var databaseURL string
 
 func TestMain(testingMain *testing.M) {
+	if os.Getenv("SEMLIA_EXECUTION_CRASH_HELPER") == "1" {
+		databaseURL = os.Getenv("SEMLIA_EXECUTION_TEST_DB")
+		os.Exit(testingMain.Run())
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	container, err := tcpostgres.Run(
@@ -86,7 +91,9 @@ func newFixture(t *testing.T) *fixture {
 		t.Fatal(err)
 	}
 	store := pgstore.NewStore(pool)
-	authorizer := authorizationapp.NewService(store, authorizationapp.ClockFunc(time.Now))
+	authorizer := authorizationapp.NewService(
+		store, authorizationapp.ClockFunc(time.Now), authorizationapp.WithLocalUATIdentities(),
+	)
 	catalog := catalogapp.NewService(store, catalogapp.ClockFunc(func() time.Time { return time.Now().UTC() }))
 	clock := governanceapp.ClockFunc(func() time.Time { return time.Now().UTC() })
 	governancePolicy := governanceapp.NewPolicyService(
@@ -112,6 +119,7 @@ func newFixture(t *testing.T) *fixture {
 		governanceapp.NewAgentRunService(store, clock),
 		authoring, authorizer, clock,
 	))(authoring)
+	workbench := workbenchapp.NewService(store, authorizer, workbenchapp.ClockFunc(time.Now))
 	var logs bytes.Buffer
 	provider := trace.NewTracerProvider()
 	t.Cleanup(func() { _ = provider.Shutdown(context.Background()) })
@@ -124,6 +132,7 @@ func newFixture(t *testing.T) *fixture {
 		provider.Tracer("governance-integration"),
 		httpapi.WithCatalog(catalog),
 		httpapi.WithGovernance(authoring),
+		httpapi.WithWorkbench(workbench),
 	)
 	return &fixture{pool: pool, store: store, handler: handler}
 }
@@ -131,9 +140,10 @@ func newFixture(t *testing.T) *fixture {
 func (environment *fixture) request(t *testing.T, method, path, principalRef, body string) *httptest.ResponseRecorder {
 	t.Helper()
 	request := httptest.NewRequest(method, path, strings.NewReader(body))
-	if principalRef != "" {
-		request.Header.Set("X-Semlia-Principal", principalRef)
+	if principalRef == "" {
+		principalRef = authorizationapp.LocalUATAuthorPrincipalRef
 	}
+	request.Header.Set("X-Semlia-Principal", principalRef)
 	response := httptest.NewRecorder()
 	environment.handler.ServeHTTP(response, request)
 	return response

@@ -1,4 +1,6 @@
-import { createSemliaClient, type components } from "@semlia/sdk-typescript";
+import type { components } from "@semlia/sdk-typescript";
+
+import { apiClient as client } from "./apiClient";
 
 export type GovernanceProposalSummary = components["schemas"]["GovernanceProposalSummary"];
 export type GovernanceProposalDetail = components["schemas"]["GovernanceProposalDetail"];
@@ -15,6 +17,7 @@ export type GovernanceReviewBatch = components["schemas"]["GovernanceReviewBatch
 export type GovernanceReviewBatchDetail = components["schemas"]["GovernanceReviewBatchDetail"];
 export type GovernanceRelease = components["schemas"]["GovernanceRelease"];
 export type GovernanceReleaseDetail = components["schemas"]["GovernanceReleaseDetail"];
+export type GovernanceReleasePage = components["schemas"]["GovernanceReleasePage"];
 export type GovernanceModelProviderDetail = components["schemas"]["GovernanceModelProviderDetail"];
 export type GovernanceModelProvider = components["schemas"]["GovernanceModelProvider"];
 export type GovernanceModelSetting = components["schemas"]["GovernanceModelSetting"];
@@ -57,8 +60,6 @@ export class GovernanceApiError extends Error {
   }
 }
 
-const client = createSemliaClient({ baseUrl: "" });
-
 function failure(error: unknown, fallbackMessage: string): GovernanceApiError {
   if (error && typeof error === "object" && "code" in error && typeof error.code === "string") {
     const message = "message" in error && typeof error.message === "string" ? error.message : fallbackMessage;
@@ -67,6 +68,56 @@ function failure(error: unknown, fallbackMessage: string): GovernanceApiError {
   }
   if (error instanceof GovernanceApiError) return error;
   return new GovernanceApiError(fallbackMessage);
+}
+
+const catalogFieldPaths: Record<string, string> = {
+  "definition.boundary": "definition",
+  "definition.includes": "includes",
+  "definition.excludes": "excludes",
+  "spec.expression": "expression",
+  "wiki.disambiguation": "disambiguationRules",
+  "ontology.relations": "relations",
+};
+
+function catalogFieldValue(fieldPath: string, value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  if (["definition.includes", "definition.excludes", "wiki.disambiguation", "ontology.relations"].includes(fieldPath)) {
+    return value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
+  }
+  return value;
+}
+
+function canonicalJSON(value: unknown): string {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return JSON.stringify(value);
+  if (typeof value === "number" && Number.isFinite(value)) return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalJSON).join(",")}]`;
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${canonicalJSON(record[key])}`).join(",")}}`;
+  }
+  throw new GovernanceApiError("治理变更值不是可序列化的 JSON。", GOVERNANCE_ERROR_CODES.INVALID_ARGUMENT);
+}
+
+async function digestGovernanceValue(value: unknown): Promise<string> {
+  if (!globalThis.crypto?.subtle) throw new GovernanceApiError("当前浏览器无法计算治理摘要。", "CRYPTO_UNAVAILABLE");
+  const bytes = new TextEncoder().encode(canonicalJSON(value));
+  const hash = await globalThis.crypto.subtle.digest("SHA-256", bytes);
+  return `sha256:${Array.from(new Uint8Array(hash), (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+}
+
+async function prepareCatalogChangeSet(items: GovernanceChangeSetItem[]): Promise<GovernanceChangeSetItem[]> {
+  return Promise.all(items.map(async (item) => {
+    const beforeValue = item.beforeValue === undefined ? undefined : catalogFieldValue(item.fieldPath, item.beforeValue);
+    const afterValue = item.afterValue === undefined ? undefined : catalogFieldValue(item.fieldPath, item.afterValue);
+    return {
+      ...item,
+      fieldPath: catalogFieldPaths[item.fieldPath] ?? item.fieldPath,
+      beforeValue,
+      afterValue,
+      beforeDigest: beforeValue === undefined ? undefined : await digestGovernanceValue(beforeValue),
+      afterDigest: afterValue === undefined ? undefined : await digestGovernanceValue(afterValue),
+    };
+  }));
 }
 
 // --- Proposals ---
@@ -81,9 +132,10 @@ export async function listProposals(workspaceId: string, signal?: AbortSignal): 
 }
 
 export async function createProposal(workspaceId: string, input: CreateGovernanceProposalRequest): Promise<GovernanceProposalDetail> {
+  const body = { ...input, changeSet: await prepareCatalogChangeSet(input.changeSet) };
   const response = await client.POST("/api/v1/workspaces/{workspaceId}/governance/proposals", {
     params: { path: { workspaceId } },
-    body: input,
+    body,
   });
   if (!response.data) throw failure(response.error, "提案创建失败。");
   return response.data;
@@ -135,6 +187,15 @@ export async function createReview(workspaceId: string, proposalId: string, inpu
   return response.data;
 }
 
+export async function listReviews(workspaceId: string, proposalId: string, signal?: AbortSignal): Promise<GovernanceReview[]> {
+  const response = await client.GET("/api/v1/workspaces/{workspaceId}/governance/proposals/{proposalId}/reviews", {
+    params: { path: { workspaceId, proposalId } },
+    signal,
+  });
+  if (!response.data) throw failure(response.error, "评审记录加载失败。");
+  return response.data.items;
+}
+
 // --- Review batches ---
 
 export async function listReviewBatches(workspaceId: string, signal?: AbortSignal): Promise<GovernanceReviewBatch[]> {
@@ -175,13 +236,13 @@ export async function confirmReviewBatch(workspaceId: string, batchId: string, i
 
 // --- Releases ---
 
-export async function listReleases(workspaceId: string, signal?: AbortSignal): Promise<GovernanceRelease[]> {
+export async function listReleases(workspaceId: string, cursor?: string, signal?: AbortSignal): Promise<GovernanceReleasePage> {
   const response = await client.GET("/api/v1/workspaces/{workspaceId}/governance/releases", {
-    params: { path: { workspaceId }, query: { limit: 50 } },
+    params: { path: { workspaceId }, query: { limit: 50, ...(cursor ? { cursor } : {}) } },
     signal,
   });
   if (!response.data) throw failure(response.error, "发布记录加载失败。");
-  return response.data.items;
+  return response.data;
 }
 
 export async function publishRelease(workspaceId: string, proposalId: string): Promise<GovernanceReleaseDetail> {

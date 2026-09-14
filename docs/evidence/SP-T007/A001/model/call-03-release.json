@@ -1,0 +1,1434 @@
+{
+  "consumerCount": 0,
+  "projection": {
+    "Path": "releases/1-rls_01m27tf6xffhkv3z9c5y11pwv4.json",
+    "CommitHash": "9bd6ab1ce770518c83b284bfaa57026f02255ebe",
+    "Changed": true
+  },
+  "published": {
+    "manifestDigest": "sha256:22f7ebc30fe67c9b9cf75a12a6bac1f8acce50a4369fd24d5fe22cc82276f3c5",
+    "operationId": "prodop_01m27tdynwfgkrxq81a5kwmrk7",
+    "releaseId": "rls_01m27tf6xffhkv3z9c5y11pwv4",
+    "replayed": false
+  },
+  "successfulAttempt": {
+    "WorkspaceID": "wsp_01m27tdyazfgktzkr627d3tpam",
+    "OperationID": "prodop_01m27tdynwfgkrxq81a5kwmrk7",
+    "ProductionVersion": 2,
+    "AttemptNo": 2,
+    "SetDigest": "sha256:6831cd47143c5f7c947c536d3dc271dab29001cfa195793610abd9ad75c6cd0e",
+    "InputDigest": "sha256:07def0423c4a5d6f4d4b651bb09fd01dd805a804abe5f3abdf5b96b711fbf096",
+    "FreshnessWitnessJSON": {
+      "input": {
+        "scope": {
+          "evidence": [],
+          "snapshots": [
+            {
+              "digest": "sha256:fec4cf86a1d9a5d5fd949950b6e5f4c0519acb72fc4406c748b0ddc328c742c8",
+              "sourceId": "src_01m27tdyckfgkvgwjbbqy2vsg7",
+              "snapshotId": "ssnp_01m27tdyfyfgkt03evzb1x6gp2",
+              "coverageKeys": [
+                "catalog"
+              ]
+            }
+          ],
+          "candidates": [],
+          "dependencies": []
+        },
+        "snapshotId": "ssnp_01m27tdyfyfgkt03evzb1x6gp2"
+      },
+      "rules": [
+        {
+          "id": "semlia.risk.v1/blockers",
+          "match": {
+            "op": "gt",
+            "field": "blockerCount",
+            "value": 0
+          },
+          "routing": "expert",
+          "priority": 100,
+          "riskLevel": "high",
+          "reasonCode": "RISK_BLOCKER",
+          "explanation": "Validation blockers require expert review before the change can proceed (SSOT §8.4).",
+          "ruleVersion": "1.0"
+        },
+        {
+          "id": "semlia.risk.v1/production-computation",
+          "match": {
+            "all": [
+              {
+                "op": "eq",
+                "field": "affectsComputation",
+                "value": true
+              },
+              {
+                "op": "eq",
+                "field": "productionEnvironment",
+                "value": true
+              }
+            ]
+          },
+          "routing": "expert",
+          "priority": 90,
+          "riskLevel": "high",
+          "reasonCode": "RISK_PRODUCTION_COMPUTATION",
+          "explanation": "Computation changes in production always take the expert channel (SSOT §8.4).",
+          "ruleVersion": "1.0"
+        },
+        {
+          "id": "semlia.risk.v1/access-or-contract",
+          "match": {
+            "any": [
+              {
+                "op": "eq",
+                "field": "affectsAccess",
+                "value": true
+              },
+              {
+                "op": "eq",
+                "field": "affectsContract",
+                "value": true
+              }
+            ]
+          },
+          "routing": "expert",
+          "priority": 80,
+          "riskLevel": "high",
+          "reasonCode": "RISK_ACCESS_OR_CONTRACT_CHANGE",
+          "explanation": "Access-scope and consumption-contract changes always take the expert channel (SSOT §8.4).",
+          "ruleVersion": "1.0"
+        },
+        {
+          "id": "semlia.risk.v1/computation",
+          "match": {
+            "op": "eq",
+            "field": "affectsComputation",
+            "value": true
+          },
+          "routing": "expert",
+          "priority": 70,
+          "riskLevel": "medium",
+          "reasonCode": "RISK_COMPUTATION_CHANGE",
+          "explanation": "Computation or expression changes are reviewed item by item by the asset owner.",
+          "ruleVersion": "1.0"
+        },
+        {
+          "id": "semlia.risk.v1/production-change",
+          "match": {
+            "op": "eq",
+            "field": "productionEnvironment",
+            "value": true
+          },
+          "routing": "expert",
+          "priority": 60,
+          "riskLevel": "medium",
+          "reasonCode": "RISK_PRODUCTION_CHANGE",
+          "explanation": "Production-affecting changes are reviewed item by item.",
+          "ruleVersion": "1.0"
+        },
+        {
+          "id": "semlia.risk.v1/low-risk",
+          "match": {},
+          "routing": "batch",
+          "priority": 10,
+          "riskLevel": "low",
+          "reasonCode": "RISK_LOW_BATCH",
+          "explanation": "No risk category matched; the change joins the batch confirmation channel (SSOT §8.4).",
+          "ruleVersion": "1.0"
+        }
+      ],
+      "baseline": {
+        "head": {
+          "presence": "absent"
+        },
+        "pins": [],
+        "targets": {}
+      },
+      "businessRules": [
+        {
+          "event": {
+            "action": "confirm",
+            "replayed": false,
+            "sequence": 2,
+            "createdAt": "2026-09-11T16:48:39.259621+08:00",
+            "setDigest": "sha256:6831cd47143c5f7c947c536d3dc271dab29001cfa195793610abd9ad75c6cd0e",
+            "targetKey": "customers",
+            "evidenceId": "evd_01m27tf4vwfh5r2xksdtbwf9zh",
+            "operationId": "prodop_01m27tdynwfgkrxq81a5kwmrk7",
+            "principalId": "prn_01m27tdybxfgkrxdqwagw77x4f",
+            "workspaceId": "wsp_01m27tdyazfgktzkr627d3tpam",
+            "contentDigest": "sha256:3a08951885fe11d33094d9d25d5f0ffae67aba3058c2a11fad5003d746ecaf34",
+            "evidenceDigest": "sha256:72b94943df2ff51711d3d326e8f2a5dd79f39bade40899c746e073e72c59dd8b",
+            "evidenceOrigin": "human_declaration",
+            "productionVersion": 2,
+            "authorizationVersion": 1
+          },
+          "valid": true
+        },
+        {
+          "event": {
+            "action": "confirm",
+            "replayed": false,
+            "sequence": 1,
+            "createdAt": "2026-09-11T16:48:39.114306+08:00",
+            "setDigest": "sha256:6831cd47143c5f7c947c536d3dc271dab29001cfa195793610abd9ad75c6cd0e",
+            "targetKey": "orders",
+            "evidenceId": "evd_01m27tf4qgfh59y25whhf0bdat",
+            "operationId": "prodop_01m27tdynwfgkrxq81a5kwmrk7",
+            "principalId": "prn_01m27tdybxfgkrxdqwagw77x4f",
+            "workspaceId": "wsp_01m27tdyazfgktzkr627d3tpam",
+            "contentDigest": "sha256:bae5b898c5755b02aae86d464d5cc76950f06ffdb7c57fd58c053ca967b17873",
+            "evidenceDigest": "sha256:0feb46a44d998f920895ab452f9fc178d07b152022f2f46f9093c1c6b187b135",
+            "evidenceOrigin": "human_declaration",
+            "productionVersion": 2,
+            "authorizationVersion": 1
+          },
+          "valid": true
+        },
+        {
+          "event": {
+            "action": "confirm",
+            "replayed": false,
+            "sequence": 3,
+            "createdAt": "2026-09-11T16:48:39.37481+08:00",
+            "setDigest": "sha256:6831cd47143c5f7c947c536d3dc271dab29001cfa195793610abd9ad75c6cd0e",
+            "targetKey": "revenue",
+            "evidenceId": "evd_01m27tf4zgfh69n8f19cmwk0pq",
+            "operationId": "prodop_01m27tdynwfgkrxq81a5kwmrk7",
+            "principalId": "prn_01m27tdybxfgkrxdqwagw77x4f",
+            "workspaceId": "wsp_01m27tdyazfgktzkr627d3tpam",
+            "contentDigest": "sha256:7cf8f110cfee0f405f36dfe1b2a552f8dc3f1100441b1426891eb273e1d366ae",
+            "evidenceDigest": "sha256:dc52a353cdc7f5477585f63a06f182d08972bf8c832ff595b70c8b4d62eaf6e9",
+            "evidenceOrigin": "human_declaration",
+            "productionVersion": 2,
+            "authorizationVersion": 1
+          },
+          "valid": true
+        }
+      ],
+      "policyVersion": "1.0"
+    },
+    "FreshnessDigest": "sha256:1d412373aed229d55281b40701c305f95f910de9a7a76712ed0202279a6704c0",
+    "RequiredChecksJSON": [
+      {
+        "proposalId": "prp_01m27tf330fgtsgjdbqh1fvb99",
+        "validatorId": "schema",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      {
+        "proposalId": "prp_01m27tf330fgtsgjdbqh1fvb99",
+        "validatorId": "reference",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      {
+        "proposalId": "prp_01m27tf330fgtsgjdbqh1fvb99",
+        "validatorId": "structural",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      {
+        "proposalId": "prp_01m27tf330fgtsgjdbqh1fvb99",
+        "validatorId": "policy",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      {
+        "proposalId": "prp_01m27tf330fgv918rvmmhzkq5m",
+        "validatorId": "schema",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      {
+        "proposalId": "prp_01m27tf330fgv918rvmmhzkq5m",
+        "validatorId": "reference",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      {
+        "proposalId": "prp_01m27tf330fgv918rvmmhzkq5m",
+        "validatorId": "structural",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      {
+        "proposalId": "prp_01m27tf330fgv918rvmmhzkq5m",
+        "validatorId": "policy",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      {
+        "proposalId": "prp_01m27tf330fgvrjq8xs1rcc424",
+        "validatorId": "schema",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      {
+        "proposalId": "prp_01m27tf330fgvrjq8xs1rcc424",
+        "validatorId": "reference",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      {
+        "proposalId": "prp_01m27tf330fgvrjq8xs1rcc424",
+        "validatorId": "structural",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      {
+        "proposalId": "prp_01m27tf330fgvrjq8xs1rcc424",
+        "validatorId": "policy",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      {
+        "proposalId": "prp_01m27tf330fgwa9dpsjzfkq01y",
+        "validatorId": "schema",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      {
+        "proposalId": "prp_01m27tf330fgwa9dpsjzfkq01y",
+        "validatorId": "reference",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      {
+        "proposalId": "prp_01m27tf330fgwa9dpsjzfkq01y",
+        "validatorId": "structural",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      {
+        "proposalId": "prp_01m27tf330fgwa9dpsjzfkq01y",
+        "validatorId": "policy",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      {
+        "proposalId": "prp_01m27tf330fgwrawvjsexv7qh6",
+        "validatorId": "schema",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      {
+        "proposalId": "prp_01m27tf330fgwrawvjsexv7qh6",
+        "validatorId": "reference",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      {
+        "proposalId": "prp_01m27tf330fgwrawvjsexv7qh6",
+        "validatorId": "structural",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      {
+        "proposalId": "prp_01m27tf330fgwrawvjsexv7qh6",
+        "validatorId": "policy",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      {
+        "proposalId": "prp_01m27tf330fgxa9qeggjdvp3n8",
+        "validatorId": "schema",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      {
+        "proposalId": "prp_01m27tf330fgxa9qeggjdvp3n8",
+        "validatorId": "reference",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      {
+        "proposalId": "prp_01m27tf330fgxa9qeggjdvp3n8",
+        "validatorId": "structural",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      {
+        "proposalId": "prp_01m27tf330fgxa9qeggjdvp3n8",
+        "validatorId": "policy",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      {
+        "proposalId": "prp_01m27tf330fgxtnfbzpb79f1r0",
+        "validatorId": "schema",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      {
+        "proposalId": "prp_01m27tf330fgxtnfbzpb79f1r0",
+        "validatorId": "reference",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      {
+        "proposalId": "prp_01m27tf330fgxtnfbzpb79f1r0",
+        "validatorId": "structural",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      {
+        "proposalId": "prp_01m27tf330fgxtnfbzpb79f1r0",
+        "validatorId": "policy",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      {
+        "proposalId": "prp_01m27tf330fgy8g7evrb5qh2h1",
+        "validatorId": "schema",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      {
+        "proposalId": "prp_01m27tf330fgy8g7evrb5qh2h1",
+        "validatorId": "reference",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      {
+        "proposalId": "prp_01m27tf330fgy8g7evrb5qh2h1",
+        "validatorId": "structural",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      {
+        "proposalId": "prp_01m27tf330fgy8g7evrb5qh2h1",
+        "validatorId": "policy",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      {
+        "proposalId": "prp_01m27tf330fgyvfx7dc2kmkqzv",
+        "validatorId": "schema",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      {
+        "proposalId": "prp_01m27tf330fgyvfx7dc2kmkqzv",
+        "validatorId": "reference",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      {
+        "proposalId": "prp_01m27tf330fgyvfx7dc2kmkqzv",
+        "validatorId": "structural",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      {
+        "proposalId": "prp_01m27tf330fgyvfx7dc2kmkqzv",
+        "validatorId": "policy",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      {
+        "proposalId": "prp_01m27tf330fgz825282vtf5hzh",
+        "validatorId": "schema",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      {
+        "proposalId": "prp_01m27tf330fgz825282vtf5hzh",
+        "validatorId": "reference",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      {
+        "proposalId": "prp_01m27tf330fgz825282vtf5hzh",
+        "validatorId": "structural",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      {
+        "proposalId": "prp_01m27tf330fgz825282vtf5hzh",
+        "validatorId": "policy",
+        "validatorVersion": "1.0.0-production.2"
+      }
+    ],
+    "RequiredChecksDigest": "sha256:bbf2022efc33ce32f1c6594574b8ab732544748973613461051bb2164d9e2bb3",
+    "Status": "succeeded",
+    "ValidationDigest": "sha256:41880874199c98ffd658d14e4b6c687f5de86f62015861aaed695e03ef1f1679",
+    "CreatedBy": "prn_01m27tdybxfgkrxdqwagw77x4f",
+    "CreatedAt": "2026-09-11T08:48:39.560021Z",
+    "CompletedAt": "2026-09-11T08:48:39.878383Z"
+  },
+  "unconfirmedFindings": [
+    {
+      "check": {
+        "proposalId": "prp_01m27tf330fgtsgjdbqh1fvb99",
+        "validatorId": "schema",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      "status": "failed",
+      "findings": [
+        {
+          "Code": "PRODUCTION_BUSINESS_RULE_UNCONFIRMED",
+          "Details": {},
+          "Message": "production validation did not satisfy the required check",
+          "Severity": "blocker",
+          "InputDigest": "sha256:cfcffcce2c17d3db69befcd3f5bf2b8517566a7ccd60752f1243cfcd108e1943"
+        },
+        {
+          "Code": "SCHEMA_COMPLETED",
+          "Details": {},
+          "Message": "schema@1.0.0-production.2 completed",
+          "Severity": "info",
+          "InputDigest": "sha256:cfcffcce2c17d3db69befcd3f5bf2b8517566a7ccd60752f1243cfcd108e1943"
+        }
+      ],
+      "inputDigest": "sha256:cfcffcce2c17d3db69befcd3f5bf2b8517566a7ccd60752f1243cfcd108e1943"
+    },
+    {
+      "check": {
+        "proposalId": "prp_01m27tf330fgtsgjdbqh1fvb99",
+        "validatorId": "reference",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      "status": "succeeded",
+      "findings": [
+        {
+          "Code": "REFERENCE_COMPLETED",
+          "Details": {},
+          "Message": "reference@1.0.0-production.2 completed",
+          "Severity": "info",
+          "InputDigest": "sha256:cc040eef9ecfc1179ea4af4abdf6fe7e758e745d920d501148bde80a75eebfa4"
+        }
+      ],
+      "inputDigest": "sha256:cc040eef9ecfc1179ea4af4abdf6fe7e758e745d920d501148bde80a75eebfa4"
+    },
+    {
+      "check": {
+        "proposalId": "prp_01m27tf330fgtsgjdbqh1fvb99",
+        "validatorId": "structural",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      "status": "succeeded",
+      "findings": [
+        {
+          "Code": "STRUCTURAL_COMPLETED",
+          "Details": {},
+          "Message": "structural@1.0.0-production.2 completed",
+          "Severity": "info",
+          "InputDigest": "sha256:c5d1b1e0b35055fbe7e3d3acde9a452fcb67cb741d1e692efdc95bb5e5266e58"
+        }
+      ],
+      "inputDigest": "sha256:c5d1b1e0b35055fbe7e3d3acde9a452fcb67cb741d1e692efdc95bb5e5266e58"
+    },
+    {
+      "check": {
+        "proposalId": "prp_01m27tf330fgtsgjdbqh1fvb99",
+        "validatorId": "policy",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      "status": "succeeded",
+      "findings": [
+        {
+          "Code": "RISK_BLOCKER",
+          "Details": {
+            "assetType": "entity",
+            "infoCount": 3,
+            "authorKind": "human",
+            "blockerCount": 1,
+            "warningCount": 0,
+            "affectsAccess": false,
+            "consumerCount": null,
+            "ownerAssigned": "unassigned",
+            "affectsContract": false,
+            "affectsRelations": false,
+            "evidenceComplete": false,
+            "targetObjectType": "semantic_asset",
+            "affectsDefinition": true,
+            "evidenceLinkCount": 0,
+            "affectsComputation": false,
+            "validationRunCount": 3,
+            "historicalAcceptRate": null,
+            "productionEnvironment": false,
+            "validationFailedCount": 1
+          },
+          "Message": "production risk policy evaluated",
+          "Severity": "info",
+          "InputDigest": "sha256:102b5edbda7e32abe4dc348b5c5fa437bef9cc75312f1116ab407da780767e9e"
+        },
+        {
+          "Code": "POLICY_COMPLETED",
+          "Details": {},
+          "Message": "policy@1.0.0-production.2 completed",
+          "Severity": "info",
+          "InputDigest": "sha256:102b5edbda7e32abe4dc348b5c5fa437bef9cc75312f1116ab407da780767e9e"
+        }
+      ],
+      "inputDigest": "sha256:102b5edbda7e32abe4dc348b5c5fa437bef9cc75312f1116ab407da780767e9e"
+    },
+    {
+      "check": {
+        "proposalId": "prp_01m27tf330fgv918rvmmhzkq5m",
+        "validatorId": "schema",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      "status": "succeeded",
+      "findings": [
+        {
+          "Code": "SCHEMA_COMPLETED",
+          "Details": {},
+          "Message": "schema@1.0.0-production.2 completed",
+          "Severity": "info",
+          "InputDigest": "sha256:21c29890659b3f176e79af56525342ca244ea01a793ddd742effacfc5a6d914c"
+        }
+      ],
+      "inputDigest": "sha256:21c29890659b3f176e79af56525342ca244ea01a793ddd742effacfc5a6d914c"
+    },
+    {
+      "check": {
+        "proposalId": "prp_01m27tf330fgv918rvmmhzkq5m",
+        "validatorId": "reference",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      "status": "succeeded",
+      "findings": [
+        {
+          "Code": "REFERENCE_COMPLETED",
+          "Details": {},
+          "Message": "reference@1.0.0-production.2 completed",
+          "Severity": "info",
+          "InputDigest": "sha256:cfd03e89913e77d7b64ac8c9d7cf2bf4b5f6399102b0d2c8d687a5b99aa4b019"
+        }
+      ],
+      "inputDigest": "sha256:cfd03e89913e77d7b64ac8c9d7cf2bf4b5f6399102b0d2c8d687a5b99aa4b019"
+    },
+    {
+      "check": {
+        "proposalId": "prp_01m27tf330fgv918rvmmhzkq5m",
+        "validatorId": "structural",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      "status": "succeeded",
+      "findings": [
+        {
+          "Code": "STRUCTURAL_COMPLETED",
+          "Details": {},
+          "Message": "structural@1.0.0-production.2 completed",
+          "Severity": "info",
+          "InputDigest": "sha256:36e996f4de417bf3b543313b63021516ef6d7d1bc9bfa630e024854ecf8a111c"
+        }
+      ],
+      "inputDigest": "sha256:36e996f4de417bf3b543313b63021516ef6d7d1bc9bfa630e024854ecf8a111c"
+    },
+    {
+      "check": {
+        "proposalId": "prp_01m27tf330fgv918rvmmhzkq5m",
+        "validatorId": "policy",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      "status": "succeeded",
+      "findings": [
+        {
+          "Code": "RISK_ACCESS_OR_CONTRACT_CHANGE",
+          "Details": {
+            "assetType": "not_applicable",
+            "infoCount": 3,
+            "authorKind": "human",
+            "blockerCount": 0,
+            "warningCount": 0,
+            "affectsAccess": false,
+            "consumerCount": null,
+            "ownerAssigned": "unassigned",
+            "affectsContract": true,
+            "affectsRelations": false,
+            "evidenceComplete": false,
+            "targetObjectType": "physical_binding",
+            "affectsDefinition": true,
+            "evidenceLinkCount": 0,
+            "affectsComputation": false,
+            "validationRunCount": 3,
+            "historicalAcceptRate": null,
+            "productionEnvironment": false,
+            "validationFailedCount": 0
+          },
+          "Message": "production risk policy evaluated",
+          "Severity": "info",
+          "InputDigest": "sha256:17baa3c71b792fe07453ba01bdeede8c0a27d73849cb22192495aba9d03f8bd4"
+        },
+        {
+          "Code": "POLICY_COMPLETED",
+          "Details": {},
+          "Message": "policy@1.0.0-production.2 completed",
+          "Severity": "info",
+          "InputDigest": "sha256:17baa3c71b792fe07453ba01bdeede8c0a27d73849cb22192495aba9d03f8bd4"
+        }
+      ],
+      "inputDigest": "sha256:17baa3c71b792fe07453ba01bdeede8c0a27d73849cb22192495aba9d03f8bd4"
+    },
+    {
+      "check": {
+        "proposalId": "prp_01m27tf330fgvrjq8xs1rcc424",
+        "validatorId": "schema",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      "status": "succeeded",
+      "findings": [
+        {
+          "Code": "SCHEMA_COMPLETED",
+          "Details": {},
+          "Message": "schema@1.0.0-production.2 completed",
+          "Severity": "info",
+          "InputDigest": "sha256:25de9871c4538d9040531c10f851961dc3069ca57fafe1ff84280c0063a46198"
+        }
+      ],
+      "inputDigest": "sha256:25de9871c4538d9040531c10f851961dc3069ca57fafe1ff84280c0063a46198"
+    },
+    {
+      "check": {
+        "proposalId": "prp_01m27tf330fgvrjq8xs1rcc424",
+        "validatorId": "reference",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      "status": "succeeded",
+      "findings": [
+        {
+          "Code": "REFERENCE_COMPLETED",
+          "Details": {},
+          "Message": "reference@1.0.0-production.2 completed",
+          "Severity": "info",
+          "InputDigest": "sha256:20118f94bc96261ccbccd07e413463092ead91704096411e7fb786fda1b80b55"
+        }
+      ],
+      "inputDigest": "sha256:20118f94bc96261ccbccd07e413463092ead91704096411e7fb786fda1b80b55"
+    },
+    {
+      "check": {
+        "proposalId": "prp_01m27tf330fgvrjq8xs1rcc424",
+        "validatorId": "structural",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      "status": "succeeded",
+      "findings": [
+        {
+          "Code": "STRUCTURAL_COMPLETED",
+          "Details": {},
+          "Message": "structural@1.0.0-production.2 completed",
+          "Severity": "info",
+          "InputDigest": "sha256:02bf9947c0c459f826948b9b89bac93cdc02a4297814587b054823681dfa5555"
+        }
+      ],
+      "inputDigest": "sha256:02bf9947c0c459f826948b9b89bac93cdc02a4297814587b054823681dfa5555"
+    },
+    {
+      "check": {
+        "proposalId": "prp_01m27tf330fgvrjq8xs1rcc424",
+        "validatorId": "policy",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      "status": "succeeded",
+      "findings": [
+        {
+          "Code": "RISK_ACCESS_OR_CONTRACT_CHANGE",
+          "Details": {
+            "assetType": "not_applicable",
+            "infoCount": 3,
+            "authorKind": "human",
+            "blockerCount": 0,
+            "warningCount": 0,
+            "affectsAccess": false,
+            "consumerCount": null,
+            "ownerAssigned": "unassigned",
+            "affectsContract": true,
+            "affectsRelations": false,
+            "evidenceComplete": false,
+            "targetObjectType": "entity_key",
+            "affectsDefinition": true,
+            "evidenceLinkCount": 0,
+            "affectsComputation": false,
+            "validationRunCount": 3,
+            "historicalAcceptRate": null,
+            "productionEnvironment": false,
+            "validationFailedCount": 0
+          },
+          "Message": "production risk policy evaluated",
+          "Severity": "info",
+          "InputDigest": "sha256:2fdcbe3a899322b4312963e82b69a5625b8b92a7dd21b1e25b31be928b1d5128"
+        },
+        {
+          "Code": "POLICY_COMPLETED",
+          "Details": {},
+          "Message": "policy@1.0.0-production.2 completed",
+          "Severity": "info",
+          "InputDigest": "sha256:2fdcbe3a899322b4312963e82b69a5625b8b92a7dd21b1e25b31be928b1d5128"
+        }
+      ],
+      "inputDigest": "sha256:2fdcbe3a899322b4312963e82b69a5625b8b92a7dd21b1e25b31be928b1d5128"
+    },
+    {
+      "check": {
+        "proposalId": "prp_01m27tf330fgwa9dpsjzfkq01y",
+        "validatorId": "schema",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      "status": "failed",
+      "findings": [
+        {
+          "Code": "PRODUCTION_BUSINESS_RULE_UNCONFIRMED",
+          "Details": {},
+          "Message": "production validation did not satisfy the required check",
+          "Severity": "blocker",
+          "InputDigest": "sha256:7a1ecc67b3f0a9855c8593cc220dca485935e4f02b03f49e72434f3c9556eb71"
+        },
+        {
+          "Code": "SCHEMA_COMPLETED",
+          "Details": {},
+          "Message": "schema@1.0.0-production.2 completed",
+          "Severity": "info",
+          "InputDigest": "sha256:7a1ecc67b3f0a9855c8593cc220dca485935e4f02b03f49e72434f3c9556eb71"
+        }
+      ],
+      "inputDigest": "sha256:7a1ecc67b3f0a9855c8593cc220dca485935e4f02b03f49e72434f3c9556eb71"
+    },
+    {
+      "check": {
+        "proposalId": "prp_01m27tf330fgwa9dpsjzfkq01y",
+        "validatorId": "reference",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      "status": "succeeded",
+      "findings": [
+        {
+          "Code": "REFERENCE_COMPLETED",
+          "Details": {},
+          "Message": "reference@1.0.0-production.2 completed",
+          "Severity": "info",
+          "InputDigest": "sha256:696bc8d6bc3cfe9dd0ba9dfc4397bc09d87c77806335a467f3cfe9a43d91cca4"
+        }
+      ],
+      "inputDigest": "sha256:696bc8d6bc3cfe9dd0ba9dfc4397bc09d87c77806335a467f3cfe9a43d91cca4"
+    },
+    {
+      "check": {
+        "proposalId": "prp_01m27tf330fgwa9dpsjzfkq01y",
+        "validatorId": "structural",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      "status": "succeeded",
+      "findings": [
+        {
+          "Code": "STRUCTURAL_COMPLETED",
+          "Details": {},
+          "Message": "structural@1.0.0-production.2 completed",
+          "Severity": "info",
+          "InputDigest": "sha256:9084bd6be8dd1bc3b3334e06937066be10ec8bbe101e6698db7c671b474bae6d"
+        }
+      ],
+      "inputDigest": "sha256:9084bd6be8dd1bc3b3334e06937066be10ec8bbe101e6698db7c671b474bae6d"
+    },
+    {
+      "check": {
+        "proposalId": "prp_01m27tf330fgwa9dpsjzfkq01y",
+        "validatorId": "policy",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      "status": "succeeded",
+      "findings": [
+        {
+          "Code": "RISK_BLOCKER",
+          "Details": {
+            "assetType": "entity",
+            "infoCount": 3,
+            "authorKind": "human",
+            "blockerCount": 1,
+            "warningCount": 0,
+            "affectsAccess": false,
+            "consumerCount": null,
+            "ownerAssigned": "unassigned",
+            "affectsContract": false,
+            "affectsRelations": false,
+            "evidenceComplete": false,
+            "targetObjectType": "semantic_asset",
+            "affectsDefinition": true,
+            "evidenceLinkCount": 0,
+            "affectsComputation": false,
+            "validationRunCount": 3,
+            "historicalAcceptRate": null,
+            "productionEnvironment": false,
+            "validationFailedCount": 1
+          },
+          "Message": "production risk policy evaluated",
+          "Severity": "info",
+          "InputDigest": "sha256:b5adb1e5fb153f29e13c7e8f4c1545fe60cc6693adf8b792692f23251b5d1b24"
+        },
+        {
+          "Code": "POLICY_COMPLETED",
+          "Details": {},
+          "Message": "policy@1.0.0-production.2 completed",
+          "Severity": "info",
+          "InputDigest": "sha256:b5adb1e5fb153f29e13c7e8f4c1545fe60cc6693adf8b792692f23251b5d1b24"
+        }
+      ],
+      "inputDigest": "sha256:b5adb1e5fb153f29e13c7e8f4c1545fe60cc6693adf8b792692f23251b5d1b24"
+    },
+    {
+      "check": {
+        "proposalId": "prp_01m27tf330fgwrawvjsexv7qh6",
+        "validatorId": "schema",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      "status": "succeeded",
+      "findings": [
+        {
+          "Code": "SCHEMA_COMPLETED",
+          "Details": {},
+          "Message": "schema@1.0.0-production.2 completed",
+          "Severity": "info",
+          "InputDigest": "sha256:33e534b6a7aa883f26ff53ae4eb0ed42032fb5f25974f06e1c04c4df823b7434"
+        }
+      ],
+      "inputDigest": "sha256:33e534b6a7aa883f26ff53ae4eb0ed42032fb5f25974f06e1c04c4df823b7434"
+    },
+    {
+      "check": {
+        "proposalId": "prp_01m27tf330fgwrawvjsexv7qh6",
+        "validatorId": "reference",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      "status": "succeeded",
+      "findings": [
+        {
+          "Code": "REFERENCE_COMPLETED",
+          "Details": {},
+          "Message": "reference@1.0.0-production.2 completed",
+          "Severity": "info",
+          "InputDigest": "sha256:28b2b596e3bd6e28e27bd29fbe9b3cf8969f7c9087df3d60d2c72ca60b8d5f97"
+        }
+      ],
+      "inputDigest": "sha256:28b2b596e3bd6e28e27bd29fbe9b3cf8969f7c9087df3d60d2c72ca60b8d5f97"
+    },
+    {
+      "check": {
+        "proposalId": "prp_01m27tf330fgwrawvjsexv7qh6",
+        "validatorId": "structural",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      "status": "succeeded",
+      "findings": [
+        {
+          "Code": "STRUCTURAL_COMPLETED",
+          "Details": {},
+          "Message": "structural@1.0.0-production.2 completed",
+          "Severity": "info",
+          "InputDigest": "sha256:b123f7527969c4560ba4f9dbd5b0277c373d05445ea9f5860e301602e20a3274"
+        }
+      ],
+      "inputDigest": "sha256:b123f7527969c4560ba4f9dbd5b0277c373d05445ea9f5860e301602e20a3274"
+    },
+    {
+      "check": {
+        "proposalId": "prp_01m27tf330fgwrawvjsexv7qh6",
+        "validatorId": "policy",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      "status": "succeeded",
+      "findings": [
+        {
+          "Code": "RISK_ACCESS_OR_CONTRACT_CHANGE",
+          "Details": {
+            "assetType": "not_applicable",
+            "infoCount": 3,
+            "authorKind": "human",
+            "blockerCount": 0,
+            "warningCount": 0,
+            "affectsAccess": false,
+            "consumerCount": null,
+            "ownerAssigned": "unassigned",
+            "affectsContract": true,
+            "affectsRelations": false,
+            "evidenceComplete": false,
+            "targetObjectType": "physical_binding",
+            "affectsDefinition": true,
+            "evidenceLinkCount": 0,
+            "affectsComputation": false,
+            "validationRunCount": 3,
+            "historicalAcceptRate": null,
+            "productionEnvironment": false,
+            "validationFailedCount": 0
+          },
+          "Message": "production risk policy evaluated",
+          "Severity": "info",
+          "InputDigest": "sha256:d64fa06b7ff7e14805fc527c634a544886aa50598aaff76016ce1cfad4b0de0e"
+        },
+        {
+          "Code": "POLICY_COMPLETED",
+          "Details": {},
+          "Message": "policy@1.0.0-production.2 completed",
+          "Severity": "info",
+          "InputDigest": "sha256:d64fa06b7ff7e14805fc527c634a544886aa50598aaff76016ce1cfad4b0de0e"
+        }
+      ],
+      "inputDigest": "sha256:d64fa06b7ff7e14805fc527c634a544886aa50598aaff76016ce1cfad4b0de0e"
+    },
+    {
+      "check": {
+        "proposalId": "prp_01m27tf330fgxa9qeggjdvp3n8",
+        "validatorId": "schema",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      "status": "succeeded",
+      "findings": [
+        {
+          "Code": "SCHEMA_COMPLETED",
+          "Details": {},
+          "Message": "schema@1.0.0-production.2 completed",
+          "Severity": "info",
+          "InputDigest": "sha256:dd05303ab4c707968cd4e1f4c84f1886cf85368b19933f09491a00fff8c0b4c6"
+        }
+      ],
+      "inputDigest": "sha256:dd05303ab4c707968cd4e1f4c84f1886cf85368b19933f09491a00fff8c0b4c6"
+    },
+    {
+      "check": {
+        "proposalId": "prp_01m27tf330fgxa9qeggjdvp3n8",
+        "validatorId": "reference",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      "status": "succeeded",
+      "findings": [
+        {
+          "Code": "REFERENCE_COMPLETED",
+          "Details": {},
+          "Message": "reference@1.0.0-production.2 completed",
+          "Severity": "info",
+          "InputDigest": "sha256:a2e10f77fb298f42154cf15069245507d7bd8812258431a169dee5e42332f3da"
+        }
+      ],
+      "inputDigest": "sha256:a2e10f77fb298f42154cf15069245507d7bd8812258431a169dee5e42332f3da"
+    },
+    {
+      "check": {
+        "proposalId": "prp_01m27tf330fgxa9qeggjdvp3n8",
+        "validatorId": "structural",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      "status": "succeeded",
+      "findings": [
+        {
+          "Code": "STRUCTURAL_COMPLETED",
+          "Details": {},
+          "Message": "structural@1.0.0-production.2 completed",
+          "Severity": "info",
+          "InputDigest": "sha256:d5ec7913a48a0a654a3ab94f1a5b9938095c482256a16d0ae570fae7f5ef36b0"
+        }
+      ],
+      "inputDigest": "sha256:d5ec7913a48a0a654a3ab94f1a5b9938095c482256a16d0ae570fae7f5ef36b0"
+    },
+    {
+      "check": {
+        "proposalId": "prp_01m27tf330fgxa9qeggjdvp3n8",
+        "validatorId": "policy",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      "status": "succeeded",
+      "findings": [
+        {
+          "Code": "RISK_ACCESS_OR_CONTRACT_CHANGE",
+          "Details": {
+            "assetType": "not_applicable",
+            "infoCount": 3,
+            "authorKind": "human",
+            "blockerCount": 0,
+            "warningCount": 0,
+            "affectsAccess": false,
+            "consumerCount": null,
+            "ownerAssigned": "unassigned",
+            "affectsContract": true,
+            "affectsRelations": false,
+            "evidenceComplete": false,
+            "targetObjectType": "join_contract",
+            "affectsDefinition": true,
+            "evidenceLinkCount": 0,
+            "affectsComputation": false,
+            "validationRunCount": 3,
+            "historicalAcceptRate": null,
+            "productionEnvironment": false,
+            "validationFailedCount": 0
+          },
+          "Message": "production risk policy evaluated",
+          "Severity": "info",
+          "InputDigest": "sha256:3011a72b16e5af78b629349e29ed14ef6b9d0be5a7b6e098d2aff73f4d7be87c"
+        },
+        {
+          "Code": "POLICY_COMPLETED",
+          "Details": {},
+          "Message": "policy@1.0.0-production.2 completed",
+          "Severity": "info",
+          "InputDigest": "sha256:3011a72b16e5af78b629349e29ed14ef6b9d0be5a7b6e098d2aff73f4d7be87c"
+        }
+      ],
+      "inputDigest": "sha256:3011a72b16e5af78b629349e29ed14ef6b9d0be5a7b6e098d2aff73f4d7be87c"
+    },
+    {
+      "check": {
+        "proposalId": "prp_01m27tf330fgxtnfbzpb79f1r0",
+        "validatorId": "schema",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      "status": "succeeded",
+      "findings": [
+        {
+          "Code": "SCHEMA_COMPLETED",
+          "Details": {},
+          "Message": "schema@1.0.0-production.2 completed",
+          "Severity": "info",
+          "InputDigest": "sha256:78ceb42ae2f269ff1fe8c16fd05d26ffc48e0a6f2e1bde3f7063b104cd2e5f35"
+        }
+      ],
+      "inputDigest": "sha256:78ceb42ae2f269ff1fe8c16fd05d26ffc48e0a6f2e1bde3f7063b104cd2e5f35"
+    },
+    {
+      "check": {
+        "proposalId": "prp_01m27tf330fgxtnfbzpb79f1r0",
+        "validatorId": "reference",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      "status": "succeeded",
+      "findings": [
+        {
+          "Code": "REFERENCE_COMPLETED",
+          "Details": {},
+          "Message": "reference@1.0.0-production.2 completed",
+          "Severity": "info",
+          "InputDigest": "sha256:44c8c81d2223e654249e3927e06db3b27f471daf323c7d35b0379ff8f4fa3cd0"
+        }
+      ],
+      "inputDigest": "sha256:44c8c81d2223e654249e3927e06db3b27f471daf323c7d35b0379ff8f4fa3cd0"
+    },
+    {
+      "check": {
+        "proposalId": "prp_01m27tf330fgxtnfbzpb79f1r0",
+        "validatorId": "structural",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      "status": "succeeded",
+      "findings": [
+        {
+          "Code": "STRUCTURAL_COMPLETED",
+          "Details": {},
+          "Message": "structural@1.0.0-production.2 completed",
+          "Severity": "info",
+          "InputDigest": "sha256:d677f8acf4d1d8e1d20fdd6cf7345fe7c598fca759f4488c13323bbd0c2c79fa"
+        }
+      ],
+      "inputDigest": "sha256:d677f8acf4d1d8e1d20fdd6cf7345fe7c598fca759f4488c13323bbd0c2c79fa"
+    },
+    {
+      "check": {
+        "proposalId": "prp_01m27tf330fgxtnfbzpb79f1r0",
+        "validatorId": "policy",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      "status": "succeeded",
+      "findings": [
+        {
+          "Code": "RISK_ACCESS_OR_CONTRACT_CHANGE",
+          "Details": {
+            "assetType": "not_applicable",
+            "infoCount": 3,
+            "authorKind": "human",
+            "blockerCount": 0,
+            "warningCount": 0,
+            "affectsAccess": false,
+            "consumerCount": null,
+            "ownerAssigned": "unassigned",
+            "affectsContract": true,
+            "affectsRelations": false,
+            "evidenceComplete": false,
+            "targetObjectType": "entity_key",
+            "affectsDefinition": true,
+            "evidenceLinkCount": 0,
+            "affectsComputation": false,
+            "validationRunCount": 3,
+            "historicalAcceptRate": null,
+            "productionEnvironment": false,
+            "validationFailedCount": 0
+          },
+          "Message": "production risk policy evaluated",
+          "Severity": "info",
+          "InputDigest": "sha256:fbcf7c84d31b2c3bb72ecfec2422b2cf7529bb1ed62f762445a433b6687b7915"
+        },
+        {
+          "Code": "POLICY_COMPLETED",
+          "Details": {},
+          "Message": "policy@1.0.0-production.2 completed",
+          "Severity": "info",
+          "InputDigest": "sha256:fbcf7c84d31b2c3bb72ecfec2422b2cf7529bb1ed62f762445a433b6687b7915"
+        }
+      ],
+      "inputDigest": "sha256:fbcf7c84d31b2c3bb72ecfec2422b2cf7529bb1ed62f762445a433b6687b7915"
+    },
+    {
+      "check": {
+        "proposalId": "prp_01m27tf330fgy8g7evrb5qh2h1",
+        "validatorId": "schema",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      "status": "failed",
+      "findings": [
+        {
+          "Code": "PRODUCTION_BUSINESS_RULE_UNCONFIRMED",
+          "Details": {},
+          "Message": "production validation did not satisfy the required check",
+          "Severity": "blocker",
+          "InputDigest": "sha256:daacc4c2c1b790c9027a5ae7c8fdf0d35eae50d18774532dee4d05eabf499292"
+        },
+        {
+          "Code": "SCHEMA_COMPLETED",
+          "Details": {},
+          "Message": "schema@1.0.0-production.2 completed",
+          "Severity": "info",
+          "InputDigest": "sha256:daacc4c2c1b790c9027a5ae7c8fdf0d35eae50d18774532dee4d05eabf499292"
+        }
+      ],
+      "inputDigest": "sha256:daacc4c2c1b790c9027a5ae7c8fdf0d35eae50d18774532dee4d05eabf499292"
+    },
+    {
+      "check": {
+        "proposalId": "prp_01m27tf330fgy8g7evrb5qh2h1",
+        "validatorId": "reference",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      "status": "succeeded",
+      "findings": [
+        {
+          "Code": "REFERENCE_COMPLETED",
+          "Details": {},
+          "Message": "reference@1.0.0-production.2 completed",
+          "Severity": "info",
+          "InputDigest": "sha256:d18de828b714cfb38d6fea33c6e46748ff44125e0026b90f2426935c4aaa09b2"
+        }
+      ],
+      "inputDigest": "sha256:d18de828b714cfb38d6fea33c6e46748ff44125e0026b90f2426935c4aaa09b2"
+    },
+    {
+      "check": {
+        "proposalId": "prp_01m27tf330fgy8g7evrb5qh2h1",
+        "validatorId": "structural",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      "status": "succeeded",
+      "findings": [
+        {
+          "Code": "STRUCTURAL_COMPLETED",
+          "Details": {},
+          "Message": "structural@1.0.0-production.2 completed",
+          "Severity": "info",
+          "InputDigest": "sha256:c14d8606c9faef09500541d08f1fbf5ae3dd0fa0b819dc25560d93f39a05d91a"
+        }
+      ],
+      "inputDigest": "sha256:c14d8606c9faef09500541d08f1fbf5ae3dd0fa0b819dc25560d93f39a05d91a"
+    },
+    {
+      "check": {
+        "proposalId": "prp_01m27tf330fgy8g7evrb5qh2h1",
+        "validatorId": "policy",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      "status": "succeeded",
+      "findings": [
+        {
+          "Code": "RISK_BLOCKER",
+          "Details": {
+            "assetType": "metric",
+            "infoCount": 3,
+            "authorKind": "human",
+            "blockerCount": 1,
+            "warningCount": 0,
+            "affectsAccess": false,
+            "consumerCount": null,
+            "ownerAssigned": "unassigned",
+            "affectsContract": false,
+            "affectsRelations": false,
+            "evidenceComplete": false,
+            "targetObjectType": "semantic_asset",
+            "affectsDefinition": true,
+            "evidenceLinkCount": 0,
+            "affectsComputation": false,
+            "validationRunCount": 3,
+            "historicalAcceptRate": null,
+            "productionEnvironment": false,
+            "validationFailedCount": 1
+          },
+          "Message": "production risk policy evaluated",
+          "Severity": "info",
+          "InputDigest": "sha256:aa90ed8c043774ef8e242cd69ac3073d56e22c70cae59e9e5cc2bd9b4b1ca4dd"
+        },
+        {
+          "Code": "POLICY_COMPLETED",
+          "Details": {},
+          "Message": "policy@1.0.0-production.2 completed",
+          "Severity": "info",
+          "InputDigest": "sha256:aa90ed8c043774ef8e242cd69ac3073d56e22c70cae59e9e5cc2bd9b4b1ca4dd"
+        }
+      ],
+      "inputDigest": "sha256:aa90ed8c043774ef8e242cd69ac3073d56e22c70cae59e9e5cc2bd9b4b1ca4dd"
+    },
+    {
+      "check": {
+        "proposalId": "prp_01m27tf330fgyvfx7dc2kmkqzv",
+        "validatorId": "schema",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      "status": "succeeded",
+      "findings": [
+        {
+          "Code": "SCHEMA_COMPLETED",
+          "Details": {},
+          "Message": "schema@1.0.0-production.2 completed",
+          "Severity": "info",
+          "InputDigest": "sha256:3ab127407b96e94bef4e5ec726e6b076f9d37415b7ecbb06fc10cd05c2a22fcc"
+        }
+      ],
+      "inputDigest": "sha256:3ab127407b96e94bef4e5ec726e6b076f9d37415b7ecbb06fc10cd05c2a22fcc"
+    },
+    {
+      "check": {
+        "proposalId": "prp_01m27tf330fgyvfx7dc2kmkqzv",
+        "validatorId": "reference",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      "status": "succeeded",
+      "findings": [
+        {
+          "Code": "REFERENCE_COMPLETED",
+          "Details": {},
+          "Message": "reference@1.0.0-production.2 completed",
+          "Severity": "info",
+          "InputDigest": "sha256:06217f0ed5f9added4e410ce7fdda426420d06856b41426816c3ff05423a28b6"
+        }
+      ],
+      "inputDigest": "sha256:06217f0ed5f9added4e410ce7fdda426420d06856b41426816c3ff05423a28b6"
+    },
+    {
+      "check": {
+        "proposalId": "prp_01m27tf330fgyvfx7dc2kmkqzv",
+        "validatorId": "structural",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      "status": "succeeded",
+      "findings": [
+        {
+          "Code": "STRUCTURAL_COMPLETED",
+          "Details": {},
+          "Message": "structural@1.0.0-production.2 completed",
+          "Severity": "info",
+          "InputDigest": "sha256:8c8a33f022ebebf04e9e7b0386a2dbbf92fc48fd85b55825548c991b08709f92"
+        }
+      ],
+      "inputDigest": "sha256:8c8a33f022ebebf04e9e7b0386a2dbbf92fc48fd85b55825548c991b08709f92"
+    },
+    {
+      "check": {
+        "proposalId": "prp_01m27tf330fgyvfx7dc2kmkqzv",
+        "validatorId": "policy",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      "status": "succeeded",
+      "findings": [
+        {
+          "Code": "RISK_ACCESS_OR_CONTRACT_CHANGE",
+          "Details": {
+            "assetType": "not_applicable",
+            "infoCount": 3,
+            "authorKind": "human",
+            "blockerCount": 0,
+            "warningCount": 0,
+            "affectsAccess": false,
+            "consumerCount": null,
+            "ownerAssigned": "unassigned",
+            "affectsContract": true,
+            "affectsRelations": false,
+            "evidenceComplete": false,
+            "targetObjectType": "physical_binding",
+            "affectsDefinition": true,
+            "evidenceLinkCount": 0,
+            "affectsComputation": false,
+            "validationRunCount": 3,
+            "historicalAcceptRate": null,
+            "productionEnvironment": false,
+            "validationFailedCount": 0
+          },
+          "Message": "production risk policy evaluated",
+          "Severity": "info",
+          "InputDigest": "sha256:534c56371347a59ce23b9e74905f63530bd29db82eb66de3fff002b9f9eecaf2"
+        },
+        {
+          "Code": "POLICY_COMPLETED",
+          "Details": {},
+          "Message": "policy@1.0.0-production.2 completed",
+          "Severity": "info",
+          "InputDigest": "sha256:534c56371347a59ce23b9e74905f63530bd29db82eb66de3fff002b9f9eecaf2"
+        }
+      ],
+      "inputDigest": "sha256:534c56371347a59ce23b9e74905f63530bd29db82eb66de3fff002b9f9eecaf2"
+    },
+    {
+      "check": {
+        "proposalId": "prp_01m27tf330fgz825282vtf5hzh",
+        "validatorId": "schema",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      "status": "succeeded",
+      "findings": [
+        {
+          "Code": "SCHEMA_COMPLETED",
+          "Details": {},
+          "Message": "schema@1.0.0-production.2 completed",
+          "Severity": "info",
+          "InputDigest": "sha256:07f047268c0534d81ec00e656d7df4e96fa9a9afe5db315e748abcc4926aedea"
+        }
+      ],
+      "inputDigest": "sha256:07f047268c0534d81ec00e656d7df4e96fa9a9afe5db315e748abcc4926aedea"
+    },
+    {
+      "check": {
+        "proposalId": "prp_01m27tf330fgz825282vtf5hzh",
+        "validatorId": "reference",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      "status": "succeeded",
+      "findings": [
+        {
+          "Code": "REFERENCE_COMPLETED",
+          "Details": {},
+          "Message": "reference@1.0.0-production.2 completed",
+          "Severity": "info",
+          "InputDigest": "sha256:75cc23ffb3470d879229dcb90bf0007489e1d8b359ac265a725ab27ab19614d3"
+        }
+      ],
+      "inputDigest": "sha256:75cc23ffb3470d879229dcb90bf0007489e1d8b359ac265a725ab27ab19614d3"
+    },
+    {
+      "check": {
+        "proposalId": "prp_01m27tf330fgz825282vtf5hzh",
+        "validatorId": "structural",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      "status": "succeeded",
+      "findings": [
+        {
+          "Code": "STRUCTURAL_COMPLETED",
+          "Details": {},
+          "Message": "structural@1.0.0-production.2 completed",
+          "Severity": "info",
+          "InputDigest": "sha256:f1aef88a593ffb1aaff288b3c253883f11b662c247af0898c8cff6f48504ee25"
+        }
+      ],
+      "inputDigest": "sha256:f1aef88a593ffb1aaff288b3c253883f11b662c247af0898c8cff6f48504ee25"
+    },
+    {
+      "check": {
+        "proposalId": "prp_01m27tf330fgz825282vtf5hzh",
+        "validatorId": "policy",
+        "validatorVersion": "1.0.0-production.2"
+      },
+      "status": "succeeded",
+      "findings": [
+        {
+          "Code": "RISK_ACCESS_OR_CONTRACT_CHANGE",
+          "Details": {
+            "assetType": "not_applicable",
+            "infoCount": 3,
+            "authorKind": "human",
+            "blockerCount": 0,
+            "warningCount": 0,
+            "affectsAccess": false,
+            "consumerCount": null,
+            "ownerAssigned": "unassigned",
+            "affectsContract": true,
+            "affectsRelations": false,
+            "evidenceComplete": false,
+            "targetObjectType": "model_grain",
+            "affectsDefinition": true,
+            "evidenceLinkCount": 0,
+            "affectsComputation": false,
+            "validationRunCount": 3,
+            "historicalAcceptRate": null,
+            "productionEnvironment": false,
+            "validationFailedCount": 0
+          },
+          "Message": "production risk policy evaluated",
+          "Severity": "info",
+          "InputDigest": "sha256:50a00f73b053c48bf01f17deb89392302764ff19b2656373d4a946d4f5efb5fb"
+        },
+        {
+          "Code": "POLICY_COMPLETED",
+          "Details": {},
+          "Message": "policy@1.0.0-production.2 completed",
+          "Severity": "info",
+          "InputDigest": "sha256:50a00f73b053c48bf01f17deb89392302764ff19b2656373d4a946d4f5efb5fb"
+        }
+      ],
+      "inputDigest": "sha256:50a00f73b053c48bf01f17deb89392302764ff19b2656373d4a946d4f5efb5fb"
+    }
+  ]
+}

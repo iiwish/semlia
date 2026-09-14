@@ -1,0 +1,25 @@
+{
+  "command": [
+    "go",
+    "test",
+    "./tests/integration/discovery",
+    "-run",
+    "TestSourceSnapshotMemberByteBudgetAndSourceConfig",
+    "-count=1",
+    "-v",
+    "-timeout",
+    "10m"
+  ],
+  "clearedEnvironment": [
+    "SEMLIA_INGESTION_TEST_DATABASE_URL",
+    "SEMLIA_EXECUTION_CRASH_HELPER",
+    "SEMLIA_EXECUTION_TEST_DB",
+    "SEMLIA_DATABASE_URL"
+  ],
+  "start": "2026-09-09T07:10:26.411Z",
+  "end": "2026-09-09T07:10:35.154Z",
+  "exitStatus": 1,
+  "signal": null,
+  "stdout": "2026/09/09 15:10:30 github.com/testcontainers/testcontainers-go - Connected to docker: \n  Server Version: 29.4.0\n  API Version: 1.54\n  Operating System: OrbStack\n  Total Memory: 16040 MB\n  Testcontainers for Go Version: v0.44.0\n  Resolved Docker Host: unix:///var/run/docker.sock\n  Resolved Docker Socket Path: /var/run/docker.sock\n  Test SessionID: 594e123f4902661bb724388aa090dcf55f827ffb77dc8f8b3e95b1cb30287db1\n  Test ProcessID: a9d41b16-4e34-4671-bcab-dc780906b884\n2026/09/09 15:10:30 🐳 Creating container for image postgres:18-alpine\n2026/09/09 15:10:30 🐳 Creating container for image testcontainers/ryuk:0.14.0\n2026/09/09 15:10:30 ✅ Container created: 75faca6cb7b0\n2026/09/09 15:10:30 🐳 Starting container: 75faca6cb7b0\n2026/09/09 15:10:30 ✅ Container started: 75faca6cb7b0\n2026/09/09 15:10:30 ⏳ Waiting for container id 75faca6cb7b0 image: testcontainers/ryuk:0.14.0. Waiting for: all of: [log message \"Started\", port 8080/tcp to be listening]\n2026/09/09 15:10:30 Shell not found in container\n2026/09/09 15:10:30 🔔 Container is ready: 75faca6cb7b0\n2026/09/09 15:10:30 ✅ Container created: 61efbc116a9d\n2026/09/09 15:10:30 🐳 Starting container: 61efbc116a9d\n2026/09/09 15:10:31 ✅ Container started: 61efbc116a9d\n2026/09/09 15:10:31 ⏳ Waiting for container id 61efbc116a9d image: postgres:18-alpine. Waiting for: all of: [log message \"database system is ready to accept connections\" (occurrence: 2), port 5432/tcp to be listening]\n2026/09/09 15:10:33 🔔 Container is ready: 61efbc116a9d\n=== RUN   TestSourceSnapshotMemberByteBudgetAndSourceConfig\n    source_snapshot_test.go:446: source config opened an unrelated freshness head: count=2 latest=01a08501-0f2a-738e-ae87-a7fac45be325 err=<nil>\n--- FAIL: TestSourceSnapshotMemberByteBudgetAndSourceConfig (0.36s)\nFAIL\n2026/09/09 15:10:34 🐳 Stopping container: 61efbc116a9d\n2026/09/09 15:10:34 ✅ Container stopped: 61efbc116a9d\n2026/09/09 15:10:34 🐳 Terminating container: 61efbc116a9d\n2026/09/09 15:10:35 🚫 Container terminated: 61efbc116a9d\nFAIL\tgithub.com/iiwish/semlia/tests/integration/discovery\t6.176s\nFAIL\n",
+  "stderr": ""
+}

@@ -1,0 +1,46 @@
+import { expect, test } from "@playwright/test";
+
+test("source commands have named menus, visible outcomes and safe cancellation", async ({ page }, testInfo) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const run = { id: "run_01arz3ndektsv4rrffq69g5fav", status: "queued", stats: {}, createdAt: "2026-09-08T08:00:00Z", updatedAt: "2026-09-08T08:00:00Z", adapterVersion: "postgresql_catalog/v1", findings: [] };
+  let tests = 0;
+  let starts = 0;
+  await page.route("**/sources/*/test", async (route) => { tests++; await route.fulfill({ json: { status: "succeeded" } }); });
+  await page.route("**/sources/*/discovery-runs", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    starts++;
+    await route.fulfill({ json: { ...run, sourceConnectionId: new URL(route.request().url()).pathname.split("/").at(-2) } });
+  });
+  await page.route(`**/discovery-runs/${run.id}`, (route) => route.fulfill({ json: run }));
+  await page.goto("/");
+  await page.getByRole("button", { name: "数据接入", exact: true }).click();
+  const row = page.getByRole("table", { name: "数据来源", exact: true }).locator("tbody tr").first();
+  const more = row.getByRole("button", { name: /更多操作/ });
+  await expect(more).toBeVisible();
+  await expect(row.getByRole("button")).toHaveCount(3);
+  await more.click();
+  const menu = page.getByRole("menu");
+  await expect(menu).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("actions-menu.png") });
+  await menu.getByRole("menuitem", { name: "测试连接" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "连接测试通过" })).toBeVisible();
+  expect(tests).toBe(1);
+  await more.click();
+  await menu.getByRole("menuitem", { name: "编辑连接" }).click();
+  await expect(page.getByRole("dialog", { name: "编辑 PostgreSQL 连接" })).toBeVisible();
+  await page.getByRole("button", { name: "关闭连接配置" }).click();
+  await more.click();
+  await menu.getByRole("menuitem", { name: "轮换凭据" }).click();
+  await expect(page.getByRole("dialog", { name: "轮换连接凭据" })).toBeVisible();
+  await page.getByRole("button", { name: "关闭连接配置" }).click();
+  await more.click();
+  await menu.getByRole("menuitem", { name: "删除连接" }).click();
+  await expect(page.getByRole("alertdialog")).toBeVisible();
+  await page.getByRole("button", { name: "取消", exact: true }).click();
+  await row.getByRole("button", { name: /启动发现/ }).click();
+  await expect(page.getByRole("status").filter({ hasText: "发现任务已创建" })).toBeVisible();
+  expect(starts).toBe(1);
+  await page.screenshot({ path: testInfo.outputPath("discovery-result.png") });
+  await page.getByRole("button", { name: "查看运行", exact: true }).click();
+  await expect(page.getByRole("region", { name: "接入运行详情" })).toBeVisible();
+});

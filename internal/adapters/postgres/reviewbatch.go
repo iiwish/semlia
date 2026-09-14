@@ -370,12 +370,16 @@ func (store *Store) ConfirmReviewBatch(
 				return governanceapp.ReviewBatchRows{}, reviewBatchRepositoryError("create batch review", err)
 			}
 			if command.Decision == governance.ReviewRejected {
-				if _, err := queries.TransitionProposal(ctx, dbgen.TransitionProposalParams{
+				transitioned, err := queries.TransitionProposal(ctx, dbgen.TransitionProposalParams{
 					WorkspaceID: workspaceUUID, ProposalID: memberRow.ProposalID,
 					State: string(governance.ProposalRejected), DecidedAt: timestamp(command.DecidedAt),
 					ExpectedState: memberRow.ProposalState, UpdatedAt: timestamp(command.DecidedAt),
-				}); err != nil {
+				})
+				if err != nil {
 					return governanceapp.ReviewBatchRows{}, reviewBatchRepositoryError("reject batch member", err)
+				}
+				if err := projectProposalAttention(ctx, queries, transitioned, command.TraceID, command.DecidedAt); err != nil {
+					return governanceapp.ReviewBatchRows{}, reviewBatchRepositoryError("project batch rejection attention", err)
 				}
 				events := command.MemberEvents[proposalID]
 				if err := createProposalMutationEvents(ctx, queries, proposalEvent{

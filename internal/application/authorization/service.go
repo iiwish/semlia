@@ -8,6 +8,7 @@ package authorization
 import (
 	"context"
 	"errors"
+	"sort"
 	"strings"
 	"time"
 
@@ -20,11 +21,103 @@ type Evaluator interface {
 	Evaluate(ctx context.Context, request EvaluationRequest) (authorization.Decision, error)
 }
 
+// SnapshotEvaluator performs one audited request-level decision and then
+// exposes the same principal's frozen-version grants for pure, read-only
+// checks over a collection. Snapshot never records authorization events or
+// expires bindings as a side effect.
+type SnapshotEvaluator interface {
+	Evaluator
+	Snapshot(ctx context.Context, workspace identity.WorkspaceID, principal identity.PrincipalID) (AccessSnapshot, error)
+}
+
+type AccessSnapshot struct {
+	Principal            authorization.Principal
+	Bindings             []authorization.RoleBinding
+	AuthorizationVersion int64
+	EvaluatedAt          time.Time
+}
+
+type FrozenGrant struct {
+	RoleID    string
+	Action    authorization.Action
+	ScopeType authorization.ScopeType
+	ScopeID   string
+}
+
+func (snapshot AccessSnapshot) Allows(action authorization.Action, resource authorization.Resource) bool {
+	if snapshot.Principal.Status != authorization.PrincipalActive || !authorization.IsKnownAction(action) {
+		return false
+	}
+	if authorization.RequiresHuman(action) && snapshot.Principal.Kind == authorization.PrincipalAgent {
+		return false
+	}
+	for _, binding := range snapshot.Bindings {
+		if binding.WorkspaceID != snapshot.Principal.WorkspaceID ||
+			!bindingGrants(binding, action, snapshot.EvaluatedAt) ||
+			!scopeMatches(binding, snapshot.Principal.WorkspaceID, resource) {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
+// ActiveRoleIDs is used only as an audience-membership projection. Permission
+// checks remain in Allows and never move into caller SQL.
+func (snapshot AccessSnapshot) ActiveRoleIDs() []string {
+	seen := make(map[string]struct{}, len(snapshot.Bindings))
+	for _, binding := range snapshot.Bindings {
+		if binding.WorkspaceID != snapshot.Principal.WorkspaceID ||
+			binding.StatusAt(snapshot.EvaluatedAt) != authorization.BindingActive || binding.RoleID == "" {
+			continue
+		}
+		seen[binding.RoleID] = struct{}{}
+	}
+	result := make([]string, 0, len(seen))
+	for roleID := range seen {
+		result = append(result, roleID)
+	}
+	sort.Strings(result)
+	return result
+}
+
+func (snapshot AccessSnapshot) ActiveGrants() []FrozenGrant {
+	if snapshot.Principal.Status != authorization.PrincipalActive {
+		return nil
+	}
+	result := make([]FrozenGrant, 0, len(snapshot.Bindings))
+	for _, binding := range snapshot.Bindings {
+		if binding.WorkspaceID != snapshot.Principal.WorkspaceID ||
+			binding.StatusAt(snapshot.EvaluatedAt) != authorization.BindingActive {
+			continue
+		}
+		for _, action := range binding.Actions {
+			if authorization.RequiresHuman(action) && snapshot.Principal.Kind == authorization.PrincipalAgent {
+				continue
+			}
+			result = append(result, FrozenGrant{RoleID: binding.RoleID, Action: action,
+				ScopeType: binding.ScopeType, ScopeID: binding.ScopeID})
+		}
+	}
+	sort.Slice(result, func(left, right int) bool {
+		if result[left].RoleID != result[right].RoleID {
+			return result[left].RoleID < result[right].RoleID
+		}
+		if result[left].Action != result[right].Action {
+			return result[left].Action < result[right].Action
+		}
+		if result[left].ScopeType != result[right].ScopeType {
+			return result[left].ScopeType < result[right].ScopeType
+		}
+		return result[left].ScopeID < result[right].ScopeID
+	})
+	return result
+}
+
 // EvaluationRequest carries the caller identity as presented on the wire. The
 // private-incubation actor contract is the X-Semlia-Principal header holding
-// the principal's public TypeID; an empty PrincipalRef selects the workspace's
-// system-seeded workspace-admin principal so M1 flows keep working unchanged
-// until real authentication replaces the header.
+// the principal's public TypeID. Development can explicitly enable symbolic
+// local-UAT aliases; otherwise a missing or malformed identity is denied.
 type EvaluationRequest struct {
 	PrincipalRef string
 	WorkspaceID  identity.WorkspaceID
@@ -36,6 +129,7 @@ type EvaluationRequest struct {
 type Repository interface {
 	LoadPrincipal(ctx context.Context, workspace identity.WorkspaceID, principal identity.PrincipalID) (authorization.Principal, error)
 	LoadDefaultPrincipal(ctx context.Context, workspace identity.WorkspaceID) (authorization.Principal, error)
+	LoadLocalUATPrincipal(ctx context.Context, workspace identity.WorkspaceID, seedNamespace, roleID string) (authorization.Principal, error)
 	LoadPrincipalBindings(ctx context.Context, principal identity.PrincipalID) ([]authorization.RoleBinding, error)
 	AuthorizationVersion(ctx context.Context, workspace identity.WorkspaceID) (int64, error)
 	RecordDecision(ctx context.Context, event authorization.DecisionEvent) error
@@ -48,20 +142,60 @@ type ClockFunc func() time.Time
 func (clock ClockFunc) Now() time.Time { return clock() }
 
 type Service struct {
-	repository Repository
-	clock      Clock
+	repository         Repository
+	clock              Clock
+	localUATIdentities bool
 }
 
-func NewService(repository Repository, clock Clock) *Service {
-	return &Service{repository: repository, clock: clock}
+type Option func(*Service)
+
+const (
+	LocalUATAuthorPrincipalRef     = "local-author"
+	LocalUATReviewerPrincipalRef   = "local-reviewer"
+	LocalUATPublisherPrincipalRef  = "local-publisher"
+	localUATAuthorSeedNamespace    = "principal"
+	localUATReviewerSeedNamespace  = "independent_reviewer"
+	localUATPublisherSeedNamespace = "independent_publisher"
+)
+
+// WithLocalUATIdentities enables explicit author, reviewer, and publisher
+// aliases for the local, development-only acceptance journey. It is not an
+// authentication mechanism.
+func WithLocalUATIdentities() Option {
+	return func(service *Service) { service.localUATIdentities = true }
+}
+
+func NewService(repository Repository, clock Clock, options ...Option) *Service {
+	service := &Service{repository: repository, clock: clock}
+	for _, option := range options {
+		if option != nil {
+			option(service)
+		}
+	}
+	return service
 }
 
 // Evaluate resolves the acting principal, matches scoped role bindings against
 // the FR-003 action vocabulary, and records an authorization_events row for
 // every decision, allow and deny alike (FR-012, FR-013).
 func (service *Service) Evaluate(ctx context.Context, request EvaluationRequest) (authorization.Decision, error) {
+	if limit, ok := CredentialFromContext(ctx); ok && !limit.Allows(request) {
+		return service.deny(ctx, request, authorization.ReasonNoMatchingGrant, nil, request.PrincipalRef)
+	}
 	if !authorization.IsKnownAction(request.Action) {
 		return service.deny(ctx, request, authorization.ReasonNoMatchingGrant, nil, "")
+	}
+	if expirer, ok := service.repository.(BindingExpiryRepository); ok && !request.WorkspaceID.IsZero() {
+		eventID, err := identity.NewEventID()
+		if err != nil {
+			return authorization.Decision{}, err
+		}
+		if err := expirer.ExpireRoleBindings(ctx, ExpireRoleBindingsRequest{
+			WorkspaceID: request.WorkspaceID, Now: service.clock.Now().UTC(),
+			TraceID: request.TraceID, EventID: eventID,
+		}); err != nil {
+			return authorization.Decision{}, err
+		}
 	}
 	principal, actor, resolved, err := service.resolvePrincipal(ctx, request)
 	if err != nil {
@@ -78,7 +212,7 @@ func (service *Service) Evaluate(ctx context.Context, request EvaluationRequest)
 		return authorization.Decision{}, err
 	}
 	for _, binding := range bindings {
-		if !bindingGrants(binding, request.Action) || !scopeMatches(binding, request.WorkspaceID, request.Resource) {
+		if !bindingGrants(binding, request.Action, service.clock.Now().UTC()) || !scopeMatches(binding, request.WorkspaceID, request.Resource) {
 			continue
 		}
 		if authorization.RequiresHuman(request.Action) && principal.Kind == authorization.PrincipalAgent {
@@ -105,19 +239,66 @@ func (service *Service) Evaluate(ctx context.Context, request EvaluationRequest)
 	return service.deny(ctx, request, authorization.ReasonNoMatchingGrant, &principal, actor)
 }
 
+func (service *Service) Snapshot(
+	ctx context.Context, workspace identity.WorkspaceID, principalID identity.PrincipalID,
+) (AccessSnapshot, error) {
+	if workspace.IsZero() || principalID.IsZero() {
+		return AccessSnapshot{}, authorization.ErrInvalidArgument
+	}
+	// A snapshot spans several repository reads. Bind each attempt to the
+	// workspace authorization version on both sides so a concurrent revoke or
+	// immutable role-version advance can never label stale grants as current.
+	// Three attempts keep contention bounded; callers retry the request if the
+	// workspace continues changing.
+	for attempt := 0; attempt < 3; attempt++ {
+		before, err := service.repository.AuthorizationVersion(ctx, workspace)
+		if err != nil {
+			return AccessSnapshot{}, err
+		}
+		principal, err := service.repository.LoadPrincipal(ctx, workspace, principalID)
+		if err != nil {
+			return AccessSnapshot{}, err
+		}
+		bindings, err := service.repository.LoadPrincipalBindings(ctx, principal.ID)
+		if err != nil {
+			return AccessSnapshot{}, err
+		}
+		after, err := service.repository.AuthorizationVersion(ctx, workspace)
+		if err != nil {
+			return AccessSnapshot{}, err
+		}
+		if before != after {
+			continue
+		}
+		snapshot := AccessSnapshot{
+			Principal: principal, Bindings: bindings, AuthorizationVersion: after,
+			EvaluatedAt: service.clock.Now().UTC(),
+		}
+		return snapshot, nil
+	}
+	return AccessSnapshot{}, authorization.ErrVersionConflict
+}
+
 func (service *Service) resolvePrincipal(
 	ctx context.Context, request EvaluationRequest,
 ) (authorization.Principal, string, bool, error) {
 	reference := strings.TrimSpace(request.PrincipalRef)
 	if reference == "" {
-		principal, err := service.repository.LoadDefaultPrincipal(ctx, request.WorkspaceID)
-		if err != nil {
-			if isNotFound(err) {
-				return authorization.Principal{}, "anonymous", false, nil
-			}
-			return authorization.Principal{}, "", false, err
+		return authorization.Principal{}, "anonymous", false, nil
+	}
+	if service.localUATIdentities {
+		seedNamespace, roleID := "", ""
+		switch reference {
+		case LocalUATAuthorPrincipalRef:
+			seedNamespace, roleID = localUATAuthorSeedNamespace, "workspace_admin"
+		case LocalUATReviewerPrincipalRef:
+			seedNamespace, roleID = localUATReviewerSeedNamespace, "reviewer"
+		case LocalUATPublisherPrincipalRef:
+			seedNamespace, roleID = localUATPublisherSeedNamespace, "publisher"
 		}
-		return principal, principal.ID.String(), true, nil
+		if seedNamespace != "" {
+			return service.resolveLocalUATPrincipal(ctx, request.WorkspaceID, reference, seedNamespace, roleID)
+		}
 	}
 	principalID, err := identity.ParsePrincipalID(reference)
 	if err != nil {
@@ -133,7 +314,25 @@ func (service *Service) resolvePrincipal(
 	return principal, principal.ID.String(), true, nil
 }
 
-func bindingGrants(binding authorization.RoleBinding, action authorization.Action) bool {
+func (service *Service) resolveLocalUATPrincipal(
+	ctx context.Context,
+	workspace identity.WorkspaceID,
+	reference, seedNamespace, roleID string,
+) (authorization.Principal, string, bool, error) {
+	principal, err := service.repository.LoadLocalUATPrincipal(ctx, workspace, seedNamespace, roleID)
+	if err != nil {
+		if isNotFound(err) {
+			return authorization.Principal{}, reference, false, nil
+		}
+		return authorization.Principal{}, "", false, err
+	}
+	return principal, principal.ID.String(), true, nil
+}
+
+func bindingGrants(binding authorization.RoleBinding, action authorization.Action, now time.Time) bool {
+	if binding.StatusAt(now) != authorization.BindingActive {
+		return false
+	}
 	for _, granted := range binding.Actions {
 		if granted == action {
 			return true

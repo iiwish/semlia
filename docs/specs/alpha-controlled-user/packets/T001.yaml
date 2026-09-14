@@ -1,0 +1,100 @@
+schema_version: 1
+packet_id: ALPHA-T001-A001
+task_id: T001
+feature_id: alpha-controlled-user
+mode: execute_one_task
+status: Completed
+
+goal: >-
+  Replace client-supplied production identity with a real generic OIDC Authorization Code plus
+  PKCE login, opaque PostgreSQL sessions, workspace memberships and controlled admission while
+  preserving the explicit development-only local UAT path.
+
+requirements:
+  - FR-001 OIDC authentication
+  - FR-002 server-side session
+  - FR-003 membership and identity authority
+  - FR-004 controlled admission
+  - FR-012 audit, migration and recovery for identity state
+  - AC-001, AC-002 and the identity portion of AC-003
+  - ALPHA-TDR-001 through ALPHA-TDR-004
+
+dependencies:
+  - Controlled-User Alpha specification 0.1.0 Confirmed
+  - Controlled-User Alpha technical baseline 0.1.0 approved on 2026-09-04
+  - M2 authorization foundation and local-UAT identities present
+
+allowed_files:
+  - api/**
+  - cmd/semlia/**
+  - compose.yaml
+  - db/**
+  - docs/operations/**
+  - docs/specs/alpha-controlled-user/**
+  - docs/evidence/ALPHA-T001/**
+  - go.mod
+  - go.sum
+  - internal/adapters/oidc/**
+  - internal/adapters/postgres/**
+  - internal/application/identity/**
+  - internal/domain/identity/**
+  - internal/platform/config/**
+  - internal/platform/http/**
+  - migrations/**
+  - pkg/identity/**
+  - sdk/typescript/**
+  - tests/**
+
+forbidden_changes:
+  - Do not trust a client principal header when OIDC session mode is active.
+  - Do not expose provider secrets, provider tokens, session tokens, CSRF tokens or PKCE verifiers
+    through persistence projections, logs, audit payloads or generated API responses.
+  - Do not add public signup or password authentication.
+  - Do not let a verified email remap an established issuer-subject identity.
+  - Do not allow removal or suspension of the final active workspace administrator.
+  - Do not replace or weaken the existing Semlia authorization action vocabulary or separation of
+    duties.
+  - Do not start T002-T007 implementation in this packet.
+  - Do not touch unrelated untracked files.
+
+tdd:
+  red:
+    - Session-mode protected requests without a valid cookie return 401 even when a principal
+      header is supplied.
+    - Replayed, expired or mismatched OIDC state/nonce/PKCE transactions fail without a session.
+    - Revoked sessions and suspended memberships deny the next protected request.
+    - Unsafe cookie-authenticated requests without an accepted Origin and CSRF token fail closed.
+    - Cross-workspace membership lookup and final-admin removal are rejected.
+  green:
+    - A local standards-compliant OIDC issuer completes login and maps one account through an active
+      membership to the existing workspace principal.
+    - Opaque cookie and CSRF verifiers are stored only as digests and survive service restart.
+    - Workspace listing returns only active memberships and protected services receive identity from
+      request context.
+    - An idempotent CLI bootstrap creates the first workspace, invitation and administrator role.
+  refactor:
+    - Keep OIDC provider, token generation, session repository and HTTP context behind narrow ports.
+    - Keep development local-UAT header resolution isolated from session authentication.
+
+validation:
+  - go test ./internal/domain/identity/... ./internal/application/identity/...
+  - go test ./internal/platform/config/... ./internal/platform/http/...
+  - go test ./tests/integration/identity/...
+  - make contracts-check
+  - make check-source
+  - make check-smoke
+  - git diff --check
+
+acceptance:
+  - Authorization Code plus PKCE validates issuer, audience, signature, state and nonce against a
+    real local issuer contract.
+  - Session, logout, expiry, revocation and membership suspension are enforced on the next request.
+  - Production/session mode ignores principal headers; development local-UAT behavior remains
+    explicit and regression-tested.
+  - One account can enumerate multiple admitted workspaces while every authorization decision uses
+    the workspace-specific principal and current authorization version.
+  - Identity migrations pass empty and populated up/down/up lifecycle tests.
+
+evidence:
+  summary: docs/evidence/ALPHA-T001/summary.md
+  test_results: docs/evidence/ALPHA-T001/test-results.md

@@ -1,0 +1,183 @@
+schema_version: 1
+packet_id: FMB-T005-SPRINT-A001
+task_id: FMB-T005
+feature_id: full-menu-beta
+mode: execute_one_task
+status: Completed
+adapter: agent-neutral
+
+governance_inputs:
+  constitution: [AGENTS.md, docs/SSOT.md]
+  product_contract: docs/specs/full-menu-beta/spec.md
+  requirements_checklist: docs/specs/full-menu-beta/checklists/requirements.md
+  technical_decisions: docs/specs/full-menu-beta/technology-decision-record.md
+  data_model: docs/specs/full-menu-beta/data-model.md
+  feature_plan: docs/specs/full-menu-beta/plan.md
+  work_graph: docs/specs/full-menu-beta/tasks.md
+  analysis: docs/specs/full-menu-beta/analysis.md
+  approval_gates:
+    scope_and_plan: Founder confirmed the Full-Menu Beta plan on 2026-09-04.
+    execution: Founder authorized continuous T001-T007 execution and the 2026-09-05 three-hour sprint.
+    dependency: T003 evidence passes; T004 source gates, PostgreSQL 17/18 migrations, real Docker desktop journeys and independent review pass with shared-file ownership returned on 2026-09-05.
+
+work_unit:
+  title: Persistent embedding-index rebuild and active retrieval
+  goal: >-
+    Replace browser-only embedding progress with one durable, checkpointed generation pipeline.
+    Pin canonical corpus, model and dimension; validate completeness; atomically activate the new
+    index while failed or cancelled generations leave the old index serving. A real search or
+    resolver candidate path must consume the active index without bypassing released semantics.
+  story: FMB-US-005
+  requirements: [FR-001, FR-007, NFR-001, NFR-002, NFR-003, NFR-004, NFR-005]
+  depends_on: [FMB-T003 evidence, FMB-T004 shared-file handoff]
+  blocks: [FMB-T007]
+  parallel: false
+
+codebase_context:
+  relevant_files:
+    - internal/application/governance/modelconfig.go
+    - internal/application/governance/llm/client.go
+    - internal/application/distribution/service.go
+    - internal/adapters/postgres/distribution.go
+    - internal/application/jobs/worker.go
+    - internal/adapters/postgres/operations.go
+    - internal/platform/http/modelconfig.go
+    - cmd/semlia/main.go
+    - web/src/ModelConfigurationView.tsx
+    - web/src/ProductApp.tsx
+  existing_patterns:
+    - Model providers/settings and default selections already persist through governance APIs.
+    - Provider credentials resolve from deployment environment names, never from recovered plaintext.
+    - Jobs have leases, heartbeat renewal, retries and terminal owning-domain projections.
+    - Operations runtime runs/events are authoritative projections; they must not expose provider payloads.
+    - Distribution reads immutable released snapshots; exact matching and authorization remain authoritative.
+    - Pgvector-unavailable deployments preserve lexical retrieval and report rebuild as not configured.
+  preflight_decisions:
+    - Add a small EmbedBatch port; the existing Complete-only LLM client is not an embedding implementation.
+    - Pin provider, endpoint, model, dimension, credential/config revision and chunking version in the generation; active query vectors use this snapshot, not mutable defaults.
+    - Validate provider result cardinality, item indexes, dimensions and finite numbers without exposing response bodies.
+    - Capture immutable corpus membership at enqueue; paginating mutable current assets is not a snapshot.
+    - Begin with bounded workspace/generation-filtered exact pgvector recall; complex ANN tuning is not required.
+    - Embedding owns cancellation and terminal projections; every checkpoint and activation checks generation state and the current job lease.
+    - Incompatible pinned releases use lexical fallback; no similarity score overrides exact revisions, current access checks or deterministic refusal.
+
+execution_constraints:
+  branch_or_worktree: current shared worktree
+  owner: One delegated implementation worker; do not delegate further.
+  coordination: >-
+    Do not edit while T004 owns shared files. T006/T007 implementation cannot overlap this packet.
+    Do not revert existing work and do not commit or push. The orchestrator owns task status.
+  allowed_files:
+    - api/openapi/semlia.v1.yaml
+    - api/gen/go/types.gen.go
+    - sdk/typescript/src/**
+    - migrations/000019_fmb_embedding_index.up.sql
+    - migrations/000019_fmb_embedding_index.down.sql
+    - db/queries/embedding.sql
+    - db/queries/jobs.sql
+    - db/sqlc.yaml
+    - internal/domain/embedding/**
+    - internal/application/embedding/**
+    - internal/adapters/embedding/**
+    - internal/adapters/postgres/embedding.go
+    - internal/adapters/postgres/store.go
+    - internal/adapters/postgres/sqlc/**
+    - internal/application/governance/modelconfig.go
+    - internal/application/governance/llm/**
+    - internal/application/distribution/**
+    - internal/adapters/postgres/distribution.go
+    - internal/application/catalog/**
+    - internal/adapters/postgres/catalog.go
+    - internal/application/jobs/**
+    - internal/domain/operations/**
+    - internal/application/operations/**
+    - internal/adapters/postgres/operations.go
+    - internal/platform/http/**
+    - internal/platform/config/**
+    - cmd/semlia/**
+    - pkg/identity/**
+    - web/src/embedding.ts
+    - web/src/embeddingRuntime.tsx
+    - web/src/embedding*.test.tsx
+    - web/src/ModelConfigurationView.tsx
+    - web/src/ModelConfigurationView.test.tsx
+    - web/src/ProductApp.tsx
+    - web/src/ProductApp.test.tsx
+    - web/src/localUAT.ts
+    - web/src/localUAT.test.tsx
+    - web/src/styles.css
+    - internal/platform/web/static/**
+    - tests/integration/embedding/**
+    - tests/integration/db/**
+    - tests/integration/worker/**
+    - tests/performance/embedding/**
+    - tests/contracts/**
+    - web/e2e/product-journey.spec.ts
+    - web/e2e-live/embedding-live.spec.ts
+    - compose.yaml
+    - deploy/local/**
+    - .env.example
+    - go.mod
+    - go.sum
+    - docs/operations/**
+    - docs/evidence/FMB-T005/**
+
+forbidden_changes:
+  - No timer-generated progress, fabricated logs, or fixture fallback after a real API failure.
+  - No active-index writes before complete validation; cancellation and failed generations never activate.
+  - No embedding similarity override of release membership, authorization, deterministic matching or refusal.
+  - No provider keys, raw provider errors or hidden source secrets in logs, events or responses.
+  - No edits to migrations 000001-000018, or migration 000020/000021.
+  - No disabling tests, widening quotas, deleting user data, or claiming hosted proof from stubs.
+  - Local-UAT capability parity may expose only the workspace.manage action already granted to the development author alias by the server evaluator; production identity and reviewer/publisher separation remain unchanged.
+
+tdd_plan:
+  red:
+    - Add regressions for immutable corpus/model pinning, mixed dimensions and incomplete activation.
+    - Test checkpoint replay, lease loss, cancellation, provider failure and concurrent rebuild intent.
+    - Test active retrieval authorization and release filtering, plus explicit lexical fallback.
+    - Test real Web API state, hard-reload progress, no configuration, denial and terminal failures.
+  green:
+    - Add migration, typed repository, provider port, job handler and bounded API contracts.
+    - Wire generation into Operations, composition and the existing model settings surface.
+  refactor:
+    - Regenerate contracts/sqlc and synchronize the embedded Web only after source tests pass.
+
+validation_loop:
+  resource_policy: >-
+    Use go test -p 1 or GOFLAGS=-p=1 for database-heavy gates on this host. Do not stop other
+    projects' containers or weaken test assertions to compensate for resource contention.
+  commands:
+    - go test -p 1 ./internal/domain/embedding/... ./internal/application/embedding/... ./internal/adapters/embedding/...
+    - go test -p 1 ./tests/integration/embedding/... ./tests/integration/db/...
+    - pnpm --dir web typecheck
+    - pnpm --dir web test
+    - pnpm --dir web lint
+    - make contracts-check
+    - make db-generate-check
+    - GOFLAGS=-p=1 make check-source
+    - git diff --check
+  proof:
+    - Populated migration 18-to-19 up/down/up preserves previous domain state.
+    - Configured pgvector integration proves vector storage and active retrieval, not a mocked repository.
+    - Missing pgvector/provider configuration remains an explicit unavailable capability.
+    - Worker restart resumes checkpoints; failed or cancelled work preserves the previous active pointer.
+    - Same-content reuse does not mix provider/model/dimension identities.
+    - Both 1440x900 and 1024x768 have keyboard/focus, empty/error and real progress evidence.
+    - Live provider execution is separate from deterministic transport-stub evidence.
+
+evidence_contract:
+  summary: docs/evidence/FMB-T005/summary.md
+  test_results: docs/evidence/FMB-T005/test-results.md
+  attempt: docs/evidence/FMB-T005/attempts/sprint-a001.md
+  required: [changed files, actual RED/GREEN results, migration proof, recovery proof, retrieval proof, UI evidence, residual risks]
+
+review_contract:
+  required_passes: [spec_compliance, bug_code_quality, security_privacy, qa_acceptance]
+  acceptance_rule: Needs_Review requires evidence and orchestrator review; Accepted remains founder-owned.
+
+stop_conditions:
+  - T004 still owns shared files or has an unresolved blocking finding.
+  - Required work relaxes confirmed safety, release, privacy or activation invariants.
+  - External provider evidence is unavailable; complete deterministic implementation but report that gap explicitly.
+  - Sprint implementation cutoff 2026-09-05T04:37:01Z; hand off actual results for final validation.

@@ -586,13 +586,47 @@ func TestPopulatedM2UpgradeAndRollbackPreserveGovernedAuthoringRows(t *testing.T
 	pool := openPool(t)
 	ctx := context.Background()
 	fixture := seedGovernanceAsset(t, pool, "lifecycle")
-	proposalService, _, _, _, _ := governanceServices(pool)
-	proposalID, changeID := submitTestProposal(t, ctx, proposalService, fixture)
+	// Seed the version 6 contract directly, not through a latest-schema repository.
+	proposalID, err := identity.NewProposalID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	changeID, err := identity.NewProposalChangeID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO proposals
+(id,workspace_id,asset_id,base_revision_id,target_object_type,target_object_id,title,summary,reason,created_by)
+VALUES($1,$2,$3,$4,'semantic_asset',$3,'Tighten revenue formula','Exclude one-off discounts','Finance sign-off','steward')`,
+		proposalID.UUID(), fixture.WorkspaceID.UUID(), fixture.AssetID.UUID(), fixture.RevisionID.UUID()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO proposal_changes
+(id,workspace_id,proposal_id,field_path,op,before_digest,after_digest,before_value,after_value)
+VALUES($1,$2,$3,'definition.formula','update',$4,$5,'"revenue"','"revenue_net"')`,
+		changeID.UUID(), fixture.WorkspaceID.UUID(), proposalID.UUID(), sha256FixtureDigest("before"), sha256FixtureDigest("after")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE proposals SET state='proposed',submitted_at=CURRENT_TIMESTAMP WHERE id=$1`, proposalID.UUID()); err != nil {
+		t.Fatal(err)
+	}
+	assertHistoricalContent := func() {
+		t.Helper()
+		var state, before, after string
+		if err := pool.QueryRow(ctx, `SELECT p.state,c.before_value#>>'{}',c.after_value#>>'{}' FROM proposals p JOIN proposal_changes c ON c.proposal_id=p.id WHERE p.id=$1 AND c.id=$2`, proposalID.UUID(), changeID.UUID()).Scan(&state, &before, &after); err != nil {
+			t.Fatal(err)
+		}
+		if state != "proposed" || before != "revenue" || after != "revenue_net" {
+			t.Fatalf("historical proposal content changed: %q %q %q", state, before, after)
+		}
+	}
+	assertHistoricalContent()
 
 	if err := migrator.Steps(1); err != nil {
 		t.Fatalf("upgrade populated T002 with governance objects: %v", err)
 	}
 	assertVersion(t, migrator, 7, true)
+	assertHistoricalContent()
 	var proposalCount, changeCount int
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM proposals WHERE id = $1`, proposalID.UUID()).Scan(&proposalCount); err != nil {
 		t.Fatal(err)
@@ -638,6 +672,7 @@ func TestPopulatedM2UpgradeAndRollbackPreserveGovernedAuthoringRows(t *testing.T
 		t.Fatalf("remove governance objects schema: %v", err)
 	}
 	assertVersion(t, migrator, 6, true)
+	assertHistoricalContent()
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM proposals WHERE id = $1`, proposalID.UUID()).Scan(&proposalCount); err != nil {
 		t.Fatal(err)
 	}
@@ -662,6 +697,7 @@ func TestPopulatedM2UpgradeAndRollbackPreserveGovernedAuthoringRows(t *testing.T
 		t.Fatalf("re-upgrade governance objects: %v", err)
 	}
 	assertVersion(t, migrator, 7, true)
+	assertHistoricalContent()
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM proposals WHERE id = $1`, proposalID.UUID()).Scan(&proposalCount); err != nil {
 		t.Fatal(err)
 	}

@@ -1,0 +1,47 @@
+2026-09-11T10:11:50Z	INFO	[vuln] Vulnerability scanning is enabled
+2026-09-11T10:11:50Z	INFO	[secret] Secret scanning is enabled
+2026-09-11T10:11:50Z	INFO	[secret] If your scanning is slow, please try '--scanners vuln' to disable secret scanning
+2026-09-11T10:11:50Z	INFO	[secret] Please see https://trivy.dev/docs/v0.73/guide/scanner/secret#recommendation for faster secret detection
+2026-09-11T10:11:51Z	INFO	[pnpm] Run "pnpm install" to collect the license information of packages	dir="node_modules"
+2026-09-11T10:11:51Z	INFO	Number of language-specific files	num=2
+2026-09-11T10:11:51Z	INFO	[gomod] Detecting vulnerabilities...
+2026-09-11T10:11:51Z	INFO	[pnpm] Detecting vulnerabilities...
+2026-09-11T10:11:51Z	WARN	Using severities from other vendors for some vulnerabilities. Read https://trivy.dev/docs/v0.73/guide/scanner/vulnerability#severity-selection for details.
+
+Report Summary
+
+┌────────────────┬───────┬─────────────────┬─────────┐
+│     Target     │ Type  │ Vulnerabilities │ Secrets │
+├────────────────┼───────┼─────────────────┼─────────┤
+│ go.mod         │ gomod │        1        │    -    │
+├────────────────┼───────┼─────────────────┼─────────┤
+│ pnpm-lock.yaml │ pnpm  │        1        │    -    │
+└────────────────┴───────┴─────────────────┴─────────┘
+Legend:
+- '-': Not scanned
+- '0': Clean (no security findings detected)
+
+
+go.mod (gomod)
+==============
+Total: 1 (HIGH: 1, CRITICAL: 0)
+
+┌────────────────────────┬────────────────┬──────────┬────────┬───────────────────┬──────────────────────────────────────────────────────────┬────────────────────────────────────────────────────────────┐
+│        Library         │ Vulnerability  │ Severity │ Status │ Installed Version │                      Fixed Version                       │                           Title                            │
+├────────────────────────┼────────────────┼──────────┼────────┼───────────────────┼──────────────────────────────────────────────────────────┼────────────────────────────────────────────────────────────┤
+│ google.golang.org/grpc │ CVE-2026-84445 │ HIGH     │ fixed  │ v1.83.1           │ 1.82.2, 1.83.2, 1.85.0-dev.0.20260825072537-93e31b48545e │ gRPC-Go xDS servers: Denial of Service (DoS) via crash due │
+│                        │                │          │        │                   │                                                          │ to missing...                                              │
+│                        │                │          │        │                   │                                                          │ https://avd.aquasec.com/nvd/cve-2026-84445                 │
+└────────────────────────┴────────────────┴──────────┴────────┴───────────────────┴──────────────────────────────────────────────────────────┴────────────────────────────────────────────────────────────┘
+
+pnpm-lock.yaml (pnpm)
+=====================
+Total: 1 (HIGH: 1, CRITICAL: 0)
+
+┌─────────┬────────────────┬──────────┬────────┬───────────────────┬───────────────┬───────────────────────────────────────────────────────────┐
+│ Library │ Vulnerability  │ Severity │ Status │ Installed Version │ Fixed Version │                           Title                           │
+├─────────┼────────────────┼──────────┼────────┼───────────────────┼───────────────┼───────────────────────────────────────────────────────────┤
+│ js-yaml │ CVE-2026-84375 │ HIGH     │ fixed  │ 4.3.1             │ 4.3.2, 3.15.2 │ js-yaml: js-yaml: Denial of Service vulnerability in YAML │
+│         │                │          │        │                   │               │ parsing                                                   │
+│         │                │          │        │                   │               │ https://avd.aquasec.com/nvd/cve-2026-84375                │
+└─────────┴────────────────┴──────────┴────────┴───────────────────┴───────────────┴───────────────────────────────────────────────────────────┘

@@ -1,0 +1,302 @@
+schema_version: 1
+packet_id: FMB-T002-A001
+task_id: FMB-T002
+feature_id: full-menu-beta
+mode: execute_one_task
+status: Completed
+adapter: agent-neutral
+
+governance_inputs:
+  constitution:
+    - AGENTS.md
+    - docs/SSOT.md
+  product_contract: docs/specs/full-menu-beta/spec.md
+  requirements_checklist: docs/specs/full-menu-beta/checklists/requirements.md
+  technical_decisions: docs/specs/full-menu-beta/technology-decision-record.md
+  data_model: docs/specs/full-menu-beta/data-model.md
+  feature_plan: docs/specs/full-menu-beta/plan.md
+  work_graph: docs/specs/full-menu-beta/tasks.md
+  analysis: docs/specs/full-menu-beta/analysis.md
+  approval_gates:
+    product_scope: Confirmed by founder on 2026-09-04
+    technical_plan_and_work_graph: Confirmed by founder on 2026-09-04
+    continuous_execution: Approved through FMB-T007 without per-task approval pauses
+    dependency_gate: Satisfied by FMB-T001 A003 and FMB-T003 A003 evidence and independent review on 2026-09-05
+
+work_unit:
+  title: Real workbench, authoritative asset detail and release detail
+  goal: >-
+    Replace Workbench and knowledge/release fixture enrichment with authorized, cursor-paged reads
+    over persisted attention items, catalog revisions, governance objects, validation evidence,
+    consumer bindings and immutable release manifests.
+  epic: FMB-E001
+  story: FMB-US-002
+  requirements:
+    - FR-001
+    - FR-003
+    - FR-004
+    - NFR-001
+    - NFR-003
+    - NFR-005
+  priority: P1
+  depends_on:
+    - FMB-T001 Needs_Review or Accepted
+    - FMB-T003 Needs_Review or Accepted for runtime_runs and attention_items schema ownership
+  blocks:
+    - FMB-T007
+  parallel: false
+  conflicts_with:
+    - FMB-T003 when editing api/openapi/semlia.v1.yaml, generated contracts, internal/platform/http/handler.go, web/src/ProductApp.tsx or web/src/styles.css
+    - FMB-T006 when editing api/openapi/semlia.v1.yaml, generated contracts or web/src/ProductApp.tsx
+
+codebase_context:
+  local_instructions:
+    - AGENTS.md
+  relevant_files:
+    - api/openapi/semlia.v1.yaml
+    - api/gen/go/types.gen.go
+    - db/queries/catalog.sql
+    - db/queries/governance.sql
+    - db/queries/governed_objects.sql
+    - db/queries/distribution.sql
+    - internal/adapters/postgres/catalog.go
+    - internal/adapters/postgres/governance.go
+    - internal/adapters/postgres/reviewbatch.go
+    - internal/adapters/postgres/governed_objects.go
+    - internal/adapters/postgres/release_publishing.go
+    - internal/adapters/postgres/distribution.go
+    - internal/application/catalog/service.go
+    - internal/application/governance/service.go
+    - internal/platform/http/handler.go
+    - web/src/ProductApp.tsx
+    - web/src/KnowledgeViews.tsx
+    - web/src/KnowledgeRevisionWorkbench.tsx
+    - web/src/LiveSourcesView.tsx
+    - web/src/LiveSourcesView.test.tsx
+    - web/src/catalogRuntime.tsx
+    - web/src/governanceRuntime.tsx
+    - docs/evidence/M1-T008/summary.md
+  existing_patterns:
+    - Catalog assets and revisions own semantic identity and definition state.
+    - Governed proposals, validations, reviews and releases retain their existing write models.
+    - Immutable release manifests pin exact asset and governance-object versions.
+    - Consumer bindings and resolved plans remain release-scoped distribution records.
+    - Public collections use stable TypeIDs, workspace authorization and cursor pagination.
+  authority_contract:
+    - Every rendered asset-detail section identifies its owning revision, release or API authority.
+    - Availability is explicit as available, not_configured, not_released, forbidden or failed.
+    - Workbench identity and state come from persisted attention_items, not a browser merge or fixture.
+    - Workbench rules are deterministic and explainable; no M4 autonomous scoring or remediation is introduced.
+    - Opening an attention item deep-links to the same persisted target after refresh and restart.
+    - Public Workbench visibility is limited to the confirmed mine, team and initiated scopes; an unscoped view-all contract is not introduced.
+
+execution_constraints:
+  branch_or_worktree: current shared worktree
+  coordination: >-
+    The orchestrator must not run T002 and T003 concurrently while either owns shared OpenAPI,
+    generated contract, HTTP composition, ProductApp or styles files. Domain-only preparation is not
+    permission to modify those shared files in parallel; ownership must be handed off explicitly.
+  allowed_files:
+    - cmd/semlia/main.go
+    - cmd/semlia/main_test.go
+    - api/openapi/semlia.v1.yaml
+    - api/gen/go/types.gen.go
+    - sdk/typescript/src/schema.gen.ts
+    - sdk/typescript/src/client.ts
+    - sdk/typescript/src/client.test.ts
+    - sdk/typescript/src/index.ts
+    - sdk/typescript/src/ids.ts
+    - sdk/typescript/src/ids.test.ts
+    - pkg/identity/id.go
+    - pkg/identity/id_test.go
+    - db/queries/catalog.sql
+    - db/queries/governance.sql
+    - db/queries/governed_objects.sql
+    - db/queries/distribution.sql
+    - db/queries/workbench.sql
+    - internal/adapters/postgres/catalog.go
+    - internal/adapters/postgres/governance.go
+    - internal/adapters/postgres/governed_objects.go
+    - internal/adapters/postgres/release_publishing.go
+    - internal/adapters/postgres/distribution.go
+    - internal/adapters/postgres/workbench.go
+    - internal/adapters/postgres/operations.go
+    - internal/adapters/postgres/discovery.go
+    - internal/adapters/postgres/source_discovery.go
+    - internal/adapters/postgres/sqlc/**
+    - internal/domain/workbench/**
+    - internal/domain/catalog/**
+    - internal/application/workbench/**
+    - internal/application/catalog/**
+    - internal/application/governance/**
+    - internal/application/authorization/service.go
+    - internal/application/authorization/service_test.go
+    - internal/platform/http/catalog.go
+    - internal/platform/http/governance.go
+    - internal/platform/http/distribution.go
+    - internal/platform/http/handler.go
+    - internal/platform/http/handler_test.go
+    - internal/platform/http/workbench.go
+    - internal/platform/http/workbench_test.go
+    - web/src/ProductApp.tsx
+    - web/src/ProductApp.test.tsx
+    - web/src/KnowledgeViews.tsx
+    - web/src/KnowledgeViews.test.tsx
+    - web/src/KnowledgeRevisionWorkbench.tsx
+    - web/src/CatalogControls.tsx
+    - web/src/Catalog.test.tsx
+    - web/src/catalog.ts
+    - web/src/catalogRuntime.tsx
+    - web/src/governance.ts
+    - web/src/governance.test.tsx
+    - web/src/governanceFixture.ts
+    - web/src/governanceRuntime.tsx
+    - web/src/workbench.ts
+    - web/src/workbench.test.ts
+    - web/src/workbenchRuntime.tsx
+    - web/src/workbenchRuntime.test.tsx
+    - web/src/types.ts
+    - web/src/styles.css
+    - web/e2e/product-journey.spec.ts
+    - web/e2e-live/governance-live.spec.ts
+    - internal/platform/web/static/**
+    - tests/contracts/**
+    - tests/integration/catalog/**
+    - tests/integration/governance/**
+    - tests/integration/projection/**
+    - tests/integration/db/**
+    - docs/evidence/FMB-T002/**
+  test_targets:
+    - internal/application/workbench/**
+    - internal/application/catalog/**
+    - internal/application/governance/**
+    - internal/platform/http/handler_test.go
+    - tests/integration/catalog/**
+    - tests/integration/governance/**
+    - tests/integration/projection/**
+    - web/src/ProductApp.test.tsx
+    - web/src/KnowledgeViews.test.tsx
+    - web/src/Catalog.test.tsx
+    - web/e2e/product-journey.spec.ts
+    - web/e2e-live/governance-live.spec.ts
+  ownership_notes:
+    - FMB-T002 owns no migration and must not revise migration 000017 created by FMB-T003.
+    - Existing records are reconciled through a bounded, explicit application command or owning-write hook; GET handlers remain side-effect free.
+    - Startup wiring may invoke a bounded, restart-safe reconcile; runtime and discovery owners may maintain attention projection atomically with their terminal writes.
+    - Attention items use a dedicated typed identity and wire prefix; they must not reuse audit-event identity.
+    - Review-batch transition ownership is included so attention resolution remains atomic with batch rejection; catalog domain DTOs carry typed authority facts; focused governance regression tests and generated embedded Web assets are task-owned consequences of the stable contract.
+    - Workbench list rows and counts share one read-only authorization snapshot; at most one request-level authorization decision is audited, never one write per row.
+    - Globs cover focused module tests and generated sqlc output because generator filenames are tool-controlled.
+    - The worker does not edit plan.md, tasks.md, packets or unrelated fixtures.
+
+forbidden_changes:
+  - Do not synthesize owners, releases, bindings, validation, trust, lineage, deadlines or impact from fixtures or plausible defaults.
+  - Do not read mutable current objects where an immutable release-manifest version is required.
+  - Do not create a second proposal, review, validation, release or runtime write model.
+  - Do not let client-side capability state authorize Workbench actions.
+  - Do not expose unauthorized or cross-workspace target existence through counts, filters, links or errors.
+  - Do not omit idempotency from Workbench mutations or implement search as a browser-only filter.
+  - Do not copy authorization policy into Workbench SQL or perform audited authorization evaluation once per returned row.
+  - Do not add M4 autonomous priority scoring, proposal generation, publish, rollback or remediation.
+  - Do not edit migrations or implement FMB-T003/FMB-T006 behavior.
+  - Do not modify shared conflict files while FMB-T003 or FMB-T006 owns them.
+
+tdd_plan:
+  required: true
+  exception: null
+  red:
+    command: >-
+      go test ./internal/application/catalog/... ./internal/application/governance/...
+      ./internal/application/projection/... ./internal/platform/http/...
+      ./tests/integration/catalog/... ./tests/integration/governance/... ./tests/integration/projection/... &&
+      pnpm --dir web test -- ProductApp Catalog KnowledgeViews
+    expected_failure: >-
+      Tests expose fixture Workbench rows, synthetic asset-detail fields, mutable release leakage,
+      missing cursor/authorization behavior and deep links that do not survive reload.
+  green:
+    command: >-
+      go test ./internal/application/catalog/... ./internal/application/governance/...
+      ./internal/application/projection/... ./internal/application/workbench/...
+      ./internal/platform/http/... ./tests/integration/catalog/... ./tests/integration/governance/...
+      ./tests/integration/projection/... && pnpm --dir web test -- ProductApp Catalog KnowledgeViews
+    expected_signal: >-
+      Workbench and detail tests pass using persisted, workspace-authorized records with explicit
+      authority/availability states and immutable release identities.
+  refactor:
+    command: make contracts-check && make db-generate-check && make check-source && git diff --check
+    expected_signal: >-
+      Generated artifacts are current, bounded projections remain green and fixture authority has
+      not returned through shared Web adapters.
+
+validation_loop:
+  commands:
+    - go test ./internal/application/catalog/... ./internal/application/governance/... ./internal/application/projection/... ./internal/application/workbench/... ./internal/platform/http/...
+    - go test ./tests/integration/catalog/... ./tests/integration/governance/... ./tests/integration/projection/... ./tests/integration/db/...
+    - pnpm --dir web test -- ProductApp Catalog KnowledgeViews
+    - pnpm --dir web lint
+    - pnpm --dir web typecheck
+    - make contracts-check
+    - make db-generate-check
+    - make check-source
+    - git diff --check
+  scenario_proof:
+    - Cursor pagination and server totals on a 10,000-asset reference dataset.
+    - Mine/team/initiated filters with separate authorized principals and SoD-sensitive actions.
+    - Asset sections in available, not_configured, not_released, forbidden and failed states.
+    - Release manifest detail remains pinned across publish and rollback.
+    - Attention-item assignment, dismissal and owning-condition resolution survive restart and are idempotent.
+    - Keyboard, focus, reduced motion and screenshots at 1440x900 and 1024x768.
+  retry_budget: 2
+  failure_policy:
+    first_failure: Fix only the failing projection, contract or Web binding owned by FMB-T002, then rerun the smallest layer.
+    second_failure: Classify a dependency, schema, authority or shared-file ownership blocker and return it to the orchestrator.
+    beyond_budget: Stop and produce blocked evidence without weakening assertions, restoring fixtures or widening scope.
+
+evidence_contract:
+  summary: docs/evidence/FMB-T002/summary.md
+  diff: docs/evidence/FMB-T002/diff.patch
+  test_results: docs/evidence/FMB-T002/test-results.md
+  required:
+    - Dependency and shared-file ownership preflight
+    - Exact changed-files inventory
+    - RED/GREEN/REFACTOR results
+    - Projection source-to-rendered-field authority map
+    - Cursor, authorization, cross-workspace and immutable-release results
+    - Restart/deep-link and 10,000-asset query evidence
+    - Desktop accessibility screenshots at both supported viewports
+    - Diff summary and residual risks
+
+review_contract:
+  required_passes:
+    - spec_compliance
+    - bug_code_quality
+    - authorization_privacy
+    - qa_acceptance
+  blocking_findings:
+    - Any fixture or synthesized canonical fact
+    - Any mutable record substituted for a release-pinned version
+    - Any cross-workspace existence leak or client-authorized action
+    - Any unbounded collection or unstable deep link
+    - Any shared-file edit concurrent with FMB-T003 ownership
+  acceptance_rule: >-
+    The orchestrator may advance FMB-T002 to Needs_Review only after all evidence and review passes;
+    the worker never marks it Accepted.
+
+handoff:
+  attempt_owner: delegated worker selected after dependencies pass
+  external_issue: null
+  pull_request: null
+  next_ready_candidates:
+    - FMB-T007 only after FMB-T004, FMB-T005 and FMB-T006 also reach Needs_Review or Accepted
+  finish_options:
+    - integrate reviewed evidence and mark Needs_Review
+    - create FMB-T002-A002 for scoped fixes
+    - mark Blocked with the named dependency or ownership condition
+
+stop_conditions:
+  - FMB-T001 or FMB-T003 dependency evidence is missing or has a blocking review finding.
+  - Another active task owns a shared OpenAPI, generated, HTTP, ProductApp or styles file.
+  - Migration 000017 does not provide the confirmed attention/runtime storage contract.
+  - Relevant existing changes cannot be preserved safely.
+  - Required work leaves the allowed files or changes a confirmed authority boundary.
+  - Validation requires fixture fallback, deleted tests, weakened assertions or fabricated evidence.

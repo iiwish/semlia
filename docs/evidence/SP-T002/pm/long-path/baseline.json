@@ -1,0 +1,8 @@
+{
+  "Replace": {
+    "/Users/iiwish/self/Semlia/internal/adapters/discovery/postgresql/adapter_test.go": "/Users/iiwish/self/Semlia/docs/evidence/SP-T002/pm/long-path/probe_test.go.txt",
+    "/Users/iiwish/self/Semlia/internal/adapters/discovery/postgresql/adapter.go": "/Users/iiwish/self/Semlia/.semlia/evidence-work/SP-T002-baseline/internal/adapters/discovery/postgresql/adapter.go",
+    "/Users/iiwish/self/Semlia/internal/domain/discovery/model.go": "/Users/iiwish/self/Semlia/.semlia/evidence-work/SP-T002-baseline/internal/domain/discovery/model.go",
+    "/Users/iiwish/self/Semlia/internal/domain/discovery/snapshot.go": "/Users/iiwish/self/Semlia/docs/evidence/SP-T002/pm/long-path/empty_snapshot.go.txt"
+  }
+}

@@ -1,0 +1,90 @@
+{
+  "db/queries/execution.sql": {
+    "before": null,
+    "after": "3cdb21e9cf0cc6d291cf2a230ce3a3660c151380da1b4c562aba996b7932da37"
+  },
+  "db/sqlc.yaml": {
+    "before": "30f3bab8089c385e1de49556ada46c42d6c9a8e98cb93bbc59cf0c33ca37b362",
+    "after": "87fbfa5d748b0a89f368b1181c8acaaf480dd67fcaa1df9adaf262d9b4f19423"
+  },
+  "docs/specs/full-menu-beta/release-report.md": {
+    "before": null,
+    "after": "af4fdf3ce4275bf456fa1b9a8092cd9a3e8617caf529ea7dc72953cc8ac65095"
+  },
+  "internal/adapters/execution/postgres.go": {
+    "before": null,
+    "after": "8c10c8fcbd14d29b9cdb0fcade5e842ffa6a79482dd00d6573267c7b0a9f5669"
+  },
+  "internal/adapters/postgres/distribution.go": {
+    "before": "9fabec6024b4106c61ea63a9d22876d13ad7202e05cda120397b48fa51e12dd5",
+    "after": "82216c0017b86e890202ae7117da16b7e39509c326dd09954049787ed39174f0"
+  },
+  "internal/adapters/postgres/execution.go": {
+    "before": null,
+    "after": "ff27e7815ea01c4a4e9d6c1e84396e2cf971196de87eacae84887424af4ff623"
+  },
+  "internal/adapters/postgres/sqlc/execution.sql.go": {
+    "before": null,
+    "after": "5c215bc5020f0ddd97ab9ac052f3215bf4ac90ba9aae9874c00d22de9de76186"
+  },
+  "internal/adapters/postgres/sqlc/models.go": {
+    "before": "783779f6d855363976fcf583870f875611d3f35955c0fec9f616b867b5c5b24d",
+    "after": "338a125444f3e76ac419df95dc2ec04f66ee65c75e23907281b027fccc556e0e"
+  },
+  "internal/application/authorization/credential.go": {
+    "before": "15bda14358552e8efa0ef077b81b03c57fed6783fab7a5878f802c9d1ca5b4ca",
+    "after": "151debb5d0b50abf62a3781f8da7154d07aae58285ee98f5eafc9313abe4e283"
+  },
+  "internal/application/distribution/execution.go": {
+    "before": null,
+    "after": "c4ac2d2460baec2e7d99b62787e7eb2f81f8696a8f9042168ba468aa62a1e1c1"
+  },
+  "internal/application/execution/service.go": {
+    "before": null,
+    "after": "d90e314aa3bd2047e1c284ef09eb1c19c012cfc9b7e3d5b1234cfe461d457b96"
+  },
+  "internal/application/identity/machine.go": {
+    "before": "ea349e8efedffa6112409242c64b12f347b7b08c0020f6878887c26ff87f1dbc",
+    "after": "94b95861b170c3c2b539f403950b62e364c4aa20f6a6fad50ab9f7ad3bd323b7"
+  },
+  "internal/application/identity/machine_test.go": {
+    "before": "4a1cd3952483c8557a9276bfd1f22fb8cbe5174b551f1e481f4a9fd1ca0de659",
+    "after": "5a6a8e4eb1f84d2064cb395a26b77e0c400826250fd58bcd4b17577ec3bbadbd"
+  },
+  "internal/domain/distribution/execution.go": {
+    "before": null,
+    "after": "a1b8e4f6ddc0db1c985cdb502169e58a2ae8b6dfb6efce20068806f2ed58088b"
+  },
+  "internal/domain/distribution/model.go": {
+    "before": "011428db49c330bd24840a5ce33775848ee44b527ef6d6837116c81f3d10207f",
+    "after": "f36feac5da3211bbc174318a0c15e5c0931bb53db2ad3d18d16b63f8c768bc08"
+  },
+  "internal/domain/distribution/resolver.go": {
+    "before": "3edbef0c9d1f167430e63c33f582e431fda44100bc1d55dd430282a0be70f99b",
+    "after": "a24415e62ec7dff21a4fd0edd762b9b210746268126513dc1bc13193df68e808"
+  },
+  "internal/domain/execution/compiler.go": {
+    "before": null,
+    "after": "fcc75b86d057aaa0800a935126f78af96061e0b34a63919baad8dd5197ac7eef"
+  },
+  "internal/domain/execution/compiler_test.go": {
+    "before": null,
+    "after": "d1e74782511e579546e75132605892704bd4156485e52d194299199d674b6f90"
+  },
+  "internal/domain/execution/model.go": {
+    "before": null,
+    "after": "ea569dffa083d361827acd5229ada3143f58fc3cf901fc226090ef365cdad249"
+  },
+  "migrations/000021_fmb_query_execution.down.sql": {
+    "before": null,
+    "after": "56c938fe681e09a88e73f86ec4fa645eb5ec8f25a2f35e7b2e8b2105ba04c0c0"
+  },
+  "migrations/000021_fmb_query_execution.up.sql": {
+    "before": null,
+    "after": "32a80156787f6578ee493ff043e1e1fad6a36d0c6d4d22fc72733b937d8fb165"
+  },
+  "tests/integration/operations/operations_test.go": {
+    "before": "749e09bb618fddd7d3af66ca423cacfd86d1331c31173b1ef6f508b84a4ab2f3",
+    "after": "068207c3019ababd9ea29163dca8782f6ffabff0190fd0f2a63e119860ffbad6"
+  }
+}

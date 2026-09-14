@@ -1,0 +1,88 @@
+# FMB-T002 exact changed-files receipt
+#
+# Base HEAD: 63241d5300cbffc0f62bc842cac132aa13560076
+# Final embedded Web: index-B7g1AWVk.js / index-DfqjqFei.css
+#
+# The shared worktree already contained approved Alpha/M3 and reviewed FMB-T001/FMB-T003 changes.
+# This literal inventory identifies files edited or generated for FMB-T002; it does not attribute
+# unrelated dirty-tree files to this task.
+
+M api/openapi/semlia.v1.yaml
+M api/gen/go/types.gen.go
+M sdk/typescript/src/ids.ts
+A sdk/typescript/src/ids.test.ts
+M sdk/typescript/src/schema.gen.ts
+M pkg/identity/id.go
+M pkg/identity/id_test.go
+M cmd/semlia/main.go
+A db/queries/workbench.sql
+M db/queries/catalog.sql
+M db/queries/governance.sql
+M internal/adapters/postgres/catalog.go
+M internal/adapters/postgres/discovery.go
+M internal/adapters/postgres/distribution.go
+M internal/adapters/postgres/governance.go
+M internal/adapters/postgres/operations.go
+M internal/adapters/postgres/release_publishing.go
+M internal/adapters/postgres/reviewbatch.go
+M internal/adapters/postgres/source_discovery.go
+A internal/adapters/postgres/workbench.go
+M internal/adapters/postgres/sqlc/catalog.sql.go
+M internal/adapters/postgres/sqlc/governance.sql.go
+M internal/adapters/postgres/sqlc/models.go
+A internal/adapters/postgres/sqlc/workbench.sql.go
+M internal/domain/catalog/model.go
+A internal/domain/workbench/model.go
+M internal/application/authorization/service.go
+M internal/application/authorization/service_test.go
+M internal/application/catalog/service.go
+M internal/application/catalog/service_test.go
+M internal/application/governance/publishing.go
+A internal/application/governance/publishing_access_test.go
+A internal/application/workbench/service.go
+A internal/application/workbench/service_test.go
+M internal/platform/http/catalog.go
+M internal/platform/http/catalog_test.go
+M internal/platform/http/governance.go
+A internal/platform/http/governance_internal_test.go
+M internal/platform/http/handler.go
+A internal/platform/http/workbench.go
+A internal/platform/http/workbench_test.go
+M tests/integration/catalog/catalog_test.go
+M tests/integration/governance/governance_http_test.go
+M tests/integration/governance/governance_test.go
+M tests/integration/governance/release_test.go
+M tests/integration/governance/review_test.go
+A tests/integration/governance/workbench_test.go
+M web/src/Catalog.test.tsx
+M web/src/ProductApp.tsx
+M web/src/ProductApp.test.tsx
+M web/src/catalog.ts
+M web/src/catalogRuntime.tsx
+M web/src/governance.ts
+M web/src/governance.test.tsx
+M web/src/governanceFixture.ts
+M web/src/governanceRuntime.tsx
+M web/src/styles.css
+M web/src/types.ts
+A web/src/workbench.ts
+A web/src/workbenchRuntime.tsx
+A web/src/workbenchRuntime.test.tsx
+M web/e2e/product-journey.spec.ts
+D internal/platform/web/static/assets/index-B4eTceSd.js
+D internal/platform/web/static/assets/index-digOIkbT.css
+A internal/platform/web/static/assets/index-B7g1AWVk.js
+A internal/platform/web/static/assets/index-DfqjqFei.css
+M internal/platform/web/static/index.html
+A docs/evidence/FMB-T002/summary.md
+A docs/evidence/FMB-T002/test-results.md
+A docs/evidence/FMB-T002/diff.patch
+A docs/evidence/FMB-T002/screenshots/desktop-workbench-detail.png
+A docs/evidence/FMB-T002/screenshots/desktop-asset-detail.png
+A docs/evidence/FMB-T002/screenshots/desktop-release-detail.png
+A docs/evidence/FMB-T002/screenshots/desktop-release-dual-diff.png
+A docs/evidence/FMB-T002/screenshots/compact-desktop-workbench-detail.png
+A docs/evidence/FMB-T002/screenshots/compact-desktop-asset-detail.png
+A docs/evidence/FMB-T002/screenshots/compact-desktop-release-detail.png
+A docs/evidence/FMB-T002/screenshots/compact-desktop-release-dual-diff.png
+A docs/evidence/FMB-T002/screenshots/uat-observations.json

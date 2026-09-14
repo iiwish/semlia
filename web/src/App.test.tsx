@@ -4,6 +4,20 @@ import { vi } from "vitest";
 
 import { StatusView as App } from "./StatusView";
 import type { SystemStatus } from "./status";
+import { App as ProductEntry } from "./App";
+import type { ReactNode } from "react";
+
+const entryRuntime = vi.hoisted(() => ({ workspaceId: "wsp_empty", assets: [], loading: false, workspaces: [{ id: "wsp_empty" }], query: "", error: "" }));
+vi.mock("./catalogRuntime", () => ({ CatalogRuntimeProvider: ({ children }: { children: ReactNode }) => children, useCatalogRuntime: () => entryRuntime }));
+vi.mock("./CatalogControls", () => ({ CatalogEntryState: () => <div>Catalog entry</div> }));
+vi.mock("./ProductApp", () => ({ ProductApp: () => <div>Authorized product shell</div> }));
+vi.mock("./sessionRuntime", () => ({ SessionRuntimeProvider: ({ children }: { children: ReactNode }) => children, SessionEntryState: () => <div>Session entry</div>, useSessionRuntime: () => ({ phase: "authenticated", session: {}, activeWorkspace: {}, capabilitySession: {} }) }));
+
+it("mounts the authorized shell in an empty workspace so the first source can be created", () => {
+  render(<ProductEntry />);
+  expect(screen.getByText("Authorized product shell")).toBeVisible();
+  expect(screen.queryByText("Catalog entry")).not.toBeInTheDocument();
+});
 
 const traceId = "4bf92f3577b34da6a3ce929d0e0e4736";
 

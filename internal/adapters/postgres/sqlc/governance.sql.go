@@ -144,6 +144,19 @@ func (q *Queries) CountReleaseRollbacks(ctx context.Context, arg CountReleaseRol
 	return count, err
 }
 
+const countReleases = `-- name: CountReleases :one
+SELECT count(*)::bigint
+FROM releases
+WHERE workspace_id = $1
+`
+
+func (q *Queries) CountReleases(ctx context.Context, workspaceID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countReleases, workspaceID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const createAgentRun = `-- name: CreateAgentRun :one
 INSERT INTO agent_runs (
     id, workspace_id, principal_id, model, config_revision, input_hash, status,
@@ -326,7 +339,7 @@ INSERT INTO proposals (
     $9, $10, $11, $12,
     $13, $14
 )
-RETURNING id, workspace_id, asset_id, base_revision_id, target_object_type, target_object_id, state, title, summary, reason, risk_level, policy_decision_id, agent_run_id, created_by, submitted_at, decided_at, created_at, updated_at
+RETURNING id, workspace_id, asset_id, base_revision_id, target_object_type, target_object_id, state, title, summary, reason, risk_level, policy_decision_id, agent_run_id, created_by, submitted_at, decided_at, created_at, updated_at, intent, creation_content, base_object_version, production_operation_id, production_version, reintroduction_creation_release_id, reintroduction_absence_release_id
 `
 
 type CreateProposalParams struct {
@@ -383,6 +396,13 @@ func (q *Queries) CreateProposal(ctx context.Context, arg CreateProposalParams) 
 		&i.DecidedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Intent,
+		&i.CreationContent,
+		&i.BaseObjectVersion,
+		&i.ProductionOperationID,
+		&i.ProductionVersion,
+		&i.ReintroductionCreationReleaseID,
+		&i.ReintroductionAbsenceReleaseID,
 	)
 	return i, err
 }
@@ -450,7 +470,7 @@ INSERT INTO releases (
     $5, $6, $7,
     $8, $9, $10
 )
-RETURNING id, workspace_id, sequence, manifest_digest, state, rolled_back_to_release_id, published_by, published_at, created_at, origin_proposal_id
+RETURNING id, workspace_id, sequence, manifest_digest, state, rolled_back_to_release_id, published_by, published_at, created_at, origin_proposal_id, production_root_release_id, production_rollback_parent_id, production_rollback_depth
 `
 
 type CreateReleaseParams struct {
@@ -491,6 +511,9 @@ func (q *Queries) CreateRelease(ctx context.Context, arg CreateReleaseParams) (R
 		&i.PublishedAt,
 		&i.CreatedAt,
 		&i.OriginProposalID,
+		&i.ProductionRootReleaseID,
+		&i.ProductionRollbackParentID,
+		&i.ProductionRollbackDepth,
 	)
 	return i, err
 }
@@ -736,7 +759,7 @@ INSERT INTO validation_runs (
     $1, $2, $3, $4,
     $5, $6, $7
 )
-RETURNING id, workspace_id, proposal_id, validator_id, validator_version, status, started_at, finished_at
+RETURNING id, workspace_id, proposal_id, validator_id, validator_version, status, started_at, finished_at, production_operation_id, production_version, production_attempt_no
 `
 
 type CreateValidationRunParams struct {
@@ -769,6 +792,9 @@ func (q *Queries) CreateValidationRun(ctx context.Context, arg CreateValidationR
 		&i.Status,
 		&i.StartedAt,
 		&i.FinishedAt,
+		&i.ProductionOperationID,
+		&i.ProductionVersion,
+		&i.ProductionAttemptNo,
 	)
 	return i, err
 }
@@ -847,7 +873,7 @@ UPDATE validation_runs
 SET status = $1, finished_at = $2
 WHERE workspace_id = $3 AND id = $4
   AND status = 'running'
-RETURNING id, workspace_id, proposal_id, validator_id, validator_version, status, started_at, finished_at
+RETURNING id, workspace_id, proposal_id, validator_id, validator_version, status, started_at, finished_at, production_operation_id, production_version, production_attempt_no
 `
 
 type FinishValidationRunParams struct {
@@ -874,6 +900,9 @@ func (q *Queries) FinishValidationRun(ctx context.Context, arg FinishValidationR
 		&i.Status,
 		&i.StartedAt,
 		&i.FinishedAt,
+		&i.ProductionOperationID,
+		&i.ProductionVersion,
+		&i.ProductionAttemptNo,
 	)
 	return i, err
 }
@@ -1161,7 +1190,7 @@ func (q *Queries) GetPolicyRule(ctx context.Context, arg GetPolicyRuleParams) (P
 }
 
 const getPreviousRelease = `-- name: GetPreviousRelease :one
-SELECT id, workspace_id, sequence, manifest_digest, state, rolled_back_to_release_id, published_by, published_at, created_at, origin_proposal_id FROM releases
+SELECT id, workspace_id, sequence, manifest_digest, state, rolled_back_to_release_id, published_by, published_at, created_at, origin_proposal_id, production_root_release_id, production_rollback_parent_id, production_rollback_depth FROM releases
 WHERE workspace_id = $1 AND sequence < $2
 ORDER BY sequence DESC
 LIMIT 1
@@ -1186,12 +1215,15 @@ func (q *Queries) GetPreviousRelease(ctx context.Context, arg GetPreviousRelease
 		&i.PublishedAt,
 		&i.CreatedAt,
 		&i.OriginProposalID,
+		&i.ProductionRootReleaseID,
+		&i.ProductionRollbackParentID,
+		&i.ProductionRollbackDepth,
 	)
 	return i, err
 }
 
 const getProposal = `-- name: GetProposal :one
-SELECT id, workspace_id, asset_id, base_revision_id, target_object_type, target_object_id, state, title, summary, reason, risk_level, policy_decision_id, agent_run_id, created_by, submitted_at, decided_at, created_at, updated_at FROM proposals
+SELECT id, workspace_id, asset_id, base_revision_id, target_object_type, target_object_id, state, title, summary, reason, risk_level, policy_decision_id, agent_run_id, created_by, submitted_at, decided_at, created_at, updated_at, intent, creation_content, base_object_version, production_operation_id, production_version, reintroduction_creation_release_id, reintroduction_absence_release_id FROM proposals
 WHERE workspace_id = $1 AND id = $2
 `
 
@@ -1222,12 +1254,19 @@ func (q *Queries) GetProposal(ctx context.Context, arg GetProposalParams) (Propo
 		&i.DecidedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Intent,
+		&i.CreationContent,
+		&i.BaseObjectVersion,
+		&i.ProductionOperationID,
+		&i.ProductionVersion,
+		&i.ReintroductionCreationReleaseID,
+		&i.ReintroductionAbsenceReleaseID,
 	)
 	return i, err
 }
 
 const getProposalForUpdate = `-- name: GetProposalForUpdate :one
-SELECT id, workspace_id, asset_id, base_revision_id, target_object_type, target_object_id, state, title, summary, reason, risk_level, policy_decision_id, agent_run_id, created_by, submitted_at, decided_at, created_at, updated_at FROM proposals
+SELECT id, workspace_id, asset_id, base_revision_id, target_object_type, target_object_id, state, title, summary, reason, risk_level, policy_decision_id, agent_run_id, created_by, submitted_at, decided_at, created_at, updated_at, intent, creation_content, base_object_version, production_operation_id, production_version, reintroduction_creation_release_id, reintroduction_absence_release_id FROM proposals
 WHERE workspace_id = $1 AND id = $2
 FOR UPDATE
 `
@@ -1259,6 +1298,13 @@ func (q *Queries) GetProposalForUpdate(ctx context.Context, arg GetProposalForUp
 		&i.DecidedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Intent,
+		&i.CreationContent,
+		&i.BaseObjectVersion,
+		&i.ProductionOperationID,
+		&i.ProductionVersion,
+		&i.ReintroductionCreationReleaseID,
+		&i.ReintroductionAbsenceReleaseID,
 	)
 	return i, err
 }
@@ -1302,7 +1348,7 @@ func (q *Queries) GetProposalPolicyDecisionByVersionDigest(ctx context.Context, 
 }
 
 const getProposalValidationRun = `-- name: GetProposalValidationRun :one
-SELECT id, workspace_id, proposal_id, validator_id, validator_version, status, started_at, finished_at FROM validation_runs
+SELECT id, workspace_id, proposal_id, validator_id, validator_version, status, started_at, finished_at, production_operation_id, production_version, production_attempt_no FROM validation_runs
 WHERE workspace_id = $1 AND proposal_id = $2
   AND validator_id = $3
   AND validator_version = $4
@@ -1332,12 +1378,15 @@ func (q *Queries) GetProposalValidationRun(ctx context.Context, arg GetProposalV
 		&i.Status,
 		&i.StartedAt,
 		&i.FinishedAt,
+		&i.ProductionOperationID,
+		&i.ProductionVersion,
+		&i.ProductionAttemptNo,
 	)
 	return i, err
 }
 
 const getRelease = `-- name: GetRelease :one
-SELECT id, workspace_id, sequence, manifest_digest, state, rolled_back_to_release_id, published_by, published_at, created_at, origin_proposal_id FROM releases
+SELECT id, workspace_id, sequence, manifest_digest, state, rolled_back_to_release_id, published_by, published_at, created_at, origin_proposal_id, production_root_release_id, production_rollback_parent_id, production_rollback_depth FROM releases
 WHERE workspace_id = $1 AND id = $2
 `
 
@@ -1360,7 +1409,43 @@ func (q *Queries) GetRelease(ctx context.Context, arg GetReleaseParams) (Release
 		&i.PublishedAt,
 		&i.CreatedAt,
 		&i.OriginProposalID,
+		&i.ProductionRootReleaseID,
+		&i.ProductionRollbackParentID,
+		&i.ProductionRollbackDepth,
 	)
+	return i, err
+}
+
+const getReleaseConsumerImpact = `-- name: GetReleaseConsumerImpact :one
+SELECT count(*) FILTER (
+           WHERE binding.mode = 'current'
+	             AND (SELECT target.sequence FROM releases AS target
+	                  WHERE target.workspace_id = $1
+	                    AND target.id = $2) =
+	                 (SELECT max(current.sequence) FROM releases AS current
+	                  WHERE current.workspace_id = $1)
+       )::bigint AS current_count,
+       count(*) FILTER (WHERE binding.mode = 'pinned' AND binding.release_id = $2)::bigint AS pinned_count
+FROM consumer_bindings AS binding
+WHERE binding.workspace_id = $1
+  AND binding.status = 'active'
+  AND (binding.expires_at IS NULL OR binding.expires_at > CURRENT_TIMESTAMP)
+`
+
+type GetReleaseConsumerImpactParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	ReleaseID   pgtype.UUID `json:"release_id"`
+}
+
+type GetReleaseConsumerImpactRow struct {
+	CurrentCount int64 `json:"current_count"`
+	PinnedCount  int64 `json:"pinned_count"`
+}
+
+func (q *Queries) GetReleaseConsumerImpact(ctx context.Context, arg GetReleaseConsumerImpactParams) (GetReleaseConsumerImpactRow, error) {
+	row := q.db.QueryRow(ctx, getReleaseConsumerImpact, arg.WorkspaceID, arg.ReleaseID)
+	var i GetReleaseConsumerImpactRow
+	err := row.Scan(&i.CurrentCount, &i.PinnedCount)
 	return i, err
 }
 
@@ -1420,7 +1505,7 @@ func (q *Queries) GetReviewBatchForUpdate(ctx context.Context, arg GetReviewBatc
 }
 
 const getValidationRun = `-- name: GetValidationRun :one
-SELECT id, workspace_id, proposal_id, validator_id, validator_version, status, started_at, finished_at FROM validation_runs
+SELECT id, workspace_id, proposal_id, validator_id, validator_version, status, started_at, finished_at, production_operation_id, production_version, production_attempt_no FROM validation_runs
 WHERE workspace_id = $1 AND id = $2
 `
 
@@ -1441,6 +1526,9 @@ func (q *Queries) GetValidationRun(ctx context.Context, arg GetValidationRunPara
 		&i.Status,
 		&i.StartedAt,
 		&i.FinishedAt,
+		&i.ProductionOperationID,
+		&i.ProductionVersion,
+		&i.ProductionAttemptNo,
 	)
 	return i, err
 }
@@ -1450,7 +1538,7 @@ UPDATE proposals
 SET policy_decision_id = $1, risk_level = $2,
     updated_at = $3
 WHERE workspace_id = $4 AND id = $5
-RETURNING id, workspace_id, asset_id, base_revision_id, target_object_type, target_object_id, state, title, summary, reason, risk_level, policy_decision_id, agent_run_id, created_by, submitted_at, decided_at, created_at, updated_at
+RETURNING id, workspace_id, asset_id, base_revision_id, target_object_type, target_object_id, state, title, summary, reason, risk_level, policy_decision_id, agent_run_id, created_by, submitted_at, decided_at, created_at, updated_at, intent, creation_content, base_object_version, production_operation_id, production_version, reintroduction_creation_release_id, reintroduction_absence_release_id
 `
 
 type LinkProposalPolicyDecisionParams struct {
@@ -1489,6 +1577,13 @@ func (q *Queries) LinkProposalPolicyDecision(ctx context.Context, arg LinkPropos
 		&i.DecidedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Intent,
+		&i.CreationContent,
+		&i.BaseObjectVersion,
+		&i.ProductionOperationID,
+		&i.ProductionVersion,
+		&i.ReintroductionCreationReleaseID,
+		&i.ReintroductionAbsenceReleaseID,
 	)
 	return i, err
 }
@@ -1535,7 +1630,7 @@ func (q *Queries) ListApprovingReviews(ctx context.Context, arg ListApprovingRev
 }
 
 const listBatchEligibleProposals = `-- name: ListBatchEligibleProposals :many
-SELECT proposal.id, proposal.workspace_id, proposal.asset_id, proposal.base_revision_id, proposal.target_object_type, proposal.target_object_id, proposal.state, proposal.title, proposal.summary, proposal.reason, proposal.risk_level, proposal.policy_decision_id, proposal.agent_run_id, proposal.created_by, proposal.submitted_at, proposal.decided_at, proposal.created_at, proposal.updated_at,
+SELECT proposal.id, proposal.workspace_id, proposal.asset_id, proposal.base_revision_id, proposal.target_object_type, proposal.target_object_id, proposal.state, proposal.title, proposal.summary, proposal.reason, proposal.risk_level, proposal.policy_decision_id, proposal.agent_run_id, proposal.created_by, proposal.submitted_at, proposal.decided_at, proposal.created_at, proposal.updated_at, proposal.intent, proposal.creation_content, proposal.base_object_version, proposal.production_operation_id, proposal.production_version, proposal.reintroduction_creation_release_id, proposal.reintroduction_absence_release_id,
     decision.matched_policy AS decision_matched_policy,
     decision.risk_level AS decision_risk_level,
     decision.routing AS decision_routing,
@@ -1566,31 +1661,38 @@ ORDER BY proposal.created_at, proposal.id
 `
 
 type ListBatchEligibleProposalsRow struct {
-	ID                    pgtype.UUID        `json:"id"`
-	WorkspaceID           pgtype.UUID        `json:"workspace_id"`
-	AssetID               pgtype.UUID        `json:"asset_id"`
-	BaseRevisionID        pgtype.UUID        `json:"base_revision_id"`
-	TargetObjectType      string             `json:"target_object_type"`
-	TargetObjectID        pgtype.UUID        `json:"target_object_id"`
-	State                 string             `json:"state"`
-	Title                 string             `json:"title"`
-	Summary               string             `json:"summary"`
-	Reason                string             `json:"reason"`
-	RiskLevel             pgtype.Text        `json:"risk_level"`
-	PolicyDecisionID      pgtype.UUID        `json:"policy_decision_id"`
-	AgentRunID            pgtype.UUID        `json:"agent_run_id"`
-	CreatedBy             string             `json:"created_by"`
-	SubmittedAt           pgtype.Timestamptz `json:"submitted_at"`
-	DecidedAt             pgtype.Timestamptz `json:"decided_at"`
-	CreatedAt             pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
-	DecisionMatchedPolicy string             `json:"decision_matched_policy"`
-	DecisionRiskLevel     string             `json:"decision_risk_level"`
-	DecisionRouting       string             `json:"decision_routing"`
-	DecisionReasonCode    string             `json:"decision_reason_code"`
-	DecisionRuleVersion   string             `json:"decision_rule_version"`
-	DecisionInputs        []byte             `json:"decision_inputs"`
-	DecisionInputsDigest  string             `json:"decision_inputs_digest"`
+	ID                              pgtype.UUID        `json:"id"`
+	WorkspaceID                     pgtype.UUID        `json:"workspace_id"`
+	AssetID                         pgtype.UUID        `json:"asset_id"`
+	BaseRevisionID                  pgtype.UUID        `json:"base_revision_id"`
+	TargetObjectType                string             `json:"target_object_type"`
+	TargetObjectID                  pgtype.UUID        `json:"target_object_id"`
+	State                           string             `json:"state"`
+	Title                           string             `json:"title"`
+	Summary                         string             `json:"summary"`
+	Reason                          string             `json:"reason"`
+	RiskLevel                       pgtype.Text        `json:"risk_level"`
+	PolicyDecisionID                pgtype.UUID        `json:"policy_decision_id"`
+	AgentRunID                      pgtype.UUID        `json:"agent_run_id"`
+	CreatedBy                       string             `json:"created_by"`
+	SubmittedAt                     pgtype.Timestamptz `json:"submitted_at"`
+	DecidedAt                       pgtype.Timestamptz `json:"decided_at"`
+	CreatedAt                       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                       pgtype.Timestamptz `json:"updated_at"`
+	Intent                          string             `json:"intent"`
+	CreationContent                 []byte             `json:"creation_content"`
+	BaseObjectVersion               pgtype.Int4        `json:"base_object_version"`
+	ProductionOperationID           pgtype.UUID        `json:"production_operation_id"`
+	ProductionVersion               pgtype.Int4        `json:"production_version"`
+	ReintroductionCreationReleaseID pgtype.UUID        `json:"reintroduction_creation_release_id"`
+	ReintroductionAbsenceReleaseID  pgtype.UUID        `json:"reintroduction_absence_release_id"`
+	DecisionMatchedPolicy           string             `json:"decision_matched_policy"`
+	DecisionRiskLevel               string             `json:"decision_risk_level"`
+	DecisionRouting                 string             `json:"decision_routing"`
+	DecisionReasonCode              string             `json:"decision_reason_code"`
+	DecisionRuleVersion             string             `json:"decision_rule_version"`
+	DecisionInputs                  []byte             `json:"decision_inputs"`
+	DecisionInputsDigest            string             `json:"decision_inputs_digest"`
 }
 
 // One deterministic eligibility scan for batch assembly: in_review proposals
@@ -1624,6 +1726,13 @@ func (q *Queries) ListBatchEligibleProposals(ctx context.Context, workspaceID pg
 			&i.DecidedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Intent,
+			&i.CreationContent,
+			&i.BaseObjectVersion,
+			&i.ProductionOperationID,
+			&i.ProductionVersion,
+			&i.ReintroductionCreationReleaseID,
+			&i.ReintroductionAbsenceReleaseID,
 			&i.DecisionMatchedPolicy,
 			&i.DecisionRiskLevel,
 			&i.DecisionRouting,
@@ -1776,8 +1885,48 @@ func (q *Queries) ListProposalChanges(ctx context.Context, arg ListProposalChang
 	return items, nil
 }
 
+const listProposalReviews = `-- name: ListProposalReviews :many
+SELECT id, workspace_id, proposal_id, reviewer_principal_id, channel, decision, note, created_at FROM reviews
+WHERE workspace_id = $1 AND proposal_id = $2
+ORDER BY created_at DESC, id DESC
+`
+
+type ListProposalReviewsParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	ProposalID  pgtype.UUID `json:"proposal_id"`
+}
+
+func (q *Queries) ListProposalReviews(ctx context.Context, arg ListProposalReviewsParams) ([]Review, error) {
+	rows, err := q.db.Query(ctx, listProposalReviews, arg.WorkspaceID, arg.ProposalID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Review{}
+	for rows.Next() {
+		var i Review
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.ProposalID,
+			&i.ReviewerPrincipalID,
+			&i.Channel,
+			&i.Decision,
+			&i.Note,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listProposalValidationRuns = `-- name: ListProposalValidationRuns :many
-SELECT id, workspace_id, proposal_id, validator_id, validator_version, status, started_at, finished_at FROM validation_runs
+SELECT id, workspace_id, proposal_id, validator_id, validator_version, status, started_at, finished_at, production_operation_id, production_version, production_attempt_no FROM validation_runs
 WHERE workspace_id = $1 AND proposal_id = $2
 ORDER BY started_at, validator_id
 `
@@ -1805,6 +1954,9 @@ func (q *Queries) ListProposalValidationRuns(ctx context.Context, arg ListPropos
 			&i.Status,
 			&i.StartedAt,
 			&i.FinishedAt,
+			&i.ProductionOperationID,
+			&i.ProductionVersion,
+			&i.ProductionAttemptNo,
 		); err != nil {
 			return nil, err
 		}
@@ -1817,7 +1969,7 @@ func (q *Queries) ListProposalValidationRuns(ctx context.Context, arg ListPropos
 }
 
 const listProposals = `-- name: ListProposals :many
-SELECT id, workspace_id, asset_id, base_revision_id, target_object_type, target_object_id, state, title, summary, reason, risk_level, policy_decision_id, agent_run_id, created_by, submitted_at, decided_at, created_at, updated_at FROM proposals
+SELECT id, workspace_id, asset_id, base_revision_id, target_object_type, target_object_id, state, title, summary, reason, risk_level, policy_decision_id, agent_run_id, created_by, submitted_at, decided_at, created_at, updated_at, intent, creation_content, base_object_version, production_operation_id, production_version, reintroduction_creation_release_id, reintroduction_absence_release_id FROM proposals
 WHERE workspace_id = $1
   AND (
       NOT $2::boolean
@@ -1870,6 +2022,13 @@ func (q *Queries) ListProposals(ctx context.Context, arg ListProposalsParams) ([
 			&i.DecidedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Intent,
+			&i.CreationContent,
+			&i.BaseObjectVersion,
+			&i.ProductionOperationID,
+			&i.ProductionVersion,
+			&i.ReintroductionCreationReleaseID,
+			&i.ReintroductionAbsenceReleaseID,
 		); err != nil {
 			return nil, err
 		}
@@ -1885,6 +2044,7 @@ const listReleaseAssets = `-- name: ListReleaseAssets :many
 SELECT workspace_id, release_id, asset_id, revision_id, compatibility, position, created_at FROM release_assets
 WHERE workspace_id = $1 AND release_id = $2
 ORDER BY position
+LIMIT 1001
 `
 
 type ListReleaseAssetsParams struct {
@@ -1924,6 +2084,7 @@ const listReleaseObjects = `-- name: ListReleaseObjects :many
 SELECT workspace_id, release_id, object_type, object_id, version, position, created_at FROM release_objects
 WHERE workspace_id = $1 AND release_id = $2
 ORDER BY position
+LIMIT 1001
 `
 
 type ListReleaseObjectsParams struct {
@@ -1959,8 +2120,143 @@ func (q *Queries) ListReleaseObjects(ctx context.Context, arg ListReleaseObjects
 	return items, nil
 }
 
+const listReleaseStableDiff = `-- name: ListReleaseStableDiff :many
+WITH target AS (
+    SELECT release.id, release.sequence
+    FROM releases AS release
+    WHERE release.workspace_id = $1
+      AND release.id = $2
+), asset_versions AS (
+    SELECT current.asset_id AS target_id,
+           prior.revision_id AS prior_version,
+           current.revision_id AS selected_version,
+           registry.current_revision_id AS registry_version
+    FROM target
+    JOIN release_assets AS current
+      ON current.workspace_id = $1
+     AND current.release_id = target.id
+    LEFT JOIN LATERAL (
+        SELECT previous.revision_id
+        FROM release_assets AS previous
+        JOIN releases AS release
+          ON release.workspace_id = previous.workspace_id
+         AND release.id = previous.release_id
+        WHERE previous.workspace_id = current.workspace_id
+          AND previous.asset_id = current.asset_id
+          AND release.sequence < target.sequence
+        ORDER BY release.sequence DESC, release.id DESC
+        LIMIT 1
+    ) prior ON true
+    JOIN semantic_assets AS registry
+      ON registry.workspace_id = current.workspace_id
+     AND registry.id = current.asset_id
+), registry_objects AS (
+    SELECT 'physical_binding'::text AS object_type, id AS object_id, version
+    FROM physical_bindings WHERE workspace_id = $1
+    UNION ALL
+    SELECT 'model_grain', id, version FROM model_grains WHERE workspace_id = $1
+    UNION ALL
+    SELECT 'entity_key', id, version FROM entity_keys WHERE workspace_id = $1
+    UNION ALL
+    SELECT 'join_contract', id, version FROM join_contracts WHERE workspace_id = $1
+), object_versions AS (
+    SELECT current.object_type AS target_type,
+           current.object_id AS target_id,
+           prior.version AS prior_version,
+           current.version AS selected_version,
+           registry.version AS registry_version
+    FROM target
+    JOIN release_objects AS current
+      ON current.workspace_id = $1
+     AND current.release_id = target.id
+    LEFT JOIN LATERAL (
+        SELECT previous.version
+        FROM release_objects AS previous
+        JOIN releases AS release
+          ON release.workspace_id = previous.workspace_id
+         AND release.id = previous.release_id
+        WHERE previous.workspace_id = current.workspace_id
+          AND previous.object_type = current.object_type
+          AND previous.object_id = current.object_id
+          AND release.sequence < target.sequence
+        ORDER BY release.sequence DESC, release.id DESC
+        LIMIT 1
+    ) prior ON true
+    JOIN registry_objects AS registry
+      ON registry.object_type = current.object_type
+     AND registry.object_id = current.object_id
+), diffs AS (
+    SELECT 'prior_pin'::text AS comparison_kind, 'semantic_asset'::text AS target_type,
+           target_id, COALESCE(prior_version::text, '')::text AS baseline_version,
+           selected_version::text AS selected_version,
+           CASE WHEN prior_version IS NULL THEN 'added'
+                WHEN prior_version = selected_version THEN 'unchanged' ELSE 'changed' END::text AS change
+    FROM asset_versions
+    UNION ALL
+    SELECT 'current_registry', 'semantic_asset', target_id, COALESCE(registry_version::text, ''),
+           selected_version::text,
+           CASE WHEN registry_version IS NULL THEN 'added'
+                WHEN registry_version = selected_version THEN 'unchanged' ELSE 'changed' END
+    FROM asset_versions
+    UNION ALL
+    SELECT 'prior_pin', target_type, target_id, COALESCE(prior_version::text, ''), selected_version::text,
+           CASE WHEN prior_version IS NULL THEN 'added'
+                WHEN prior_version = selected_version THEN 'unchanged' ELSE 'changed' END
+    FROM object_versions
+    UNION ALL
+    SELECT 'current_registry', target_type, target_id, registry_version::text, selected_version::text,
+           CASE WHEN registry_version = selected_version THEN 'unchanged' ELSE 'changed' END
+    FROM object_versions
+)
+SELECT comparison_kind, target_type, target_id, baseline_version, selected_version, change
+FROM diffs
+ORDER BY comparison_kind, target_type, target_id
+LIMIT 4002
+`
+
+type ListReleaseStableDiffParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	ReleaseID   pgtype.UUID `json:"release_id"`
+}
+
+type ListReleaseStableDiffRow struct {
+	ComparisonKind  string      `json:"comparison_kind"`
+	TargetType      string      `json:"target_type"`
+	TargetID        pgtype.UUID `json:"target_id"`
+	BaselineVersion string      `json:"baseline_version"`
+	SelectedVersion string      `json:"selected_version"`
+	Change          string      `json:"change"`
+}
+
+func (q *Queries) ListReleaseStableDiff(ctx context.Context, arg ListReleaseStableDiffParams) ([]ListReleaseStableDiffRow, error) {
+	rows, err := q.db.Query(ctx, listReleaseStableDiff, arg.WorkspaceID, arg.ReleaseID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListReleaseStableDiffRow{}
+	for rows.Next() {
+		var i ListReleaseStableDiffRow
+		if err := rows.Scan(
+			&i.ComparisonKind,
+			&i.TargetType,
+			&i.TargetID,
+			&i.BaselineVersion,
+			&i.SelectedVersion,
+			&i.Change,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listReleases = `-- name: ListReleases :many
-SELECT id, workspace_id, sequence, manifest_digest, state, rolled_back_to_release_id, published_by, published_at, created_at, origin_proposal_id FROM releases
+SELECT id, workspace_id, sequence, manifest_digest, state, rolled_back_to_release_id, published_by, published_at, created_at, origin_proposal_id, production_root_release_id, production_rollback_parent_id, production_rollback_depth FROM releases
 WHERE workspace_id = $1
   AND (
       NOT $2::boolean
@@ -2005,6 +2301,9 @@ func (q *Queries) ListReleases(ctx context.Context, arg ListReleasesParams) ([]R
 			&i.PublishedAt,
 			&i.CreatedAt,
 			&i.OriginProposalID,
+			&i.ProductionRootReleaseID,
+			&i.ProductionRollbackParentID,
+			&i.ProductionRollbackDepth,
 		); err != nil {
 			return nil, err
 		}
@@ -2261,7 +2560,7 @@ const submitProposal = `-- name: SubmitProposal :one
 UPDATE proposals
 SET state = 'proposed', submitted_at = $1, updated_at = $2
 WHERE workspace_id = $3 AND id = $4 AND state = 'draft'
-RETURNING id, workspace_id, asset_id, base_revision_id, target_object_type, target_object_id, state, title, summary, reason, risk_level, policy_decision_id, agent_run_id, created_by, submitted_at, decided_at, created_at, updated_at
+RETURNING id, workspace_id, asset_id, base_revision_id, target_object_type, target_object_id, state, title, summary, reason, risk_level, policy_decision_id, agent_run_id, created_by, submitted_at, decided_at, created_at, updated_at, intent, creation_content, base_object_version, production_operation_id, production_version, reintroduction_creation_release_id, reintroduction_absence_release_id
 `
 
 type SubmitProposalParams struct {
@@ -2298,6 +2597,13 @@ func (q *Queries) SubmitProposal(ctx context.Context, arg SubmitProposalParams) 
 		&i.DecidedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Intent,
+		&i.CreationContent,
+		&i.BaseObjectVersion,
+		&i.ProductionOperationID,
+		&i.ProductionVersion,
+		&i.ReintroductionCreationReleaseID,
+		&i.ReintroductionAbsenceReleaseID,
 	)
 	return i, err
 }
@@ -2354,7 +2660,7 @@ UPDATE proposals
 SET state = $1, decided_at = $2, updated_at = $3
 WHERE workspace_id = $4 AND id = $5
   AND state = $6
-RETURNING id, workspace_id, asset_id, base_revision_id, target_object_type, target_object_id, state, title, summary, reason, risk_level, policy_decision_id, agent_run_id, created_by, submitted_at, decided_at, created_at, updated_at
+RETURNING id, workspace_id, asset_id, base_revision_id, target_object_type, target_object_id, state, title, summary, reason, risk_level, policy_decision_id, agent_run_id, created_by, submitted_at, decided_at, created_at, updated_at, intent, creation_content, base_object_version, production_operation_id, production_version, reintroduction_creation_release_id, reintroduction_absence_release_id
 `
 
 type TransitionProposalParams struct {
@@ -2395,6 +2701,13 @@ func (q *Queries) TransitionProposal(ctx context.Context, arg TransitionProposal
 		&i.DecidedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Intent,
+		&i.CreationContent,
+		&i.BaseObjectVersion,
+		&i.ProductionOperationID,
+		&i.ProductionVersion,
+		&i.ReintroductionCreationReleaseID,
+		&i.ReintroductionAbsenceReleaseID,
 	)
 	return i, err
 }

@@ -22,18 +22,23 @@ import (
 )
 
 const (
-	defaultLimit = 50
-	maxLimit     = 200
-	maxDepth     = 3
+	defaultLimit                = 50
+	maxLimit                    = 200
+	maxDepth                    = 3
+	defaultAuthorityRecordLimit = 100
+	maxAuthorityRecordLimit     = 200
 )
 
 type Repository interface {
 	ListCatalogWorkspaces(context.Context) ([]domain.Workspace, error)
 	CreateCatalogWorkspace(context.Context, domain.CreateWorkspaceCommand) (domain.Workspace, error)
 	ListCatalogAssets(context.Context, domain.ListAssetsQuery) ([]domain.AssetSummary, error)
+	CountCatalogAssets(context.Context, domain.ListAssetsQuery) (int64, error)
 	GetCatalogAsset(context.Context, identity.WorkspaceID, identity.AssetID) (domain.AssetDetail, error)
+	ListCatalogAuthorityRecords(context.Context, domain.ListAuthorityRecordsQuery) (domain.AuthorityRecordResult, error)
 	CreateCatalogAsset(context.Context, domain.CreateAssetCommand) (domain.AssetDetail, error)
 	ListCatalogRevisions(context.Context, domain.ListRevisionsQuery) ([]domain.Revision, error)
+	CountCatalogRevisions(context.Context, identity.WorkspaceID, identity.AssetID) (int64, error)
 	GetCatalogRevision(context.Context, identity.WorkspaceID, identity.AssetID, identity.RevisionID) (domain.Revision, error)
 	AppendCatalogRevision(context.Context, domain.AppendRevisionCommand) (domain.Revision, error)
 	ListCatalogRelations(context.Context, domain.ListRelationsQuery) ([]domain.Relation, error)
@@ -81,20 +86,22 @@ func NewService(repository Repository, clock Clock, options ...Option) *Service 
 }
 
 type ListAssetsRequest struct {
-	WorkspaceID identity.WorkspaceID
-	Search      string
-	AssetType   semantic.AssetType
-	Lifecycle   string
-	Limit       int
-	Cursor      string
-	ActorID     string
-	Channel     string
-	TraceID     string
+	WorkspaceID  identity.WorkspaceID
+	Search       string
+	AssetType    semantic.AssetType
+	Lifecycle    string
+	Limit        int
+	Cursor       string
+	ActorID      string
+	Channel      string
+	TraceID      string
+	PrincipalRef string
 }
 
 type AssetPage struct {
 	Items      []domain.AssetSummary
 	Limit      int
+	Total      int64
 	NextCursor string
 }
 
@@ -123,15 +130,54 @@ type AppendRevisionRequest struct {
 }
 
 type ListRevisionsRequest struct {
-	WorkspaceID identity.WorkspaceID
-	AssetID     identity.AssetID
-	Limit       int
-	Cursor      string
+	WorkspaceID  identity.WorkspaceID
+	AssetID      identity.AssetID
+	Limit        int
+	Cursor       string
+	PrincipalRef string
+	TraceID      string
+}
+
+type GetRevisionRequest struct {
+	WorkspaceID  identity.WorkspaceID
+	AssetID      identity.AssetID
+	RevisionID   identity.RevisionID
+	PrincipalRef string
+	TraceID      string
+}
+
+type ListRelationsRequest struct {
+	WorkspaceID  identity.WorkspaceID
+	AssetID      identity.AssetID
+	Direction    string
+	Plane        semantic.RelationPlane
+	Depth        int
+	Limit        int
+	PrincipalRef string
+	TraceID      string
 }
 
 type RevisionPage struct {
 	Items      []domain.Revision
 	Limit      int
+	Total      int64
+	NextCursor string
+}
+
+type ListAuthorityRecordsRequest struct {
+	WorkspaceID  identity.WorkspaceID
+	AssetID      identity.AssetID
+	Section      string
+	Limit        int
+	Cursor       string
+	PrincipalRef string
+	TraceID      string
+}
+
+type AuthorityRecordPage struct {
+	Items      []domain.AuthorityRecord
+	Limit      int
+	Total      int64
 	NextCursor string
 }
 
@@ -177,6 +223,15 @@ func (service *Service) ListAssets(ctx context.Context, request ListAssetsReques
 	if err != nil || len(request.Search) > 256 || !validAssetType(request.AssetType, true) || !validLifecycle(request.Lifecycle) {
 		return AssetPage{}, domain.ErrInvalidArgument
 	}
+	if err := service.authorize(ctx, authorizationapp.EvaluationRequest{
+		PrincipalRef: request.PrincipalRef,
+		WorkspaceID:  request.WorkspaceID,
+		Action:       authz.ActionAssetRead,
+		Resource:     authz.Resource{Type: authz.ScopeWorkspace, ID: request.WorkspaceID.UUID()},
+		TraceID:      request.TraceID,
+	}); err != nil {
+		return AssetPage{}, err
+	}
 	filter := assetFilterDigest(request.Search, request.AssetType, request.Lifecycle)
 	cursor, err := decodeAssetCursor(request.Cursor, filter)
 	if err != nil {
@@ -190,7 +245,15 @@ func (service *Service) ListAssets(ctx context.Context, request ListAssetsReques
 		service.recordSearch(ctx, request, 0, true)
 		return AssetPage{}, err
 	}
-	page := AssetPage{Items: items, Limit: limit}
+	total, err := service.repository.CountCatalogAssets(ctx, domain.ListAssetsQuery{
+		WorkspaceID: request.WorkspaceID, Search: request.Search, AssetType: request.AssetType,
+		Lifecycle: request.Lifecycle,
+	})
+	if err != nil {
+		service.recordSearch(ctx, request, 0, true)
+		return AssetPage{}, err
+	}
+	page := AssetPage{Items: items, Limit: limit, Total: total}
 	if len(items) > limit {
 		last := items[limit-1]
 		page.Items = items[:limit]
@@ -248,7 +311,7 @@ func (service *Service) CreateAsset(ctx context.Context, request CreateAssetRequ
 }
 
 func (service *Service) GetAsset(ctx context.Context, workspace identity.WorkspaceID, asset identity.AssetID) (domain.AssetDetail, error) {
-	return service.repository.GetCatalogAsset(ctx, workspace, asset)
+	return service.GetAssetObserved(ctx, workspace, asset, ReadObservation{})
 }
 
 // authorize runs the shared M2 capability evaluation. Denials carry the audited
@@ -257,10 +320,21 @@ func (service *Service) authorize(ctx context.Context, request authorizationapp.
 	if service.authorizer == nil {
 		return nil
 	}
-	decision, err := service.authorizer.Evaluate(ctx, request)
+	decision, err := service.evaluate(ctx, request)
 	if err != nil {
 		return err
 	}
+	return authorizationDecisionError(decision)
+}
+
+func (service *Service) evaluate(ctx context.Context, request authorizationapp.EvaluationRequest) (authz.Decision, error) {
+	if service.authorizer == nil {
+		return authz.Decision{Allowed: true, Action: request.Action}, nil
+	}
+	return service.authorizer.Evaluate(ctx, request)
+}
+
+func authorizationDecisionError(decision authz.Decision) error {
 	if decision.Allowed {
 		return nil
 	}
@@ -268,9 +342,10 @@ func (service *Service) authorize(ctx context.Context, request authorizationapp.
 }
 
 type ReadObservation struct {
-	ActorID string
-	Channel string
-	TraceID string
+	ActorID      string
+	Channel      string
+	TraceID      string
+	PrincipalRef string
 }
 
 func (service *Service) GetAssetObserved(
@@ -279,8 +354,42 @@ func (service *Service) GetAssetObserved(
 	asset identity.AssetID,
 	observation ReadObservation,
 ) (domain.AssetDetail, error) {
+	if workspace.IsZero() || asset.IsZero() {
+		return domain.AssetDetail{}, domain.ErrInvalidArgument
+	}
+	decision, err := service.evaluate(ctx, authorizationapp.EvaluationRequest{
+		PrincipalRef: observation.PrincipalRef,
+		WorkspaceID:  workspace,
+		Action:       authz.ActionAssetRead,
+		Resource:     authz.Resource{Type: authz.ScopeAsset, ID: asset.UUID()},
+		TraceID:      observation.TraceID,
+	})
+	if err != nil {
+		return domain.AssetDetail{}, err
+	}
+	if err := authorizationDecisionError(decision); err != nil {
+		return domain.AssetDetail{}, err
+	}
 	detail, err := service.repository.GetCatalogAsset(ctx, workspace, asset)
 	if err != nil {
+		return domain.AssetDetail{}, err
+	}
+	snapshot := authorizationapp.AccessSnapshot{}
+	hasSectionAccess := service.authorizer == nil
+	if snapshotEvaluator, ok := service.authorizer.(authorizationapp.SnapshotEvaluator); ok && !decision.PrincipalID.IsZero() {
+		loaded, snapshotErr := snapshotEvaluator.Snapshot(ctx, workspace, decision.PrincipalID)
+		if snapshotErr != nil {
+			return domain.AssetDetail{}, snapshotErr
+		}
+		snapshot, hasSectionAccess = loaded, true
+		if !snapshot.Allows(authz.ActionAssetRead, authz.Resource{Type: authz.ScopeAsset, ID: asset.UUID()}) {
+			return domain.AssetDetail{}, domain.ErrNotFound
+		}
+		applyAuthoritySectionAuthorization(&detail, snapshot, asset)
+	} else if service.authorizer != nil {
+		applyAuthoritySectionAuthorization(&detail, authorizationapp.AccessSnapshot{}, asset)
+	}
+	if err := service.populateAuthorityRecordPages(ctx, workspace, asset, &detail, snapshot, hasSectionAccess); err != nil {
 		return domain.AssetDetail{}, err
 	}
 	if service.usage != nil && detail.CurrentRevision != nil && validTraceID(observation.TraceID) {
@@ -290,6 +399,178 @@ func (service *Service) GetAssetObserved(
 		})
 	}
 	return detail, nil
+}
+
+func applyAuthoritySectionAuthorization(
+	detail *domain.AssetDetail,
+	snapshot authorizationapp.AccessSnapshot,
+	asset identity.AssetID,
+) {
+	resource := authz.Resource{Type: authz.ScopeAsset, ID: asset.UUID()}
+	for index := range detail.AuthoritySections {
+		action := authoritySectionAction(detail.AuthoritySections[index].Kind)
+		if action == "" || snapshot.Allows(action, resource) {
+			continue
+		}
+		if detail.AuthoritySections[index].Kind == "evidence" && detail.CurrentRevision != nil {
+			detail.CurrentRevision.Evidence = []domain.Evidence{}
+		}
+		detail.AuthoritySections[index].Availability = domain.AvailabilityForbidden
+		detail.AuthoritySections[index].RevisionID = nil
+		detail.AuthoritySections[index].ReleaseID = nil
+		detail.AuthoritySections[index].ReleaseSequence = nil
+		detail.AuthoritySections[index].Values = map[string]int64{}
+		detail.AuthoritySections[index].Records = []domain.AuthorityRecord{}
+		detail.AuthoritySections[index].RecordsLimit = defaultAuthorityRecordLimit
+		detail.AuthoritySections[index].RecordsTotal = 0
+		detail.AuthoritySections[index].RecordsNextCursor = ""
+	}
+}
+
+func authoritySectionAction(section string) authz.Action {
+	switch section {
+	case "evidence", "validation":
+		return authz.ActionEvidenceRead
+	case "physical_bindings", "join_contracts", "lineage", "consumer_impact":
+		return authz.ActionBindingRead
+	default:
+		return ""
+	}
+}
+
+func authorityRecordSection(section string) bool {
+	switch section {
+	case "relations", "physical_bindings", "join_contracts", "validation", "lineage", "consumer_impact":
+		return true
+	default:
+		return false
+	}
+}
+
+func (service *Service) populateAuthorityRecordPages(
+	ctx context.Context,
+	workspace identity.WorkspaceID,
+	asset identity.AssetID,
+	detail *domain.AssetDetail,
+	snapshot authorizationapp.AccessSnapshot,
+	hasSectionAccess bool,
+) error {
+	resource := authz.Resource{Type: authz.ScopeAsset, ID: asset.UUID()}
+	for index := range detail.AuthoritySections {
+		section := &detail.AuthoritySections[index]
+		section.RecordsLimit = defaultAuthorityRecordLimit
+		if !authorityRecordSection(section.Kind) || section.Availability == domain.AvailabilityForbidden {
+			continue
+		}
+		action := authoritySectionAction(section.Kind)
+		if action != "" && service.authorizer != nil && (!hasSectionAccess || !snapshot.Allows(action, resource)) {
+			continue
+		}
+		page, err := service.listAuthorityRecordPage(ctx, workspace, asset, section.Kind,
+			defaultAuthorityRecordLimit, nil)
+		if err != nil {
+			return err
+		}
+		section.Records, section.RecordsNextCursor = page.Items, page.NextCursor
+		redactAuthorityRecordEvidence(section.Records, service.authorizer == nil ||
+			hasSectionAccess && snapshot.Allows(authz.ActionEvidenceRead, resource))
+		section.RecordsTotal = page.Total
+		if section.Kind == "lineage" && len(page.Items) > 0 {
+			section.Availability = domain.AvailabilityAvailable
+		}
+	}
+	return nil
+}
+
+func (service *Service) ListAuthorityRecords(
+	ctx context.Context, request ListAuthorityRecordsRequest,
+) (AuthorityRecordPage, error) {
+	if request.WorkspaceID.IsZero() || request.AssetID.IsZero() || !authorityRecordSection(request.Section) {
+		return AuthorityRecordPage{}, domain.ErrInvalidArgument
+	}
+	limit := request.Limit
+	if limit == 0 {
+		limit = defaultAuthorityRecordLimit
+	}
+	if limit < 1 || limit > maxAuthorityRecordLimit {
+		return AuthorityRecordPage{}, domain.ErrInvalidArgument
+	}
+	decision, err := service.evaluate(ctx, authorizationapp.EvaluationRequest{
+		PrincipalRef: request.PrincipalRef, WorkspaceID: request.WorkspaceID,
+		Action:   authz.ActionAssetRead,
+		Resource: authz.Resource{Type: authz.ScopeAsset, ID: request.AssetID.UUID()}, TraceID: request.TraceID,
+	})
+	if err != nil {
+		return AuthorityRecordPage{}, err
+	}
+	if err := authorizationDecisionError(decision); err != nil {
+		return AuthorityRecordPage{}, domain.ErrNotFound
+	}
+	evidenceAllowed := service.authorizer == nil
+	if service.authorizer != nil {
+		snapshotEvaluator, ok := service.authorizer.(authorizationapp.SnapshotEvaluator)
+		if !ok || decision.PrincipalID.IsZero() {
+			return AuthorityRecordPage{}, domain.ErrNotFound
+		}
+		snapshot, snapshotErr := snapshotEvaluator.Snapshot(ctx, request.WorkspaceID, decision.PrincipalID)
+		if snapshotErr != nil {
+			return AuthorityRecordPage{}, snapshotErr
+		}
+		resource := authz.Resource{Type: authz.ScopeAsset, ID: request.AssetID.UUID()}
+		if !snapshot.Allows(authz.ActionAssetRead, resource) {
+			return AuthorityRecordPage{}, domain.ErrNotFound
+		}
+		if action := authoritySectionAction(request.Section); action != "" && !snapshot.Allows(action, resource) {
+			return AuthorityRecordPage{}, domain.ErrNotFound
+		}
+		evidenceAllowed = snapshot.Allows(authz.ActionEvidenceRead, resource)
+	}
+	cursor, err := decodeAuthorityRecordCursor(request.Cursor, request.WorkspaceID, request.AssetID, request.Section)
+	if err != nil {
+		return AuthorityRecordPage{}, err
+	}
+	page, err := service.listAuthorityRecordPage(ctx, request.WorkspaceID, request.AssetID, request.Section, limit, cursor)
+	if err != nil {
+		return AuthorityRecordPage{}, err
+	}
+	redactAuthorityRecordEvidence(page.Items, evidenceAllowed)
+	return page, nil
+}
+
+func redactAuthorityRecordEvidence(records []domain.AuthorityRecord, allowed bool) {
+	if allowed {
+		return
+	}
+	for index := range records {
+		if records[index].ModelGrain != nil {
+			records[index].ModelGrain.DocumentedBy = nil
+		}
+	}
+}
+
+func (service *Service) listAuthorityRecordPage(
+	ctx context.Context,
+	workspace identity.WorkspaceID,
+	asset identity.AssetID,
+	section string,
+	limit int,
+	cursor *domain.AuthorityRecordCursor,
+) (AuthorityRecordPage, error) {
+	result, err := service.repository.ListCatalogAuthorityRecords(ctx, domain.ListAuthorityRecordsQuery{
+		WorkspaceID: workspace, AssetID: asset, Section: section, Limit: limit + 1, Cursor: cursor,
+	})
+	if err != nil {
+		return AuthorityRecordPage{}, err
+	}
+	page := AuthorityRecordPage{Items: result.Items, Limit: limit, Total: result.Total}
+	if len(result.Items) > limit {
+		last := result.Items[limit-1]
+		page.Items = result.Items[:limit]
+		page.NextCursor = encodeCursor(authorityRecordCursorEnvelope{Kind: "catalog-authority-records",
+			WorkspaceID: workspace.String(), AssetID: asset.String(), Section: section,
+			RecordKind: last.Kind, RecordID: last.ID})
+	}
+	return page, nil
 }
 
 func (service *Service) recordSearch(ctx context.Context, request ListAssetsRequest, resultCount int, failed bool) {
@@ -305,8 +586,11 @@ func (service *Service) recordSearch(ctx context.Context, request ListAssetsRequ
 
 func (service *Service) ListRevisions(ctx context.Context, request ListRevisionsRequest) (RevisionPage, error) {
 	limit, err := normalizeLimit(request.Limit)
-	if err != nil {
+	if err != nil || request.WorkspaceID.IsZero() || request.AssetID.IsZero() {
 		return RevisionPage{}, domain.ErrInvalidArgument
+	}
+	if err := service.authorizeAssetReadSafe(ctx, request.WorkspaceID, request.AssetID, request.PrincipalRef, request.TraceID); err != nil {
+		return RevisionPage{}, err
 	}
 	cursor, err := decodeRevisionCursor(request.Cursor, request.AssetID)
 	if err != nil {
@@ -318,7 +602,11 @@ func (service *Service) ListRevisions(ctx context.Context, request ListRevisions
 	if err != nil {
 		return RevisionPage{}, err
 	}
-	page := RevisionPage{Items: items, Limit: limit}
+	total, err := service.repository.CountCatalogRevisions(ctx, request.WorkspaceID, request.AssetID)
+	if err != nil {
+		return RevisionPage{}, err
+	}
+	page := RevisionPage{Items: items, Limit: limit, Total: total}
 	if len(items) > limit {
 		last := items[limit-1]
 		page.Items = items[:limit]
@@ -329,8 +617,14 @@ func (service *Service) ListRevisions(ctx context.Context, request ListRevisions
 	return page, nil
 }
 
-func (service *Service) GetRevision(ctx context.Context, workspace identity.WorkspaceID, asset identity.AssetID, revision identity.RevisionID) (domain.Revision, error) {
-	return service.repository.GetCatalogRevision(ctx, workspace, asset, revision)
+func (service *Service) GetRevision(ctx context.Context, request GetRevisionRequest) (domain.Revision, error) {
+	if request.WorkspaceID.IsZero() || request.AssetID.IsZero() || request.RevisionID.IsZero() {
+		return domain.Revision{}, domain.ErrInvalidArgument
+	}
+	if err := service.authorizeAssetReadSafe(ctx, request.WorkspaceID, request.AssetID, request.PrincipalRef, request.TraceID); err != nil {
+		return domain.Revision{}, err
+	}
+	return service.repository.GetCatalogRevision(ctx, request.WorkspaceID, request.AssetID, request.RevisionID)
 }
 
 func (service *Service) AppendRevision(ctx context.Context, request AppendRevisionRequest) (domain.Revision, error) {
@@ -367,19 +661,62 @@ func (service *Service) AppendRevision(ctx context.Context, request AppendRevisi
 	})
 }
 
-func (service *Service) ListRelations(ctx context.Context, query domain.ListRelationsQuery) ([]domain.Relation, error) {
-	if query.Direction == "" {
-		query.Direction = "both"
+func (service *Service) ListRelations(ctx context.Context, request ListRelationsRequest) ([]domain.Relation, error) {
+	if request.Direction == "" {
+		request.Direction = "both"
 	}
-	if query.Depth == 0 {
-		query.Depth = 1
+	if request.Depth == 0 {
+		request.Depth = 1
 	}
-	if query.Depth < 1 || query.Depth > maxDepth ||
-		(query.Direction != "incoming" && query.Direction != "outgoing" && query.Direction != "both") ||
-		(query.Plane != "" && query.Plane != semantic.TaxonomyPlane && query.Plane != semantic.SemanticPlane && query.Plane != semantic.DependencyPlane) {
+	limit, err := normalizeLimit(request.Limit)
+	if err != nil {
+		return nil, err
+	}
+	if request.WorkspaceID.IsZero() || request.AssetID.IsZero() || request.Depth < 1 || request.Depth > maxDepth ||
+		(request.Direction != "incoming" && request.Direction != "outgoing" && request.Direction != "both") ||
+		(request.Plane != "" && request.Plane != semantic.TaxonomyPlane && request.Plane != semantic.SemanticPlane && request.Plane != semantic.DependencyPlane) {
 		return nil, domain.ErrInvalidArgument
 	}
-	return service.repository.ListCatalogRelations(ctx, query)
+	if err := service.authorizeAssetReadSafe(ctx, request.WorkspaceID, request.AssetID, request.PrincipalRef, request.TraceID); err != nil {
+		return nil, err
+	}
+	items, err := service.repository.ListCatalogRelations(ctx, domain.ListRelationsQuery{
+		WorkspaceID: request.WorkspaceID, AssetID: request.AssetID, Direction: request.Direction,
+		Plane: request.Plane, Depth: request.Depth, Limit: limit + 1,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(items) > limit {
+		return nil, domain.ErrInvariant
+	}
+	// The legacy graph projection is asset.read only. Evidence identifiers are
+	// available through evidence-authorized catalog surfaces, never this route.
+	for index := range items {
+		items[index].EvidenceArtifactID = nil
+	}
+	return items, nil
+}
+
+func (service *Service) authorizeAssetReadSafe(
+	ctx context.Context,
+	workspace identity.WorkspaceID,
+	asset identity.AssetID,
+	principalRef string,
+	traceID string,
+) error {
+	err := service.authorize(ctx, authorizationapp.EvaluationRequest{
+		PrincipalRef: principalRef,
+		WorkspaceID:  workspace,
+		Action:       authz.ActionAssetRead,
+		Resource:     authz.Resource{Type: authz.ScopeAsset, ID: asset.UUID()},
+		TraceID:      traceID,
+	})
+	var denial *authz.DenialError
+	if errors.As(err, &denial) {
+		return domain.ErrNotFound
+	}
+	return err
 }
 
 func (service *Service) GetDiscoveryRun(ctx context.Context, workspace identity.WorkspaceID, run identity.RunID) (domain.DiscoveryRun, error) {
@@ -509,6 +846,15 @@ type revisionCursorEnvelope struct {
 	ID       string `json:"i"`
 }
 
+type authorityRecordCursorEnvelope struct {
+	Kind        string `json:"k"`
+	WorkspaceID string `json:"w"`
+	AssetID     string `json:"a"`
+	Section     string `json:"s"`
+	RecordKind  string `json:"rk"`
+	RecordID    string `json:"ri"`
+}
+
 func encodeCursor(value any) string {
 	encoded, _ := json.Marshal(value)
 	return base64.RawURLEncoding.EncodeToString(encoded)
@@ -548,6 +894,56 @@ func decodeRevisionCursor(value string, asset identity.AssetID) (*domain.Revisio
 		return nil, domain.ErrInvalidArgument
 	}
 	return &domain.RevisionCursor{Sequence: envelope.Sequence, ID: id}, nil
+}
+
+func decodeAuthorityRecordCursor(
+	value string,
+	workspace identity.WorkspaceID,
+	asset identity.AssetID,
+	section string,
+) (*domain.AuthorityRecordCursor, error) {
+	if value == "" {
+		return nil, nil
+	}
+	if len(value) > 2048 {
+		return nil, domain.ErrInvalidArgument
+	}
+	var envelope authorityRecordCursorEnvelope
+	if err := decodeCursor(value, &envelope); err != nil || envelope.Kind != "catalog-authority-records" ||
+		envelope.WorkspaceID != workspace.String() || envelope.AssetID != asset.String() || envelope.Section != section {
+		return nil, domain.ErrInvalidArgument
+	}
+	expected, ok := authorityRecordPrefix(envelope.RecordKind)
+	if !ok {
+		return nil, domain.ErrInvalidArgument
+	}
+	if _, err := identity.Parse(expected, envelope.RecordID); err != nil {
+		return nil, domain.ErrInvalidArgument
+	}
+	return &domain.AuthorityRecordCursor{Kind: envelope.RecordKind, ID: envelope.RecordID}, nil
+}
+
+func authorityRecordPrefix(kind string) (identity.Prefix, bool) {
+	switch kind {
+	case "relation":
+		return identity.Relation, true
+	case "physical_binding":
+		return identity.PhysicalBinding, true
+	case "model_grain":
+		return identity.ModelGrain, true
+	case "entity_key":
+		return identity.EntityKey, true
+	case "join_contract":
+		return identity.JoinContract, true
+	case "validation_run":
+		return identity.ValidationRun, true
+	case "lineage":
+		return identity.LineageEdge, true
+	case "consumer_binding":
+		return identity.ConsumerBinding, true
+	default:
+		return "", false
+	}
 }
 
 func decodeCursor(value string, target any) error {

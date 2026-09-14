@@ -75,10 +75,14 @@ type Snapshot struct {
 	Datasets         []Dataset
 	CodeArtifacts    []CodeArtifact
 	Lineage          []LineageEdge
+	Keys             []KeyObservation
+	Joins            []JoinObservation
 	Findings         []Finding
+	Coverage         []CoverageUnit
 }
 
 type Dataset struct {
+	CoverageKey   string
 	ExternalKey   string
 	QualifiedName string
 	Kind          string
@@ -97,6 +101,8 @@ type Field struct {
 }
 
 type CodeArtifact struct {
+	CoverageKey   string
+	Content       []byte `json:"-"`
 	Path          string
 	BlobOID       string
 	Language      string
@@ -104,6 +110,7 @@ type CodeArtifact struct {
 }
 
 type LineageEdge struct {
+	CoverageKey           string
 	UpstreamExternalKey   string
 	DownstreamExternalKey string
 	Kind                  string
@@ -111,12 +118,28 @@ type LineageEdge struct {
 	Confidence            float64
 }
 
+type KeyObservation struct {
+	DatasetExternalKey string
+	ConstraintName     string
+	FieldExternalKeys  []string
+	Kind               string
+}
+
+type JoinObservation struct {
+	ConstraintName         string
+	FromDatasetExternalKey string
+	FromFieldExternalKeys  []string
+	ToDatasetExternalKey   string
+	ToFieldExternalKeys    []string
+}
+
 type Finding struct {
-	Code     string
-	Severity string
-	Locator  string
-	Details  map[string]any
-	Terminal bool
+	CoverageKey string `json:"coverageKey,omitempty"`
+	Code        string
+	Severity    string
+	Locator     string
+	Details     map[string]any
+	Terminal    bool
 }
 
 func (snapshot *Snapshot) Canonicalize() error {
@@ -180,14 +203,38 @@ func (snapshot *Snapshot) Canonicalize() error {
 			"\x00" + snapshot.Lineage[right].Kind + "\x00" + snapshot.Lineage[right].CodePath
 		return leftKey < rightKey
 	})
+	for index := range snapshot.Keys {
+		key := &snapshot.Keys[index]
+		if key.DatasetExternalKey == "" || key.ConstraintName == "" ||
+			(key.Kind != "primary" && key.Kind != "unique") || len(key.FieldExternalKeys) == 0 {
+			return ErrInvalidSnapshot
+		}
+		sort.Strings(key.FieldExternalKeys)
+	}
+	sort.Slice(snapshot.Keys, func(left, right int) bool {
+		return snapshot.Keys[left].DatasetExternalKey+"\x00"+snapshot.Keys[left].ConstraintName <
+			snapshot.Keys[right].DatasetExternalKey+"\x00"+snapshot.Keys[right].ConstraintName
+	})
+	for index := range snapshot.Joins {
+		join := &snapshot.Joins[index]
+		if join.ConstraintName == "" || join.FromDatasetExternalKey == "" || join.ToDatasetExternalKey == "" ||
+			len(join.FromFieldExternalKeys) == 0 || len(join.ToFieldExternalKeys) == 0 ||
+			len(join.FromFieldExternalKeys) != len(join.ToFieldExternalKeys) {
+			return ErrInvalidSnapshot
+		}
+	}
+	sort.Slice(snapshot.Joins, func(left, right int) bool {
+		return snapshot.Joins[left].FromDatasetExternalKey+"\x00"+snapshot.Joins[left].ConstraintName <
+			snapshot.Joins[right].FromDatasetExternalKey+"\x00"+snapshot.Joins[right].ConstraintName
+	})
 	sort.Slice(snapshot.Findings, func(left, right int) bool {
 		leftKey := snapshot.Findings[left].Code + "\x00" + snapshot.Findings[left].Locator +
-			"\x00" + fingerprint(snapshot.Findings[left].Details)
+			"\x00" + fingerprint(snapshot.Findings[left])
 		rightKey := snapshot.Findings[right].Code + "\x00" + snapshot.Findings[right].Locator +
-			"\x00" + fingerprint(snapshot.Findings[right].Details)
+			"\x00" + fingerprint(snapshot.Findings[right])
 		return leftKey < rightKey
 	})
-	return nil
+	return snapshot.CanonicalizeCoverage()
 }
 
 func fingerprint(value any) string {

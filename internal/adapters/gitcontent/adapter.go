@@ -225,8 +225,9 @@ type releaseMetadata struct {
 }
 
 type releaseSpec struct {
-	Manifest releaseManifest `json:"manifest"`
-	Proposal *releaseSpecProposal
+	Manifest   releaseManifest `json:"manifest"`
+	Proposal   *releaseSpecProposal
+	Production *domain.ProductionRelease `json:"production,omitempty"`
 }
 
 type releaseManifest struct {
@@ -294,7 +295,7 @@ func renderRelease(release domain.Release) ([]byte, error) {
 	}
 	encoded, err := json.MarshalIndent(releaseDocument{
 		APIVersion: "semlia.io/v1", Kind: "SemanticAssetRelease",
-		Metadata: metadata, Spec: releaseSpec{Manifest: releaseManifest{Assets: assets, Objects: objects}, Proposal: proposal},
+		Metadata: metadata, Spec: releaseSpec{Manifest: releaseManifest{Assets: assets, Objects: objects}, Proposal: proposal, Production: release.Production},
 	}, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("render release projection: %w", err)

@@ -30,4 +30,16 @@ var (
 	// items, reviews, validation results, policy decisions, releases and
 	// agent steps; the database triggers enforce the same invariant.
 	ErrImmutableRecord = errors.New("governance record is immutable")
+
+	// Production authoring errors (SP-T003 & SP-T004):
+	ErrAlreadyProduced       = errors.New("production operation already produced")
+	ErrIdentityConflict      = errors.New("production identity conflict")
+	ErrIdempotencyConflict   = errors.New("idempotency key conflict")
+	ErrInputIncomplete       = errors.New("production input incomplete")
+	ErrContentMismatch       = errors.New("production content mismatch")
+	ErrProductionSetRequired = errors.New("production set required")
+	ErrLimitExceeded         = errors.New("production aggregate limit exceeded")
+	ErrNoSubstantiveChange   = errors.New("no substantive change")
+	ErrEvidenceMissing       = errors.New("evidence missing")
+	ErrDependencyInvalid     = errors.New("dependency invalid")
 )

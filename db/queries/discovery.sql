@@ -24,7 +24,11 @@ SELECT * FROM discovery_runs
 WHERE workspace_id = sqlc.arg(workspace_id)
   AND source_revision_id = sqlc.arg(source_revision_id)
   AND adapter_version = sqlc.arg(adapter_version)
-  AND status = 'succeeded';
+  AND status IN ('succeeded', 'degraded') AND NOT projection_reused;
+
+-- name: GetSourceSnapshotForRun :one
+SELECT snapshot_id FROM source_snapshot_runs
+WHERE workspace_id=sqlc.arg(workspace_id) AND run_id=sqlc.arg(run_id);
 
 -- name: CreateCompletedDiscoveryRun :one
 INSERT INTO discovery_runs (
@@ -53,7 +57,8 @@ INSERT INTO physical_datasets (
     sqlc.arg(external_key), sqlc.arg(qualified_name)
 )
 ON CONFLICT (source_connection_id, external_key) DO UPDATE
-SET qualified_name = EXCLUDED.qualified_name, updated_at = CURRENT_TIMESTAMP
+SET qualified_name = CASE WHEN sqlc.arg(publish_current)::boolean THEN EXCLUDED.qualified_name ELSE physical_datasets.qualified_name END,
+    updated_at = CASE WHEN sqlc.arg(publish_current)::boolean THEN CURRENT_TIMESTAMP ELSE physical_datasets.updated_at END
 RETURNING *;
 
 -- name: GetCurrentPhysicalDatasetRevision :one
@@ -62,6 +67,12 @@ FROM physical_datasets dataset
 JOIN physical_dataset_revisions revision ON revision.id = dataset.current_revision_id
 WHERE dataset.workspace_id = sqlc.arg(workspace_id)
   AND dataset.id = sqlc.arg(physical_dataset_id);
+
+-- name: GetPhysicalDatasetRevisionByDigest :one
+SELECT * FROM physical_dataset_revisions
+WHERE workspace_id=sqlc.arg(workspace_id) AND physical_dataset_id=sqlc.arg(physical_dataset_id)
+  AND content_digest=sqlc.arg(content_digest)
+ORDER BY created_at,id LIMIT 1;
 
 -- name: CreatePhysicalDatasetRevision :one
 INSERT INTO physical_dataset_revisions (
@@ -86,7 +97,8 @@ INSERT INTO physical_fields (
     sqlc.arg(external_key), sqlc.arg(name)
 )
 ON CONFLICT (physical_dataset_id, external_key) DO UPDATE
-SET name = EXCLUDED.name, updated_at = CURRENT_TIMESTAMP
+SET name = CASE WHEN sqlc.arg(publish_current)::boolean THEN EXCLUDED.name ELSE physical_fields.name END,
+    updated_at = CASE WHEN sqlc.arg(publish_current)::boolean THEN CURRENT_TIMESTAMP ELSE physical_fields.updated_at END
 RETURNING *;
 
 -- name: GetCurrentPhysicalFieldRevision :one
@@ -95,6 +107,12 @@ FROM physical_fields field
 JOIN physical_field_revisions revision ON revision.id = field.current_revision_id
 WHERE field.workspace_id = sqlc.arg(workspace_id)
   AND field.id = sqlc.arg(physical_field_id);
+
+-- name: GetPhysicalFieldRevisionByDigest :one
+SELECT * FROM physical_field_revisions
+WHERE workspace_id=sqlc.arg(workspace_id) AND physical_field_id=sqlc.arg(physical_field_id)
+  AND dataset_revision_id=sqlc.arg(dataset_revision_id) AND metadata->>'fingerprint'=sqlc.arg(content_digest)::text
+ORDER BY created_at,id LIMIT 1;
 
 -- name: CreatePhysicalFieldRevision :one
 INSERT INTO physical_field_revisions (

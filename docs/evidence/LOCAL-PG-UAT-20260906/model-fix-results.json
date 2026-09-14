@@ -1,0 +1,260 @@
+{
+  "startedAt": "2026-09-06T02:40:51Z",
+  "checks": {
+    "ask": {
+      "agentRun": {
+        "configRevision": "sha256:a62aa261eb74bb749d500d8c7d7d99a9ccfb43eb5ff7e25f5c4a7566cfebf60a/mdl_01m1t8m8a4fp88khs3gcc0tgnt",
+        "costMicros": 1424,
+        "durationMs": 5148,
+        "finishedAt": "2026-09-06T02:40:56.533952Z",
+        "id": "agr_01m1t9e35senrtw2r513yhdyhj",
+        "inputHash": "sha256:7aabfcb5a69ddddca523fcdaaf958bfd47bbb38e8bfb5a86417eb25eda1085d9",
+        "model": "deepseek-v4-flash",
+        "outputDigest": "sha256:5f391d4891dafaac1095eb4674432a806a6df7d97784d23529a2e22f6b7d28e3",
+        "startedAt": "2026-09-06T02:40:51.385881Z",
+        "status": "succeeded"
+      },
+      "definitions": [
+        {
+          "address": "demo.net_revenue",
+          "assetId": "ast_01m1t7e473fne8hjpcxv8vr4ym",
+          "assetType": "metric",
+          "contentDigest": "sha256:b51379b879d61d9a9692086649390c3d99eb86e76fd169507af12d27b3a9bbee",
+          "definition": "Sum of recorded simulated order net amounts",
+          "name": "Demo order net revenue (simulated)",
+          "revisionId": "rev_01m1t7e5h8fnmbxmyc52380c8c"
+        }
+      ],
+      "interpretation": {
+        "schema": "semlia.ask-interpretation/v1",
+        "outcome": "query",
+        "query": {
+          "schemaVersion": "1.0.0",
+          "intent": "aggregate",
+          "measures": [
+            {
+              "search": "demo.net_revenue"
+            }
+          ],
+          "context": {
+            "mode": "current"
+          }
+        }
+      },
+      "resolution": {
+        "channel": "ask",
+        "createdAt": "2026-09-06T02:40:56.449331041Z",
+        "definitions": [
+          {
+            "assetId": "ast_01m1t7e473fne8hjpcxv8vr4ym",
+            "revisionId": "rev_01m1t7e5h8fnmbxmyc52380c8c",
+            "address": "demo.net_revenue",
+            "assetType": "metric",
+            "name": "Demo order net revenue (simulated)",
+            "definition": "Sum of recorded simulated order net amounts",
+            "contentDigest": "sha256:b51379b879d61d9a9692086649390c3d99eb86e76fd169507af12d27b3a9bbee"
+          }
+        ],
+        "id": "smq_01m1t9e841ensa3rkxs7s8fnqa",
+        "outcome": "resolved",
+        "plan": {
+          "id": "rsp_01m1t9e855ens9sx1h8n8h4054",
+          "queryId": "smq_01m1t9e841ensa3rkxs7s8fnqa",
+          "releaseId": "rls_01m1t7e8zbfnzr3zaxq1980a5b",
+          "resolverVersion": "alpha-1",
+          "intent": "aggregate",
+          "assets": [
+            {
+              "assetId": "ast_01m1t7e473fne8hjpcxv8vr4ym",
+              "revisionId": "rev_01m1t7e5h8fnmbxmyc52380c8c",
+              "address": "demo.net_revenue",
+              "assetType": "metric"
+            }
+          ],
+          "objects": [
+            {
+              "objectType": "physical_binding",
+              "objectId": "phb_01m1t7e5jsf7ytyh806vp4b51x",
+              "version": 2
+            }
+          ],
+          "measures": [
+            {
+              "assetId": "ast_01m1t7e473fne8hjpcxv8vr4ym"
+            }
+          ],
+          "executionStatus": "requires_execution_validation",
+          "planDigest": "sha256:438d83461ca247cc86ac0ed12c188e3826edf0f6a4741f5a553bb8fa04f73a9d",
+          "createdAt": "2026-09-06T02:40:56.449331041Z"
+        },
+        "releaseId": "rls_01m1t7e8zbfnzr3zaxq1980a5b",
+        "requestDigest": "sha256:62d6c2722fc3ae8b4824f38701c36354c33f77f93d3585608e0ab7714c998d6d",
+        "resolverVersion": "alpha-1",
+        "schemaVersion": "1.0.0",
+        "validation": {
+          "id": "qvr_01m1t9e856ensaf3hb3r4p2d7d",
+          "queryId": "smq_01m1t9e841ensa3rkxs7s8fnqa",
+          "planId": "rsp_01m1t9e855ens9sx1h8n8h4054",
+          "validator": "semantic-plan",
+          "validatorVersion": "alpha-1",
+          "inputDigest": "sha256:438d83461ca247cc86ac0ed12c188e3826edf0f6a4741f5a553bb8fa04f73a9d",
+          "status": "passed",
+          "results": [],
+          "createdAt": "2026-09-06T02:40:56.449331041Z",
+          "completedAt": "2026-09-06T02:40:56.449331041Z"
+        }
+      }
+    },
+    "execution": {
+      "run": {
+        "id": "run_01m1t9e89qent95422w0fyd3rx",
+        "workspaceId": "wsp_01m1t6ypf8eye8yn23y0a62q9z",
+        "queryId": "smq_01m1t9e841ensa3rkxs7s8fnqa",
+        "planId": "rsp_01m1t9e855ens9sx1h8n8h4054",
+        "planDigest": "sha256:438d83461ca247cc86ac0ed12c188e3826edf0f6a4741f5a553bb8fa04f73a9d",
+        "principalId": "prn_01m1t6ypf8fsm8twg2tbn7qhqt",
+        "channel": "api",
+        "sourceId": "src_01m1t6yphjeyevg3g39zbe9qfv",
+        "sourceRevisionId": "srv_01m1t6yq4qe9a91g6jk7aq90b3",
+        "adapterVersion": "postgres-aggregate/v1",
+        "policyVersion": 1,
+        "timeoutMs": 10000,
+        "maxRows": 1000,
+        "maxBytes": 1048576,
+        "cancelRequested": false,
+        "state": "succeeded",
+        "rowCount": 1,
+        "byteCount": 61,
+        "resultDigest": "sha256:54a02820682cb6bdeedf446af99ad544fe66a6994b3d05df4ae087b8ecaaa7e4",
+        "startedAt": "2026-09-06T02:40:56.631884Z",
+        "finishedAt": "2026-09-06T02:40:56.758526Z",
+        "traceId": "43e855232fd1f76a9c63cd492d0b2ecb"
+      },
+      "availability": "ephemeral",
+      "columns": [
+        "demo.net_revenue"
+      ],
+      "rows": [
+        [
+          "440940.00000000"
+        ]
+      ],
+      "replay": false
+    },
+    "generation": {
+      "agentRun": {
+        "configRevision": "sha256:a62aa261eb74bb749d500d8c7d7d99a9ccfb43eb5ff7e25f5c4a7566cfebf60a/mdl_01m1t8m8a4fp88khs3gcc0tgnt",
+        "costMicros": 6318,
+        "durationMs": 45229,
+        "finishedAt": "2026-09-06T02:41:42.019604Z",
+        "id": "agr_01m1t9e8enentbejvdkk7akxdr",
+        "inputHash": "sha256:1e81963521f0c0bfc90951f3fde18b92ebb2d97b4b305b2280c5d5d3f4225185",
+        "model": "deepseek-v4-flash",
+        "outputDigest": "sha256:027f65aaef21a9c9f52f1da0f6f8cde2019b3cca14bdb8d9d440220b7b11ca82",
+        "startedAt": "2026-09-06T02:40:56.789768Z",
+        "status": "succeeded"
+      },
+      "proposal": {
+        "agentRunId": "agr_01m1t9e8enentbejvdkk7akxdr",
+        "assetId": "ast_01m1t7e473fne8hjpcxv8vr4ym",
+        "baseRevisionId": "rev_01m1t7e5h8fnmbxmyc52380c8c",
+        "changeSet": [
+          {
+            "afterDigest": "sha256:e7ddbd67bc0c93f0a4bfc4eaa214c1b7f981149894a7dc4f9bb14e0ec293e303",
+            "afterValue": "模拟订单净额的总和（基于模拟数据）",
+            "beforeDigest": "sha256:8a01c7a0f0ab66262e535605d728d56adf7b414235776011874ab9318eb38ef3",
+            "beforeValue": "Sum of recorded simulated order net amounts",
+            "createdAt": "2026-09-06T02:41:41.979492071Z",
+            "fieldPath": "content.definition",
+            "id": "chg_01m1t9fmjvenv8eng60berfvjd",
+            "op": "update"
+          }
+        ],
+        "createdAt": "2026-09-06T02:41:41.979492Z",
+        "createdBy": "prn_01m1t6ypf8evy8msr5q2cwc0j5",
+        "id": "prp_01m1t9fmjvents3wf4k1p2k9mk",
+        "reason": "",
+        "state": "draft",
+        "summary": "",
+        "targetObjectId": "ast_01m1t7e473fne8hjpcxv8vr4ym",
+        "targetObjectType": "semantic_asset",
+        "title": "Clarify definition in Chinese",
+        "updatedAt": "2026-09-06T02:41:41.979492Z"
+      }
+    },
+    "embeddingBefore": {
+      "configured": true,
+      "reason": "",
+      "active": null,
+      "latest": null
+    },
+    "embeddingStart": {
+      "id": "run_01m1t9fmq2envbzmw8h2py6vrb",
+      "workspaceId": "wsp_01m1t6ypf8eye8yn23y0a62q9z",
+      "releaseId": "rls_01m1t7e8zbfnzr3zaxq1980a5b",
+      "model": "text-embedding-v4",
+      "dimension": 1024,
+      "corpusDigest": "sha256:2ffcb19adf208b129d43dab9263a15754cf094cd28aadfb0933db108262cb30d",
+      "chunkCount": 2,
+      "vectorCount": 0,
+      "state": "building",
+      "errorCode": "",
+      "runtimeRunId": "run_01m1t9fmq2envbzmw8h2py6vrb",
+      "createdAt": "2026-09-06T02:41:42.126521Z",
+      "updatedAt": "2026-09-06T02:41:42.126521Z"
+    },
+    "embeddingAfter": {
+      "configured": true,
+      "reason": "",
+      "active": {
+        "id": "run_01m1t9fmq2envbzmw8h2py6vrb",
+        "workspaceId": "wsp_01m1t6ypf8eye8yn23y0a62q9z",
+        "releaseId": "rls_01m1t7e8zbfnzr3zaxq1980a5b",
+        "model": "text-embedding-v4",
+        "dimension": 1024,
+        "corpusDigest": "sha256:2ffcb19adf208b129d43dab9263a15754cf094cd28aadfb0933db108262cb30d",
+        "chunkCount": 2,
+        "vectorCount": 2,
+        "state": "active",
+        "errorCode": "",
+        "runtimeRunId": "run_01m1t9fmq2envbzmw8h2py6vrb",
+        "createdAt": "2026-09-06T02:41:42.126521Z",
+        "updatedAt": "2026-09-06T02:41:42.878909Z"
+      },
+      "latest": {
+        "id": "run_01m1t9fmq2envbzmw8h2py6vrb",
+        "workspaceId": "wsp_01m1t6ypf8eye8yn23y0a62q9z",
+        "releaseId": "rls_01m1t7e8zbfnzr3zaxq1980a5b",
+        "model": "text-embedding-v4",
+        "dimension": 1024,
+        "corpusDigest": "sha256:2ffcb19adf208b129d43dab9263a15754cf094cd28aadfb0933db108262cb30d",
+        "chunkCount": 2,
+        "vectorCount": 2,
+        "state": "active",
+        "errorCode": "",
+        "runtimeRunId": "run_01m1t9fmq2envbzmw8h2py6vrb",
+        "createdAt": "2026-09-06T02:41:42.126521Z",
+        "updatedAt": "2026-09-06T02:41:42.878909Z"
+      }
+    },
+    "embeddingSearch": {
+      "mode": "vector",
+      "fallbackReason": "",
+      "items": [
+        {
+          "assetId": "ast_01m1t7e473fne8hjpcxv8vr4ym",
+          "revisionId": "rev_01m1t7e5h8fnmbxmyc52380c8c",
+          "address": "demo.net_revenue",
+          "score": 0.6624291345561629
+        },
+        {
+          "assetId": "ast_01m1t7e6r7fnr9gsfw32x62sjm",
+          "revisionId": "rev_01m1t7e7wkfny8cqwtbvpnsdvs",
+          "address": "demo.precision_total",
+          "score": 0.5372900046533353
+        }
+      ]
+    }
+  },
+  "finishedAt": "2026-09-06T02:41:44Z"
+}

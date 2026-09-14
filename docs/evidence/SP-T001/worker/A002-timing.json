@@ -1,0 +1,52 @@
+{
+  "attempt": "SP-T001-A002",
+  "started": "2026-09-09 05:00:19 UTC",
+  "finished": "2026-09-09 05:21:17 UTC",
+  "elapsed_seconds": 1258,
+  "clock_precision_seconds": 1,
+  "stages": [
+    {
+      "phase": "review_and_actual_code_read_plus_red_tests",
+      "start": "2026-09-09 05:00:19 UTC",
+      "end": "2026-09-09 05:04:00 UTC",
+      "elapsed_seconds": 221
+    },
+    {
+      "phase": "red_execution",
+      "start": "2026-09-09 05:04:00 UTC",
+      "end": "2026-09-09 05:04:02 UTC",
+      "elapsed_seconds": 2
+    },
+    {
+      "phase": "four_contract_repairs",
+      "start": "2026-09-09 05:04:02 UTC",
+      "end": "2026-09-09 05:12:16 UTC",
+      "elapsed_seconds": 494
+    },
+    {
+      "phase": "first_green_execution",
+      "start": "2026-09-09 05:12:16 UTC",
+      "end": "2026-09-09 05:12:19 UTC",
+      "elapsed_seconds": 3
+    },
+    {
+      "phase": "bounded_history_and_canonical_storage_consistency",
+      "start": "2026-09-09 05:12:19 UTC",
+      "end": "2026-09-09 05:18:55 UTC",
+      "elapsed_seconds": 396
+    },
+    {
+      "phase": "required_validation",
+      "start": "2026-09-09 05:18:55 UTC",
+      "end": "2026-09-09 05:19:03 UTC",
+      "elapsed_seconds": 8
+    },
+    {
+      "phase": "evidence_hashes_and_untracked_checks",
+      "start": "2026-09-09 05:19:03 UTC",
+      "end": "2026-09-09 05:21:17 UTC",
+      "elapsed_seconds": 134
+    }
+  ],
+  "note": "Worker wall-clock only. A001 evidence is unchanged; separate PM review time is excluded. All runtime implementation remains deferred."
+}

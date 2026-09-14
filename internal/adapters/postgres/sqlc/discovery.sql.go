@@ -20,7 +20,7 @@ INSERT INTO discovery_runs (
     $5, $6, $7, $8,
     $9, $9, $9
 )
-RETURNING id, workspace_id, source_connection_id, source_revision_id, adapter_version, status, error_code, stats, started_at, completed_at, created_at, updated_at
+RETURNING id, workspace_id, source_connection_id, source_revision_id, adapter_version, status, error_code, stats, started_at, completed_at, created_at, updated_at, credential_version, job_id, requested_by, trace_id, projection_reused, artifact_set_id, request_fingerprint, source_input_fingerprint, source_config
 `
 
 type CreateCompletedDiscoveryRunParams struct {
@@ -61,6 +61,15 @@ func (q *Queries) CreateCompletedDiscoveryRun(ctx context.Context, arg CreateCom
 		&i.CompletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CredentialVersion,
+		&i.JobID,
+		&i.RequestedBy,
+		&i.TraceID,
+		&i.ProjectionReused,
+		&i.ArtifactSetID,
+		&i.RequestFingerprint,
+		&i.SourceInputFingerprint,
+		&i.SourceConfig,
 	)
 	return i, err
 }
@@ -400,12 +409,95 @@ func (q *Queries) GetCurrentPhysicalFieldRevision(ctx context.Context, arg GetCu
 	return i, err
 }
 
+const getPhysicalDatasetRevisionByDigest = `-- name: GetPhysicalDatasetRevisionByDigest :one
+SELECT id, workspace_id, physical_dataset_id, source_revision_id, dataset_kind, locator, content_digest, metadata, created_at FROM physical_dataset_revisions
+WHERE workspace_id=$1 AND physical_dataset_id=$2
+  AND content_digest=$3
+ORDER BY created_at,id LIMIT 1
+`
+
+type GetPhysicalDatasetRevisionByDigestParams struct {
+	WorkspaceID       pgtype.UUID `json:"workspace_id"`
+	PhysicalDatasetID pgtype.UUID `json:"physical_dataset_id"`
+	ContentDigest     string      `json:"content_digest"`
+}
+
+func (q *Queries) GetPhysicalDatasetRevisionByDigest(ctx context.Context, arg GetPhysicalDatasetRevisionByDigestParams) (PhysicalDatasetRevision, error) {
+	row := q.db.QueryRow(ctx, getPhysicalDatasetRevisionByDigest, arg.WorkspaceID, arg.PhysicalDatasetID, arg.ContentDigest)
+	var i PhysicalDatasetRevision
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.PhysicalDatasetID,
+		&i.SourceRevisionID,
+		&i.DatasetKind,
+		&i.Locator,
+		&i.ContentDigest,
+		&i.Metadata,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getPhysicalFieldRevisionByDigest = `-- name: GetPhysicalFieldRevisionByDigest :one
+SELECT id, workspace_id, physical_field_id, dataset_revision_id, ordinal, data_type, nullable, metadata, created_at FROM physical_field_revisions
+WHERE workspace_id=$1 AND physical_field_id=$2
+  AND dataset_revision_id=$3 AND metadata->>'fingerprint'=$4::text
+ORDER BY created_at,id LIMIT 1
+`
+
+type GetPhysicalFieldRevisionByDigestParams struct {
+	WorkspaceID       pgtype.UUID `json:"workspace_id"`
+	PhysicalFieldID   pgtype.UUID `json:"physical_field_id"`
+	DatasetRevisionID pgtype.UUID `json:"dataset_revision_id"`
+	ContentDigest     string      `json:"content_digest"`
+}
+
+func (q *Queries) GetPhysicalFieldRevisionByDigest(ctx context.Context, arg GetPhysicalFieldRevisionByDigestParams) (PhysicalFieldRevision, error) {
+	row := q.db.QueryRow(ctx, getPhysicalFieldRevisionByDigest,
+		arg.WorkspaceID,
+		arg.PhysicalFieldID,
+		arg.DatasetRevisionID,
+		arg.ContentDigest,
+	)
+	var i PhysicalFieldRevision
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.PhysicalFieldID,
+		&i.DatasetRevisionID,
+		&i.Ordinal,
+		&i.DataType,
+		&i.Nullable,
+		&i.Metadata,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getSourceSnapshotForRun = `-- name: GetSourceSnapshotForRun :one
+SELECT snapshot_id FROM source_snapshot_runs
+WHERE workspace_id=$1 AND run_id=$2
+`
+
+type GetSourceSnapshotForRunParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	RunID       pgtype.UUID `json:"run_id"`
+}
+
+func (q *Queries) GetSourceSnapshotForRun(ctx context.Context, arg GetSourceSnapshotForRunParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, getSourceSnapshotForRun, arg.WorkspaceID, arg.RunID)
+	var snapshot_id pgtype.UUID
+	err := row.Scan(&snapshot_id)
+	return snapshot_id, err
+}
+
 const getSuccessfulDiscoveryRun = `-- name: GetSuccessfulDiscoveryRun :one
-SELECT id, workspace_id, source_connection_id, source_revision_id, adapter_version, status, error_code, stats, started_at, completed_at, created_at, updated_at FROM discovery_runs
+SELECT id, workspace_id, source_connection_id, source_revision_id, adapter_version, status, error_code, stats, started_at, completed_at, created_at, updated_at, credential_version, job_id, requested_by, trace_id, projection_reused, artifact_set_id, request_fingerprint, source_input_fingerprint, source_config FROM discovery_runs
 WHERE workspace_id = $1
   AND source_revision_id = $2
   AND adapter_version = $3
-  AND status = 'succeeded'
+  AND status IN ('succeeded', 'degraded') AND NOT projection_reused
 `
 
 type GetSuccessfulDiscoveryRunParams struct {
@@ -430,6 +522,15 @@ func (q *Queries) GetSuccessfulDiscoveryRun(ctx context.Context, arg GetSuccessf
 		&i.CompletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CredentialVersion,
+		&i.JobID,
+		&i.RequestedBy,
+		&i.TraceID,
+		&i.ProjectionReused,
+		&i.ArtifactSetID,
+		&i.RequestFingerprint,
+		&i.SourceInputFingerprint,
+		&i.SourceConfig,
 	)
 	return i, err
 }
@@ -528,7 +629,8 @@ INSERT INTO physical_datasets (
     $4, $5
 )
 ON CONFLICT (source_connection_id, external_key) DO UPDATE
-SET qualified_name = EXCLUDED.qualified_name, updated_at = CURRENT_TIMESTAMP
+SET qualified_name = CASE WHEN $6::boolean THEN EXCLUDED.qualified_name ELSE physical_datasets.qualified_name END,
+    updated_at = CASE WHEN $6::boolean THEN CURRENT_TIMESTAMP ELSE physical_datasets.updated_at END
 RETURNING id, workspace_id, source_connection_id, external_key, qualified_name, current_revision_id, created_at, updated_at
 `
 
@@ -538,6 +640,7 @@ type UpsertPhysicalDatasetParams struct {
 	SourceConnectionID pgtype.UUID `json:"source_connection_id"`
 	ExternalKey        string      `json:"external_key"`
 	QualifiedName      string      `json:"qualified_name"`
+	PublishCurrent     bool        `json:"publish_current"`
 }
 
 func (q *Queries) UpsertPhysicalDataset(ctx context.Context, arg UpsertPhysicalDatasetParams) (PhysicalDataset, error) {
@@ -547,6 +650,7 @@ func (q *Queries) UpsertPhysicalDataset(ctx context.Context, arg UpsertPhysicalD
 		arg.SourceConnectionID,
 		arg.ExternalKey,
 		arg.QualifiedName,
+		arg.PublishCurrent,
 	)
 	var i PhysicalDataset
 	err := row.Scan(
@@ -570,7 +674,8 @@ INSERT INTO physical_fields (
     $4, $5
 )
 ON CONFLICT (physical_dataset_id, external_key) DO UPDATE
-SET name = EXCLUDED.name, updated_at = CURRENT_TIMESTAMP
+SET name = CASE WHEN $6::boolean THEN EXCLUDED.name ELSE physical_fields.name END,
+    updated_at = CASE WHEN $6::boolean THEN CURRENT_TIMESTAMP ELSE physical_fields.updated_at END
 RETURNING id, workspace_id, physical_dataset_id, external_key, name, current_revision_id, created_at, updated_at
 `
 
@@ -580,6 +685,7 @@ type UpsertPhysicalFieldParams struct {
 	PhysicalDatasetID pgtype.UUID `json:"physical_dataset_id"`
 	ExternalKey       string      `json:"external_key"`
 	Name              string      `json:"name"`
+	PublishCurrent    bool        `json:"publish_current"`
 }
 
 func (q *Queries) UpsertPhysicalField(ctx context.Context, arg UpsertPhysicalFieldParams) (PhysicalField, error) {
@@ -589,6 +695,7 @@ func (q *Queries) UpsertPhysicalField(ctx context.Context, arg UpsertPhysicalFie
 		arg.PhysicalDatasetID,
 		arg.ExternalKey,
 		arg.Name,
+		arg.PublishCurrent,
 	)
 	var i PhysicalField
 	err := row.Scan(

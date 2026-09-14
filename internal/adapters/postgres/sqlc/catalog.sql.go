@@ -11,6 +11,59 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countCatalogAssetRevisions = `-- name: CountCatalogAssetRevisions :one
+SELECT count(*)::bigint
+FROM asset_revisions
+WHERE workspace_id = $1
+  AND asset_id = $2
+`
+
+type CountCatalogAssetRevisionsParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	AssetID     pgtype.UUID `json:"asset_id"`
+}
+
+func (q *Queries) CountCatalogAssetRevisions(ctx context.Context, arg CountCatalogAssetRevisionsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countCatalogAssetRevisions, arg.WorkspaceID, arg.AssetID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const countCatalogAssets = `-- name: CountCatalogAssets :one
+SELECT count(*)::bigint
+FROM semantic_assets AS asset
+LEFT JOIN asset_revisions AS revision ON revision.id = asset.current_revision_id
+WHERE asset.workspace_id = $1
+  AND ($2::text = '' OR asset.asset_type = $2::text)
+  AND ($3::text = '' OR asset.lifecycle_state = $3::text)
+  AND (
+      $4::text = ''
+      OR asset.namespace || '.' || asset.key ILIKE '%' || $4::text || '%'
+      OR to_tsvector('simple', COALESCE(revision.content::text, '')) @@
+         plainto_tsquery('simple', $4::text)
+  )
+`
+
+type CountCatalogAssetsParams struct {
+	WorkspaceID    pgtype.UUID `json:"workspace_id"`
+	AssetType      string      `json:"asset_type"`
+	LifecycleState string      `json:"lifecycle_state"`
+	Search         string      `json:"search"`
+}
+
+func (q *Queries) CountCatalogAssets(ctx context.Context, arg CountCatalogAssetsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countCatalogAssets,
+		arg.WorkspaceID,
+		arg.AssetType,
+		arg.LifecycleState,
+		arg.Search,
+	)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const getCatalogAsset = `-- name: GetCatalogAsset :one
 SELECT asset.id,
        asset.workspace_id,
@@ -90,6 +143,208 @@ func (q *Queries) GetCatalogAsset(ctx context.Context, arg GetCatalogAssetParams
 		&i.Title,
 		&i.Summary,
 		&i.RelationCount,
+	)
+	return i, err
+}
+
+const getCatalogAssetAuthorityFacts = `-- name: GetCatalogAssetAuthorityFacts :one
+WITH latest_pin AS (
+    SELECT release_asset.release_id,
+           release_asset.revision_id,
+           release.sequence AS release_sequence,
+           release.origin_proposal_id
+    FROM release_assets AS release_asset
+    JOIN releases AS release
+      ON release.workspace_id = release_asset.workspace_id
+     AND release.id = release_asset.release_id
+    WHERE release_asset.workspace_id = $1
+      AND release_asset.asset_id = $2
+    ORDER BY release.sequence DESC, release.id DESC
+    LIMIT 1
+), effective_objects AS (
+    SELECT DISTINCT ON (snapshot.object_type, snapshot.object_id)
+           snapshot.object_type, snapshot.object_id, snapshot.payload,
+           snapshot.release_id, release.sequence AS release_sequence
+    FROM release_object_snapshots AS snapshot
+    JOIN releases AS release
+      ON release.workspace_id = snapshot.workspace_id
+     AND release.id = snapshot.release_id
+    WHERE snapshot.workspace_id = $1
+    ORDER BY snapshot.object_type, snapshot.object_id, release.sequence DESC, release.id DESC
+), asset_objects AS (
+    SELECT object_type, object_id, payload, release_id, release_sequence
+    FROM effective_objects
+    WHERE object_type IN ('physical_binding', 'model_grain', 'entity_key')
+      AND payload->>'asset_id' = $2::uuid::text
+), released_datasets AS (
+    SELECT DISTINCT (payload->>'dataset_id')::uuid AS dataset_id
+    FROM asset_objects
+    WHERE object_type = 'physical_binding'
+      AND payload ? 'dataset_id'
+), join_objects AS (
+    SELECT object_type, object_id, payload, release_id, release_sequence
+    FROM effective_objects
+    WHERE object_type = 'join_contract'
+      AND (
+          (payload->>'left_dataset_id')::uuid IN (SELECT dataset_id FROM released_datasets)
+          OR (payload->>'right_dataset_id')::uuid IN (SELECT dataset_id FROM released_datasets)
+      )
+), object_facts AS (
+    SELECT count(*) FILTER (
+               WHERE object_type = 'physical_binding'
+           )::bigint AS physical_binding_count,
+           count(*) FILTER (
+               WHERE object_type = 'model_grain'
+           )::bigint AS model_grain_count,
+           count(*) FILTER (
+               WHERE object_type = 'entity_key'
+           )::bigint AS entity_key_count
+    FROM asset_objects
+), object_basis AS (
+    SELECT release_id, release_sequence
+    FROM asset_objects
+    ORDER BY release_sequence DESC, release_id DESC
+    LIMIT 1
+), join_facts AS (
+    SELECT count(*)::bigint AS join_contract_count
+    FROM join_objects
+), join_basis AS (
+    SELECT release_id, release_sequence
+    FROM join_objects
+    ORDER BY release_sequence DESC, release_id DESC
+    LIMIT 1
+), validation_counts AS (
+    SELECT count(DISTINCT run.id)::bigint AS run_count,
+           count(result.id) FILTER (WHERE result.severity = 'blocker')::bigint AS blocker_count,
+           count(result.id) FILTER (WHERE result.severity = 'warning')::bigint AS warning_count
+    FROM latest_pin
+    JOIN validation_runs AS run
+      ON run.workspace_id = $1
+     AND run.proposal_id = latest_pin.origin_proposal_id
+    LEFT JOIN validation_results AS result
+      ON result.workspace_id = run.workspace_id
+     AND result.validation_run_id = run.id
+), current_release AS (
+    SELECT release.id
+    FROM releases AS release
+    WHERE release.workspace_id = $1
+    ORDER BY release.sequence DESC, release.id DESC
+    LIMIT 1
+), effective_bindings AS (
+    SELECT binding.mode,
+           CASE WHEN binding.mode = 'current' THEN current_release.id ELSE binding.release_id END AS effective_release_id
+    FROM consumer_bindings AS binding
+    LEFT JOIN current_release ON true
+    WHERE binding.workspace_id = $1
+      AND binding.status = 'active'
+      AND (binding.expires_at IS NULL OR binding.expires_at > CURRENT_TIMESTAMP)
+), consumer_counts AS (
+    SELECT count(*) FILTER (WHERE binding.mode = 'current')::bigint AS current_count,
+           count(*) FILTER (WHERE binding.mode = 'pinned')::bigint AS pinned_count
+    FROM effective_bindings AS binding
+    JOIN latest_pin ON true
+    JOIN release_assets AS manifest
+      ON manifest.workspace_id = $1
+     AND manifest.release_id = binding.effective_release_id
+     AND manifest.asset_id = $2
+     AND manifest.revision_id = latest_pin.revision_id
+), basis AS (
+    SELECT asset.current_revision_id,
+           latest_pin.release_id,
+           latest_pin.revision_id AS released_revision_id,
+           latest_pin.release_sequence,
+		   asset.current_revision_id AS evidence_revision_id
+    FROM semantic_assets AS asset
+    LEFT JOIN latest_pin ON true
+    WHERE asset.workspace_id = $1
+      AND asset.id = $2
+)
+SELECT basis.current_revision_id,
+       basis.release_id,
+       basis.released_revision_id,
+       basis.release_sequence,
+       basis.evidence_revision_id,
+       (SELECT release_id FROM object_basis) AS physical_release_id,
+       COALESCE((SELECT release_sequence FROM object_basis), 0)::bigint AS physical_release_sequence,
+       (SELECT release_id FROM join_basis) AS join_release_id,
+       COALESCE((SELECT release_sequence FROM join_basis), 0)::bigint AS join_release_sequence,
+       (SELECT count(*)::bigint FROM semantic_relations AS relation
+        WHERE relation.workspace_id = $1
+          AND (relation.subject_asset_id = $2 OR relation.object_asset_id = $2)) AS relation_count,
+       (SELECT count(*)::bigint
+        FROM lineage_edges AS edge
+        WHERE edge.workspace_id = $1
+          AND (edge.upstream_dataset_id IN (SELECT dataset_id FROM released_datasets)
+            OR edge.downstream_dataset_id IN (SELECT dataset_id FROM released_datasets))) AS lineage_count,
+       COALESCE((SELECT physical_binding_count FROM object_facts), 0)::bigint AS physical_binding_count,
+       COALESCE((SELECT model_grain_count FROM object_facts), 0)::bigint AS model_grain_count,
+       COALESCE((SELECT entity_key_count FROM object_facts), 0)::bigint AS entity_key_count,
+       COALESCE((SELECT join_contract_count FROM join_facts), 0)::bigint AS join_contract_count,
+       COALESCE((SELECT run_count FROM validation_counts), 0)::bigint AS validation_run_count,
+       COALESCE((SELECT blocker_count FROM validation_counts), 0)::bigint AS validation_blocker_count,
+       COALESCE((SELECT warning_count FROM validation_counts), 0)::bigint AS validation_warning_count,
+       (SELECT count(*)::bigint FROM revision_evidence_links AS link
+        WHERE link.workspace_id = $1
+          AND link.asset_revision_id = basis.evidence_revision_id) AS evidence_count,
+       COALESCE((SELECT current_count FROM consumer_counts), 0)::bigint AS current_consumer_count,
+       COALESCE((SELECT pinned_count FROM consumer_counts), 0)::bigint AS pinned_consumer_count
+FROM basis
+`
+
+type GetCatalogAssetAuthorityFactsParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	AssetID     pgtype.UUID `json:"asset_id"`
+}
+
+type GetCatalogAssetAuthorityFactsRow struct {
+	CurrentRevisionID       pgtype.UUID `json:"current_revision_id"`
+	ReleaseID               pgtype.UUID `json:"release_id"`
+	ReleasedRevisionID      pgtype.UUID `json:"released_revision_id"`
+	ReleaseSequence         pgtype.Int8 `json:"release_sequence"`
+	EvidenceRevisionID      pgtype.UUID `json:"evidence_revision_id"`
+	PhysicalReleaseID       pgtype.UUID `json:"physical_release_id"`
+	PhysicalReleaseSequence int64       `json:"physical_release_sequence"`
+	JoinReleaseID           pgtype.UUID `json:"join_release_id"`
+	JoinReleaseSequence     int64       `json:"join_release_sequence"`
+	RelationCount           int64       `json:"relation_count"`
+	LineageCount            int64       `json:"lineage_count"`
+	PhysicalBindingCount    int64       `json:"physical_binding_count"`
+	ModelGrainCount         int64       `json:"model_grain_count"`
+	EntityKeyCount          int64       `json:"entity_key_count"`
+	JoinContractCount       int64       `json:"join_contract_count"`
+	ValidationRunCount      int64       `json:"validation_run_count"`
+	ValidationBlockerCount  int64       `json:"validation_blocker_count"`
+	ValidationWarningCount  int64       `json:"validation_warning_count"`
+	EvidenceCount           int64       `json:"evidence_count"`
+	CurrentConsumerCount    int64       `json:"current_consumer_count"`
+	PinnedConsumerCount     int64       `json:"pinned_consumer_count"`
+}
+
+func (q *Queries) GetCatalogAssetAuthorityFacts(ctx context.Context, arg GetCatalogAssetAuthorityFactsParams) (GetCatalogAssetAuthorityFactsRow, error) {
+	row := q.db.QueryRow(ctx, getCatalogAssetAuthorityFacts, arg.WorkspaceID, arg.AssetID)
+	var i GetCatalogAssetAuthorityFactsRow
+	err := row.Scan(
+		&i.CurrentRevisionID,
+		&i.ReleaseID,
+		&i.ReleasedRevisionID,
+		&i.ReleaseSequence,
+		&i.EvidenceRevisionID,
+		&i.PhysicalReleaseID,
+		&i.PhysicalReleaseSequence,
+		&i.JoinReleaseID,
+		&i.JoinReleaseSequence,
+		&i.RelationCount,
+		&i.LineageCount,
+		&i.PhysicalBindingCount,
+		&i.ModelGrainCount,
+		&i.EntityKeyCount,
+		&i.JoinContractCount,
+		&i.ValidationRunCount,
+		&i.ValidationBlockerCount,
+		&i.ValidationWarningCount,
+		&i.EvidenceCount,
+		&i.CurrentConsumerCount,
+		&i.PinnedConsumerCount,
 	)
 	return i, err
 }
@@ -192,7 +447,7 @@ func (q *Queries) GetCatalogDiscoveryFindings(ctx context.Context, runID pgtype.
 }
 
 const getCatalogDiscoveryRun = `-- name: GetCatalogDiscoveryRun :one
-SELECT id, workspace_id, source_connection_id, source_revision_id, adapter_version, status, error_code, stats, started_at, completed_at, created_at, updated_at
+SELECT id, workspace_id, source_connection_id, source_revision_id, adapter_version, status, error_code, stats, started_at, completed_at, created_at, updated_at, credential_version, job_id, requested_by, trace_id, projection_reused, artifact_set_id, request_fingerprint, source_input_fingerprint, source_config
 FROM discovery_runs
 WHERE workspace_id = $1
   AND id = $2
@@ -219,6 +474,15 @@ func (q *Queries) GetCatalogDiscoveryRun(ctx context.Context, arg GetCatalogDisc
 		&i.CompletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CredentialVersion,
+		&i.JobID,
+		&i.RequestedBy,
+		&i.TraceID,
+		&i.ProjectionReused,
+		&i.ArtifactSetID,
+		&i.RequestFingerprint,
+		&i.SourceInputFingerprint,
+		&i.SourceConfig,
 	)
 	return i, err
 }
@@ -305,6 +569,248 @@ func (q *Queries) LinkRevisionEvidence(ctx context.Context, arg LinkRevisionEvid
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const listCatalogAssetAuthorityRecords = `-- name: ListCatalogAssetAuthorityRecords :many
+WITH latest_pin AS (
+    SELECT release_asset.release_id, release_asset.revision_id,
+           release.sequence AS release_sequence, release.origin_proposal_id
+    FROM release_assets AS release_asset
+    JOIN releases AS release
+      ON release.workspace_id = release_asset.workspace_id AND release.id = release_asset.release_id
+    WHERE release_asset.workspace_id = $5
+      AND release_asset.asset_id = $6
+    ORDER BY release.sequence DESC, release.id DESC
+    LIMIT 1
+), effective_objects AS (
+    SELECT DISTINCT ON (snapshot.object_type, snapshot.object_id)
+           snapshot.object_type, snapshot.object_id, snapshot.version, snapshot.payload,
+           snapshot.release_id, release.sequence AS release_sequence
+    FROM release_object_snapshots AS snapshot
+    JOIN releases AS release
+      ON release.workspace_id = snapshot.workspace_id AND release.id = snapshot.release_id
+    WHERE snapshot.workspace_id = $5
+    ORDER BY snapshot.object_type, snapshot.object_id, release.sequence DESC, release.id DESC
+), asset_objects AS (
+    SELECT object_type, object_id, version, payload, release_id, release_sequence FROM effective_objects
+    WHERE object_type IN ('physical_binding', 'model_grain', 'entity_key')
+      AND payload->>'asset_id' = $6::uuid::text
+), asset_datasets AS (
+    SELECT DISTINCT (payload->>'dataset_id')::uuid AS dataset_id
+    FROM asset_objects
+    WHERE object_type = 'physical_binding' AND payload ? 'dataset_id'
+), join_objects AS (
+    SELECT object_type, object_id, version, payload, release_id, release_sequence FROM effective_objects
+    WHERE object_type = 'join_contract'
+      AND ((payload->>'left_dataset_id')::uuid IN (SELECT dataset_id FROM asset_datasets)
+        OR (payload->>'right_dataset_id')::uuid IN (SELECT dataset_id FROM asset_datasets))
+), current_release AS (
+    SELECT release.id
+    FROM releases AS release
+    WHERE release.workspace_id = $5
+    ORDER BY release.sequence DESC, release.id DESC
+    LIMIT 1
+), effective_bindings AS (
+    SELECT binding.id, binding.workspace_id, binding.consumer_id, binding.environment, binding.purpose, binding.mode, binding.release_id, binding.compatibility_constraint, binding.expires_at, binding.status, binding.version, binding.created_at, binding.updated_at,
+           CASE WHEN binding.mode = 'current' THEN current_release.id ELSE binding.release_id END AS effective_release_id
+    FROM consumer_bindings AS binding
+    LEFT JOIN current_release ON true
+    WHERE binding.workspace_id = $5
+      AND binding.status = 'active'
+      AND (binding.expires_at IS NULL OR binding.expires_at > CURRENT_TIMESTAMP)
+), records AS (
+    SELECT 'relations'::text AS section_kind, 'relation'::text AS record_kind,
+           relation.id AS record_id, 'semantic_relations'::text AS authority,
+           NULL::uuid AS release_id, 0::bigint AS release_sequence, 0::integer AS version,
+           relation.assertion_state AS status, relation.predicate AS label,
+           CASE WHEN relation.subject_asset_id = $6
+                THEN relation.object_asset_id ELSE relation.subject_asset_id END::text AS related_id,
+           jsonb_build_object(
+               'direction', CASE WHEN relation.subject_asset_id = $6 THEN 'outgoing' ELSE 'incoming' END,
+               'predicate', relation.predicate, 'plane', relation.plane,
+               'assertionState', relation.assertion_state,
+               'subjectAssetId', relation.subject_asset_id,
+               'objectAssetId', relation.object_asset_id
+           ) AS details
+    FROM semantic_relations AS relation
+    WHERE relation.workspace_id = $5
+      AND (relation.subject_asset_id = $6 OR relation.object_asset_id = $6)
+    UNION ALL
+    SELECT 'physical_bindings', object_type, object_id, 'release_object_snapshots',
+           release_id, release_sequence, version,
+           CASE WHEN object_type = 'physical_binding' AND payload->>'retired_at' IS NOT NULL THEN 'retired' ELSE 'available' END,
+           CASE object_type
+               WHEN 'physical_binding' THEN COALESCE(payload->>'transform', payload->>'dataset_id', object_type)
+               WHEN 'model_grain' THEN COALESCE(payload->>'grain_expression', object_type)
+               WHEN 'entity_key' THEN COALESCE(payload->>'uniqueness_semantics', object_type)
+           END,
+           CASE WHEN object_type = 'physical_binding' THEN COALESCE(payload->>'dataset_id', '') ELSE '' END,
+           CASE object_type
+               WHEN 'physical_binding' THEN jsonb_build_object(
+                   'assetId', payload->>'asset_id', 'datasetId', payload->>'dataset_id',
+                   'fieldId', payload->>'field_id', 'transform', payload->>'transform'
+               )
+               WHEN 'model_grain' THEN jsonb_build_object(
+                   'assetId', payload->>'asset_id', 'grainExpression', payload->>'grain_expression',
+                   'grainFieldRefs', COALESCE(payload->'grain_field_refs', '[]'::jsonb),
+                   'documentedBy', payload->>'documented_by'
+               )
+               WHEN 'entity_key' THEN jsonb_build_object(
+                   'assetId', payload->>'asset_id',
+                   'keyFieldRefs', COALESCE(payload->'key_field_refs', '[]'::jsonb),
+                   'uniquenessSemantics', payload->>'uniqueness_semantics'
+               )
+           END
+    FROM asset_objects
+    UNION ALL
+    SELECT 'join_contracts', object_type, object_id, 'release_object_snapshots',
+           release_id, release_sequence, version, COALESCE(payload->>'status', 'available'),
+           COALESCE(payload->>'join_expression', payload->>'cardinality', object_type),
+           CASE
+               WHEN (payload->>'left_dataset_id')::uuid IN (SELECT dataset_id FROM asset_datasets)
+                AND (payload->>'right_dataset_id')::uuid NOT IN (SELECT dataset_id FROM asset_datasets)
+                 THEN COALESCE(payload->>'right_dataset_id', '')
+               WHEN (payload->>'right_dataset_id')::uuid IN (SELECT dataset_id FROM asset_datasets)
+                 THEN COALESCE(payload->>'left_dataset_id', '')
+               ELSE ''
+           END,
+           jsonb_build_object(
+               'direction', CASE
+                   WHEN (payload->>'left_dataset_id')::uuid IN (SELECT dataset_id FROM asset_datasets)
+                    AND (payload->>'right_dataset_id')::uuid IN (SELECT dataset_id FROM asset_datasets) THEN 'both'
+                   WHEN (payload->>'left_dataset_id')::uuid IN (SELECT dataset_id FROM asset_datasets) THEN 'outgoing'
+                   ELSE 'incoming'
+               END,
+               'leftDatasetId', payload->>'left_dataset_id',
+               'rightDatasetId', payload->>'right_dataset_id',
+               'leftFieldRefs', COALESCE(payload->'left_field_refs', '[]'::jsonb),
+               'rightFieldRefs', COALESCE(payload->'right_field_refs', '[]'::jsonb),
+               'joinType', payload->>'join_type', 'cardinality', payload->>'cardinality',
+               'joinExpression', payload->>'join_expression'
+           )
+    FROM join_objects
+    UNION ALL
+    SELECT 'validation', 'validation_run', run.id, 'validation_runs',
+           latest_pin.release_id, latest_pin.release_sequence, 0, run.status, run.validator_id,
+           run.proposal_id::text, '{}'::jsonb
+    FROM latest_pin
+    JOIN validation_runs AS run
+      ON run.workspace_id = $5 AND run.proposal_id = latest_pin.origin_proposal_id
+    UNION ALL
+    SELECT 'lineage', 'lineage', edge.id, 'lineage_edges', NULL, 0, 0, edge.edge_kind,
+           edge.edge_kind, CASE WHEN edge.upstream_dataset_id IN (SELECT dataset_id FROM asset_datasets)
+                                THEN edge.downstream_dataset_id ELSE edge.upstream_dataset_id END::text,
+           jsonb_build_object(
+               'direction', CASE WHEN edge.upstream_dataset_id IN (SELECT dataset_id FROM asset_datasets)
+                                 THEN 'outgoing' ELSE 'incoming' END,
+               'upstreamDatasetId', edge.upstream_dataset_id,
+               'downstreamDatasetId', edge.downstream_dataset_id,
+               'edgeKind', edge.edge_kind, 'sourceRevisionId', edge.source_revision_id,
+               'codeArtifactId', edge.code_artifact_id, 'confidence', edge.confidence
+           )
+    FROM lineage_edges AS edge
+    WHERE edge.workspace_id = $5
+      AND (edge.upstream_dataset_id IN (SELECT dataset_id FROM asset_datasets)
+        OR edge.downstream_dataset_id IN (SELECT dataset_id FROM asset_datasets))
+    UNION ALL
+    SELECT 'consumer_impact', 'consumer_binding', binding.id, 'consumer_bindings',
+           binding.effective_release_id, release.sequence, binding.version, binding.status,
+           binding.environment, binding.consumer_id::text,
+           jsonb_build_object('consumerId', binding.consumer_id, 'environment', binding.environment,
+                              'purpose', binding.purpose, 'mode', binding.mode, 'status', binding.status,
+                              'effectiveReleaseId', binding.effective_release_id,
+                              'compatibilityConstraint', binding.compatibility_constraint,
+                              'expiresAt', binding.expires_at)
+    FROM effective_bindings AS binding
+    JOIN latest_pin ON true
+    JOIN release_assets AS manifest
+      ON manifest.workspace_id = $5
+     AND manifest.release_id = binding.effective_release_id
+     AND manifest.asset_id = $6
+     AND manifest.revision_id = latest_pin.revision_id
+    JOIN releases AS release
+      ON release.workspace_id = binding.workspace_id AND release.id = binding.effective_release_id
+), section_records AS (
+    SELECT records.section_kind, records.record_kind, records.record_id, records.authority, records.release_id, records.release_sequence, records.version, records.status, records.label, records.related_id, records.details, count(*) OVER()::bigint AS total_count
+    FROM records
+    WHERE section_kind = $7::text
+)
+SELECT section_kind, record_kind, record_id, authority, release_id,
+       release_sequence, version, status, label, related_id, details, total_count
+FROM section_records
+WHERE (
+      NOT $1::boolean
+      OR record_kind > $2::text
+      OR (record_kind = $2::text AND record_id > $3::uuid)
+  )
+ORDER BY section_kind, record_kind, record_id
+LIMIT $4
+`
+
+type ListCatalogAssetAuthorityRecordsParams struct {
+	HasCursor        bool        `json:"has_cursor"`
+	CursorRecordKind string      `json:"cursor_record_kind"`
+	CursorRecordID   pgtype.UUID `json:"cursor_record_id"`
+	PageLimit        int32       `json:"page_limit"`
+	WorkspaceID      pgtype.UUID `json:"workspace_id"`
+	AssetID          pgtype.UUID `json:"asset_id"`
+	SectionKind      string      `json:"section_kind"`
+}
+
+type ListCatalogAssetAuthorityRecordsRow struct {
+	SectionKind     string      `json:"section_kind"`
+	RecordKind      string      `json:"record_kind"`
+	RecordID        pgtype.UUID `json:"record_id"`
+	Authority       string      `json:"authority"`
+	ReleaseID       pgtype.UUID `json:"release_id"`
+	ReleaseSequence int64       `json:"release_sequence"`
+	Version         int32       `json:"version"`
+	Status          string      `json:"status"`
+	Label           string      `json:"label"`
+	RelatedID       string      `json:"related_id"`
+	Details         []byte      `json:"details"`
+	TotalCount      int64       `json:"total_count"`
+}
+
+func (q *Queries) ListCatalogAssetAuthorityRecords(ctx context.Context, arg ListCatalogAssetAuthorityRecordsParams) ([]ListCatalogAssetAuthorityRecordsRow, error) {
+	rows, err := q.db.Query(ctx, listCatalogAssetAuthorityRecords,
+		arg.HasCursor,
+		arg.CursorRecordKind,
+		arg.CursorRecordID,
+		arg.PageLimit,
+		arg.WorkspaceID,
+		arg.AssetID,
+		arg.SectionKind,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListCatalogAssetAuthorityRecordsRow{}
+	for rows.Next() {
+		var i ListCatalogAssetAuthorityRecordsRow
+		if err := rows.Scan(
+			&i.SectionKind,
+			&i.RecordKind,
+			&i.RecordID,
+			&i.Authority,
+			&i.ReleaseID,
+			&i.ReleaseSequence,
+			&i.Version,
+			&i.Status,
+			&i.Label,
+			&i.RelatedID,
+			&i.Details,
+			&i.TotalCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listCatalogAssetRevisions = `-- name: ListCatalogAssetRevisions :many
@@ -527,6 +1033,7 @@ WHERE relation.workspace_id = $2
        OR ($3::text = 'incoming' AND relation.object_asset_id = $1))
   AND ($4::text = '' OR relation.plane = $4::text)
 ORDER BY relation.id
+LIMIT $5
 `
 
 type ListDirectCatalogAssetRelationsParams struct {
@@ -534,6 +1041,7 @@ type ListDirectCatalogAssetRelationsParams struct {
 	WorkspaceID pgtype.UUID `json:"workspace_id"`
 	Direction   string      `json:"direction"`
 	Plane       string      `json:"plane"`
+	PageLimit   int32       `json:"page_limit"`
 }
 
 type ListDirectCatalogAssetRelationsRow struct {
@@ -564,6 +1072,7 @@ func (q *Queries) ListDirectCatalogAssetRelations(ctx context.Context, arg ListD
 		arg.WorkspaceID,
 		arg.Direction,
 		arg.Plane,
+		arg.PageLimit,
 	)
 	if err != nil {
 		return nil, err

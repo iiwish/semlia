@@ -1,0 +1,51 @@
+[
+  {
+    "name": "unit-final",
+    "command": "env -u SEMLIA_DATABASE_URL go test -p=1 -count=1 ./pkg/identity ./internal/domain/governance ./internal/application/governance ./internal/application/catalog ./internal/application/discovery ./internal/platform/config ./internal/platform/http ./cmd/semlia",
+    "startedAt": "2026-09-10T09:56:45.687Z",
+    "endedAt": "2026-09-10T09:57:13.269Z",
+    "exitCode": 0
+  },
+  {
+    "name": "db-generate-check",
+    "command": "make db-generate-check",
+    "startedAt": "2026-09-10T09:57:13.272Z",
+    "endedAt": "2026-09-10T09:57:14.595Z",
+    "exitCode": 0
+  },
+  {
+    "name": "contracts-check",
+    "command": "make contracts-check",
+    "startedAt": "2026-09-10T09:57:14.595Z",
+    "endedAt": "2026-09-10T09:57:17.116Z",
+    "exitCode": 0
+  },
+  {
+    "name": "test-contracts",
+    "command": "make test-contracts",
+    "startedAt": "2026-09-10T09:57:17.117Z",
+    "endedAt": "2026-09-10T09:57:17.474Z",
+    "exitCode": 0
+  },
+  {
+    "name": "test-repository",
+    "command": "make test-repository",
+    "startedAt": "2026-09-10T09:57:17.474Z",
+    "endedAt": "2026-09-10T09:57:24.114Z",
+    "exitCode": 0
+  },
+  {
+    "name": "sdk",
+    "command": "pnpm --filter @semlia/sdk-typescript test",
+    "startedAt": "2026-09-10T09:57:24.115Z",
+    "endedAt": "2026-09-10T09:57:25.892Z",
+    "exitCode": 0
+  },
+  {
+    "name": "diff-check",
+    "command": "git diff --check",
+    "startedAt": "2026-09-10T09:57:25.893Z",
+    "endedAt": "2026-09-10T09:57:26.066Z",
+    "exitCode": 0
+  }
+]

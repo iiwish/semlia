@@ -3,6 +3,7 @@ package contracts_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -49,11 +50,11 @@ func TestCanonicalSpecificationIsValidAndMinimal(t *testing.T) {
 	if doc.OpenAPI != "3.0.3" {
 		t.Errorf("OpenAPI version = %q, want 3.0.3", doc.OpenAPI)
 	}
-	if doc.Info.Version != "0.4.0" {
-		t.Errorf("contract bundle version = %q, want 0.4.0", doc.Info.Version)
+	if doc.Info.Version != "0.9.0" {
+		t.Errorf("contract bundle version = %q, want 0.9.0", doc.Info.Version)
 	}
-	if version := doc.Extensions["x-semlia-contract-version"]; version == nil {
-		t.Error("missing x-semlia-contract-version")
+	if version := doc.Extensions["x-semlia-contract-version"]; fmt.Sprint(version) != "9" {
+		t.Errorf("x-semlia-contract-version = %v, want 9", version)
 	}
 
 	requiredSchemas := []string{
@@ -62,6 +63,28 @@ func TestCanonicalSpecificationIsValidAndMinimal(t *testing.T) {
 		"WorkspaceId",
 		"Workspace",
 		"CreateWorkspaceRequest",
+		"UserAccountId",
+		"PrincipalId",
+		"MembershipId",
+		"InvitationId",
+		"SessionResponse",
+		"AuthorizationAction",
+		"AuthorizationRole",
+		"AuthorizationRolePage",
+		"CreateAuthorizationRoleRequest",
+		"UpdateAuthorizationRoleRequest",
+		"AuthorizationRoleBinding",
+		"AuthorizationRoleBindingPage",
+		"CreateAuthorizationRoleBindingRequest",
+		"RevokeAuthorizationRoleBindingRequest",
+		"InspectAuthorizationRequest",
+		"AuthorizationDecision",
+		"WorkspaceMembership",
+		"WorkspaceMembershipPage",
+		"UpdateWorkspaceMembershipRequest",
+		"WorkspaceInvitation",
+		"WorkspaceInvitationPage",
+		"CreateWorkspaceInvitationRequest",
 		"SemanticAssetId",
 		"AssetRevisionId",
 		"SemanticRelationId",
@@ -70,6 +93,16 @@ func TestCanonicalSpecificationIsValidAndMinimal(t *testing.T) {
 		"RunId",
 		"EventId",
 		"SourceConnectionId",
+		"ArtifactId",
+		"ArtifactSetId",
+		"SourceScheduleId",
+		"ScheduleOccurrenceId",
+		"SemanticCandidateId",
+		"ProductionOperationId",
+		"ProductionOperation",
+		"ProductionCommandResult",
+		"CreateProductionRequest",
+		"ReplaceProductionRequest",
 		"SourceRevisionId",
 		"PhysicalDatasetId",
 		"PhysicalDatasetRevisionId",
@@ -77,6 +110,17 @@ func TestCanonicalSpecificationIsValidAndMinimal(t *testing.T) {
 		"PhysicalFieldRevisionId",
 		"CodeArtifactId",
 		"LineageEdgeId",
+		"SourceConnection",
+		"IngestionArtifact",
+		"ArtifactValidationSummary",
+		"ArtifactSet",
+		"SourceSchedule",
+		"SourceScheduleOccurrence",
+		"CreateSourceRequest",
+		"SourceDiscoveryRun",
+		"SourceDiscoveryRunPage",
+		"SemanticCandidate",
+		"SemanticCandidateDecision",
 		"SemanticAddress",
 		"SemanticAssetType",
 		"RelationPredicate",
@@ -144,6 +188,17 @@ func TestCanonicalSpecificationIsValidAndMinimal(t *testing.T) {
 		"GovernanceReleaseDetail",
 		"GovernanceReleasePage",
 		"PublishGovernanceReleaseRequest",
+		"ConsumerId",
+		"ConsumerBindingId",
+		"SemanticQueryId",
+		"ResolvedSemanticPlanId",
+		"QueryValidationRunId",
+		"Consumer",
+		"ConsumerBinding",
+		"SemanticQuery",
+		"ResolvedSemanticPlan",
+		"SemanticRefusal",
+		"SemanticResolution",
 	}
 	for _, name := range requiredSchemas {
 		if doc.Components.Schemas[name] == nil {
@@ -152,12 +207,19 @@ func TestCanonicalSpecificationIsValidAndMinimal(t *testing.T) {
 	}
 
 	requiredOperations := map[string]string{
-		"/health/live":        "getLiveness",
-		"/health/ready":       "getReadiness",
-		"/api/v1/system/info": "getSystemInfo",
-		"/api/v1/workspaces/{workspaceId}/catalog/assets":                                    "listCatalogAssets",
-		"/api/v1/workspaces/{workspaceId}/catalog/assets/{assetId}":                          "getCatalogAsset",
-		"/api/v1/workspaces/{workspaceId}/catalog/assets/{assetId}/revisions":                "listAssetRevisions",
+		"/health/live":                                                        "getLiveness",
+		"/health/ready":                                                       "getReadiness",
+		"/api/v1/system/info":                                                 "getSystemInfo",
+		"/api/v1/auth/login":                                                  "beginOIDCLogin",
+		"/api/v1/auth/callback":                                               "completeOIDCLogin",
+		"/api/v1/session":                                                     "getSession",
+		"/api/v1/workspaces/{workspaceId}/members":                            "listWorkspaceMembers",
+		"/api/v1/workspaces/{workspaceId}/invitations":                        "listWorkspaceInvitations",
+		"/api/v1/workspaces/{workspaceId}/authorization/roles":                "listAuthorizationRoles",
+		"/api/v1/workspaces/{workspaceId}/authorization/role-bindings":        "listAuthorizationRoleBindings",
+		"/api/v1/workspaces/{workspaceId}/catalog/assets":                     "listCatalogAssets",
+		"/api/v1/workspaces/{workspaceId}/catalog/assets/{assetId}":           "getCatalogAsset",
+		"/api/v1/workspaces/{workspaceId}/catalog/assets/{assetId}/revisions": "listAssetRevisions",
 		"/api/v1/workspaces/{workspaceId}/catalog/assets/{assetId}/revisions/{revisionId}":   "getAssetRevision",
 		"/api/v1/workspaces/{workspaceId}/catalog/assets/{assetId}/relations":                "listAssetRelations",
 		"/api/v1/workspaces/{workspaceId}/discovery-runs/{runId}":                            "getDiscoveryRun",
@@ -169,6 +231,14 @@ func TestCanonicalSpecificationIsValidAndMinimal(t *testing.T) {
 		"/api/v1/workspaces/{workspaceId}/governance/review-batches/{batchId}":               "getGovernanceReviewBatch",
 		"/api/v1/workspaces/{workspaceId}/governance/releases":                               "listGovernanceReleases",
 		"/api/v1/workspaces/{workspaceId}/governance/releases/{releaseId}":                   "getGovernanceRelease",
+		"/api/v1/workspaces/{workspaceId}/consumers":                                         "listConsumers",
+		"/api/v1/workspaces/{workspaceId}/consumers/{consumerId}":                            "getConsumer",
+		"/api/v1/workspaces/{workspaceId}/consumer-bindings":                                 "listConsumerBindings",
+		"/api/v1/workspaces/{workspaceId}/consumer-bindings/{bindingId}":                     "getConsumerBinding",
+		"/api/v1/workspaces/{workspaceId}/semantic-queries/{queryId}":                        "getSemanticQuery",
+		"/api/v1/workspaces/{workspaceId}/resolved-semantic-plans/{planId}":                  "getResolvedSemanticPlan",
+		"/api/v1/workspaces/{workspaceId}/production-operations":                             "listProductionOperations",
+		"/api/v1/workspaces/{workspaceId}/production-operations/{operationId}":               "getProductionOperation",
 	}
 	for path, operationID := range requiredOperations {
 		item := doc.Paths.Find(path)
@@ -187,6 +257,10 @@ func TestCanonicalSpecificationIsValidAndMinimal(t *testing.T) {
 	revisions := doc.Paths.Find("/api/v1/workspaces/{workspaceId}/catalog/assets/{assetId}/revisions")
 	if revisions == nil || revisions.Post == nil || revisions.Post.OperationID != "createAssetRevision" {
 		t.Error("missing POST createAssetRevision operation")
+	}
+	inspect := doc.Paths.Find("/api/v1/workspaces/{workspaceId}/authorization:inspect")
+	if inspect == nil || inspect.Post == nil || inspect.Post.OperationID != "inspectEffectiveAuthorization" {
+		t.Error("missing POST inspectEffectiveAuthorization operation")
 	}
 	proposals := doc.Paths.Find("/api/v1/workspaces/{workspaceId}/governance/proposals")
 	if proposals == nil || proposals.Post == nil || proposals.Post.OperationID != "createGovernanceProposal" {
@@ -216,6 +290,38 @@ func TestCanonicalSpecificationIsValidAndMinimal(t *testing.T) {
 	if rollback == nil || rollback.Post == nil || rollback.Post.OperationID != "rollbackGovernanceRelease" {
 		t.Error("missing POST rollbackGovernanceRelease operation")
 	}
+	sources := doc.Paths.Find("/api/v1/workspaces/{workspaceId}/sources")
+	if sources == nil || sources.Get == nil || sources.Post == nil {
+		t.Error("missing source list/create operations")
+	}
+	runs := doc.Paths.Find("/api/v1/workspaces/{workspaceId}/sources/{sourceId}/discovery-runs")
+	if runs == nil || runs.Get == nil || runs.Post == nil {
+		t.Error("missing source discovery run operations")
+	}
+	candidates := doc.Paths.Find("/api/v1/workspaces/{workspaceId}/semantic-candidates/{candidateId}/decisions")
+	if candidates == nil || candidates.Post == nil {
+		t.Error("missing semantic candidate decision operation")
+	}
+	resolve := doc.Paths.Find("/api/v1/workspaces/{workspaceId}/semantic-queries:resolve")
+	if resolve == nil || resolve.Post == nil || resolve.Post.OperationID != "resolveSemanticQuery" {
+		t.Error("missing semantic query resolve operation")
+	}
+	prodOps := doc.Paths.Find("/api/v1/workspaces/{workspaceId}/production-operations")
+	if prodOps == nil || prodOps.Post == nil || prodOps.Post.OperationID != "createProductionOperation" {
+		t.Error("missing POST createProductionOperation operation")
+	}
+	replaceDraft := doc.Paths.Find("/api/v1/workspaces/{workspaceId}/production-operations/{operationId}")
+	if replaceDraft == nil || replaceDraft.Put == nil || replaceDraft.Put.OperationID != "replaceProductionDraft" {
+		t.Error("missing PUT replaceProductionDraft operation")
+	}
+	generation := doc.Paths.Find("/api/v1/workspaces/{workspaceId}/production-operations/{operationId}/generation")
+	if generation == nil || generation.Post == nil || generation.Post.OperationID != "generateProductionSuggestions" || generation.Post.Responses.Status(202) == nil {
+		t.Error("missing queued production generation contract")
+	}
+	recovery := doc.Paths.Find("/api/v1/workspaces/{workspaceId}/production-operations/{operationId}/generation/{runId}")
+	if recovery == nil || recovery.Get == nil || recovery.Get.OperationID != "getProductionGeneration" {
+		t.Error("missing generation recovery contract")
+	}
 
 }
 
@@ -227,6 +333,16 @@ func TestSharedSchemaValidationMatrix(t *testing.T) {
 		payload    string
 		shouldPass bool
 	}{
+		{"source snapshot ID", "SourceSnapshotId", `"ssnp_01arz3ndektsv4rrffq69g5fav"`, true},
+		{"source snapshot wrong prefix", "SourceSnapshotId", `"run_01arz3ndektsv4rrffq69g5fav"`, false},
+		{"source code revision ID", "SourceCodeRevisionId", `"codrev_01arz3ndektsv4rrffq69g5fav"`, true},
+		{"source lineage revision ID", "SourceLineageRevisionId", `"linrev_01arz3ndektsv4rrffq69g5fav"`, true},
+		{"production operation ID", "ProductionOperationId", `"prodop_01arz3ndektsv4rrffq69g5fav"`, true},
+		{"production operation wrong prefix", "ProductionOperationId", `"ast_01arz3ndektsv4rrffq69g5fav"`, false},
+		{"snapshot cursor null", "SnapshotPage", `{"items":[],"nextCursor":null}`, true},
+		{"snapshot cursor required", "SnapshotPage", `{"items":[]}`, false},
+		{"snapshot code member", "SnapshotMember", `{"kind":"code","objectId":"cod_01arz3ndektsv4rrffq69g5fav","revisionId":"codrev_01arz3ndektsv4rrffq69g5fav","name":"schema.sql","locator":"schema.sql","contentDigest":"sha256:0000000000000000000000000000000000000000000000000000000000000000","coverageKey":"sql:schema.sql"}`, true},
+		{"snapshot field parent", "SnapshotMember", `{"kind":"field","objectId":"pfd_01arz3ndektsv4rrffq69g5fav","revisionId":"pfr_01arz3ndektsv4rrffq69g5fav","name":"id","locator":"orders#id","contentDigest":"sha256:0000000000000000000000000000000000000000000000000000000000000000","coverageKey":"catalog","parentObjectId":"pds_01arz3ndektsv4rrffq69g5fav","parentRevisionId":"pdr_01arz3ndektsv4rrffq69g5fav"}`, true},
 		{"resource ID", "ResourceId", `"ast_01arz3ndektsv4rrffq69g5fav"`, true},
 		{"resource ID uppercase", "ResourceId", `"ast_01ARZ3NDEKTSV4RRFFQ69G5FAV"`, false},
 		{"resource ID without prefix", "ResourceId", `"01arz3ndektsv4rrffq69g5fav"`, false},
@@ -252,10 +368,33 @@ func TestSharedSchemaValidationMatrix(t *testing.T) {
 		{"health response invalid status", "HealthResponse", `{"status":"down","traceId":"4bf92f3577b34da6a3ce929d0e0e4736"}`, false},
 		{"system info", "SystemInfo", `{"service":"semlia","apiVersion":"v1","schemaVersion":"0.2.0","buildVersion":"dev","traceId":"4bf92f3577b34da6a3ce929d0e0e4736"}`, true},
 		{"system info invalid API version", "SystemInfo", `{"service":"semlia","apiVersion":"1","schemaVersion":"0.2.0","buildVersion":"dev","traceId":"4bf92f3577b34da6a3ce929d0e0e4736"}`, false},
-		{"catalog asset detail", "CatalogAssetDetail", `{"id":"ast_01arz3ndektsv4rrffq69g5fav","address":"commerce.net_revenue","assetType":"metric","lifecycleState":"active","title":"Net revenue","summary":"Revenue after refunds","updatedAt":"2026-09-02T08:00:00Z","createdAt":"2026-09-01T08:00:00Z","relationCount":2}`, true},
-		{"catalog asset detail extra field", "CatalogAssetDetail", `{"id":"ast_01arz3ndektsv4rrffq69g5fav","address":"commerce.net_revenue","assetType":"metric","lifecycleState":"active","title":"Net revenue","summary":"Revenue after refunds","updatedAt":"2026-09-02T08:00:00Z","createdAt":"2026-09-01T08:00:00Z","relationCount":2,"databaseUuid":"hidden"}`, false},
+		{"session capabilities", "SessionResponse", `{"account":{"id":"usr_01arz3ndektsv4rrffq69g5fav","displayName":"Founder"},"workspaces":[{"id":"wsp_01arz3ndektsv4rrffq69g5fav","slug":"default","displayName":"Default","principalId":"prn_01arz3ndektsv4rrffq69g5fav","roleIds":["workspace_admin"],"capabilities":["role.read"],"authorizationVersion":1}],"expiresAt":"2026-09-04T08:00:00Z","traceId":"4bf92f3577b34da6a3ce929d0e0e4736"}`, true},
+		{"session capabilities required", "SessionResponse", `{"account":{"id":"usr_01arz3ndektsv4rrffq69g5fav","displayName":"Founder"},"workspaces":[{"id":"wsp_01arz3ndektsv4rrffq69g5fav","slug":"default","displayName":"Default","principalId":"prn_01arz3ndektsv4rrffq69g5fav","roleIds":["workspace_admin"],"authorizationVersion":1}],"expiresAt":"2026-09-04T08:00:00Z","traceId":"4bf92f3577b34da6a3ce929d0e0e4736"}`, false},
+		{"custom role create", "CreateAuthorizationRoleRequest", `{"name":"Analyst","description":"Reads governed assets.","actions":["asset.read"]}`, true},
+		{"custom role rejects unknown action", "CreateAuthorizationRoleRequest", `{"name":"Analyst","description":"Reads governed assets.","actions":["database.destroy"]}`, false},
+		{"role binding create", "CreateAuthorizationRoleBindingRequest", `{"principalId":"prn_01arz3ndektsv4rrffq69g5fav","roleId":"workspace_admin","expectedRoleVersion":1,"scope":{"type":"workspace","id":"01arz3ndektsv4rrffq69g5fav"}}`, true},
+		{"authorization inspect", "InspectAuthorizationRequest", `{"principalId":"prn_01arz3ndektsv4rrffq69g5fav","action":"asset.read","resource":{"type":"workspace","id":"01arz3ndektsv4rrffq69g5fav"}}`, true},
+		{"catalog asset detail", "CatalogAssetDetail", `{"id":"ast_01arz3ndektsv4rrffq69g5fav","address":"commerce.net_revenue","assetType":"metric","lifecycleState":"active","title":"Net revenue","summary":"Revenue after refunds","updatedAt":"2026-09-02T08:00:00Z","createdAt":"2026-09-01T08:00:00Z","relationCount":2,"authoritySections":[]}`, true},
+		{"catalog asset detail extra field", "CatalogAssetDetail", `{"id":"ast_01arz3ndektsv4rrffq69g5fav","address":"commerce.net_revenue","assetType":"metric","lifecycleState":"active","title":"Net revenue","summary":"Revenue after refunds","updatedAt":"2026-09-02T08:00:00Z","createdAt":"2026-09-01T08:00:00Z","relationCount":2,"authoritySections":[],"databaseUuid":"hidden"}`, false},
 		{"create catalog asset", "CreateCatalogAssetRequest", `{"address":"commerce.net_revenue","assetType":"metric","schemaVersion":"1.0.0","content":{"name":"Net revenue"},"createdBy":"founder"}`, true},
 		{"create catalog asset unknown field", "CreateCatalogAssetRequest", `{"address":"commerce.net_revenue","assetType":"metric","schemaVersion":"1.0.0","content":{},"createdBy":"founder","credential":"secret"}`, false},
+		{"create source write-only password", "CreateSourceRequest", `{"name":"Warehouse","host":"db.internal","port":5432,"database":"analytics","username":"semlia_reader","password":"write-only","sslMode":"verify-full","artifactPaths":["v1/schema.sql"]}`, true},
+		{"source response redacts password", "SourceConnection", `{"id":"src_01arz3ndektsv4rrffq69g5fav","name":"Warehouse","adapterKind":"postgresql_catalog","host":"db.internal","port":5432,"database":"analytics","username":"semlia_reader","password":"leaked","sslMode":"verify-full","artifactPaths":[],"status":"active","credentialVersion":1,"createdAt":"2026-09-04T08:00:00Z","updatedAt":"2026-09-04T08:00:00Z"}`, false},
+		{"postgres source response", "SourceConnection", `{"id":"src_01arz3ndektsv4rrffq69g5fav","name":"Warehouse","sourceKind":"postgresql","adapterKind":"postgresql_catalog","host":"db.internal","port":5432,"database":"analytics","username":"semlia_reader","sslMode":"verify-full","artifactPaths":[],"status":"active","credentialVersion":1,"version":2,"createdAt":"2026-09-04T08:00:00Z","updatedAt":"2026-09-04T08:00:00Z"}`, true},
+		{"artifact source response", "SourceConnection", `{"id":"src_01arz3ndektsv4rrffq69g5fav","name":"Orders CSV","sourceKind":"file","adapterKind":"file_catalog","activeArtifactSetId":"ars_01arz3ndektsv4rrffq69g5fav","status":"active","version":1,"createdAt":"2026-09-04T08:00:00Z","updatedAt":"2026-09-04T08:00:00Z"}`, true},
+		{"artifact source rejects fake credentials", "SourceConnection", `{"id":"src_01arz3ndektsv4rrffq69g5fav","name":"Orders CSV","sourceKind":"file","adapterKind":"file_catalog","activeArtifactSetId":"ars_01arz3ndektsv4rrffq69g5fav","credentialVersion":1,"status":"active","version":1,"createdAt":"2026-09-04T08:00:00Z","updatedAt":"2026-09-04T08:00:00Z"}`, false},
+		{"source page", "SourceConnectionPage", `{"items":[{"id":"src_01arz3ndektsv4rrffq69g5fav","name":"Orders CSV","sourceKind":"file","adapterKind":"file_catalog","activeArtifactSetId":"ars_01arz3ndektsv4rrffq69g5fav","status":"active","version":1,"createdAt":"2026-09-04T08:00:00Z","updatedAt":"2026-09-04T08:00:00Z"}],"total":1,"limit":50}`, true},
+		{"staged artifact preview", "IngestionArtifact", `{"id":"art_01arz3ndektsv4rrffq69g5fav","kind":"csv","schemaVersion":"csv/v1","contentDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","byteSize":42,"mediaType":"text/csv","originalName":"orders.csv","status":"uploaded","contentAvailability":"available","validationSummary":{"adapterKind":"file_catalog","adapterVersion":"1.0.0","datasetCount":1,"fieldCount":3,"codeArtifactCount":0,"lineageCount":0,"keyCount":0,"joinCount":0,"findingCount":0},"createdAt":"2026-09-04T08:00:00Z"}`, true},
+		{"artifact set exact pins", "ArtifactSet", `{"id":"ars_01arz3ndektsv4rrffq69g5fav","sourceId":"src_01arz3ndektsv4rrffq69g5fav","sourceKind":"file","setDigest":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","members":[{"artifactId":"art_01arz3ndektsv4rrffq69g5fav","logicalPath":"orders.csv","ordinal":1,"contentDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","byteSize":42,"mediaType":"text/csv","kind":"csv","contentAvailability":"available"}],"createdAt":"2026-09-04T08:00:00Z"}`, true},
+		{"scheduled occurrence pins", "SourceScheduleOccurrence", `{"id":"occ_01arz3ndektsv4rrffq69g5fav","scheduleId":"sch_01arz3ndektsv4rrffq69g5fav","sourceId":"src_01arz3ndektsv4rrffq69g5fav","triggerKind":"scheduled","scheduleVersion":2,"scheduledFor":"2026-09-04T08:00:00Z","eligibleAt":"2026-09-04T08:00:00Z","wallClockKey":"2026-09-04T08:00","state":"enqueued","misfireDisposition":"on_time","discoveryRunId":"run_01arz3ndektsv4rrffq69g5fav","jobId":"run_01arz3ndektsv4rrffq69g5fav","runtimeRunId":"run_01arz3ndektsv4rrffq69g5fav","artifactSetId":"ars_01arz3ndektsv4rrffq69g5fav","sourceFingerprint":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","operationsPath":"/operations/runtime?run=run_01arz3ndektsv4rrffq69g5fav","idempotencyKey":"scheduled:sch_01arz3ndektsv4rrffq69g5fav:2026-09-04T08:00","createdAt":"2026-09-04T08:00:00Z"}`, true},
+		{"candidate page", "SemanticCandidatePage", `{"items":[],"total":0,"limit":50}`, true},
+		{"semantic query", "SemanticQuery", `{"schemaVersion":"1.0.0","intent":"breakdown","measures":[{"address":"commerce.net_revenue"}],"dimensions":[{"search":"country"}],"filters":[{"selector":{"address":"commerce.country"},"operator":"eq","value":"CN"}],"limit":100,"context":{"mode":"current"}}`, true},
+		{"semantic query rejects raw sql", "SemanticQuery", `{"schemaVersion":"1.0.0","intent":"aggregate","measures":[{"address":"commerce.net_revenue"}],"context":{"mode":"current"},"sql":"select * from credentials"}`, false},
+		{"semantic query rejects credentials", "SemanticQuery", `{"schemaVersion":"1.0.0","intent":"aggregate","measures":[{"address":"commerce.net_revenue"}],"context":{"mode":"current"},"credential":"secret"}`, false},
+		{"ask request", "AskRequest", `{"question":"净收入的当前发布定义是什么？","context":{"mode":"current"},"idempotencyKey":"ask-1"}`, true},
+		{"ask request rejects credential", "AskRequest", `{"question":"净收入","idempotencyKey":"ask-2","credential":"secret"}`, false},
+		{"ask response rejects raw question", "AskResponse", `{"agentRun":{"id":"arun_01arz3ndektsv4rrffq69g5fav","model":"gpt-test","configRevision":"sha256:a/mset","inputHash":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","status":"succeeded","costMicros":0,"startedAt":"2026-09-04T08:00:00Z"},"interpretation":{"schema":"semlia.ask-interpretation/v1","outcome":"clarification","clarification":"请说明指标。"},"definitions":[],"question":"raw prompt"}`, false},
+		{"semantic candidate", "SemanticCandidate", `{"id":"scd_01arz3ndektsv4rrffq69g5fav","sourceConnectionId":"src_01arz3ndektsv4rrffq69g5fav","sourceRevisionId":"srv_01arz3ndektsv4rrffq69g5fav","discoveryRunId":"run_01arz3ndektsv4rrffq69g5fav","candidateKey":"entity:postgres:public.orders","candidateKind":"entity","title":"public.orders","proposalInput":{},"evidence":[],"contentDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","status":"pending","createdAt":"2026-09-04T08:00:00Z","updatedAt":"2026-09-04T08:00:00Z"}`, true},
 		{"create governance proposal", "CreateGovernanceProposalRequest", `{"targetObjectType":"semantic_asset","targetObjectId":"ast_01arz3ndektsv4rrffq69g5fav","baseRevisionId":"rev_01arz3ndektsv4rrffq69g5fav","title":"Tighten metric definition","summary":"Clarifies refunds","reason":"Audit finding","changeSet":[{"fieldPath":"definition","op":"update","beforeDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","afterDigest":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","beforeValue":"Revenue after refunds","afterValue":"Revenue after refunds and chargebacks"}],"createdBy":"founder"}`, true},
 		{"create governance proposal unknown field", "CreateGovernanceProposalRequest", `{"targetObjectType":"join_contract","targetObjectId":"jct_01arz3ndektsv4rrffq69g5fav","title":"Fix join","changeSet":[{"fieldPath":"joinExpression","op":"update","beforeDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","afterDigest":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}],"createdBy":"founder","prompt":"raw text"}`, false},
 		{"create governance proposal missing change set", "CreateGovernanceProposalRequest", `{"targetObjectType":"entity_key","targetObjectId":"eky_01arz3ndektsv4rrffq69g5fav","title":"Add key","createdBy":"founder"}`, false},
@@ -281,6 +420,36 @@ func TestSharedSchemaValidationMatrix(t *testing.T) {
 				t.Fatal("expected invalid payload")
 			}
 		})
+	}
+}
+
+func TestSourceSnapshotReadContract(t *testing.T) {
+	doc := loadSpecification(t)
+	base := "/api/v1/workspaces/{workspaceId}/sources/{sourceId}/snapshots"
+	for suffix, operation := range map[string]string{"": "listProductionSourceSnapshots", "/{snapshotId}": "getProductionSourceSnapshot", "/{snapshotId}/members": "listProductionSnapshotMembers", "/{snapshotId}/diagnostics": "listProductionSnapshotDiagnostics"} {
+		path := doc.Paths.Find(base + suffix)
+		if path == nil || path.Get == nil || path.Get.OperationID != operation || len(path.Operations()) != 1 {
+			t.Fatalf("snapshot route=%s operation=%s", suffix, operation)
+		}
+		if fmt.Sprint(path.Get.Extensions["x-semlia-actions"]) != "[source.read]" || fmt.Sprint(path.Get.Extensions["x-semlia-reauthorize"]) != "true" {
+			t.Fatalf("read permission missing on %s", suffix)
+		}
+		for _, status := range []string{"200", "400", "403", "404"} {
+			if path.Get.Responses.Value(status) == nil {
+				t.Fatalf("missing %s on %s", status, suffix)
+			}
+		}
+	}
+	snapshotID := doc.Components.Schemas["SourceDiscoveryRun"].Value.Properties["snapshotId"].Value
+	if !snapshotID.Nullable || !strings.HasPrefix(snapshotID.Pattern, "^ssnp_") {
+		t.Fatal("run snapshotId must be nullable and typed")
+	}
+	limit := doc.Components.Parameters["Limit"].Value.Schema.Value
+	if limit.Min == nil || *limit.Min != 1 || limit.Max == nil || *limit.Max != 200 || fmt.Sprint(limit.Default) != "50" {
+		t.Fatal("snapshot pagination limits drifted")
+	}
+	if doc.Paths.Find("/api/v1/workspaces/{workspaceId}/production/operations") != nil {
+		t.Fatal("T002 must not introduce production commands")
 	}
 }
 
@@ -312,6 +481,7 @@ func TestGeneratedArtifactsArePortable(t *testing.T) {
 			"type EventEnvelope struct",
 			"type WorkspaceId = identity.WorkspaceID",
 			"type SemanticAssetId = identity.AssetID",
+			"\n\tDiagnostic OperationsRuntimeRunEventEventType",
 		},
 		"sdk/typescript/src/schema.gen.ts": {
 			"This file was auto-generated by openapi-typescript.",

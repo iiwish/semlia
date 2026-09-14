@@ -2,18 +2,24 @@ package discovery_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/iiwish/semlia/internal/adapters/discovery/catalog"
 	"github.com/iiwish/semlia/internal/adapters/discovery/dbt"
+	"github.com/iiwish/semlia/internal/adapters/discovery/postgreslive"
 	"github.com/iiwish/semlia/internal/adapters/discovery/postgresql"
 	pgstore "github.com/iiwish/semlia/internal/adapters/postgres"
 	application "github.com/iiwish/semlia/internal/application/discovery"
+	"github.com/iiwish/semlia/internal/application/jobs"
 	domain "github.com/iiwish/semlia/internal/domain/discovery"
 	"github.com/iiwish/semlia/internal/domain/semantic"
 	"github.com/iiwish/semlia/pkg/identity"
@@ -223,6 +229,180 @@ func TestUnsupportedDBTVersionPersistsFailedRunWithoutProjection(t *testing.T) {
 		"source_revisions": 1, "discovery_runs": 1, "discovery_findings": 1,
 		"physical_datasets": 0, "physical_dataset_revisions": 0,
 	})
+}
+
+func TestProtectedPostgreSQLSourceRunsWithPinnedCredentialAndReadOnlyCatalog(t *testing.T) {
+	pool, store := newStore(t)
+	resetData(t, pool)
+	ctx := context.Background()
+	parsed, err := url.Parse(databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	adminPassword, _ := parsed.User.Password()
+	readonlyPassword := "readonly-alpha-only"
+	if _, err := pool.Exec(ctx, `
+DROP SCHEMA IF EXISTS alpha_fixture CASCADE;
+DROP ROLE IF EXISTS semlia_alpha_reader;
+CREATE ROLE semlia_alpha_reader LOGIN PASSWORD 'readonly-alpha-only';
+CREATE SCHEMA alpha_fixture;
+CREATE TABLE alpha_fixture.accounts (id bigint PRIMARY KEY, region text NOT NULL);
+CREATE TABLE alpha_fixture.orders (id bigint PRIMARY KEY, account_id bigint NOT NULL REFERENCES alpha_fixture.accounts(id), amount numeric);
+GRANT CONNECT ON DATABASE semlia_discovery_test TO semlia_alpha_reader;
+GRANT USAGE ON SCHEMA alpha_fixture TO semlia_alpha_reader;
+GRANT SELECT ON ALL TABLES IN SCHEMA alpha_fixture TO semlia_alpha_reader;`); err != nil {
+		t.Fatal(err)
+	}
+
+	workspaceID := mustID(t, identity.NewWorkspaceID)
+	if _, err := pool.Exec(ctx, `INSERT INTO workspaces (id,slug,display_name) VALUES ($1,'protected-source','Protected Source')`, workspaceID.UUID()); err != nil {
+		t.Fatal(err)
+	}
+	principalID := mustID(t, identity.NewPrincipalID)
+	principalRef := principalID.String()
+	if _, err := pool.Exec(ctx, `INSERT INTO principals(id,workspace_id,kind,display_name,status) VALUES($1,$2,'human','Integration admin','active')`, principalID.UUID(), workspaceID.UUID()); err != nil {
+		t.Fatal(err)
+	}
+	cipher, err := application.NewCredentialCipher([]byte(strings.Repeat("c", 32)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	loader, err := application.NewArtifactLoader("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC().Truncate(time.Second)
+	service := application.NewControlService(store, cipher, postgreslive.NewLiveCollector(5*time.Second, 15*time.Second), loader, postgresql.Adapter{}, nil, application.ClockFunc(func() time.Time { return now }))
+	port, _ := strconv.Atoi(parsed.Port())
+	source, err := service.CreateSource(ctx, application.CreateSourceRequest{WorkspaceID: workspaceID, Name: "Alpha warehouse",
+		Host: parsed.Hostname(), Port: port, Database: strings.TrimPrefix(parsed.Path, "/"), Username: "semlia_alpha_reader", Password: readonlyPassword,
+		SSLMode: "disable", PrincipalRef: principalRef, TraceID: "4bf92f3577b34da6a3ce929d0e0e4736"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var authorizationVersion int64
+	if err := pool.QueryRow(ctx, `SELECT authorization_version FROM workspaces WHERE id=$1`, workspaceID.UUID()).Scan(&authorizationVersion); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := store.LoadDiscoverySourceCredentialAuthorized(ctx, workspaceID, source.ID, authorizationVersion); err != nil {
+		t.Fatalf("authorized credential bundle: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE workspaces SET authorization_version=authorization_version+1 WHERE id=$1`, workspaceID.UUID()); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := store.LoadDiscoverySourceCredentialAuthorized(ctx, workspaceID, source.ID, authorizationVersion); !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("stale credential authorization version error=%v", err)
+	}
+	if err := service.TestSource(ctx, application.SourceRequest{WorkspaceID: workspaceID, SourceID: source.ID, PrincipalRef: principalRef, TraceID: "4bf92f3577b34da6a3ce929d0e0e4736"}); err != nil {
+		t.Fatal(err)
+	}
+	var plaintextMatches int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM source_credentials WHERE ciphertext::text LIKE '%' || $1 || '%' OR nonce::text LIKE '%' || $1 || '%'`, readonlyPassword).Scan(&plaintextMatches); err != nil || plaintextMatches != 0 {
+		t.Fatalf("plaintext matches=%d err=%v", plaintextMatches, err)
+	}
+
+	request := application.StartRunRequest{SourceRequest: application.SourceRequest{WorkspaceID: workspaceID, SourceID: source.ID, PrincipalRef: principalRef, TraceID: "4bf92f3577b34da6a3ce929d0e0e4736"}, IdempotencyKey: "alpha-run-1"}
+	run, err := service.StartRun(ctx, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replay, err := service.StartRun(ctx, request)
+	if err != nil || replay.ID != run.ID {
+		t.Fatalf("idempotent run=%+v err=%v", replay, err)
+	}
+	request.IdempotencyKey = "overlap"
+	if _, err := service.StartRun(ctx, request); !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("overlap error=%v", err)
+	}
+	if _, err := service.RotateCredential(ctx, application.RotateCredentialRequest{SourceRequest: request.SourceRequest,
+		Password: "rotated-but-intentionally-wrong", ExpectedVersion: source.Version}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.LoadDiscoveryRunExecution(ctx, workspaceID, run.ID); err != nil {
+		t.Fatalf("load pinned run execution: %v", err)
+	}
+	worker := jobs.NewWorker(store, jobs.ClockFunc(time.Now), jobs.BackoffFunc(func(int32) time.Duration { return 0 }), time.Minute)
+	worker.Register(application.DiscoveryJobType, service.JobHandler())
+	processed, err := worker.RunOne(ctx, "alpha-worker")
+	if err != nil || !processed {
+		t.Fatalf("worker processed=%v err=%v", processed, err)
+	}
+	detail, err := store.GetCatalogDiscoveryRun(ctx, workspaceID, run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if detail.Status != "succeeded" {
+		var jobsText string
+		_ = pool.QueryRow(ctx, `SELECT COALESCE(string_agg(job_type||':'||status||':'||id::text||':'||COALESCE(last_error_code,''),','),'') FROM jobs`).Scan(&jobsText)
+		t.Fatalf("run status=%s error=%s jobID=%s jobs=%s", detail.Status, detail.ErrorCode, run.JobID.String(), jobsText)
+	}
+	candidatePage, err := service.ListCandidates(ctx, application.ListCandidateRequest{WorkspaceID: workspaceID, PrincipalRef: principalRef, TraceID: "4bf92f3577b34da6a3ce929d0e0e4736"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(candidatePage.Items) != 2 || candidatePage.Total != 2 {
+		t.Fatalf("candidate page=%+v", candidatePage)
+	}
+	candidates := candidatePage.Items
+	dismissed, err := service.DecideCandidate(ctx, application.DecideCandidateRequest{WorkspaceID: workspaceID,
+		CandidateID: candidates[0].ID, Action: "dismiss", Reason: "not governed in Alpha", IdempotencyKey: "dismiss-1",
+		PrincipalRef: principalRef, TraceID: "4bf92f3577b34da6a3ce929d0e0e4736"})
+	if err != nil || dismissed.Action != "dismiss" {
+		t.Fatalf("dismissed=%+v err=%v", dismissed, err)
+	}
+	dismissedReplay, err := service.DecideCandidate(ctx, application.DecideCandidateRequest{WorkspaceID: workspaceID,
+		CandidateID: candidates[0].ID, Action: "dismiss", Reason: "not governed in Alpha", IdempotencyKey: "dismiss-1",
+		PrincipalRef: principalRef, TraceID: "4bf92f3577b34da6a3ce929d0e0e4736"})
+	if err != nil || dismissedReplay.ID != dismissed.ID {
+		t.Fatalf("dismiss replay=%+v err=%v", dismissedReplay, err)
+	}
+	if _, err := service.DecideCandidate(ctx, application.DecideCandidateRequest{WorkspaceID: workspaceID,
+		CandidateID: candidates[1].ID, Action: "dismiss", Reason: "different request", IdempotencyKey: "dismiss-1",
+		PrincipalRef: principalRef, TraceID: "4bf92f3577b34da6a3ce929d0e0e4736"}); !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("cross-candidate replay err=%v", err)
+	}
+	assetID := mustID(t, identity.NewAssetID)
+	revisionID := mustID(t, identity.NewRevisionID)
+	proposalID := mustID(t, identity.NewProposalID)
+	if _, err := pool.Exec(ctx, `INSERT INTO semantic_assets (id,workspace_id,namespace,key,asset_type,lifecycle_state) VALUES ($1,$2,'alpha','orders','entity','draft')`, assetID.UUID(), workspaceID.UUID()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO asset_revisions (id,workspace_id,asset_id,sequence,schema_version,content_digest,content,created_by) VALUES ($1,$2,$3,1,'1.0.0',$4,'{}','integration-admin')`, revisionID.UUID(), workspaceID.UUID(), assetID.UUID(), "sha256:"+strings.Repeat("d", 64)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE semantic_assets SET current_revision_id=$1 WHERE id=$2`, revisionID.UUID(), assetID.UUID()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO proposals (id,workspace_id,asset_id,base_revision_id,target_object_type,target_object_id,state,title,created_by) VALUES ($1,$2,$3,$4,'semantic_asset',$3,'draft','Discovered orders','integration-admin')`, proposalID.UUID(), workspaceID.UUID(), assetID.UUID(), revisionID.UUID()); err != nil {
+		t.Fatal(err)
+	}
+	converted, err := service.DecideCandidate(ctx, application.DecideCandidateRequest{WorkspaceID: workspaceID,
+		CandidateID: candidates[1].ID, Action: "convert", ProposalID: &proposalID, Reason: "govern this entity", IdempotencyKey: "convert-1",
+		PrincipalRef: principalRef, TraceID: "4bf92f3577b34da6a3ce929d0e0e4736"})
+	if err != nil || converted.ProposalID == nil || *converted.ProposalID != proposalID {
+		t.Fatalf("converted=%+v err=%v", converted, err)
+	}
+	var keys, joins int
+	if err := pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM physical_key_observations),(SELECT count(*) FROM join_observations)`).Scan(&keys, &joins); err != nil {
+		t.Fatal(err)
+	}
+	if keys != 2 || joins != 1 {
+		t.Fatalf("keys/joins=%d/%d", keys, joins)
+	}
+
+	unsafeWorkspaceID := mustID(t, identity.NewWorkspaceID)
+	if _, err := pool.Exec(ctx, `INSERT INTO workspaces (id,slug,display_name) VALUES ($1,'unsafe-source','Unsafe Source')`, unsafeWorkspaceID.UUID()); err != nil {
+		t.Fatal(err)
+	}
+	elevated, err := service.CreateSource(ctx, application.CreateSourceRequest{WorkspaceID: unsafeWorkspaceID, Name: "Unsafe admin",
+		Host: parsed.Hostname(), Port: port, Database: strings.TrimPrefix(parsed.Path, "/"), Username: parsed.User.Username(), Password: adminPassword,
+		SSLMode: "disable", PrincipalRef: "integration-admin", TraceID: "4bf92f3577b34da6a3ce929d0e0e4736"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := service.TestSource(ctx, application.SourceRequest{WorkspaceID: unsafeWorkspaceID, SourceID: elevated.ID, PrincipalRef: "integration-admin", TraceID: "4bf92f3577b34da6a3ce929d0e0e4736"}); !errors.Is(err, domain.ErrUnsafeSource) {
+		t.Fatalf("unsafe role error=%v", err)
+	}
 }
 
 func newStore(t *testing.T) (*pgstore.Pool, *pgstore.Store) {

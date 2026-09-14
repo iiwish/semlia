@@ -1,0 +1,25 @@
+{
+  "command": [
+    "go",
+    "test",
+    "./tests/integration/ingestion",
+    "-run",
+    "^TestSourceSnapshot",
+    "-count=1",
+    "-v",
+    "-timeout",
+    "10m"
+  ],
+  "clearedEnvironment": [
+    "SEMLIA_INGESTION_TEST_DATABASE_URL",
+    "SEMLIA_EXECUTION_CRASH_HELPER",
+    "SEMLIA_EXECUTION_TEST_DB",
+    "SEMLIA_DATABASE_URL"
+  ],
+  "start": "2026-09-09T07:05:22.471Z",
+  "end": "2026-09-09T07:05:43.649Z",
+  "exitStatus": 0,
+  "signal": null,
+  "stdout": "2026/09/09 15:05:30 github.com/testcontainers/testcontainers-go - Connected to docker: \n  Server Version: 29.4.0\n  API Version: 1.54\n  Operating System: OrbStack\n  Total Memory: 16040 MB\n  Testcontainers for Go Version: v0.44.0\n  Resolved Docker Host: unix:///var/run/docker.sock\n  Resolved Docker Socket Path: /var/run/docker.sock\n  Test SessionID: 85ee076feefaf91bfb93f72c29c27ae45fb931f595638acb57dc83b377c9900e\n  Test ProcessID: 7b79a304-db20-4e06-9781-591cbbe77e17\n2026/09/09 15:05:30 🐳 Creating container for image postgres:18-alpine\n2026/09/09 15:05:31 🐳 Creating container for image testcontainers/ryuk:0.14.0\n2026/09/09 15:05:31 ✅ Container created: 0f2f328f13d8\n2026/09/09 15:05:31 🐳 Starting container: 0f2f328f13d8\n2026/09/09 15:05:32 ✅ Container started: 0f2f328f13d8\n2026/09/09 15:05:32 ⏳ Waiting for container id 0f2f328f13d8 image: testcontainers/ryuk:0.14.0. Waiting for: all of: [log message \"Started\", port 8080/tcp to be listening]\n2026/09/09 15:05:32 Shell not found in container\n2026/09/09 15:05:32 🔔 Container is ready: 0f2f328f13d8\n2026/09/09 15:05:32 ✅ Container created: 0ec0bdc3be37\n2026/09/09 15:05:32 🐳 Starting container: 0ec0bdc3be37\n2026/09/09 15:05:33 ✅ Container started: 0ec0bdc3be37\n2026/09/09 15:05:33 ⏳ Waiting for container id 0ec0bdc3be37 image: postgres:18-alpine. Waiting for: all of: [log message \"database system is ready to accept connections\" (occurrence: 2), port 5432/tcp to be listening]\n2026/09/09 15:05:40 🔔 Container is ready: 0ec0bdc3be37\n=== RUN   TestSourceSnapshotPinsHistoricalArtifactBytesDuringCleanup\n--- PASS: TestSourceSnapshotPinsHistoricalArtifactBytesDuringCleanup (0.36s)\n=== RUN   TestSourceSnapshotWorkerFailureInvalidatesFreshnessWithoutLosingHistory\n--- PASS: TestSourceSnapshotWorkerFailureInvalidatesFreshnessWithoutLosingHistory (0.42s)\nPASS\n2026/09/09 15:05:43 🐳 Stopping container: 0ec0bdc3be37\n2026/09/09 15:05:43 ✅ Container stopped: 0ec0bdc3be37\n2026/09/09 15:05:43 🐳 Terminating container: 0ec0bdc3be37\n2026/09/09 15:05:43 🚫 Container terminated: 0ec0bdc3be37\nok  \tgithub.com/iiwish/semlia/tests/integration/ingestion\t16.739s\n",
+  "stderr": ""
+}

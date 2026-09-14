@@ -19,6 +19,7 @@ type ProposalRepository interface {
 	DeleteProposalChange(ctx context.Context, workspace identity.WorkspaceID, proposal identity.ProposalID, change identity.ProposalChangeID) error
 	ListProposalChanges(ctx context.Context, workspace identity.WorkspaceID, proposal identity.ProposalID) ([]governance.ChangeSetItem, error)
 	CreateReview(ctx context.Context, review governance.Review) (governance.Review, error)
+	ListProposalReviews(ctx context.Context, workspace identity.WorkspaceID, proposal identity.ProposalID) ([]governance.Review, error)
 }
 
 // ProposalSubmitCommand carries the pre-minted event identities so the
@@ -293,4 +294,13 @@ func (service *ProposalService) RecordReview(ctx context.Context, request Record
 		return governance.Review{}, err
 	}
 	return service.repository.CreateReview(ctx, review)
+}
+
+func (service *ProposalService) ListReviews(
+	ctx context.Context, workspace identity.WorkspaceID, proposal identity.ProposalID,
+) ([]governance.Review, error) {
+	if _, err := service.repository.GetProposal(ctx, workspace, proposal); err != nil {
+		return nil, err
+	}
+	return service.repository.ListProposalReviews(ctx, workspace, proposal)
 }

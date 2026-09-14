@@ -1,0 +1,14 @@
+{
+  "command": "make test-contracts",
+  "start": {
+    "current_time": "2026-09-09 04:48:47 UTC"
+  },
+  "end": {
+    "current_time": "2026-09-09 04:48:48 UTC"
+  },
+  "chunk_id": "583c75",
+  "wall_time_seconds": 1.5462589580000001,
+  "exit_code": 0,
+  "original_token_count": 21,
+  "output": "go test ./tests/contracts/...\nok  \tgithub.com/iiwish/semlia/tests/contracts\t1.283s\n"
+}

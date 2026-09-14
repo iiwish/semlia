@@ -1,0 +1,392 @@
+{
+  "workspaceId": "wsp_01m1t6ypf8eye8yn23y0a62q9z",
+  "sourceId": "src_01m1t6yphjeyevg3g39zbe9qfv",
+  "metrics": {
+    "demo.net_revenue": {
+      "expected": "440940.00000000",
+      "runs": [
+        {
+          "initial": {
+            "run": {
+              "id": "run_01m1t7fd1tfp69wyh3vxjpsvv4",
+              "workspaceId": "wsp_01m1t6ypf8eye8yn23y0a62q9z",
+              "queryId": "smq_01m1t7e90jfp28wxk3yw4v7xe8",
+              "planId": "rsp_01m1t7e90sfp2s87rzd24353b4",
+              "planDigest": "sha256:438d83461ca247cc86ac0ed12c188e3826edf0f6a4741f5a553bb8fa04f73a9d",
+              "principalId": "prn_01m1t6ypf8fsm8twg2tbn7qhqt",
+              "channel": "api",
+              "sourceId": "src_01m1t6yphjeyevg3g39zbe9qfv",
+              "sourceRevisionId": "srv_01m1t6yq4qe9a91g6jk7aq90b3",
+              "adapterVersion": "postgres-aggregate/v1",
+              "policyVersion": 1,
+              "timeoutMs": 10000,
+              "maxRows": 1000,
+              "maxBytes": 1048576,
+              "cancelRequested": false,
+              "state": "succeeded",
+              "rowCount": 1,
+              "byteCount": 61,
+              "resultDigest": "sha256:54a02820682cb6bdeedf446af99ad544fe66a6994b3d05df4ae087b8ecaaa7e4",
+              "startedAt": "2026-09-06T02:06:37.11464Z",
+              "finishedAt": "2026-09-06T02:06:37.253487Z",
+              "traceId": "e5eaba99c4f5bafb68b1fb22706a8a6c"
+            },
+            "availability": "ephemeral",
+            "columns": [
+              "demo.net_revenue"
+            ],
+            "rows": [
+              [
+                "440940.00000000"
+              ]
+            ],
+            "replay": false
+          },
+          "replay": {
+            "run": {
+              "id": "run_01m1t7fd1tfp69wyh3vxjpsvv4",
+              "workspaceId": "wsp_01m1t6ypf8eye8yn23y0a62q9z",
+              "queryId": "smq_01m1t7e90jfp28wxk3yw4v7xe8",
+              "planId": "rsp_01m1t7e90sfp2s87rzd24353b4",
+              "planDigest": "sha256:438d83461ca247cc86ac0ed12c188e3826edf0f6a4741f5a553bb8fa04f73a9d",
+              "principalId": "prn_01m1t6ypf8fsm8twg2tbn7qhqt",
+              "channel": "api",
+              "sourceId": "src_01m1t6yphjeyevg3g39zbe9qfv",
+              "sourceRevisionId": "srv_01m1t6yq4qe9a91g6jk7aq90b3",
+              "adapterVersion": "postgres-aggregate/v1",
+              "policyVersion": 1,
+              "timeoutMs": 10000,
+              "maxRows": 1000,
+              "maxBytes": 1048576,
+              "cancelRequested": false,
+              "state": "succeeded",
+              "rowCount": 1,
+              "byteCount": 61,
+              "resultDigest": "sha256:54a02820682cb6bdeedf446af99ad544fe66a6994b3d05df4ae087b8ecaaa7e4",
+              "startedAt": "2026-09-06T02:06:37.11464Z",
+              "finishedAt": "2026-09-06T02:06:37.253487Z",
+              "traceId": "e5eaba99c4f5bafb68b1fb22706a8a6c"
+            },
+            "availability": "metadata_only",
+            "replay": true
+          },
+          "reload": {
+            "run": {
+              "id": "run_01m1t7fd1tfp69wyh3vxjpsvv4",
+              "workspaceId": "wsp_01m1t6ypf8eye8yn23y0a62q9z",
+              "queryId": "smq_01m1t7e90jfp28wxk3yw4v7xe8",
+              "planId": "rsp_01m1t7e90sfp2s87rzd24353b4",
+              "planDigest": "sha256:438d83461ca247cc86ac0ed12c188e3826edf0f6a4741f5a553bb8fa04f73a9d",
+              "principalId": "prn_01m1t6ypf8fsm8twg2tbn7qhqt",
+              "channel": "api",
+              "sourceId": "src_01m1t6yphjeyevg3g39zbe9qfv",
+              "sourceRevisionId": "srv_01m1t6yq4qe9a91g6jk7aq90b3",
+              "adapterVersion": "postgres-aggregate/v1",
+              "policyVersion": 1,
+              "timeoutMs": 10000,
+              "maxRows": 1000,
+              "maxBytes": 1048576,
+              "cancelRequested": false,
+              "state": "succeeded",
+              "rowCount": 1,
+              "byteCount": 61,
+              "resultDigest": "sha256:54a02820682cb6bdeedf446af99ad544fe66a6994b3d05df4ae087b8ecaaa7e4",
+              "startedAt": "2026-09-06T02:06:37.11464Z",
+              "finishedAt": "2026-09-06T02:06:37.253487Z",
+              "traceId": "e5eaba99c4f5bafb68b1fb22706a8a6c"
+            },
+            "availability": "metadata_only",
+            "replay": true
+          }
+        },
+        {
+          "initial": {
+            "run": {
+              "id": "run_01m1t7fda2fp7tg5x3g51a03bc",
+              "workspaceId": "wsp_01m1t6ypf8eye8yn23y0a62q9z",
+              "queryId": "smq_01m1t7e90jfp28wxk3yw4v7xe8",
+              "planId": "rsp_01m1t7e90sfp2s87rzd24353b4",
+              "planDigest": "sha256:438d83461ca247cc86ac0ed12c188e3826edf0f6a4741f5a553bb8fa04f73a9d",
+              "principalId": "prn_01m1t6ypf8fsm8twg2tbn7qhqt",
+              "channel": "api",
+              "sourceId": "src_01m1t6yphjeyevg3g39zbe9qfv",
+              "sourceRevisionId": "srv_01m1t6yq4qe9a91g6jk7aq90b3",
+              "adapterVersion": "postgres-aggregate/v1",
+              "policyVersion": 1,
+              "timeoutMs": 10000,
+              "maxRows": 1000,
+              "maxBytes": 1048576,
+              "cancelRequested": false,
+              "state": "succeeded",
+              "rowCount": 1,
+              "byteCount": 61,
+              "resultDigest": "sha256:54a02820682cb6bdeedf446af99ad544fe66a6994b3d05df4ae087b8ecaaa7e4",
+              "startedAt": "2026-09-06T02:06:37.378652Z",
+              "finishedAt": "2026-09-06T02:06:37.438674Z",
+              "traceId": "827a2ae9d2a1b459f25423a52ae51063"
+            },
+            "availability": "ephemeral",
+            "columns": [
+              "demo.net_revenue"
+            ],
+            "rows": [
+              [
+                "440940.00000000"
+              ]
+            ],
+            "replay": false
+          },
+          "replay": {
+            "run": {
+              "id": "run_01m1t7fda2fp7tg5x3g51a03bc",
+              "workspaceId": "wsp_01m1t6ypf8eye8yn23y0a62q9z",
+              "queryId": "smq_01m1t7e90jfp28wxk3yw4v7xe8",
+              "planId": "rsp_01m1t7e90sfp2s87rzd24353b4",
+              "planDigest": "sha256:438d83461ca247cc86ac0ed12c188e3826edf0f6a4741f5a553bb8fa04f73a9d",
+              "principalId": "prn_01m1t6ypf8fsm8twg2tbn7qhqt",
+              "channel": "api",
+              "sourceId": "src_01m1t6yphjeyevg3g39zbe9qfv",
+              "sourceRevisionId": "srv_01m1t6yq4qe9a91g6jk7aq90b3",
+              "adapterVersion": "postgres-aggregate/v1",
+              "policyVersion": 1,
+              "timeoutMs": 10000,
+              "maxRows": 1000,
+              "maxBytes": 1048576,
+              "cancelRequested": false,
+              "state": "succeeded",
+              "rowCount": 1,
+              "byteCount": 61,
+              "resultDigest": "sha256:54a02820682cb6bdeedf446af99ad544fe66a6994b3d05df4ae087b8ecaaa7e4",
+              "startedAt": "2026-09-06T02:06:37.378652Z",
+              "finishedAt": "2026-09-06T02:06:37.438674Z",
+              "traceId": "827a2ae9d2a1b459f25423a52ae51063"
+            },
+            "availability": "metadata_only",
+            "replay": true
+          },
+          "reload": {
+            "run": {
+              "id": "run_01m1t7fda2fp7tg5x3g51a03bc",
+              "workspaceId": "wsp_01m1t6ypf8eye8yn23y0a62q9z",
+              "queryId": "smq_01m1t7e90jfp28wxk3yw4v7xe8",
+              "planId": "rsp_01m1t7e90sfp2s87rzd24353b4",
+              "planDigest": "sha256:438d83461ca247cc86ac0ed12c188e3826edf0f6a4741f5a553bb8fa04f73a9d",
+              "principalId": "prn_01m1t6ypf8fsm8twg2tbn7qhqt",
+              "channel": "api",
+              "sourceId": "src_01m1t6yphjeyevg3g39zbe9qfv",
+              "sourceRevisionId": "srv_01m1t6yq4qe9a91g6jk7aq90b3",
+              "adapterVersion": "postgres-aggregate/v1",
+              "policyVersion": 1,
+              "timeoutMs": 10000,
+              "maxRows": 1000,
+              "maxBytes": 1048576,
+              "cancelRequested": false,
+              "state": "succeeded",
+              "rowCount": 1,
+              "byteCount": 61,
+              "resultDigest": "sha256:54a02820682cb6bdeedf446af99ad544fe66a6994b3d05df4ae087b8ecaaa7e4",
+              "startedAt": "2026-09-06T02:06:37.378652Z",
+              "finishedAt": "2026-09-06T02:06:37.438674Z",
+              "traceId": "827a2ae9d2a1b459f25423a52ae51063"
+            },
+            "availability": "metadata_only",
+            "replay": true
+          }
+        }
+      ]
+    },
+    "demo.precision_total": {
+      "expected": "123456789.123456790",
+      "runs": [
+        {
+          "initial": {
+            "run": {
+              "id": "run_01m1t7fdh6fp7tedj4bgwdk8ne",
+              "workspaceId": "wsp_01m1t6ypf8eye8yn23y0a62q9z",
+              "queryId": "smq_01m1t7e920fp3tn5j69wbqe3xa",
+              "planId": "rsp_01m1t7e928fp3rb19zw860wqg3",
+              "planDigest": "sha256:fe599213b692200bf44626e637d186345cd07a768899a1d2c9db84634b2a6d3e",
+              "principalId": "prn_01m1t6ypf8fsm8twg2tbn7qhqt",
+              "channel": "api",
+              "sourceId": "src_01m1t6yphjeyevg3g39zbe9qfv",
+              "sourceRevisionId": "srv_01m1t6yq4qe9a91g6jk7aq90b3",
+              "adapterVersion": "postgres-aggregate/v1",
+              "policyVersion": 1,
+              "timeoutMs": 10000,
+              "maxRows": 1000,
+              "maxBytes": 1048576,
+              "cancelRequested": false,
+              "state": "succeeded",
+              "rowCount": 1,
+              "byteCount": 69,
+              "resultDigest": "sha256:b09d54f28f7908d3d2115b854ee6053b212ca5070e863fa083a0912921d254de",
+              "startedAt": "2026-09-06T02:06:37.606965Z",
+              "finishedAt": "2026-09-06T02:06:37.682668Z",
+              "traceId": "df5f7fa087813fb78e43f7b4d4902de4"
+            },
+            "availability": "ephemeral",
+            "columns": [
+              "demo.precision_total"
+            ],
+            "rows": [
+              [
+                "123456789.123456790"
+              ]
+            ],
+            "replay": false
+          },
+          "replay": {
+            "run": {
+              "id": "run_01m1t7fdh6fp7tedj4bgwdk8ne",
+              "workspaceId": "wsp_01m1t6ypf8eye8yn23y0a62q9z",
+              "queryId": "smq_01m1t7e920fp3tn5j69wbqe3xa",
+              "planId": "rsp_01m1t7e928fp3rb19zw860wqg3",
+              "planDigest": "sha256:fe599213b692200bf44626e637d186345cd07a768899a1d2c9db84634b2a6d3e",
+              "principalId": "prn_01m1t6ypf8fsm8twg2tbn7qhqt",
+              "channel": "api",
+              "sourceId": "src_01m1t6yphjeyevg3g39zbe9qfv",
+              "sourceRevisionId": "srv_01m1t6yq4qe9a91g6jk7aq90b3",
+              "adapterVersion": "postgres-aggregate/v1",
+              "policyVersion": 1,
+              "timeoutMs": 10000,
+              "maxRows": 1000,
+              "maxBytes": 1048576,
+              "cancelRequested": false,
+              "state": "succeeded",
+              "rowCount": 1,
+              "byteCount": 69,
+              "resultDigest": "sha256:b09d54f28f7908d3d2115b854ee6053b212ca5070e863fa083a0912921d254de",
+              "startedAt": "2026-09-06T02:06:37.606965Z",
+              "finishedAt": "2026-09-06T02:06:37.682668Z",
+              "traceId": "df5f7fa087813fb78e43f7b4d4902de4"
+            },
+            "availability": "metadata_only",
+            "replay": true
+          },
+          "reload": {
+            "run": {
+              "id": "run_01m1t7fdh6fp7tedj4bgwdk8ne",
+              "workspaceId": "wsp_01m1t6ypf8eye8yn23y0a62q9z",
+              "queryId": "smq_01m1t7e920fp3tn5j69wbqe3xa",
+              "planId": "rsp_01m1t7e928fp3rb19zw860wqg3",
+              "planDigest": "sha256:fe599213b692200bf44626e637d186345cd07a768899a1d2c9db84634b2a6d3e",
+              "principalId": "prn_01m1t6ypf8fsm8twg2tbn7qhqt",
+              "channel": "api",
+              "sourceId": "src_01m1t6yphjeyevg3g39zbe9qfv",
+              "sourceRevisionId": "srv_01m1t6yq4qe9a91g6jk7aq90b3",
+              "adapterVersion": "postgres-aggregate/v1",
+              "policyVersion": 1,
+              "timeoutMs": 10000,
+              "maxRows": 1000,
+              "maxBytes": 1048576,
+              "cancelRequested": false,
+              "state": "succeeded",
+              "rowCount": 1,
+              "byteCount": 69,
+              "resultDigest": "sha256:b09d54f28f7908d3d2115b854ee6053b212ca5070e863fa083a0912921d254de",
+              "startedAt": "2026-09-06T02:06:37.606965Z",
+              "finishedAt": "2026-09-06T02:06:37.682668Z",
+              "traceId": "df5f7fa087813fb78e43f7b4d4902de4"
+            },
+            "availability": "metadata_only",
+            "replay": true
+          }
+        },
+        {
+          "initial": {
+            "run": {
+              "id": "run_01m1t7fdvsfp8antvwsn2y7yft",
+              "workspaceId": "wsp_01m1t6ypf8eye8yn23y0a62q9z",
+              "queryId": "smq_01m1t7e920fp3tn5j69wbqe3xa",
+              "planId": "rsp_01m1t7e928fp3rb19zw860wqg3",
+              "planDigest": "sha256:fe599213b692200bf44626e637d186345cd07a768899a1d2c9db84634b2a6d3e",
+              "principalId": "prn_01m1t6ypf8fsm8twg2tbn7qhqt",
+              "channel": "api",
+              "sourceId": "src_01m1t6yphjeyevg3g39zbe9qfv",
+              "sourceRevisionId": "srv_01m1t6yq4qe9a91g6jk7aq90b3",
+              "adapterVersion": "postgres-aggregate/v1",
+              "policyVersion": 1,
+              "timeoutMs": 10000,
+              "maxRows": 1000,
+              "maxBytes": 1048576,
+              "cancelRequested": false,
+              "state": "succeeded",
+              "rowCount": 1,
+              "byteCount": 69,
+              "resultDigest": "sha256:b09d54f28f7908d3d2115b854ee6053b212ca5070e863fa083a0912921d254de",
+              "startedAt": "2026-09-06T02:06:37.945883Z",
+              "finishedAt": "2026-09-06T02:06:38.046819Z",
+              "traceId": "c3af8e1e20f6ef62e835fbefe514d574"
+            },
+            "availability": "ephemeral",
+            "columns": [
+              "demo.precision_total"
+            ],
+            "rows": [
+              [
+                "123456789.123456790"
+              ]
+            ],
+            "replay": false
+          },
+          "replay": {
+            "run": {
+              "id": "run_01m1t7fdvsfp8antvwsn2y7yft",
+              "workspaceId": "wsp_01m1t6ypf8eye8yn23y0a62q9z",
+              "queryId": "smq_01m1t7e920fp3tn5j69wbqe3xa",
+              "planId": "rsp_01m1t7e928fp3rb19zw860wqg3",
+              "planDigest": "sha256:fe599213b692200bf44626e637d186345cd07a768899a1d2c9db84634b2a6d3e",
+              "principalId": "prn_01m1t6ypf8fsm8twg2tbn7qhqt",
+              "channel": "api",
+              "sourceId": "src_01m1t6yphjeyevg3g39zbe9qfv",
+              "sourceRevisionId": "srv_01m1t6yq4qe9a91g6jk7aq90b3",
+              "adapterVersion": "postgres-aggregate/v1",
+              "policyVersion": 1,
+              "timeoutMs": 10000,
+              "maxRows": 1000,
+              "maxBytes": 1048576,
+              "cancelRequested": false,
+              "state": "succeeded",
+              "rowCount": 1,
+              "byteCount": 69,
+              "resultDigest": "sha256:b09d54f28f7908d3d2115b854ee6053b212ca5070e863fa083a0912921d254de",
+              "startedAt": "2026-09-06T02:06:37.945883Z",
+              "finishedAt": "2026-09-06T02:06:38.046819Z",
+              "traceId": "c3af8e1e20f6ef62e835fbefe514d574"
+            },
+            "availability": "metadata_only",
+            "replay": true
+          },
+          "reload": {
+            "run": {
+              "id": "run_01m1t7fdvsfp8antvwsn2y7yft",
+              "workspaceId": "wsp_01m1t6ypf8eye8yn23y0a62q9z",
+              "queryId": "smq_01m1t7e920fp3tn5j69wbqe3xa",
+              "planId": "rsp_01m1t7e928fp3rb19zw860wqg3",
+              "planDigest": "sha256:fe599213b692200bf44626e637d186345cd07a768899a1d2c9db84634b2a6d3e",
+              "principalId": "prn_01m1t6ypf8fsm8twg2tbn7qhqt",
+              "channel": "api",
+              "sourceId": "src_01m1t6yphjeyevg3g39zbe9qfv",
+              "sourceRevisionId": "srv_01m1t6yq4qe9a91g6jk7aq90b3",
+              "adapterVersion": "postgres-aggregate/v1",
+              "policyVersion": 1,
+              "timeoutMs": 10000,
+              "maxRows": 1000,
+              "maxBytes": 1048576,
+              "cancelRequested": false,
+              "state": "succeeded",
+              "rowCount": 1,
+              "byteCount": 69,
+              "resultDigest": "sha256:b09d54f28f7908d3d2115b854ee6053b212ca5070e863fa083a0912921d254de",
+              "startedAt": "2026-09-06T02:06:37.945883Z",
+              "finishedAt": "2026-09-06T02:06:38.046819Z",
+              "traceId": "c3af8e1e20f6ef62e835fbefe514d574"
+            },
+            "availability": "metadata_only",
+            "replay": true
+          }
+        }
+      ]
+    }
+  }
+}
