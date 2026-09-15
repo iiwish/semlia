@@ -3,8 +3,9 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export function filesFor(version) {
+export function filesFor(version, local = false) {
   if (!/^v[0-9][0-9A-Za-z.+-]*$/.test(version)) throw new Error('Invalid release version');
+  if (local) return ['image.tar', 'image.json', 'image.sbom.cdx.json', 'validation.json'];
   return ['linux-amd64', 'linux-arm64', 'darwin-amd64', 'darwin-arm64'].flatMap(platform => {
     const bundle = `semlia-${version}-${platform}`;
     return [`${bundle}/${bundle}.tar.gz`, `${bundle}/${bundle}.sbom.cdx.json`, `${bundle}/SHA256SUMS`];
@@ -13,9 +14,10 @@ export function filesFor(version) {
 
 export function statement(root, version, commit, runURL) {
   if (!/^[a-f0-9]{40}$/.test(commit)) throw new Error('Invalid commit');
-  if (!/^https:\/\/github.com\/iiwish\/semlia\/actions\/runs\/[0-9]+$/.test(runURL)) throw new Error('Invalid run URL');
+  const local = /^urn:semlia:local-release:[a-f0-9-]{36}$/.test(runURL);
+  if (!local && !/^https:\/\/github.com\/iiwish\/semlia\/actions\/runs\/[0-9]+$/.test(runURL)) throw new Error('Invalid run URL');
   return { schema: 'semlia.release-proof/v1', repository: 'iiwish/semlia', version, commit, runURL,
-    files: filesFor(version).map(path => ({ path, sha256: createHash('sha256').update(readFileSync(join(root, path))).digest('hex') })) };
+    files: filesFor(version, local).map(path => ({ path, sha256: createHash('sha256').update(readFileSync(join(root, path))).digest('hex') })) };
 }
 
 export function verifyProof(root, bytes, signature, publicKey, version, commit) {
