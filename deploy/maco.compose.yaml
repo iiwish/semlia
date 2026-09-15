@@ -2,6 +2,7 @@ name: semlia-test
 
 x-app: &app
   image: ${SEMLIA_IMAGE:?immutable image is required}
+  pull_policy: never
   env_file: /opt/maco-ops/secrets/semlia/test/runtime.env
   environment: &env
     SEMLIA_ENV: development
