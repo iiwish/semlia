@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "target": "example",
+  "app": "semlia",
+  "environment": "example",
+  "compose_project": "operator-supplied",
+  "database": {
+    "instance": "operator-managed-postgres",
+    "name": "application_database",
+    "runtime_role": "application_runtime",
+    "migration_role": "application_migrator",
+    "pool_budget": "operator-supplied",
+    "secret_file": "operator-supplied"
+  },
+  "redis": null,
+  "ingress": {"visibility": "operator-supplied", "hostname": "app.example.invalid", "authorization_ref": "operator-supplied"},
+  "rollback": {"application": "Redeploy an approved schema-compatible image digest", "database": "Retain application data; follow the operator-approved recovery plan"},
+  "persistent_data": ["operator-supplied artifact directory", "operator-supplied content directory"],
+  "services": {"server": {"kind": "service"}, "worker": {"kind": "service"}, "migrate": {"kind": "job"}}
+}

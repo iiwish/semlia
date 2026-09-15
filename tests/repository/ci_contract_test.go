@@ -1,7 +1,6 @@
 package repository_test
 
 import (
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -204,8 +203,7 @@ func TestCIWorkflowsPinActionsAndUseLeastPrivilege(t *testing.T) {
 			for permission, access := range job.Permissions {
 				allowedReleasePermission := name == "release.yml" &&
 					((permission == "contents" && access == "read") ||
-						(permission == "id-token" && access == "write") ||
-						(permission == "attestations" && access == "write"))
+						(jobName == "image" && permission == "packages" && access == "write"))
 				if !allowedReleasePermission {
 					t.Errorf("%s job %s has excessive permission %s=%s", name, jobName, permission, access)
 				}
@@ -236,9 +234,8 @@ func TestCISecurityAndReleaseTriggersAreExplicit(t *testing.T) {
 	if _, ok := release.On["workflow_dispatch"]; !ok {
 		t.Error("release.yml must support workflow_dispatch")
 	}
-	push, ok := release.On["push"].(map[string]any)
-	if !ok || fmt.Sprint(push["tags"]) == "<nil>" {
-		t.Error("release.yml must build explicit version tags")
+	if len(release.On) != 1 {
+		t.Error("release.yml must remain manual-only for locally built releases")
 	}
 }
 
