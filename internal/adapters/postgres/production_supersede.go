@@ -2,9 +2,7 @@ package postgres
 
 import (
 	"context"
-	"time"
 
-	authapp "github.com/iiwish/semlia/internal/application/authorization"
 	domain "github.com/iiwish/semlia/internal/domain/governance"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -32,7 +30,7 @@ func (s *Store) checkProductionSupersedeTx(ctx context.Context, tx pgx.Tx, versi
 	if err := tx.QueryRow(ctx, `SELECT frozen_at FROM production_versions WHERE workspace_id=$1 AND operation_id=$2 AND version=$3 FOR UPDATE`, version.WorkspaceID.UUID(), version.SupersedesOperationID.UUID(), current).Scan(&frozen); err != nil {
 		return err
 	}
-	_, previous, targets, _, _, err := s.GetProductionOperationVersion(ctx, version.WorkspaceID, *version.SupersedesOperationID, current)
+	_, previous, targets, _, _, err := s.getProductionOperationVersionTx(ctx, tx, version.WorkspaceID, *version.SupersedesOperationID, current)
 	if err != nil {
 		return err
 	}
@@ -40,7 +38,7 @@ func (s *Store) checkProductionSupersedeTx(ctx context.Context, tx pgx.Tx, versi
 	if err := s.validateProductionInputTx(ctx, tx, previous, targets, false); err != nil {
 		return err
 	}
-	access, err := authapp.NewService(s, authapp.ClockFunc(time.Now)).Snapshot(ctx, version.WorkspaceID, version.CreatedBy)
+	access, err := s.productionAccessTx(ctx, tx, version.WorkspaceID, version.CreatedBy)
 	if err != nil {
 		return err
 	}

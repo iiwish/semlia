@@ -52,6 +52,13 @@ func productionRequire(access authapp.AccessSnapshot, action authz.Action, resou
 	return nil
 }
 
+func (s *Store) productionAccessTx(ctx context.Context, tx pgx.Tx, workspace identity.WorkspaceID, principal identity.PrincipalID) (authapp.AccessSnapshot, error) {
+	// Reuse the connection holding the workspace lock. Borrowing another pool
+	// connection here can deadlock when other transactions wait for that lock.
+	store := &Store{queries: s.queries.WithTx(tx)}
+	return authapp.NewService(store, authapp.ClockFunc(time.Now)).Snapshot(ctx, workspace, principal)
+}
+
 // Authorization mutations serialize on the workspace row. Source ingestion
 // uses the same boundary, keeping selected coverage heads stable until commit.
 func (s *Store) validateProductionInputTx(ctx context.Context, tx pgx.Tx, version domain.ProductionVersion, targets []domain.ProductionTarget, fresh bool, existingVersion ...bool) error {
@@ -60,7 +67,7 @@ func (s *Store) validateProductionInputTx(ctx context.Context, tx pgx.Tx, versio
 	if err := tx.QueryRow(ctx, `SELECT authorization_version FROM workspaces WHERE id=$1 FOR UPDATE`, w.UUID()).Scan(&authVersion); err != nil {
 		return governanceRepositoryError("lock production workspace", err)
 	}
-	access, err := authapp.NewService(s, authapp.ClockFunc(time.Now)).Snapshot(ctx, w, version.CreatedBy)
+	access, err := s.productionAccessTx(ctx, tx, w, version.CreatedBy)
 	if err != nil {
 		return err
 	}

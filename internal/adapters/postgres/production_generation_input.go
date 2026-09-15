@@ -18,7 +18,7 @@ func (s *Store) productionGenerationVersionTx(ctx context.Context, tx pgx.Tx, r 
 	if err := tx.QueryRow(ctx, `SELECT id FROM workspaces WHERE id=$1 FOR UPDATE`, r.WorkspaceID.UUID()).Scan(&locked); err != nil {
 		return domain.ProductionVersion{}, nil, governanceRepositoryError("lock generation workspace", err)
 	}
-	op, ver, targets, _, _, err := s.GetProductionOperationVersion(ctx, r.WorkspaceID, r.OperationID, r.ExpectedVersion)
+	op, ver, targets, _, _, err := s.getProductionOperationVersionTx(ctx, tx, r.WorkspaceID, r.OperationID, r.ExpectedVersion)
 	if err != nil {
 		return ver, nil, err
 	}
@@ -91,7 +91,8 @@ func (s *Store) prepareProductionGenerationTx(ctx context.Context, tx pgx.Tx, re
 	}
 	ver.CreatedBy = request.PrincipalID
 	if agent.IsZero() {
-		principal, err := s.WorkspaceAgentPrincipal(ctx, request.WorkspaceID)
+		store := &Store{queries: s.queries.WithTx(tx)}
+		principal, err := store.WorkspaceAgentPrincipal(ctx, request.WorkspaceID)
 		if err != nil {
 			return work, ver, err
 		}

@@ -335,6 +335,19 @@ func (s *Store) GetProductionOperationVersion(
 		return domain.ProductionOperation{}, domain.ProductionVersion{}, nil, nil, nil, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	op, ver, targets, links, contributors, err := s.getProductionOperationVersionTx(ctx, tx, workspace, opID, requestedVersion)
+	if err != nil {
+		return domain.ProductionOperation{}, domain.ProductionVersion{}, nil, nil, nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return domain.ProductionOperation{}, domain.ProductionVersion{}, nil, nil, nil, err
+	}
+	return op, ver, targets, links, contributors, nil
+}
+
+func (s *Store) getProductionOperationVersionTx(
+	ctx context.Context, tx pgx.Tx, workspace identity.WorkspaceID, opID identity.ProductionOperationID, requestedVersion int,
+) (domain.ProductionOperation, domain.ProductionVersion, []domain.ProductionTarget, []domain.ProductionCandidateLink, []domain.ProductionContributor, error) {
 	q := s.queries.WithTx(tx)
 	wspUUID, err := uuidFromString(workspace.UUID())
 	if err != nil {
@@ -525,9 +538,6 @@ func (s *Store) GetProductionOperationVersion(
 	}
 
 	if err := loadProductionRecovery(ctx, tx, q, &ver, targets, vRow.ActiveValidationAttemptNo); err != nil {
-		return domain.ProductionOperation{}, domain.ProductionVersion{}, nil, nil, nil, err
-	}
-	if err := tx.Commit(ctx); err != nil {
 		return domain.ProductionOperation{}, domain.ProductionVersion{}, nil, nil, nil, err
 	}
 	return op, ver, targets, links, contributors, nil

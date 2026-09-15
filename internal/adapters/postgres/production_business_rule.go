@@ -4,9 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"time"
 
-	authapp "github.com/iiwish/semlia/internal/application/authorization"
 	app "github.com/iiwish/semlia/internal/application/governance"
 	authz "github.com/iiwish/semlia/internal/domain/authorization"
 	domain "github.com/iiwish/semlia/internal/domain/governance"
@@ -53,7 +51,7 @@ func (s *Store) authorizeBusinessRuleTx(ctx context.Context, tx pgx.Tx, ver doma
 	if !domain.RequiresProductionBusinessRule(target) {
 		return 0, domain.ErrInvalidArgument
 	}
-	access, err := authapp.NewService(s, authapp.ClockFunc(time.Now)).Snapshot(ctx, ver.WorkspaceID, ver.CreatedBy)
+	access, err := s.productionAccessTx(ctx, tx, ver.WorkspaceID, ver.CreatedBy)
 	if err != nil {
 		return 0, err
 	}
