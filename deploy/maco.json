@@ -13,7 +13,7 @@
     "secret_file": "/opt/maco-ops/secrets/semlia/test/postgres.env"
   },
   "redis": null,
-  "ingress": {"visibility": "private", "hostname": null},
+  "ingress": {"visibility": "public", "hostname": "app.semlia.com", "authorization_ref": "User authorized app.semlia.com Cloudflare Tunnel to maco 1Panel on 2026-09-15"},
   "rollback": {"application": "Redeploy the recorded schema-compatible image digest; first release has no previous application", "database": "Do not down-migrate or restore shared PostgreSQL; retain project data"},
   "persistent_data": ["/opt/maco-apps/semlia/test/data/artifacts", "/opt/maco-apps/semlia/test/data/content"],
   "services": {"server": {"kind": "service"}, "worker": {"kind": "service"}, "migrate": {"kind": "job"}}

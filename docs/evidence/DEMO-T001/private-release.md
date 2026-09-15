@@ -19,8 +19,10 @@
 
 ## maco 范围
 
-`deploy/maco.json` / `deploy/maco.compose.yaml` 定义 `semlia-test`，仅在共享 pg-main 创建独立数据库及角色，不使用 Redis。server/worker 各限制 8 个数据库连接，运行角色上限 20；迁移使用独立单次任务，迁移角色上限 5。运行凭据和迁移凭据分离，迁移 URL 不携带仅适用于 pgxpool 的连接池参数。仅发布 loopback 端口，以 SSH 转发检查，不增加公网域名、DNS、Tunnel 或 Access 配置。
+`deploy/maco.json` / `deploy/maco.compose.yaml` 定义 `semlia-test`，仅在共享 pg-main 创建独立数据库及角色，不使用 Redis。server/worker 各限制 8 个数据库连接，运行角色上限 20；迁移使用独立单次任务，迁移角色上限 5。运行凭据和迁移凭据分离，迁移 URL 不携带仅适用于 pgxpool 的连接池参数。
 
-展示服务使用 password 认证和 development cookie 配置，适用于受控 HTTP 转发，不声明为公网生产 SaaS。初始 admin 通过容器 bootstrap 命令建立；不将本地原始数据或密码打进镜像。
+展示入口为 `https://app.semlia.com`，使用用户配置的 Cloudflare Tunnel 转发至 maco 的 80 端口，再由 `deploy/maco.nginx.conf` 代理至 `127.0.0.1:18086`。站点文件安装于 `/opt/1panel/www/conf.d/semlia-test.conf`，独立维护，不在 1Panel 网站列表登记，不启用面板 API。源站仅接受回环连接，应用仅允许 `https://app.semlia.com` 来源，使用 Secure、HttpOnly 会话 Cookie。公网不暴露健康检查和 metrics，响应禁止缓存及搜索索引。
+
+展示服务使用 password 认证，不声明为开放注册的生产 SaaS。Cloudflare Access 未配置，Tunnel 不构成访客身份限制；简单管理员密码存在公网猜测风险，建议配置 Access 保护。初始 admin 通过容器 bootstrap 命令建立；不将本地原始数据或密码打进镜像。HTTP SSH 转发仅用于运维健康检查，登录通过 HTTPS 域名完成。
 
 部署需重新检查 COS 备份、平台基线、配额、挂载权限及精确 resolved Compose；迁移和应用均使用同一签名镜像 digest。初次部署无旧镜像，不回滚共享实例或删除数据。最终运行、签名和部署证据以 PR/发布记录补充。
