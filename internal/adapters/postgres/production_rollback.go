@@ -84,7 +84,8 @@ func (s *Store) RollbackProductionCommand(ctx context.Context, cmd app.RollbackO
 	if !sealed {
 		return nil, domain.ErrPriorStateUnknown
 	}
-	existing, err := s.GetProductionCommand(ctx, cmd.WorkspaceID, cmd.PrincipalID, domain.CommandRollback, cmd.IdempotencyKey)
+	store := &Store{queries: s.queries.WithTx(tx)}
+	existing, err := store.GetProductionCommand(ctx, cmd.WorkspaceID, cmd.PrincipalID, domain.CommandRollback, cmd.IdempotencyKey)
 	if err != nil && !errors.Is(err, domain.ErrNotFound) {
 		return nil, err
 	}

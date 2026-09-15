@@ -7,7 +7,6 @@ import (
 	"time"
 
 	dbgen "github.com/iiwish/semlia/internal/adapters/postgres/sqlc"
-	authapp "github.com/iiwish/semlia/internal/application/authorization"
 	app "github.com/iiwish/semlia/internal/application/governance"
 	domain "github.com/iiwish/semlia/internal/domain/governance"
 	"github.com/iiwish/semlia/pkg/identity"
@@ -51,7 +50,7 @@ func (s *Store) QueueProductionGeneration(ctx context.Context, r domain.Producti
 	if err != nil {
 		return empty, err
 	}
-	access, err := authapp.NewService(s, authapp.ClockFunc(time.Now)).Snapshot(ctx, r.WorkspaceID, r.PrincipalID)
+	access, err := s.productionAccessTx(ctx, tx, r.WorkspaceID, r.PrincipalID)
 	if err != nil {
 		return empty, err
 	}

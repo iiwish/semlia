@@ -3,9 +3,7 @@ package postgres
 import (
 	"context"
 	"encoding/json"
-	"time"
 
-	authapp "github.com/iiwish/semlia/internal/application/authorization"
 	authz "github.com/iiwish/semlia/internal/domain/authorization"
 	domain "github.com/iiwish/semlia/internal/domain/governance"
 	"github.com/iiwish/semlia/pkg/identity"
@@ -23,7 +21,7 @@ func (s *Store) AuthorizeProductionManifestRead(ctx context.Context, w identity.
 	if err := tx.QueryRow(ctx, `SELECT authorization_version FROM workspaces WHERE id=$1 FOR SHARE`, w.UUID()).Scan(&version); err != nil {
 		return err
 	}
-	access, err := authapp.NewService(s, authapp.ClockFunc(time.Now)).Snapshot(ctx, w, principal)
+	access, err := s.productionAccessTx(ctx, tx, w, principal)
 	if err != nil {
 		return err
 	}

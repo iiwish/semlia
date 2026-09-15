@@ -2,9 +2,7 @@ package postgres
 
 import (
 	"context"
-	"time"
 
-	authapp "github.com/iiwish/semlia/internal/application/authorization"
 	authz "github.com/iiwish/semlia/internal/domain/authorization"
 	domain "github.com/iiwish/semlia/internal/domain/governance"
 	"github.com/jackc/pgx/v5"
@@ -27,7 +25,7 @@ func (s *Store) productionActionTx(ctx context.Context, tx pgx.Tx, ver domain.Pr
 	if err := tx.QueryRow(ctx, `SELECT authorization_version FROM workspaces WHERE id=$1 FOR UPDATE`, ver.WorkspaceID.UUID()).Scan(&version); err != nil {
 		return err
 	}
-	access, err := authapp.NewService(s, authapp.ClockFunc(time.Now)).Snapshot(ctx, ver.WorkspaceID, ver.CreatedBy)
+	access, err := s.productionAccessTx(ctx, tx, ver.WorkspaceID, ver.CreatedBy)
 	if err != nil {
 		return err
 	}

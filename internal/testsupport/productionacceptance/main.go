@@ -114,7 +114,8 @@ func run(ctx context.Context, c acceptanceConfig) error {
 	if err != nil || closeErr != nil {
 		return errors.New("acceptance migrations failed")
 	}
-	pool, err := pgstore.Open(ctx, c.DatabaseURL)
+	// Reproduce hosted CI pool pressure on high-core development machines too.
+	pool, err := pgstore.Open(ctx, c.DatabaseURL+"&pool_max_conns=4")
 	if err != nil {
 		return errors.New("acceptance database unavailable")
 	}
