@@ -19,7 +19,7 @@
 
 ## maco 范围
 
-`deploy/maco.json` / `deploy/maco.compose.yaml` 定义 `semlia-test`，仅在共享 pg-main 创建独立数据库及角色，不使用 Redis。server/worker 各限制 8 个数据库连接，迁移最多 3 个；运行凭据和迁移凭据分离。仅发布 loopback 端口，以 SSH 转发检查，不增加公网域名、DNS、Tunnel 或 Access 配置。
+`deploy/maco.json` / `deploy/maco.compose.yaml` 定义 `semlia-test`，仅在共享 pg-main 创建独立数据库及角色，不使用 Redis。server/worker 各限制 8 个数据库连接，运行角色上限 20；迁移使用独立单次任务，迁移角色上限 5。运行凭据和迁移凭据分离，迁移 URL 不携带仅适用于 pgxpool 的连接池参数。仅发布 loopback 端口，以 SSH 转发检查，不增加公网域名、DNS、Tunnel 或 Access 配置。
 
 展示服务使用 password 认证和 development cookie 配置，适用于受控 HTTP 转发，不声明为公网生产 SaaS。初始 admin 通过容器 bootstrap 命令建立；不将本地原始数据或密码打进镜像。
 
