@@ -1218,6 +1218,18 @@ VALUES($1,$2,'postgresql_catalog',$3,$4,'paused','{}'::jsonb,'postgresql','[]'::
 	}
 }
 
+func TestScheduleFixtureDoesNotLeaveClaimableWork(t *testing.T) {
+	t.Run("owner", TestScheduledExecutionUsesSystemActorAfterCreatorSuspension)
+	pool, _ := openStore(t)
+	var enabled int
+	if err := pool.QueryRow(context.Background(), `SELECT count(*) FROM source_schedules s JOIN workspaces w ON w.id=s.workspace_id WHERE w.slug LIKE 'schedule-system-actor-%' AND s.enabled`).Scan(&enabled); err != nil {
+		t.Fatal(err)
+	}
+	if enabled != 0 {
+		t.Fatalf("completed fixtures left %d enabled schedules", enabled)
+	}
+}
+
 func openStore(t *testing.T) (*pgxpool.Pool, *pgstore.Store) {
 	t.Helper()
 	pool, err := pgstore.Open(context.Background(), databaseURL)
@@ -1234,6 +1246,15 @@ func createWorkspace(t *testing.T, pool *pgxpool.Pool, slug string) identity.Wor
 	if _, err := pool.Exec(context.Background(), `INSERT INTO workspaces(id,slug,display_name) VALUES($1,$2,$3)`, workspace.UUID(), slug+"-"+workspace.String(), slug); err != nil {
 		t.Fatal(err)
 	}
+	// The scheduler claims across workspaces in the shared test database.
+	// Retire only this fixture's schedules before its pool is closed.
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if _, err := pool.Exec(ctx, `UPDATE source_schedules SET enabled=false,next_run_at=NULL,next_wall_clock_key=NULL,lease_owner=NULL,leased_until=NULL WHERE workspace_id=$1`, workspace.UUID()); err != nil {
+			t.Errorf("retire fixture schedules: %v", err)
+		}
+	})
 	return workspace
 }
 

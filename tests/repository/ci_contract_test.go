@@ -204,8 +204,7 @@ func TestCIWorkflowsPinActionsAndUseLeastPrivilege(t *testing.T) {
 			for permission, access := range job.Permissions {
 				allowedReleasePermission := name == "release.yml" &&
 					((permission == "contents" && access == "read") ||
-						(permission == "id-token" && access == "write") ||
-						(permission == "attestations" && access == "write"))
+						(jobName == "image" && permission == "packages" && access == "write"))
 				if !allowedReleasePermission {
 					t.Errorf("%s job %s has excessive permission %s=%s", name, jobName, permission, access)
 				}
