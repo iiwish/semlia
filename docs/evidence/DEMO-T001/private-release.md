@@ -4,6 +4,8 @@
 
 发布执行采用用户授权的本机构建，不依赖 GitHub Actions 额度。PR 以对应提交的完整本地源码、浏览器、冒烟和安全验收记录作为合并依据；GitHub 发布工作流仅手动触发。本地签名收据使用 `urn:semlia:local-release:<UUID>` 标识，覆盖目标 Linux 镜像归档、镜像 digest/commit、CycloneDX SBOM 和验证记录，不冒充 GitHub 托管构建。四平台发布包不在本次 maco 单平台部署范围。
 
+本机构建使用正式 release 相同的 `CGO_ENABLED=0` Linux/amd64 Go 编译及内嵌前端，将二进制和 migrations 放入 `build/maco/`，通过 `deploy/maco.Dockerfile` 包装为固定基础镜像的非 root 容器。最终镜像必须另行经过容器冒烟与安全扫描，不能用另一架构镜像的检查结果代替。
+
 镜像通过本机临时回环 registry 和 SSH 反向转发传输，maco 按 digest 拉取并与签名记录核对。应用使用 `pull_policy: never` 保留已验证的本地镜像，不依赖临时 registry 常驻；恢复时重新验证归档并传输相同 digest。传输完成后关闭临时 registry 和反向转发，不修改共享网络服务。
 
 ## 验证合同
