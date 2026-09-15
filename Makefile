@@ -142,6 +142,13 @@ sbom: build
 release:
 	@./scripts/release/build.sh
 
+.PHONY: release-proof release-image
+release-proof:
+	node scripts/release/proof.mjs sign release "$(RELEASE_VERSION)" "$(RELEASE_COMMIT)" "$(RELEASE_RUN)"
+
+release-image:
+	bash scripts/release/image.sh
+
 clean:
 	rm -rf node_modules dist build coverage .cache
 	rm -f coverage.out

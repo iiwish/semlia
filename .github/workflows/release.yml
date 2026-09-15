@@ -1,9 +1,6 @@
 name: Release Build
 
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
 
 permissions:
@@ -71,23 +68,65 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  image:
+    name: Publish immutable maco image
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [source-and-smoke, security]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build and publish image
+        run: make release-image
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_COMMIT: ${{ github.sha }}
+      - name: Upload image identity
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: semlia-image-${{ github.ref_name }}
+          path: build/release/image.json
+          if-no-files-found: error
+          retention-days: 90
+
   attest:
-    name: Attest tagged release artifacts
+    name: Sign and verify tagged release artifacts
     if: startsWith(github.ref, 'refs/tags/v')
     needs:
       - build
+      - image
     runs-on: ubuntu-24.04
     permissions:
       contents: read
-      id-token: write
-      attestations: write
     steps:
+      - name: Check out trusted verifier
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.15.0
       - name: Download release bundles
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: release
           pattern: semlia-*
-      - name: Attest release provenance
-        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+      - name: Sign and verify release proof
+        run: make release-proof
+        env:
+          SEMLIA_RELEASE_SIGNING_KEY: ${{ secrets.SEMLIA_RELEASE_SIGNING_KEY }}
+          RELEASE_VERSION: ${{ github.ref_name }}
+          RELEASE_COMMIT: ${{ github.sha }}
+          RELEASE_RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      - name: Upload signed release proof
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          subject-path: "release/**/semlia-*.tar.gz"
+          name: semlia-release-proof-${{ github.ref_name }}
+          path: |
+            release/release-proof.json
+            release/release-proof.sig
+          if-no-files-found: error
+          retention-days: 90

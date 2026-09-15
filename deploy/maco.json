@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "target": "maco",
+  "app": "semlia",
+  "environment": "test",
+  "compose_project": "semlia-test",
+  "database": {
+    "instance": "pg-main",
+    "name": "semlia_test",
+    "runtime_role": "semlia_test_app",
+    "migration_role": "semlia_test_migrator",
+    "pool_budget": 20,
+    "secret_file": "/opt/maco-ops/secrets/semlia/test/postgres.env"
+  },
+  "redis": null,
+  "ingress": {"visibility": "private", "hostname": null},
+  "rollback": {"application": "Redeploy the recorded schema-compatible image digest; first release has no previous application", "database": "Do not down-migrate or restore shared PostgreSQL; retain project data"},
+  "persistent_data": ["/opt/maco-apps/semlia/test/data/artifacts", "/opt/maco-apps/semlia/test/data/content"],
+  "services": {"server": {"kind": "service"}, "worker": {"kind": "service"}, "migrate": {"kind": "job"}}
+}
