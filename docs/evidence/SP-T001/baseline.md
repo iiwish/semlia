@@ -32,7 +32,7 @@ SEMLIA_EXECUTION_TEST_DB
 SEMLIA_DATABASE_URL
 ```
 
-没有启动/停止默认 Compose、访问部署服务器 或客户数据库，也没有运行 `make check`、`make dev` 或全局 Docker 清理。[environment-after.json](environment-after.json) 仅公开本次测试计数，不包含全机容器身份记录。
+没有启动/停止默认 Compose、访问部署服务器或客户数据库，也没有运行 `make check`、`make dev` 或全局 Docker 清理。[environment-after.json](environment-after.json) 仅公开本次测试计数，不包含全机容器身份记录。
 
 ## 复用判断与缺口
 

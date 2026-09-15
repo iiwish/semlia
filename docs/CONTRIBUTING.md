@@ -29,6 +29,12 @@ The root Make targets are the stable local interface. CI must call the same unde
 - Update canonical documentation in present tense. Do not create competing definitions of product behavior.
 - Never commit credentials, private customer data, personal paths, or generated local state.
 
+## Publication Privacy
+
+Keep machine-wide container inventories, resolved deployment configuration, private account status and raw browser traces outside the repository. Evidence should contain only the project's relevant results and synthetic inputs, with local paths and private identifiers removed. Review commit email addresses and GitHub comment edit history as well as file contents before publication.
+
+Deployment examples must require operator-supplied configuration rather than describe a real installation. Historical evidence may be redacted for privacy and is not an immutable release attestation; use the signed artifact verification process in [Release Verification](operations/release-verification.md).
+
 ## Commit Sign-off
 
 Semlia uses the [Developer Certificate of Origin 1.1](https://developercertificate.org/). Sign each commit with:

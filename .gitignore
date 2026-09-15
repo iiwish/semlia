@@ -10,6 +10,8 @@
 !.env.example
 *.pem
 *.key
+*.bundle
+deploy/private/
 
 # Go
 *.test
