@@ -1,0 +1,43 @@
+server {
+    listen 80;
+    server_name ${SEMLIA_HOSTNAME};
+
+    # A trusted TLS-terminating proxy connects over loopback only.
+    allow 127.0.0.1;
+    allow ::1;
+    deny all;
+
+    if ($http_x_forwarded_proto != "https") {
+        return 308 https://${SEMLIA_HOSTNAME}$request_uri;
+    }
+
+    client_max_body_size 51m;
+    access_log off;
+    error_log /var/log/nginx/semlia-error.log warn;
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-Frame-Options DENY always;
+    add_header Referrer-Policy strict-origin-when-cross-origin always;
+    add_header Strict-Transport-Security "max-age=86400" always;
+    add_header X-Robots-Tag "noindex, nofollow" always;
+    add_header Cache-Control "no-store" always;
+
+    location = /health/live { return 404; }
+    location = /health/ready { return 404; }
+    location = /metrics { return 404; }
+
+    location / {
+        proxy_pass http://127.0.0.1:${SEMLIA_PORT};
+        proxy_http_version 1.1;
+        proxy_set_header Host ${SEMLIA_HOSTNAME};
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header Connection "";
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 120s;
+        proxy_send_timeout 120s;
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_hide_header Cache-Control;
+    }
+}
