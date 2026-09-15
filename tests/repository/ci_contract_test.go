@@ -235,9 +235,8 @@ func TestCISecurityAndReleaseTriggersAreExplicit(t *testing.T) {
 	if _, ok := release.On["workflow_dispatch"]; !ok {
 		t.Error("release.yml must support workflow_dispatch")
 	}
-	push, ok := release.On["push"].(map[string]any)
-	if !ok || fmt.Sprint(push["tags"]) == "<nil>" {
-		t.Error("release.yml must build explicit version tags")
+	if len(release.On) != 1 {
+		t.Error("release.yml must remain manual-only for locally built releases")
 	}
 }
 
