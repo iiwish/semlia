@@ -618,13 +618,35 @@ func setLauncherTrustedPath(t *testing.T, launcherPath, trustedPath string) {
 	}
 }
 
+func TestLauncherGoCandidateReplacementPreservesPlatformCandidates(t *testing.T) {
+	physicalGo := launcherPhysicalGoTool(t)
+	platform := "  EXPECTED_GO_CANDIDATES=" + physicalGo + ":/usr/local/go/bin/go\n"
+	launcher := platform + "esac\nEXPECTED_GO_CANDIDATES=" + physicalGo + "\nOLD_IFS=${IFS}\n"
+	path := filepath.Join(t.TempDir(), "launcher.sh")
+	if err := os.WriteFile(path, []byte(launcher), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	replaceLauncherGoCandidate(t, path, "/fixture/go")
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := platform + "esac\nEXPECTED_GO_CANDIDATES=/fixture/go\nOLD_IFS=${IFS}\n"
+	if string(got) != want {
+		t.Fatalf("candidate replacement changed the platform branch: %s", got)
+	}
+}
+
 func replaceLauncherGoCandidate(t *testing.T, launcherPath, goPath string) {
 	t.Helper()
 	launcherBytes, err := os.ReadFile(launcherPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	launcher := replaceLauncherFragment(t, string(launcherBytes), "EXPECTED_GO_CANDIDATES="+launcherPhysicalGoTool(t), "EXPECTED_GO_CANDIDATES="+goPath)
+	launcher := replaceLauncherFragment(t, string(launcherBytes),
+		"esac\nEXPECTED_GO_CANDIDATES="+launcherPhysicalGoTool(t)+"\nOLD_IFS=${IFS}",
+		"esac\nEXPECTED_GO_CANDIDATES="+goPath+"\nOLD_IFS=${IFS}",
+	)
 	if err := os.WriteFile(launcherPath, []byte(launcher), 0o700); err != nil {
 		t.Fatal(err)
 	}

@@ -31,3 +31,7 @@
 - 最终 `make check-browser` 通过：原生账号登录/创建停用/改密验收通过，证据 `.semlia/evidence-work/LAD-T001-native-1789383758745/`；4 连接生产验收桌面与紧凑桌面共 12/12 通过，1.9 分钟，证据 `.semlia/production-acceptance/spacc_48eea19689a1bc7e/`，覆盖来源导入、生成、纠正、验证、独立审核、发布和双向回滚。
 - 本次未重新运行容器 smoke、安全扫描及远程发布流水线；rc.1 上这两项远程门禁通过，不将旧结果表述为新候选版本已通过。
 - 发布范围：通过 PR 合并到 main 后固定 rc.2，并执行远程全套发布验收。用户已于 2026-09-15 授权提交及 PR 合并。rc.1 保持不变；本流程不切换常驻演示服务、不修改演示数据、不部署服务器。
+
+## PR 验收
+
+PR：<https://github.com/iiwish/semlia/pull/24>。首轮安全扫描、容器冒烟和浏览器通过；源码运行 <https://github.com/iiwish/semlia/actions/runs/34922229080> 发现 launcher supervisor 测试夹具在 hosted Go 路径下的前缀误匹配。替换范围限定为平台 case 结束后的完整测试覆盖赋值，保留真实平台候选列表与全部断言。新增同前缀回归在修复前复现失败；修复后重新执行 acceptance 测试及远程门禁。
