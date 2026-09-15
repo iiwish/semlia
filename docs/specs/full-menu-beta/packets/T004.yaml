@@ -1,0 +1,294 @@
+schema_version: 1
+packet_id: FMB-T004-A001
+task_id: FMB-T004
+feature_id: full-menu-beta
+mode: execute_one_task
+status: Completed
+adapter: agent-neutral
+
+governance_inputs:
+  constitution: [AGENTS.md, docs/SSOT.md]
+  product_contract: docs/specs/full-menu-beta/spec.md
+  requirements_checklist: docs/specs/full-menu-beta/checklists/requirements.md
+  technical_decisions: docs/specs/full-menu-beta/technology-decision-record.md
+  data_model: docs/specs/full-menu-beta/data-model.md
+  feature_plan: docs/specs/full-menu-beta/plan.md
+  work_graph: docs/specs/full-menu-beta/tasks.md
+  analysis: docs/specs/full-menu-beta/analysis.md
+  approval_gates:
+    scope_and_plan: Confirmed by founder on 2026-09-04
+    continuous_execution: Approved through FMB-T007 without per-task approval pauses
+    dependency_gate: Satisfied by FMB-T003 A003 evidence and independent review on 2026-09-05; execution remains serialized behind FMB-T002
+
+work_unit:
+  title: File, SQL/dbt artifact ingestion and scheduling
+  goal: >-
+    Make CSV, XLSX, Markdown, versioned SQL and supported dbt ingestion durable and secure through a
+    shared content-addressed ArtifactStore, then run the same discovery command manually or from a
+    database-backed five-field-cron schedule with occurrence idempotency.
+  epic: FMB-E001
+  story: FMB-US-004
+  requirements: [FR-001, FR-006, NFR-001, NFR-002, NFR-003, NFR-004]
+  priority: P1
+  depends_on:
+    - FMB-T003 Needs_Review or Accepted
+  blocks: [FMB-T005, FMB-T007]
+  parallel: false
+  conflicts_with:
+    - FMB-T005 on OpenAPI, generated contracts, jobs, sqlc, readiness, provider/source composition and ProductApp
+    - FMB-T006 on OpenAPI, generated contracts, jobs, sqlc, readiness and composition root
+
+codebase_context:
+  local_instructions: [AGENTS.md]
+  relevant_files:
+    - api/openapi/semlia.v1.yaml
+    - migrations/000014_alpha_source_discovery.up.sql
+    - db/queries/discovery.sql
+    - db/queries/jobs.sql
+    - internal/domain/discovery/model.go
+    - internal/application/discovery/service.go
+    - internal/application/discovery/artifacts.go
+    - internal/adapters/discovery/dbt/adapter.go
+    - internal/adapters/discovery/postgresql/adapter.go
+    - internal/adapters/postgres/source_discovery.go
+    - internal/adapters/postgres/discovery.go
+    - internal/adapters/postgres/store.go
+    - internal/application/jobs/worker.go
+    - internal/platform/http/handler.go
+    - cmd/semlia/main.go
+    - web/src/JourneyViews.tsx
+    - web/src/JourneyViews.test.tsx
+    - web/src/LiveSourcesView.tsx
+  existing_patterns:
+    - Discovery creates an exact run and leased job before a worker writes snapshots, findings and candidates.
+    - Versioned SQL paths are relative to a configured root and reject traversal and symlink escape.
+    - dbt adapters validate supported manifest/catalog schemas rather than accepting arbitrary JSON.
+    - T003 owns normalized runtime visibility; T004 links owning ingestion records to that projection.
+  storage_and_schedule_contract:
+    - ArtifactStore keys are workspace-scoped content digests; temporary host paths never become durable references.
+    - Local Beta uses a shared mounted volume and hosted Beta uses a shared object-store adapter with identical semantics.
+    - Hosted storage is S3-compatible, uses the standard AWS credential chain and accepts only server-generated workspace/digest keys.
+    - File type is proven by extension, declared MIME and magic; parser limits are enforced before canonical writes.
+    - Schedules store expression, IANA timezone, misfire policy, enabled state, next/last occurrence and optimistic version.
+    - UNIQUE schedule plus scheduled_for occurrence and a stable enqueue idempotency key prevent duplicate authoritative runs.
+    - Raw uploads are capped at 50 MiB; archive expansion is capped at 200 MiB, 4,096 entries, 50 MiB per entry and 100:1 ratio.
+    - A workspace may retain at most 10,000 active artifact objects and 5 GiB of deduplicated artifact bytes; quota reservation and digest deduplication are concurrency-safe.
+    - CSV/XLSX limits are 64 sheets, 250,000 rows, 512 columns, 5,000,000 cells and 1 MiB per cell; Markdown is capped at 10 MiB with a bounded AST.
+    - Any spreadsheet formula, macro, encryption, OLE/ActiveX object, external relationship or unsafe archive entry rejects the workbook.
+    - SQL uses configured-root registration only; dbt uses staged manifest.json plus optional catalog.json upload.
+    - Spring-forward gaps skip; fall-back repeated wall minutes run once at the earlier offset using a stored wall-clock key.
+    - Overlap produces terminal OVERLAP_ACTIVE_RUN; source or credential unavailability produces stable skipped reasons.
+    - Finalize creates an immutable ordered artifact set and enqueue pins that exact set to the discovery run; successful source revisions copy the pins without re-reading a mutable source.
+    - Long ingestion handlers renew job leases at most every lease/3 and abort before canonical commit if the lease or context is lost.
+
+execution_constraints:
+  branch_or_worktree: current shared worktree
+  coordination: >-
+    T004 owns migration 000018. The orchestrator must serialize all OpenAPI, generated contract,
+    jobs, sqlc, readiness, HTTP composition and ProductApp changes against T005 and T006; no worker
+    may assume that shared files can be merged safely after concurrent edits.
+  allowed_files:
+    - api/openapi/semlia.v1.yaml
+    - api/gen/go/types.gen.go
+    - sdk/typescript/src/**
+    - migrations/000018_fmb_file_ingestion_schedules.up.sql
+    - migrations/000018_fmb_file_ingestion_schedules.down.sql
+    - db/queries/discovery.sql
+    - db/queries/artifacts.sql
+    - db/queries/schedules.sql
+    - db/queries/jobs.sql
+    - db/sqlc.yaml
+    - internal/domain/discovery/**
+    - internal/domain/ingestion/**
+    - internal/domain/operations/**
+    - internal/application/discovery/**
+    - internal/application/ingestion/**
+    - internal/application/operations/**
+    - internal/application/jobs/**
+    - internal/adapters/discovery/**
+    - internal/adapters/artifacts/**
+    - internal/adapters/postgres/source_discovery.go
+    - internal/adapters/postgres/store.go
+    - internal/adapters/postgres/artifacts.go
+    - internal/adapters/postgres/operations.go
+    - internal/adapters/postgres/schedules.go
+    - internal/adapters/postgres/sqlc/**
+    - internal/platform/config/**
+    - internal/platform/http/handler.go
+    - internal/platform/http/handler_test.go
+    - internal/platform/http/catalog.go
+    - internal/platform/http/discovery.go
+    - internal/platform/http/ingestion.go
+    - internal/platform/http/ingestion_test.go
+    - cmd/semlia/main.go
+    - cmd/semlia/readiness.go
+    - cmd/semlia/readiness_test.go
+    - pkg/identity/id.go
+    - pkg/identity/id_test.go
+    - .env.example
+    - compose.yaml
+    - compose.override.yaml
+    - deploy/local/Dockerfile
+    - scripts/dev/**
+    - go.mod
+    - go.sum
+    - pnpm-lock.yaml
+    - web/src/apiClient.ts
+    - web/src/App.tsx
+    - web/src/App.test.tsx
+    - web/src/catalogRuntime.tsx
+    - web/src/catalogRuntime.test.tsx
+    - web/src/discovery.ts
+    - web/src/ingestion.ts
+    - web/src/ingestion.test.tsx
+    - web/src/ingestionRuntime.tsx
+    - web/src/ingestionRuntime.test.tsx
+    - web/src/operations.ts
+    - web/src/operationsRuntime.tsx
+    - web/src/JourneyViews.tsx
+    - web/src/JourneyViews.test.tsx
+    - web/src/LiveSourcesView.tsx
+    - web/src/LiveSourcesView.test.tsx
+    - web/src/ProductApp.tsx
+    - web/src/ProductApp.test.tsx
+    - web/src/types.ts
+    - web/src/styles.css
+    - internal/platform/web/static/**
+    - web/e2e/product-journey.spec.ts
+    - web/e2e-live/source-live.spec.ts
+    - tests/fixtures/ingestion/**
+    - tests/contracts/**
+    - tests/acceptance/fresh_clone_test.go
+    - tests/integration/discovery/**
+    - tests/integration/ingestion/**
+    - tests/integration/worker/**
+    - tests/integration/db/**
+    - docs/operations/**
+    - docs/evidence/FMB-T004/**
+  test_targets:
+    - internal/application/discovery/**
+    - internal/application/ingestion/**
+    - internal/adapters/discovery/**
+    - internal/adapters/artifacts/**
+    - internal/platform/http/**
+    - tests/integration/discovery/**
+    - tests/integration/ingestion/**
+    - tests/integration/worker/**
+    - web/src/LiveSourcesView.test.tsx
+    - web/src/ProductApp.test.tsx
+    - web/e2e-live/source-live.spec.ts
+  ownership_notes:
+    - Globs cover new bounded modules, type-specific parser tests and generated artifacts only.
+    - The worker does not edit plan.md, tasks.md, packets or another task's evidence.
+    - Existing PostgreSQL source and discovery behavior must remain compatible.
+    - An authorized empty workspace still mounts the product shell so Sources can create the first durable input; catalog emptiness is an Assets-view state, not an application gate.
+    - The fresh-clone topology assertion includes the one additional shared artifact-data volume required by server and worker, raising the canonical local Compose volume count from two to three without widening service topology.
+    - Ingestion run presentation reuses the T003 Operations authority and does not create a browser-only run model.
+    - Artifact, artifact-set, schedule and occurrence audit events extend the T003 allowlisted target projector and safe-detail fields so they remain filterable without exposing raw content or storage keys.
+    - Enqueue pins the exact finalized artifact identities to the discovery run; workers never resolve mutable current source artifacts after lease acquisition.
+    - Long parser work renews its job lease and observes cancellation before canonical commit so a reaped job cannot commit concurrently.
+
+forbidden_changes:
+  - Do not accept executable content, macros, encrypted workbooks, Markdown HTML execution or spreadsheet formula evaluation.
+  - Do not trust file names, client MIME, ZIP entry paths, artifact paths or dbt schema declarations.
+  - Do not store browser/server temporary paths as authoritative artifact locators.
+  - Do not read outside configured roots, follow symlinks, permit archive bombs or bypass row/cell/document/byte limits.
+  - Do not let schedule replay, DST, restart or concurrent schedulers enqueue duplicate authoritative occurrences.
+  - Do not log or audit raw file contents, spreadsheet cells, source DSNs or credentials.
+  - Do not modify migrations 000001 through 000017 or any T005/T006 migration.
+  - Do not modify shared files concurrently with T005 or T006.
+
+tdd_plan:
+  required: true
+  exception: null
+  red:
+    command: >-
+      go test ./internal/application/discovery/... ./internal/application/ingestion/...
+      ./internal/adapters/discovery/... ./internal/adapters/artifacts/...
+      ./tests/integration/discovery/... ./tests/integration/ingestion/... ./tests/integration/worker/... &&
+      pnpm --dir web test -- LiveSources JourneyViews ProductApp
+    expected_failure: >-
+      Tests prove uploads and schedules are not durable and reject missing safeguards for type/magic,
+      traversal, symlinks, archive expansion, parser quotas, dbt versions, DST, overlap and restart.
+  green:
+    command: >-
+      go test ./internal/application/discovery/... ./internal/application/ingestion/...
+      ./internal/adapters/discovery/... ./internal/adapters/artifacts/...
+      ./tests/integration/discovery/... ./tests/integration/ingestion/... ./tests/integration/worker/... &&
+      pnpm --dir web test -- LiveSources JourneyViews ProductApp
+    expected_signal: >-
+      Each supported input reaches one durable source revision/run or a stable terminal finding, and
+      manual/scheduled execution shares one idempotent application command.
+  refactor:
+    command: make contracts-check && make db-generate-check && make check-source && git diff --check
+    expected_signal: >-
+      Generated artifacts are current, readiness expects migration 18, parser boundaries remain
+      isolated and no fixture/session-only success path remains.
+
+validation_loop:
+  commands:
+    - go test ./internal/application/discovery/... ./internal/application/ingestion/... ./internal/application/jobs/... ./internal/adapters/discovery/... ./internal/adapters/artifacts/...
+    - go test ./tests/integration/discovery/... ./tests/integration/ingestion/... ./tests/integration/worker/... ./tests/integration/db/...
+    - pnpm --dir web test -- LiveSources JourneyViews ProductApp
+    - pnpm --dir web lint
+    - pnpm --dir web typecheck
+    - make contracts-check
+    - make db-generate-check
+    - make check-source
+    - git diff --check
+  migration_proof:
+    - Empty database reaches migration 18.
+    - Populated migration-17 source/run data upgrades, rolls back 18, and reapplies without loss.
+    - Readiness requires version 18 while T004 is the execution head.
+  security_proof:
+    - Adversarial CSV/XLSX/Markdown corpus covers spoofed MIME, macros, formulas, active HTML, encryption, traversal and quota overflow.
+    - ZIP entry count and expanded-size limits reject decompression bombs before durable canonical state.
+    - SQL/dbt paths reject absolute path, parent traversal, symlink escape and unsupported schema versions.
+    - Artifact logs, audit and API responses contain digest/safe metadata only.
+  scenario_proof:
+    - Upload-to-preview-to-run-to-candidate journey survives hard reload and worker/database restart.
+    - Manual and scheduled runs produce equivalent owning records and Operations links.
+    - Cron timezone, DST, pause/resume, skip/run_once misfire, concurrent claim and run-now cases are deterministic.
+    - Desktop keyboard/focus and screenshots pass at 1440x900 and 1024x768.
+  retry_budget: 2
+  failure_policy:
+    first_failure: Fix only T004 storage, parser, schedule or discovery integration and rerun the smallest failing layer.
+    second_failure: Classify dependency, unsafe-input, migration, shared-storage or shared-file ownership blockers.
+    beyond_budget: Stop and emit blocked evidence without relaxing quotas, validators, assertions or allowed files.
+
+evidence_contract:
+  summary: docs/evidence/FMB-T004/summary.md
+  diff: docs/evidence/FMB-T004/diff.patch
+  test_results: docs/evidence/FMB-T004/test-results.md
+  required:
+    - Dependency/shared-file preflight and exact changed files
+    - RED/GREEN/REFACTOR results
+    - Migration 17-to-18 and populated up/down/up evidence
+    - Parser adversarial corpus and artifact-store durability evidence
+    - Schedule idempotency, DST, overlap, misfire and restart evidence
+    - Operations linkage and both desktop viewport journeys
+    - Diff summary and residual risks
+
+review_contract:
+  required_passes: [spec_compliance, bug_code_quality, security_privacy, qa_acceptance]
+  blocking_findings:
+    - Path/symlink/archive/type validation bypass or executable file content
+    - Raw content, source secret or temporary-path disclosure
+    - Duplicate schedule occurrence or partial canonical write
+    - Non-durable hosted artifact ownership
+    - Fixture success or shared-file ownership conflict
+  acceptance_rule: The orchestrator may mark Needs_Review after all evidence passes; the worker never marks Accepted.
+
+handoff:
+  attempt_owner: delegated worker selected after FMB-T003 evidence passes
+  next_ready_candidates:
+    - FMB-T005 after the artifact/chunk contract passes
+    - FMB-T007 only after T002, T005 and T006 also pass
+  finish_options: [integrate_and_mark_needs_review, scoped_fix_attempt, blocked_with_named_condition]
+
+stop_conditions:
+  - FMB-T003 evidence is missing or has a blocking finding.
+  - Migration 000018 or a shared file is owned by another active attempt.
+  - Hosted storage cannot provide shared durable ArtifactStore semantics.
+  - Required work leaves allowed files or relaxes an approved security boundary.
+  - Validation would require fixture fallback, deleted tests, weaker assertions or fabricated evidence.

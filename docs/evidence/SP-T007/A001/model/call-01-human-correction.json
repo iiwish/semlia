@@ -1,0 +1,90 @@
+{
+  "disclosure": "Synthetic human answer applied through the production API; not model output or human attestation.",
+  "payload": {
+    "expectedVersion": 1,
+    "input": {
+      "candidates": [],
+      "dependencies": [],
+      "evidence": [],
+      "snapshots": [
+        {
+          "coverageKeys": [
+            "catalog"
+          ],
+          "digest": "sha256:e6132712a369881fd073dd0f65610549220048b565bfcb96c0af50177195c1b9",
+          "snapshotId": "ssnp_01m27sz1p4fjbv9pb5p7znttqm",
+          "sourceId": "src_01m27sz1h0fjbv7ekj2jvf0fk8"
+        }
+      ]
+    },
+    "suggestionRunId": "agr_01m27sz208fjdv798mm4q2qzgc",
+    "targets": [
+      {
+        "changes": [],
+        "content": {
+          "address": "commerce.customers",
+          "assetType": "entity",
+          "definition": "One customer per customer_id.",
+          "displayName": "customers",
+          "ownerPrincipalId": "prn_01m27sz1g6fjbspd1tft2m0x35",
+          "scope": "Customers referenced by sales orders."
+        },
+        "evidenceIds": [],
+        "identityKey": "commerce.customers",
+        "intent": "create",
+        "kind": "semantic_asset",
+        "localKey": "customers",
+        "title": "customers"
+      },
+      {
+        "changes": [],
+        "content": {
+          "address": "commerce.orders",
+          "assetType": "entity",
+          "definition": "One order per order_id.",
+          "displayName": "orders",
+          "ownerPrincipalId": "prn_01m27sz1g6fjbspd1tft2m0x35",
+          "scope": "Sales orders."
+        },
+        "evidenceIds": [],
+        "identityKey": "commerce.orders",
+        "intent": "create",
+        "kind": "semantic_asset",
+        "localKey": "orders",
+        "title": "orders"
+      },
+      {
+        "changes": [],
+        "content": {
+          "address": "commerce.revenue",
+          "assetType": "metric",
+          "definition": "Sum of paid order amounts, excluding cancelled orders.",
+          "displayName": "revenue",
+          "ownerPrincipalId": "prn_01m27sz1g6fjbspd1tft2m0x35",
+          "scope": "Paid sales orders only; cancelled orders are excluded."
+        },
+        "evidenceIds": [],
+        "identityKey": "commerce.revenue",
+        "intent": "create",
+        "kind": "semantic_asset",
+        "localKey": "revenue",
+        "title": "revenue"
+      }
+    ]
+  },
+  "result": {
+    "operationId": "prodop_01m27sz1sffjbvxbe1zjdxmd6n",
+    "outcome": "updated",
+    "proposalIds": [
+      "prp_01m27szmdyfjevg6x4qvjvtrv7",
+      "prp_01m27szmdyfjf8zzepyskx2h9v",
+      "prp_01m27szmdyfjfrzfe71wrdjncm"
+    ],
+    "replayed": false,
+    "reviewIds": [],
+    "setDigest": "sha256:01018f852ce19273a7d2c62dbb4b987929f32a871289835d819a80b6b9a6c0e0",
+    "validationAttemptNo": null,
+    "validationRunIds": [],
+    "version": 2
+  }
+}

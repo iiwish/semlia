@@ -14,7 +14,7 @@ import (
 const createWorkspace = `-- name: CreateWorkspace :one
 INSERT INTO workspaces (id, slug, display_name)
 VALUES ($1, $2, $3)
-RETURNING legacy_id, slug, display_name, created_at, updated_at, id
+RETURNING legacy_id, slug, display_name, created_at, updated_at, id, authorization_version
 `
 
 type CreateWorkspaceParams struct {
@@ -33,12 +33,13 @@ func (q *Queries) CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ID,
+		&i.AuthorizationVersion,
 	)
 	return i, err
 }
 
 const listWorkspaces = `-- name: ListWorkspaces :many
-SELECT workspace.legacy_id, workspace.slug, workspace.display_name, workspace.created_at, workspace.updated_at, workspace.id
+SELECT workspace.legacy_id, workspace.slug, workspace.display_name, workspace.created_at, workspace.updated_at, workspace.id, workspace.authorization_version
 FROM workspaces AS workspace
 ORDER BY EXISTS (
     SELECT 1
@@ -63,6 +64,7 @@ func (q *Queries) ListWorkspaces(ctx context.Context) ([]Workspace, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.ID,
+			&i.AuthorizationVersion,
 		); err != nil {
 			return nil, err
 		}

@@ -9,13 +9,17 @@ import (
 	"strings"
 
 	"github.com/iiwish/semlia/internal/domain/discovery"
+	"github.com/iiwish/semlia/internal/domain/ingestion"
 	pg_query "github.com/pganalyze/pg_query_go/v6"
+	pgquery "github.com/wasilibs/go-pgquery"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 const (
 	adapterKind    = "postgresql_sql"
 	adapterVersion = "1.0.0"
+	maxStatements  = 10_000
+	maxSQLObjects  = 100_000
 )
 
 type Adapter struct{}
@@ -23,7 +27,7 @@ type Adapter struct{}
 func (Adapter) Kind() string    { return adapterKind }
 func (Adapter) Version() string { return adapterVersion }
 
-func (Adapter) Discover(_ context.Context, input discovery.Input) (discovery.Snapshot, error) {
+func (Adapter) Discover(ctx context.Context, input discovery.Input) (discovery.Snapshot, error) {
 	if err := input.Validate(); err != nil {
 		return discovery.Snapshot{}, err
 	}
@@ -37,17 +41,28 @@ func (Adapter) Discover(_ context.Context, input discovery.Input) (discovery.Sna
 		paths = append(paths, path)
 	}
 	sort.Strings(paths)
+	objects := 0
 	for _, path := range paths {
+		if err := ctx.Err(); err != nil {
+			return discovery.Snapshot{}, err
+		}
 		content := input.Files[path]
-		parsed, err := pg_query.Parse(string(content))
+		parsed, err := pgquery.Parse(string(content))
 		if err != nil {
 			return discovery.Snapshot{}, fmt.Errorf("%w: parse PostgreSQL SQL at %s", discovery.ErrInvalidInput, path)
 		}
+		if len(parsed.Stmts) > maxStatements {
+			return discovery.Snapshot{}, ingestion.ErrLimitExceeded
+		}
 		snapshot.CodeArtifacts = append(snapshot.CodeArtifacts, discovery.CodeArtifact{
-			Path: path, Language: "sql", ContentDigest: digest(content),
+			Path: path, Language: "sql", ContentDigest: digest(content), Content: append([]byte(nil), content...),
 		})
 		for statementIndex, rawStatement := range parsed.Stmts {
+			if err := ctx.Err(); err != nil {
+				return discovery.Snapshot{}, err
+			}
 			statement := rawStatement.GetStmt()
+			beforeDatasets, beforeLineage, beforeFindings := len(snapshot.Datasets), len(snapshot.Lineage), len(snapshot.Findings)
 			switch {
 			case statement.GetCreateStmt() != nil:
 				snapshot.Datasets = append(snapshot.Datasets, tableDataset(statement.GetCreateStmt(), path))
@@ -67,6 +82,46 @@ func (Adapter) Discover(_ context.Context, input discovery.Input) (discovery.Sna
 					Locator: fmt.Sprintf("%s#statement-%d", path, statementIndex+1),
 					Details: map[string]any{"node_type": statementType(statement)},
 				})
+			}
+			objects += len(snapshot.Datasets) - beforeDatasets + len(snapshot.Lineage) - beforeLineage + len(snapshot.Findings) - beforeFindings
+			for index := beforeFindings; index < len(snapshot.Findings); index++ {
+				snapshot.Findings[index].CoverageKey = discovery.PathCoverageKey("sql", path)
+			}
+			for _, dataset := range snapshot.Datasets[beforeDatasets:] {
+				objects += len(dataset.Fields)
+			}
+			if objects > maxSQLObjects {
+				return discovery.Snapshot{}, ingestion.ErrLimitExceeded
+			}
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return discovery.Snapshot{}, err
+	}
+	for _, filePath := range paths {
+		key := discovery.PathCoverageKey("sql", filePath)
+		unit := discovery.CoverageUnit{Key: key, Selector: filePath, ConfigDigest: discovery.SnapshotDigest(struct{ Kind, Version string }{adapterKind, adapterVersion}), Status: "complete", EnumerationComplete: true, DiagnosticCodes: []string{}}
+		for _, finding := range snapshot.Findings {
+			if finding.CoverageKey == key {
+				unit.Status = "partial"
+				unit.EnumerationComplete = false
+				unit.DiagnosticCodes = append(unit.DiagnosticCodes, finding.Code)
+			}
+		}
+		snapshot.Coverage = append(snapshot.Coverage, unit)
+		for i := range snapshot.Datasets {
+			if strings.HasPrefix(snapshot.Datasets[i].Locator, filePath+"#") {
+				snapshot.Datasets[i].CoverageKey = key
+			}
+		}
+		for i := range snapshot.CodeArtifacts {
+			if snapshot.CodeArtifacts[i].Path == filePath {
+				snapshot.CodeArtifacts[i].CoverageKey = key
+			}
+		}
+		for i := range snapshot.Lineage {
+			if snapshot.Lineage[i].CodePath == filePath {
+				snapshot.Lineage[i].CoverageKey = key
 			}
 		}
 	}

@@ -1,0 +1,22 @@
+[
+  "web/src/LiveSourcesView.tsx",
+  "web/src/LiveSourcesView.test.tsx",
+  "web/src/ProductApp.tsx",
+  "web/src/SemanticProductionPanel.tsx",
+  "web/src/SemanticProductionPanel.test.tsx",
+  "web/src/semanticProduction.ts",
+  "web/src/semanticProductionRuntime.tsx",
+  "web/src/semanticProductionRuntime.test.tsx",
+  "web/src/ingestion-workspace.css",
+  "web/package.json",
+  "web/e2e-production/production.spec.ts",
+  "web/e2e-production/fixtures.ts",
+  "web/playwright.production.config.ts",
+  "scripts/dev/production-acceptance.sh",
+  "compose.production-acceptance.yaml",
+  "internal/testsupport/productionacceptance/main.go",
+  "internal/testsupport/productionacceptance/main_test.go",
+  "internal/adapters/postgres/catalog.go",
+  "internal/adapters/postgres/production_release_persistence.go",
+  "tests/integration/governance/production_projection_test.go"
+]

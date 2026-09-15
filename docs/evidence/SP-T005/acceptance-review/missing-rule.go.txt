@@ -1,0 +1,78 @@
+package governance_test
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"strings"
+	"testing"
+
+	"github.com/iiwish/semlia/internal/application/jobs"
+	gov "github.com/iiwish/semlia/internal/domain/governance"
+)
+
+func TestProductionGenerationUnresolvedApplicationCannotPassValidation(t *testing.T) {
+	g := newProductionGenerationFixture(t)
+	content := g.payload["targets"].([]any)[0].(map[string]any)["content"].(map[string]any)
+	content["definition"] = nil
+	content["scope"] = nil
+	raw, _ := json.Marshal(map[string]any{"schemaVersion": gov.ProductionSuggestionsSchema, "targets": g.payload["targets"]})
+	g.output = string(raw)
+	queued := g.queue(t)
+	g.run(t)
+	if result := g.get(t, queued.RunID); result.Status != "succeeded" {
+		t.Fatalf("unresolved suggestion rejected rather than preserved: %+v", result)
+	}
+	g.payload["expectedVersion"] = 1
+	g.payload["suggestionRunId"] = queued.RunID.String()
+	applied := productionRequestResult(t, g.h, http.MethodPut, g.path(), g.actor, "apply-unresolved", g.payload, http.StatusOK)
+	productionRequestResult(t, g.h, http.MethodPost, g.path()+"/submit", g.actor, "submit-unresolved", map[string]any{"expectedVersion": 2, "setDigest": applied["setDigest"]}, http.StatusAccepted)
+	job := jobs.Job{WorkspaceID: g.w, Attempt: 1, MaxAttempts: 3}
+	if err := g.f.pool.QueryRow(context.Background(), `SELECT payload,trace_id FROM jobs WHERE workspace_id=$1 AND job_type='governance.proposal.validate' AND payload->>'operationId'=$2`, g.w.UUID(), g.op.String()).Scan(&job.Payload, &job.TraceID); err != nil {
+		t.Fatal(err)
+	}
+	if err := runProductionValidationJob(t, g.f, job); err != nil {
+		t.Fatal(err)
+	}
+	var status string
+	if err := g.f.pool.QueryRow(context.Background(), `SELECT status FROM production_validation_attempts WHERE operation_id=$1 AND production_version=2 AND attempt_no=1`, g.op.UUID()).Scan(&status); err != nil {
+		t.Fatal(err)
+	}
+	if status != "failed" {
+		t.Fatalf("unresolved generated business definition passed validation: %s", status)
+	}
+	var findings []byte
+	if err := g.f.pool.QueryRow(context.Background(), `SELECT results_json FROM production_validation_seals WHERE operation_id=$1 AND production_version=2 AND attempt_no=1`, g.op.UUID()).Scan(&findings); err != nil {
+		t.Fatal(err)
+	}
+	for _, code := range []string{"PRODUCTION_DEFINITION_UNRESOLVED", "PRODUCTION_SCOPE_UNRESOLVED"} {
+		if !strings.Contains(string(findings), code) {
+			t.Fatalf("missing %s: %s", code, findings)
+		}
+	}
+	assertTableCount(t, g.f.pool, "releases", 0)
+}
+
+func TestProductionGenerationReviewMissingBusinessRule(t *testing.T) {
+ g:=newProductionGenerationFixture(t)
+ targets:=append([]any{},g.payload["targets"].([]any)...)
+ targets=append(targets,map[string]any{
+  "localKey":"revenue","title":"Revenue","kind":"semantic_asset","intent":"create","identityKey":"sales.revenue",
+  "changes":[]any{},"evidenceIds":[]any{},
+  "content":map[string]any{"address":"sales.revenue","assetType":"metric","displayName":"Revenue","definition":"Revenue excludes refunds and taxes","scope":"All completed orders","ownerPrincipalId":g.actor.String()},
+ })
+ raw,_:=json.Marshal(map[string]any{"schemaVersion":gov.ProductionSuggestionsSchema,"targets":targets});g.output=string(raw)
+ queued:=g.queue(t);g.run(t)
+ result:=g.get(t,queued.RunID)
+ if result.Status!="succeeded"{t.Logf("generation safely rejected missing rule: %+v",result);return}
+ g.payload["targets"]=targets;g.payload["expectedVersion"]=1;g.payload["suggestionRunId"]=queued.RunID.String()
+ applied:=productionRequestResult(t,g.h,http.MethodPut,g.path(),g.actor,"review-apply-no-rule",g.payload,http.StatusOK)
+ productionRequestResult(t,g.h,http.MethodPost,g.path()+"/submit",g.actor,"review-submit-no-rule",map[string]any{"expectedVersion":2,"setDigest":applied["setDigest"]},http.StatusAccepted)
+ job:=jobs.Job{WorkspaceID:g.w,Attempt:1,MaxAttempts:3}
+ if err:=g.f.pool.QueryRow(context.Background(),`SELECT payload,trace_id FROM jobs WHERE workspace_id=$1 AND job_type='governance.proposal.validate' AND payload->>'operationId'=$2`,g.w.UUID(),g.op.String()).Scan(&job.Payload,&job.TraceID);err!=nil{t.Fatal(err)}
+ if err:=runProductionValidationJob(t,g.f,job);err!=nil{t.Fatal(err)}
+ var status string
+ if err:=g.f.pool.QueryRow(context.Background(),`SELECT status FROM production_validation_attempts WHERE operation_id=$1 AND production_version=2 AND attempt_no=1`,g.op.UUID()).Scan(&status);err!=nil{t.Fatal(err)}
+ if status!="failed"{t.Fatalf("metric with no business-rule evidence passed deterministic validation: %s",status)}
+}
+

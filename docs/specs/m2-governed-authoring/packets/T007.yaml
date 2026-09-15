@@ -1,0 +1,79 @@
+schema_version: 1
+packet_id: M2-T007-A001
+task_id: T007
+feature_id: m2-governed-authoring
+mode: execute_one_task
+status: Ready
+
+goal: >-
+  Complete the governed loop: publish an approved proposal as an immutable release that applies
+  its change-set (asset revision switch or governed-object change), project releases through the
+  existing Git content writer, and roll back as a new immutable release — with release.publish
+  SoD enforced and no tags, remotes or history rewriting.
+
+dependencies:
+  - T006 Accepted (2026-09-02)
+  - founder continuous M2 execution authorization through T007 (2026-09-02)
+  - docs/SSOT.md §8.1 G1 (human reviews then publishes), §8.2 (immutable release or rejection),
+    §8.4, P-003, D-008 (rollback as new release)
+  - docs/specs/semantic-assets/semantic-asset-design.md §4.6 (release = immutable manifest
+    pinning revisions; released revision is the only production-consumable content)
+  - docs/adr/0002-m1-product-and-semantic-execution.md §3 (publish/rollback belong to M2), §7
+
+allowed_files:
+  - internal/**
+  - api/openapi/**
+  - db/**
+  - migrations/**
+  - sdk/typescript/**
+  - tests/**
+  - docs/specs/m2-governed-authoring/**
+  - docs/evidence/M2-T007/**
+  - cmd/**
+
+forbidden_changes:
+  - Do not add tags, remotes, reverts or history rewriting to the Git projection; append-only
+    commits through the existing writer.
+  - Do not implement consumer bindings, MCP or trusted resolution (M3).
+  - Do not allow publishing without release.publish capability and an approving review; agents
+    are excluded by the requires_human flag (T001).
+  - Do not update or delete existing release rows; rollback creates a NEW release (D8).
+  - Do not auto-publish; publishing is always an explicit human command.
+  - Do not weaken release immutability, the strict outbox envelope or any existing test.
+
+tdd:
+  red:
+    - Publish gates: publishing without an approving review, without release.publish capability,
+      by the proposal author, or by the sole approving reviewer is refused with stable codes;
+      a blocked (blocker finding) proposal cannot publish (T002 gate).
+    - Application: publishing a semantic-asset proposal appends the new revision, switches the
+      current revision and pins it in the release manifest within one transaction; publishing a
+      governed-object proposal applies the change with a version bump and pins the object
+      version.
+    - Projection: a release.published outbox event drives the Git writer to append a release
+      document; no tags or remotes are created; asset content projection still works.
+    - Rollback: rolling back a release creates a NEW release referencing the target, restores
+      the prior revision pointer (asset) or prior content (object), and never mutates the
+      target release rows.
+  green:
+    - End-to-end against real PostgreSQL and a real local Git repo: propose → validate → review →
+      publish → projection → rollback → projection, with audit and outbox assertions.
+  refactor:
+    - Share one release-application helper for asset and object targets.
+
+validation:
+  - go test ./...
+  - go vet ./...
+  - make contracts-check
+  - make check-source
+  - git diff --check
+
+acceptance:
+  - Publishing applies the approved change-set in one transaction and cuts an immutable release
+    manifest pinning the resulting revision/version.
+  - release.published drives append-only Git projection of release documents; asset projection
+    is unchanged.
+  - Rollback is a new immutable release restoring prior state (asset revision pointer or object
+    content) with full audit.
+  - Publishing requires release.publish (human-only) plus an approving review; SoD denials are
+    stable and audited.

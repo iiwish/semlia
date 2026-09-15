@@ -1,0 +1,24 @@
+{
+  "command": [
+    "go",
+    "test",
+    "-p=1",
+    "-count=1",
+    "-timeout=20m",
+    "./tests/integration/ingestion",
+    "-run",
+    "^TestSourceSnapshotLongPathsBeginAndPersistConsistently$"
+  ],
+  "clearedEnvironment": [
+    "SEMLIA_INGESTION_TEST_DATABASE_URL",
+    "SEMLIA_EXECUTION_CRASH_HELPER",
+    "SEMLIA_EXECUTION_TEST_DB",
+    "SEMLIA_DATABASE_URL"
+  ],
+  "start": "2026-09-09T08:03:53.476Z",
+  "end": "2026-09-09T08:04:02.130Z",
+  "exitStatus": 1,
+  "signal": null,
+  "stdout": "2026/09/09 16:03:58 github.com/testcontainers/testcontainers-go - Connected to docker: \n  Server Version: 29.4.0\n  API Version: 1.54\n  Operating System: OrbStack\n  Total Memory: 16040 MB\n  Testcontainers for Go Version: v0.44.0\n  Resolved Docker Host: unix:///var/run/docker.sock\n  Resolved Docker Socket Path: /var/run/docker.sock\n  Test SessionID: 365bf404d70c98282d900666ecdcb3f08a8fa046d29f474b0f684727d0299666\n  Test ProcessID: bca137ed-888f-42d2-84aa-bca572f98073\n2026/09/09 16:03:58 🐳 Creating container for image postgres:18-alpine\n2026/09/09 16:03:59 🐳 Creating container for image testcontainers/ryuk:0.14.0\n2026/09/09 16:03:59 ✅ Container created: a7f4fea32481\n2026/09/09 16:03:59 🐳 Starting container: a7f4fea32481\n2026/09/09 16:03:59 ✅ Container started: a7f4fea32481\n2026/09/09 16:03:59 ⏳ Waiting for container id a7f4fea32481 image: testcontainers/ryuk:0.14.0. Waiting for: all of: [log message \"Started\", port 8080/tcp to be listening]\n2026/09/09 16:03:59 Shell not found in container\n2026/09/09 16:03:59 🔔 Container is ready: a7f4fea32481\n2026/09/09 16:03:59 ✅ Container created: 08aa4d7138c2\n2026/09/09 16:03:59 🐳 Starting container: 08aa4d7138c2\n2026/09/09 16:03:59 ✅ Container started: 08aa4d7138c2\n2026/09/09 16:03:59 ⏳ Waiting for container id 08aa4d7138c2 image: postgres:18-alpine. Waiting for: all of: [log message \"database system is ready to accept connections\" (occurrence: 2), port 5432/tcp to be listening]\n2026/09/09 16:04:00 🔔 Container is ready: 08aa4d7138c2\n--- FAIL: TestSourceSnapshotLongPathsBeginAndPersistConsistently (0.79s)\n    --- FAIL: TestSourceSnapshotLongPathsBeginAndPersistConsistently/sql (0.08s)\n        source_snapshot_retention_test.go:136: valid long path never reached adapter; BeginDiscoveryRun stranded the run\n    --- FAIL: TestSourceSnapshotLongPathsBeginAndPersistConsistently/sql-max-upload (0.15s)\n        source_snapshot_retention_test.go:136: valid long path never reached adapter; BeginDiscoveryRun stranded the run\n    --- FAIL: TestSourceSnapshotLongPathsBeginAndPersistConsistently/file-max-name (0.06s)\n        source_snapshot_retention_test.go:136: valid long path never reached adapter; BeginDiscoveryRun stranded the run\nFAIL\n2026/09/09 16:04:01 🐳 Stopping container: 08aa4d7138c2\n2026/09/09 16:04:02 ✅ Container stopped: 08aa4d7138c2\n2026/09/09 16:04:02 🐳 Terminating container: 08aa4d7138c2\n2026/09/09 16:04:02 🚫 Container terminated: 08aa4d7138c2\nFAIL\tgithub.com/iiwish/semlia/tests/integration/ingestion\t4.736s\nFAIL\n",
+  "stderr": ""
+}

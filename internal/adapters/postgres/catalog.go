@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"time"
 
 	dbgen "github.com/iiwish/semlia/internal/adapters/postgres/sqlc"
@@ -52,6 +53,21 @@ func (store *Store) ListCatalogAssets(ctx context.Context, query domain.ListAsse
 	return result, nil
 }
 
+func (store *Store) CountCatalogAssets(ctx context.Context, query domain.ListAssetsQuery) (int64, error) {
+	workspaceID, err := uuidValue(query.WorkspaceID)
+	if err != nil {
+		return 0, err
+	}
+	count, err := store.queries.CountCatalogAssets(ctx, dbgen.CountCatalogAssetsParams{
+		WorkspaceID: workspaceID, Search: query.Search, AssetType: string(query.AssetType),
+		LifecycleState: query.Lifecycle,
+	})
+	if err != nil {
+		return 0, repositoryError("count catalog assets", err)
+	}
+	return count, nil
+}
+
 func (store *Store) GetCatalogAsset(ctx context.Context, workspace identity.WorkspaceID, asset identity.AssetID) (domain.AssetDetail, error) {
 	workspaceID, assetID, err := catalogIDs(workspace, asset)
 	if err != nil {
@@ -82,7 +98,473 @@ func (store *Store) GetCatalogAsset(ctx context.Context, workspace identity.Work
 		}
 		detail.CurrentRevision = &mapped
 	}
+	facts, err := store.queries.GetCatalogAssetAuthorityFacts(ctx, dbgen.GetCatalogAssetAuthorityFactsParams{
+		WorkspaceID: workspaceID, AssetID: assetID,
+	})
+	if err != nil {
+		return domain.AssetDetail{}, repositoryError("get catalog asset authority facts", err)
+	}
+	detail.RelationCount = int(facts.RelationCount)
+	detail.AuthoritySections, err = catalogAuthoritySections(facts)
+	if err != nil {
+		return domain.AssetDetail{}, err
+	}
+	lineageAvailability := domain.AvailabilityNotConfigured
+	if facts.LineageCount > 0 {
+		lineageAvailability = domain.AvailabilityAvailable
+	}
+	detail.AuthoritySections = append(detail.AuthoritySections, domain.AuthoritySection{
+		Kind: "lineage", Authority: "lineage_edges", Availability: lineageAvailability,
+		Values: map[string]int64{"lineageCount": facts.LineageCount}, Records: []domain.AuthorityRecord{},
+	})
 	return detail, nil
+}
+
+func (store *Store) ListCatalogAuthorityRecords(
+	ctx context.Context, query domain.ListAuthorityRecordsQuery,
+) (domain.AuthorityRecordResult, error) {
+	workspaceID, assetID, err := catalogIDs(query.WorkspaceID, query.AssetID)
+	if err != nil {
+		return domain.AuthorityRecordResult{}, err
+	}
+	params := dbgen.ListCatalogAssetAuthorityRecordsParams{
+		WorkspaceID: workspaceID, AssetID: assetID, SectionKind: query.Section,
+		PageLimit: int32(query.Limit),
+	}
+	if query.Cursor != nil {
+		params.HasCursor = true
+		params.CursorRecordKind = query.Cursor.Kind
+		cursor, parseErr := identity.ParseAny(query.Cursor.ID)
+		if parseErr != nil {
+			return domain.AuthorityRecordResult{}, domain.ErrInvalidArgument
+		}
+		params.CursorRecordID, err = uuidValue(cursor)
+		if err != nil {
+			return domain.AuthorityRecordResult{}, domain.ErrInvalidArgument
+		}
+	}
+	rows, err := store.queries.ListCatalogAssetAuthorityRecords(ctx, params)
+	if err != nil {
+		return domain.AuthorityRecordResult{}, repositoryError("list catalog asset authority records", err)
+	}
+	records := make([]domain.AuthorityRecord, 0, len(rows))
+	for _, row := range rows {
+		record, mapErr := catalogAuthorityRecord(row)
+		if mapErr != nil {
+			return domain.AuthorityRecordResult{}, mapErr
+		}
+		records = append(records, record)
+	}
+	result := domain.AuthorityRecordResult{Items: records}
+	if len(rows) > 0 {
+		result.Total = rows[0].TotalCount
+	}
+	return result, nil
+}
+
+func catalogAuthorityRecord(row dbgen.ListCatalogAssetAuthorityRecordsRow) (domain.AuthorityRecord, error) {
+	prefix := identity.Prefix("")
+	switch row.RecordKind {
+	case "relation":
+		prefix = identity.Relation
+	case "physical_binding":
+		prefix = identity.PhysicalBinding
+	case "model_grain":
+		prefix = identity.ModelGrain
+	case "entity_key":
+		prefix = identity.EntityKey
+	case "join_contract":
+		prefix = identity.JoinContract
+	case "validation_run":
+		prefix = identity.ValidationRun
+	case "lineage":
+		prefix = identity.LineageEdge
+	case "consumer_binding":
+		prefix = identity.ConsumerBinding
+	default:
+		return domain.AuthorityRecord{}, domain.ErrInvariant
+	}
+	id, err := identity.FromUUIDBytes(prefix, row.RecordID.Bytes)
+	if err != nil {
+		return domain.AuthorityRecord{}, err
+	}
+	releaseID, releaseSequence, err := catalogReleaseBasis(row.ReleaseID, row.ReleaseSequence)
+	if err != nil {
+		return domain.AuthorityRecord{}, err
+	}
+	relatedID, err := catalogAuthorityRelatedID(row.RecordKind, row.RelatedID)
+	if err != nil {
+		return domain.AuthorityRecord{}, err
+	}
+	record := domain.AuthorityRecord{Kind: row.RecordKind, ID: id.String(), Authority: row.Authority,
+		Status: row.Status, Label: row.Label, RelatedID: relatedID, Version: int(row.Version),
+		ReleaseID: releaseID, ReleaseSequence: releaseSequence}
+	if err := catalogAuthorityDetails(&record, row.Details); err != nil {
+		return domain.AuthorityRecord{}, err
+	}
+	return record, nil
+}
+
+func catalogAuthorityRelatedID(kind, value string) (string, error) {
+	if value == "" {
+		return "", nil
+	}
+	prefix := identity.PhysicalDataset
+	switch kind {
+	case "relation":
+		prefix = identity.Asset
+	case "validation_run":
+		prefix = identity.Proposal
+	case "consumer_binding":
+		prefix = identity.Consumer
+	case "physical_binding", "join_contract", "lineage":
+		prefix = identity.PhysicalDataset
+	default:
+		return "", nil
+	}
+	id, err := identity.FromUUID(prefix, value)
+	if err != nil {
+		return "", err
+	}
+	return id.String(), nil
+}
+
+func catalogAuthorityDetails(record *domain.AuthorityRecord, raw []byte) error {
+	if len(raw) == 0 {
+		return nil
+	}
+	switch record.Kind {
+	case "relation":
+		var value struct {
+			Direction, Predicate, Plane, AssertionState, SubjectAssetID, ObjectAssetID string
+		}
+		if err := json.Unmarshal(raw, &value); err != nil {
+			return domain.ErrInvariant
+		}
+		subject, err := assetIDFromStorage(value.SubjectAssetID)
+		if err != nil {
+			return err
+		}
+		object, err := assetIDFromStorage(value.ObjectAssetID)
+		if err != nil {
+			return err
+		}
+		record.Relation = &domain.RelationAuthority{Direction: value.Direction,
+			Predicate: value.Predicate, Plane: value.Plane, AssertionState: value.AssertionState,
+			SubjectAssetID: subject, ObjectAssetID: object}
+	case "physical_binding":
+		var value struct {
+			AssetID, DatasetID, FieldID, Transform string
+		}
+		if err := json.Unmarshal(raw, &value); err != nil {
+			return domain.ErrInvariant
+		}
+		assetID, err := assetIDFromStorage(value.AssetID)
+		if err != nil {
+			return err
+		}
+		datasetID, err := datasetIDFromStorage(value.DatasetID)
+		if err != nil {
+			return err
+		}
+		var fieldID *identity.PhysicalFieldID
+		if value.FieldID != "" {
+			field, fieldErr := fieldIDFromStorage(value.FieldID)
+			if fieldErr != nil {
+				return fieldErr
+			}
+			fieldID = &field
+		}
+		record.PhysicalBinding = &domain.PhysicalBindingAuthority{
+			AssetID: assetID, DatasetID: datasetID, FieldID: fieldID, Transform: value.Transform,
+		}
+	case "model_grain":
+		var value struct {
+			AssetID, GrainExpression, DocumentedBy string
+			GrainFieldRefs                         []string
+		}
+		if err := json.Unmarshal(raw, &value); err != nil {
+			return domain.ErrInvariant
+		}
+		assetID, err := assetIDFromStorage(value.AssetID)
+		if err != nil {
+			return err
+		}
+		refs, err := fieldIDsFromStorage(value.GrainFieldRefs)
+		if err != nil {
+			return err
+		}
+		var documentedBy *identity.EvidenceID
+		if value.DocumentedBy != "" {
+			id, idErr := identity.FromUUID(identity.Evidence, value.DocumentedBy)
+			if idErr != nil {
+				return idErr
+			}
+			parsed, parseErr := identity.ParseEvidenceID(id.String())
+			if parseErr != nil {
+				return parseErr
+			}
+			documentedBy = &parsed
+		}
+		record.ModelGrain = &domain.ModelGrainAuthority{AssetID: assetID,
+			GrainExpression: value.GrainExpression, GrainFieldRefs: refs, DocumentedBy: documentedBy}
+	case "entity_key":
+		var value struct {
+			AssetID, UniquenessSemantics string
+			KeyFieldRefs                 []string
+		}
+		if err := json.Unmarshal(raw, &value); err != nil {
+			return domain.ErrInvariant
+		}
+		assetID, err := assetIDFromStorage(value.AssetID)
+		if err != nil {
+			return err
+		}
+		refs, err := fieldIDsFromStorage(value.KeyFieldRefs)
+		if err != nil {
+			return err
+		}
+		record.EntityKey = &domain.EntityKeyAuthority{AssetID: assetID,
+			KeyFieldRefs: refs, UniquenessSemantics: value.UniquenessSemantics}
+	case "join_contract":
+		var value struct {
+			Direction, LeftDatasetID, RightDatasetID, JoinType, Cardinality, JoinExpression string
+			LeftFieldRefs, RightFieldRefs                                                   []string
+		}
+		if err := json.Unmarshal(raw, &value); err != nil {
+			return domain.ErrInvariant
+		}
+		leftDataset, err := datasetIDFromStorage(value.LeftDatasetID)
+		if err != nil {
+			return err
+		}
+		rightDataset, err := datasetIDFromStorage(value.RightDatasetID)
+		if err != nil {
+			return err
+		}
+		leftRefs, err := fieldIDsFromStorage(value.LeftFieldRefs)
+		if err != nil {
+			return err
+		}
+		rightRefs, err := fieldIDsFromStorage(value.RightFieldRefs)
+		if err != nil {
+			return err
+		}
+		record.JoinContract = &domain.JoinContractAuthority{Direction: value.Direction,
+			LeftDatasetID: leftDataset, RightDatasetID: rightDataset,
+			LeftFieldRefs: leftRefs, RightFieldRefs: rightRefs, JoinType: value.JoinType,
+			Cardinality: value.Cardinality, JoinExpression: value.JoinExpression}
+	case "lineage":
+		var value struct {
+			Direction, UpstreamDatasetID, DownstreamDatasetID string
+			EdgeKind, SourceRevisionID, CodeArtifactID        string
+			Confidence                                        float64
+		}
+		if err := json.Unmarshal(raw, &value); err != nil {
+			return domain.ErrInvariant
+		}
+		upstream, err := datasetIDFromStorage(value.UpstreamDatasetID)
+		if err != nil {
+			return err
+		}
+		downstream, err := datasetIDFromStorage(value.DownstreamDatasetID)
+		if err != nil {
+			return err
+		}
+		sourceRevision, err := sourceRevisionIDFromStorage(value.SourceRevisionID)
+		if err != nil {
+			return err
+		}
+		var codeArtifact *identity.CodeArtifactID
+		if value.CodeArtifactID != "" {
+			id, idErr := identity.FromUUID(identity.CodeArtifact, value.CodeArtifactID)
+			if idErr != nil {
+				return idErr
+			}
+			parsed, parseErr := identity.ParseCodeArtifactID(id.String())
+			if parseErr != nil {
+				return parseErr
+			}
+			codeArtifact = &parsed
+		}
+		record.Lineage = &domain.LineageAuthority{Direction: value.Direction,
+			UpstreamDatasetID: upstream, DownstreamDatasetID: downstream, EdgeKind: value.EdgeKind,
+			SourceRevisionID: sourceRevision, CodeArtifactID: codeArtifact, Confidence: value.Confidence}
+	case "consumer_binding":
+		var value struct {
+			ConsumerID, EffectiveReleaseID, Environment, Purpose, Mode, Status string
+			CompatibilityConstraint                                            json.RawMessage
+			ExpiresAt                                                          *time.Time
+		}
+		if err := json.Unmarshal(raw, &value); err != nil {
+			return domain.ErrInvariant
+		}
+		id, err := identity.FromUUID(identity.Consumer, value.ConsumerID)
+		if err != nil {
+			return err
+		}
+		consumerID, err := identity.ParseConsumerID(id.String())
+		if err != nil {
+			return err
+		}
+		effectiveRelease, err := identity.FromUUID(identity.Release, value.EffectiveReleaseID)
+		if err != nil {
+			return err
+		}
+		effectiveReleaseID, err := identity.ParseReleaseID(effectiveRelease.String())
+		if err != nil {
+			return err
+		}
+		if len(value.CompatibilityConstraint) == 0 {
+			value.CompatibilityConstraint = json.RawMessage(`{}`)
+		}
+		record.ConsumerBinding = &domain.ConsumerBindingAuthority{ConsumerID: consumerID, EffectiveReleaseID: effectiveReleaseID,
+			Environment: value.Environment, Purpose: value.Purpose, Mode: value.Mode, Status: value.Status,
+			CompatibilityConstraint: value.CompatibilityConstraint, ExpiresAt: value.ExpiresAt}
+	}
+	return nil
+}
+
+func assetIDFromStorage(value string) (identity.AssetID, error) {
+	id, err := identity.FromUUID(identity.Asset, value)
+	if err != nil {
+		return identity.AssetID{}, err
+	}
+	return identity.ParseAssetID(id.String())
+}
+
+func datasetIDFromStorage(value string) (identity.PhysicalDatasetID, error) {
+	id, err := identity.FromUUID(identity.PhysicalDataset, value)
+	if err != nil {
+		return identity.PhysicalDatasetID{}, err
+	}
+	return identity.ParsePhysicalDatasetID(id.String())
+}
+
+func fieldIDFromStorage(value string) (identity.PhysicalFieldID, error) {
+	if strings.HasPrefix(value, "pfd_") {
+		return identity.ParsePhysicalFieldID(value)
+	}
+	id, err := identity.FromUUID(identity.PhysicalField, value)
+	if err != nil {
+		return identity.PhysicalFieldID{}, err
+	}
+	return identity.ParsePhysicalFieldID(id.String())
+}
+
+func sourceRevisionIDFromStorage(value string) (identity.SourceRevisionID, error) {
+	id, err := identity.FromUUID(identity.SourceRevision, value)
+	if err != nil {
+		return identity.SourceRevisionID{}, err
+	}
+	return identity.ParseSourceRevisionID(id.String())
+}
+
+func fieldIDsFromStorage(values []string) ([]identity.PhysicalFieldID, error) {
+	result := make([]identity.PhysicalFieldID, 0, len(values))
+	for _, value := range values {
+		id, err := fieldIDFromStorage(value)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, id)
+	}
+	return result, nil
+}
+
+func catalogAuthoritySections(facts dbgen.GetCatalogAssetAuthorityFactsRow) ([]domain.AuthoritySection, error) {
+	var currentRevision *identity.RevisionID
+	if facts.CurrentRevisionID.Valid {
+		value, err := identity.RevisionIDFromUUIDBytes(facts.CurrentRevisionID.Bytes)
+		if err != nil {
+			return nil, err
+		}
+		currentRevision = &value
+	}
+	var releasedRevision *identity.RevisionID
+	if facts.ReleasedRevisionID.Valid {
+		value, err := identity.RevisionIDFromUUIDBytes(facts.ReleasedRevisionID.Bytes)
+		if err != nil {
+			return nil, err
+		}
+		releasedRevision = &value
+	}
+	var releaseID *identity.ReleaseID
+	if facts.ReleaseID.Valid {
+		value, err := identity.ReleaseIDFromUUIDBytes(facts.ReleaseID.Bytes)
+		if err != nil {
+			return nil, err
+		}
+		releaseID = &value
+	}
+	var releaseSequence *int64
+	if facts.ReleaseSequence.Valid {
+		value := facts.ReleaseSequence.Int64
+		releaseSequence = &value
+	}
+	physicalReleaseID, physicalReleaseSequence, err := catalogReleaseBasis(facts.PhysicalReleaseID, facts.PhysicalReleaseSequence)
+	if err != nil {
+		return nil, err
+	}
+	joinReleaseID, joinReleaseSequence, err := catalogReleaseBasis(facts.JoinReleaseID, facts.JoinReleaseSequence)
+	if err != nil {
+		return nil, err
+	}
+	releasedAvailability := domain.AvailabilityNotReleased
+	if releaseID != nil {
+		releasedAvailability = domain.AvailabilityAvailable
+	}
+	physicalAvailability := domain.AvailabilityNotReleased
+	if physicalReleaseID != nil {
+		physicalAvailability = domain.AvailabilityAvailable
+	} else if releaseID != nil {
+		physicalAvailability = domain.AvailabilityNotConfigured
+	}
+	joinAvailability := domain.AvailabilityNotReleased
+	if joinReleaseID != nil {
+		joinAvailability = domain.AvailabilityAvailable
+	} else if releaseID != nil {
+		joinAvailability = domain.AvailabilityNotConfigured
+	}
+	validationAvailability := domain.AvailabilityNotReleased
+	var validationRevisionID *identity.RevisionID
+	var validationReleaseID *identity.ReleaseID
+	var validationReleaseSequence *int64
+	if releaseID != nil {
+		validationAvailability = domain.AvailabilityNotConfigured
+		if facts.ValidationRunCount > 0 {
+			validationAvailability = domain.AvailabilityAvailable
+			validationRevisionID = releasedRevision
+			validationReleaseID = releaseID
+			validationReleaseSequence = releaseSequence
+		}
+	}
+	definitionAvailability := domain.AvailabilityFailed
+	if currentRevision != nil {
+		definitionAvailability = domain.AvailabilityAvailable
+	}
+	return []domain.AuthoritySection{
+		{Kind: "definition", Authority: "asset_revisions", Availability: definitionAvailability, RevisionID: currentRevision, Values: map[string]int64{}, Records: []domain.AuthorityRecord{}},
+		{Kind: "released_state", Authority: "release_assets", Availability: releasedAvailability, RevisionID: releasedRevision, ReleaseID: releaseID, ReleaseSequence: releaseSequence, Values: map[string]int64{}, Records: []domain.AuthorityRecord{}},
+		{Kind: "relations", Authority: "semantic_relations", Availability: domain.AvailabilityAvailable, Values: map[string]int64{"relationCount": facts.RelationCount}, Records: []domain.AuthorityRecord{}},
+		{Kind: "physical_bindings", Authority: "release_object_snapshots", Availability: physicalAvailability, ReleaseID: physicalReleaseID, ReleaseSequence: physicalReleaseSequence, Values: map[string]int64{"bindingCount": facts.PhysicalBindingCount, "grainCount": facts.ModelGrainCount, "entityKeyCount": facts.EntityKeyCount}, Records: []domain.AuthorityRecord{}},
+		{Kind: "join_contracts", Authority: "release_object_snapshots", Availability: joinAvailability, ReleaseID: joinReleaseID, ReleaseSequence: joinReleaseSequence, Values: map[string]int64{"contractCount": facts.JoinContractCount}, Records: []domain.AuthorityRecord{}},
+		{Kind: "validation", Authority: "validation_runs", Availability: validationAvailability, RevisionID: validationRevisionID, ReleaseID: validationReleaseID, ReleaseSequence: validationReleaseSequence, Values: map[string]int64{"runCount": facts.ValidationRunCount, "blockerCount": facts.ValidationBlockerCount, "warningCount": facts.ValidationWarningCount}, Records: []domain.AuthorityRecord{}},
+		{Kind: "evidence", Authority: "revision_evidence_links", Availability: definitionAvailability, RevisionID: currentRevision, Values: map[string]int64{"evidenceCount": facts.EvidenceCount}, Records: []domain.AuthorityRecord{}},
+		{Kind: "trust", Authority: "trust_configuration", Availability: domain.AvailabilityNotConfigured, Values: map[string]int64{}, Records: []domain.AuthorityRecord{}},
+		{Kind: "consumer_impact", Authority: "consumer_bindings", Availability: releasedAvailability, RevisionID: releasedRevision, ReleaseID: releaseID, ReleaseSequence: releaseSequence, Values: map[string]int64{"currentConsumerCount": facts.CurrentConsumerCount, "pinnedConsumerCount": facts.PinnedConsumerCount}, Records: []domain.AuthorityRecord{}},
+	}, nil
+}
+
+func catalogReleaseBasis(value pgtype.UUID, sequence int64) (*identity.ReleaseID, *int64, error) {
+	if !value.Valid {
+		return nil, nil, nil
+	}
+	releaseID, err := identity.ReleaseIDFromUUIDBytes(value.Bytes)
+	if err != nil {
+		return nil, nil, err
+	}
+	return &releaseID, &sequence, nil
 }
 
 func (store *Store) CreateCatalogAsset(ctx context.Context, command domain.CreateAssetCommand) (domain.AssetDetail, error) {
@@ -170,6 +652,22 @@ func (store *Store) ListCatalogRevisions(ctx context.Context, query domain.ListR
 		result = append(result, value)
 	}
 	return result, nil
+}
+
+func (store *Store) CountCatalogRevisions(
+	ctx context.Context, workspace identity.WorkspaceID, asset identity.AssetID,
+) (int64, error) {
+	workspaceID, assetID, err := catalogIDs(workspace, asset)
+	if err != nil {
+		return 0, err
+	}
+	count, err := store.queries.CountCatalogAssetRevisions(ctx, dbgen.CountCatalogAssetRevisionsParams{
+		WorkspaceID: workspaceID, AssetID: assetID,
+	})
+	if err != nil {
+		return 0, repositoryError("count catalog asset revisions", err)
+	}
+	return count, nil
 }
 
 func (store *Store) GetCatalogRevision(
@@ -278,6 +776,9 @@ func (store *Store) ListCatalogRelations(ctx context.Context, query domain.ListR
 	for depth := 1; depth <= query.Depth && len(frontier) > 0; depth++ {
 		next := make([]identity.AssetID, 0)
 		for _, node := range frontier {
+			if len(result) >= query.Limit {
+				break
+			}
 			nodeID, encodeErr := uuidValue(node)
 			if encodeErr != nil {
 				return nil, encodeErr
@@ -288,6 +789,7 @@ func (store *Store) ListCatalogRelations(ctx context.Context, query domain.ListR
 			}
 			rows, listErr := store.queries.ListDirectCatalogAssetRelations(ctx, dbgen.ListDirectCatalogAssetRelationsParams{
 				AssetID: nodeID, WorkspaceID: workspaceID, Direction: direction, Plane: string(query.Plane),
+				PageLimit: int32(query.Limit - len(result)),
 			})
 			if listErr != nil {
 				return nil, repositoryError("list direct catalog relations", listErr)
@@ -314,6 +816,9 @@ func (store *Store) ListCatalogRelations(ctx context.Context, query domain.ListR
 					return nil, mapErr
 				}
 				result = append(result, mapped)
+				if len(result) >= query.Limit {
+					break
+				}
 			}
 		}
 		frontier = next
@@ -536,48 +1041,19 @@ type catalogEvent struct {
 }
 
 func createCatalogMutationEvents(ctx context.Context, queries *dbgen.Queries, event catalogEvent) error {
-	workspaceID, err := uuidValue(event.WorkspaceID)
-	if err != nil {
-		return err
-	}
-	auditID, err := uuidValue(event.AuditID)
-	if err != nil {
-		return err
-	}
-	outboxID, err := uuidValue(event.OutboxID)
-	if err != nil {
-		return err
-	}
 	payloadData := map[string]any{
-		"specVersion": "semlia.catalog/v1", "action": event.Action,
 		"assetId": event.AssetID.String(), "revisionId": event.RevisionID.String(), "sequence": event.Sequence,
 	}
 	if event.BaseRevisionID != nil {
 		payloadData["baseRevisionId"] = event.BaseRevisionID.String()
 	}
-	auditPayload, _ := json.Marshal(payloadData)
-	createdAt := event.CreatedAt.UTC()
-	if err := queries.CreateAuditEvent(ctx, dbgen.CreateAuditEventParams{
-		ID: auditID, WorkspaceID: workspaceID, EventType: "catalog.asset." + event.Action,
-		ActorID: textValue(event.Actor), Payload: auditPayload, TraceID: event.TraceID, CreatedAt: timestamp(createdAt),
+	if err := createMutationEvents(ctx, queries, mutationEvent{
+		WorkspaceID: event.WorkspaceID, AuditID: event.AuditID, OutboxID: event.OutboxID,
+		AuditType: "catalog.asset." + event.Action, OutboxType: "catalog.asset.changed",
+		SpecVersion: "semlia.catalog/v1", Action: event.Action, Actor: event.Actor,
+		TraceID: event.TraceID, CreatedAt: event.CreatedAt, Data: payloadData,
 	}); err != nil {
-		return repositoryError("create catalog audit event", err)
-	}
-	outboxPayload, _ := json.Marshal(map[string]any{
-		"specVersion": "semlia.events/v1",
-		"id":          event.OutboxID.String(),
-		"type":        "catalog.asset.changed",
-		"source":      "urn:semlia:control-plane",
-		"workspaceId": event.WorkspaceID.String(),
-		"time":        createdAt.Format(time.RFC3339Nano),
-		"traceId":     event.TraceID,
-		"data":        payloadData,
-	})
-	if err := queries.EnqueueOutboxEvent(ctx, dbgen.EnqueueOutboxEventParams{
-		ID: outboxID, WorkspaceID: workspaceID, EventType: "catalog.asset.changed", Payload: outboxPayload,
-		MaxAttempts: 8, AvailableAt: timestamp(createdAt), TraceID: event.TraceID,
-	}); err != nil {
-		return repositoryError("enqueue catalog outbox event", err)
+		return repositoryError("create catalog mutation events", err)
 	}
 	return nil
 }

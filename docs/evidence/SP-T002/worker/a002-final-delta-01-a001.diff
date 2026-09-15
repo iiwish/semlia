@@ -1,0 +1,892 @@
+--- a/api/README.md
++++ b/api/README.md
+@@ -37,12 +37,21 @@
+ 
+ Snapshot members retain observed names, locators, and exact revisions, including
+ unchanged revisions. Fields identify their exact parent dataset revision. Code
+-revisions retain verified content-addressed bytes; lineage references exact
++revisions retain verified content-addressed bytes up to the existing 50 MiB
++internal staging boundary. Public HTTP artifact upload rejects SQL; `ImportSQL`
++uses the local artifact loader with an 8 MiB aggregate limit. The dbt adapter
++retains its 10 MiB raw-code limit. Lineage references exact
+ dataset and code revisions. Snapshot-dependent artifact objects are protected
+ from normal retention cleanup. Partial and failed attempts do not replace the
+ last complete effective snapshot; their unit heads still expose the latest
+ attempt so earlier success cannot masquerade as fresh completeness.
+ 
++Coverage keys are bounded stable identities. SQL logical paths retain their full
++selector up to 1024 bytes, with long keys encoded as a namespaced SHA-256 digest.
++Diagnostic codes are coalesced within each coverage unit at their maximum
++severity. A blocker invalidates its affected unit without downgrading unrelated
++complete units.
++
+ Legacy runs without reconstructible immutable evidence have `unverifiable`
+ history with unknown, incomplete coverage and no fabricated current members.
+ Discovery-run responses include a nullable `snapshotId`. Snapshot identity and
+--- a/cmd/semlia/readiness.go
++++ b/cmd/semlia/readiness.go
+@@ -41,6 +41,7 @@
+ ) AND NOT EXISTS (
+  SELECT 1 FROM expected_triggers e WHERE NOT EXISTS (SELECT 1 FROM pg_trigger t WHERE t.tgrelid=to_regclass('public.'||e.table_name) AND t.tgname=e.trigger_name AND t.tgenabled IN ('O','A'))
+ ) AND EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid=to_regclass('public.source_code_revisions') AND attname='content_bytes' AND atttypid='bytea'::regtype AND attnotnull)
++AND EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid=to_regclass('public.source_code_revisions') AND conname='source_code_revisions_content_bytes_check' AND convalidated AND pg_get_constraintdef(oid)='CHECK (((octet_length(content_bytes) >= 1) AND (octet_length(content_bytes) <= 52428800)))')
+ AND (SELECT count(*) FROM pg_attribute WHERE attrelid=to_regclass('public.source_snapshot_members') AND attgenerated='s')=9
+ AND EXISTS (SELECT 1 FROM pg_index WHERE indexrelid=to_regclass('public.source_snapshots_read_idx') AND indisvalid)
+ `
+--- a/cmd/semlia/readiness_test.go
++++ b/cmd/semlia/readiness_test.go
+@@ -97,6 +97,12 @@
+ 	if err := pool.QueryRow(ctx, `SELECT conname,pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid='source_snapshot_runs'::regclass AND confrelid='discovery_runs'::regclass`).Scan(&tenantFK, &tenantDefinition); err != nil {
+ 		t.Fatal(err)
+ 	}
++	var codeBytesDefinition string
++	if err := pool.QueryRow(ctx, `SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid='source_code_revisions'::regclass AND conname='source_code_revisions_content_bytes_check'`).Scan(&codeBytesDefinition); err != nil {
++		t.Fatal(err)
++	}
++	t.Logf("code byte constraint: %s", codeBytesDefinition)
++	const dropCodeBytesCheck = `ALTER TABLE source_code_revisions DROP CONSTRAINT source_code_revisions_content_bytes_check; ALTER TABLE source_code_revisions ADD CONSTRAINT source_code_revisions_content_bytes_check `
+ 	for _, test := range []struct{ name, breakSQL, restoreSQL string }{
+ 		{"old version", `UPDATE schema_migrations SET version=21`, `UPDATE schema_migrations SET version=22`},
+ 		{"dirty version", `UPDATE schema_migrations SET dirty=true`, `UPDATE schema_migrations SET dirty=false`},
+@@ -104,6 +110,8 @@
+ 		{"missing code bytes", `ALTER TABLE source_code_revisions RENAME COLUMN content_bytes TO unavailable_bytes`, `ALTER TABLE source_code_revisions RENAME COLUMN unavailable_bytes TO content_bytes`},
+ 		{"disabled immutable trigger", `ALTER TABLE source_snapshots DISABLE TRIGGER source_snapshots_immutable`, `ALTER TABLE source_snapshots ENABLE TRIGGER source_snapshots_immutable`},
+ 		{"missing tenant foreign key", `ALTER TABLE source_snapshot_runs DROP CONSTRAINT ` + pgx.Identifier{tenantFK}.Sanitize(), `ALTER TABLE source_snapshot_runs ADD CONSTRAINT ` + pgx.Identifier{tenantFK}.Sanitize() + ` ` + tenantDefinition},
++		{"legacy 8 MiB code limit", dropCodeBytesCheck + `CHECK(octet_length(content_bytes) BETWEEN 1 AND 8388608)`, dropCodeBytesCheck + codeBytesDefinition},
++		{"legacy 10 MiB code limit", dropCodeBytesCheck + `CHECK(octet_length(content_bytes) BETWEEN 1 AND 10485760)`, dropCodeBytesCheck + codeBytesDefinition},
+ 	} {
+ 		t.Run(test.name, func(t *testing.T) {
+ 			if _, err := pool.Exec(ctx, test.breakSQL); err != nil {
+--- a/internal/adapters/discovery/dbt/adapter_test.go
++++ b/internal/adapters/discovery/dbt/adapter_test.go
+@@ -2,7 +2,10 @@
+ 
+ import (
+ 	"context"
++	"encoding/json"
+ 	"errors"
++	"fmt"
++	"strings"
+ 	"testing"
+ 	"time"
+ 
+@@ -10,6 +13,47 @@
+ 	"github.com/iiwish/semlia/internal/domain/discovery"
+ )
+ 
++func TestDBTAdapterPreservesSupportedCodeAndPathBounds(t *testing.T) {
++	for _, test := range []struct {
++		pathBytes, codeBytes int
++		valid                bool
++	}{{1024, 16, true}, {1025, 16, false}, {20, 9 << 20, true}, {20, 10 << 20, true}, {20, (10 << 20) + 1, false}} {
++		t.Run(fmt.Sprintf("path-%d-code-%d", test.pathBytes, test.codeBytes), func(t *testing.T) {
++			path := strings.Repeat("x", test.pathBytes-4) + ".sql"
++			code := strings.Repeat(" ", test.codeBytes-8) + "select 1"
++			manifest := map[string]any{
++				"metadata": map[string]any{"dbt_schema_version": "https://schemas.getdbt.com/dbt/manifest/v12.json"},
++				"nodes": map[string]any{"model.shop.orders": map[string]any{
++					"database": "warehouse", "schema": "analytics", "name": "orders", "resource_type": "model",
++					"package_name": "shop", "path": path, "original_file_path": path, "unique_id": "model.shop.orders",
++					"fqn": []string{"shop", "orders"}, "alias": "orders", "checksum": map[string]string{"name": "sha256", "checksum": "abc"},
++					"raw_code": code, "depends_on": map[string]any{"nodes": []string{}},
++				}},
++			}
++			for _, key := range []string{"sources", "macros", "docs", "exposures", "metrics", "groups", "selectors", "disabled", "parent_map", "child_map", "group_map", "saved_queries", "semantic_models", "unit_tests"} {
++				manifest[key] = map[string]any{}
++			}
++			data, err := json.Marshal(manifest)
++			if err != nil {
++				t.Fatal(err)
++			}
++			snapshot, err := (dbt.Adapter{}).Discover(context.Background(), discovery.Input{Locator: "target", ObservedAt: time.Now(), Files: map[string][]byte{"manifest.json": data}})
++			if !test.valid {
++				if err == nil {
++					t.Fatal("out-of-contract input accepted")
++				}
++				return
++			}
++			if err != nil {
++				t.Fatalf("supported input rejected: %v", err)
++			}
++			if len(snapshot.CodeArtifacts) != 1 || snapshot.CodeArtifacts[0].Path != path || string(snapshot.CodeArtifacts[0].Content) != code || len(snapshot.Coverage) != 1 || snapshot.Coverage[0].Key != "dbt" || snapshot.Coverage[0].Selector != "manifest.json" {
++				t.Fatal("supported code bytes or path not preserved")
++			}
++		})
++	}
++}
++
+ func TestDBTAdapterMapsSupportedArtifacts(t *testing.T) {
+ 	input := discovery.Input{
+ 		Locator: "git://analytics/target", ExternalRevision: "cafebabe", ObservedAt: time.Now(),
+--- a/internal/adapters/discovery/files/adapter.go
++++ b/internal/adapters/discovery/files/adapter.go
+@@ -67,7 +67,7 @@
+ 	if err != nil {
+ 		return discovery.Snapshot{}, err
+ 	}
+-	snapshot.DeclareCoverage("file:"+name, name)
++	snapshot.DeclareCoverage(discovery.PathCoverageKey("file", name), name)
+ 	if err := snapshot.Canonicalize(); err != nil {
+ 		return discovery.Snapshot{}, err
+ 	}
+--- a/internal/adapters/discovery/files/adapter_test.go
++++ b/internal/adapters/discovery/files/adapter_test.go
+@@ -5,6 +5,7 @@
+ 	"bytes"
+ 	"context"
+ 	"errors"
++	"strings"
+ 	"testing"
+ 	"time"
+ 
+@@ -13,6 +14,19 @@
+ 	"github.com/iiwish/semlia/internal/domain/ingestion"
+ )
+ 
++func TestCSVPreservesMaximumUploadNameInCoverage(t *testing.T) {
++	for _, length := range []int{251, 252, 255} {
++		name := strings.Repeat("x", length-4) + ".csv"
++		snapshot, err := filesadapter.CSV().Discover(context.Background(), input(name, []byte("id\n1\n")))
++		if err != nil {
++			t.Fatalf("valid %d-byte upload name rejected: %v", length, err)
++		}
++		if len(snapshot.Coverage) != 1 || len(snapshot.Coverage[0].Key) > 256 || snapshot.Coverage[0].Selector != name || snapshot.Datasets[0].CoverageKey != snapshot.Coverage[0].Key {
++			t.Fatalf("coverage=%+v", snapshot.Coverage)
++		}
++	}
++}
++
+ func TestCSVRejectsInconsistentRowsAndActiveCells(t *testing.T) {
+ 	t.Parallel()
+ 	for _, content := range []string{"a,b\n1\n", "a,b\n=cmd,2\n", "a,b\n1,\x00\n", "account\u202Etxt,value\n1,2\n"} {
+--- a/internal/adapters/discovery/postgresql/adapter.go
++++ b/internal/adapters/discovery/postgresql/adapter.go
+@@ -84,6 +84,9 @@
+ 				})
+ 			}
+ 			objects += len(snapshot.Datasets) - beforeDatasets + len(snapshot.Lineage) - beforeLineage + len(snapshot.Findings) - beforeFindings
++			for index := beforeFindings; index < len(snapshot.Findings); index++ {
++				snapshot.Findings[index].CoverageKey = discovery.PathCoverageKey("sql", path)
++			}
+ 			for _, dataset := range snapshot.Datasets[beforeDatasets:] {
+ 				objects += len(dataset.Fields)
+ 			}
+@@ -96,10 +99,10 @@
+ 		return discovery.Snapshot{}, err
+ 	}
+ 	for _, filePath := range paths {
+-		key := "sql:" + filePath
++		key := discovery.PathCoverageKey("sql", filePath)
+ 		unit := discovery.CoverageUnit{Key: key, Selector: filePath, ConfigDigest: discovery.SnapshotDigest(struct{ Kind, Version string }{adapterKind, adapterVersion}), Status: "complete", EnumerationComplete: true, DiagnosticCodes: []string{}}
+ 		for _, finding := range snapshot.Findings {
+-			if strings.HasPrefix(finding.Locator, filePath+"#") || finding.Locator == filePath {
++			if finding.CoverageKey == key {
+ 				unit.Status = "partial"
+ 				unit.EnumerationComplete = false
+ 				unit.DiagnosticCodes = append(unit.DiagnosticCodes, finding.Code)
+--- a/internal/adapters/discovery/postgresql/adapter_test.go
++++ b/internal/adapters/discovery/postgresql/adapter_test.go
+@@ -3,6 +3,7 @@
+ import (
+ 	"context"
+ 	"errors"
++	"fmt"
+ 	"strings"
+ 	"testing"
+ 	"time"
+@@ -12,6 +13,22 @@
+ 	"github.com/iiwish/semlia/internal/domain/ingestion"
+ )
+ 
++func TestPostgreSQLAdapterPreservesSupportedUploadBytes(t *testing.T) {
++	for _, size := range []int{11 << 20, 50 << 20} {
++		t.Run(fmt.Sprint(size), func(t *testing.T) {
++			statement := "CREATE TABLE orders (id bigint);"
++			content := strings.Repeat(" ", size-len(statement)) + statement
++			snapshot, err := (postgresql.Adapter{}).Discover(context.Background(), discovery.Input{Locator: "artifact-set:fixture", ObservedAt: time.Now(), Files: map[string][]byte{"schema.sql": []byte(content)}})
++			if err != nil {
++				t.Fatalf("SQL within the existing internal staging boundary rejected: %v", err)
++			}
++			if len(snapshot.CodeArtifacts) != 1 || string(snapshot.CodeArtifacts[0].Content) != content {
++				t.Fatal("SQL upload bytes not retained")
++			}
++		})
++	}
++}
++
+ func TestPostgreSQLAdapterParsesTablesViewsAndLineage(t *testing.T) {
+ 	input := discovery.Input{
+ 		Locator: "git://warehouse/ddl", ExternalRevision: "deadbeef", ObservedAt: time.Now(),
+@@ -56,6 +73,33 @@
+ 	}
+ }
+ 
++func TestPostgreSQLAdapterPreservesLongLogicalPaths(t *testing.T) {
++	for _, length := range []int{252, 253, 261, 1024} {
++		prefix := strings.Repeat("segment/", (length-100)/8)
++		path := prefix + strings.Repeat("x", length-len(prefix)-4) + ".sql"
++		snapshot, err := (postgresql.Adapter{}).Discover(context.Background(), discovery.Input{Locator: "git://long-path", ObservedAt: time.Now().UTC(), Files: map[string][]byte{path: []byte("CREATE TABLE public.orders(id bigint);")}})
++		if err != nil {
++			t.Fatalf("logical path of %d bytes rejected: %v", length, err)
++		}
++		if len(snapshot.Coverage) != 1 || len(snapshot.Coverage[0].Key) > 256 || snapshot.Coverage[0].Selector != path || len(snapshot.CodeArtifacts) != 1 || snapshot.CodeArtifacts[0].Path != path {
++			t.Fatalf("path of %d bytes lost or unbounded: %+v", length, snapshot.Coverage)
++		}
++	}
++	path := strings.Repeat("segment/", 40)
++	input := discovery.Input{Locator: "git://distinct-long-paths", ObservedAt: time.Now().UTC(), Files: map[string][]byte{path + "a.sql": []byte("CREATE TABLE public.a(id bigint);"), path + "b.sql": []byte("CREATE TABLE public.b(id bigint);")}}
++	first, err := (postgresql.Adapter{}).Discover(context.Background(), input)
++	if err != nil {
++		t.Fatal(err)
++	}
++	second, err := (postgresql.Adapter{}).Discover(context.Background(), input)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if first.Coverage[0].Key == first.Coverage[1].Key || first.Coverage[0].Key != second.Coverage[0].Key || first.Coverage[1].Key != second.Coverage[1].Key {
++		t.Fatal("long-path coverage identities collide or are unstable")
++	}
++}
++
+ func TestPostgreSQLAdapterBoundsStatementCount(t *testing.T) {
+ 	_, err := (postgresql.Adapter{}).Discover(context.Background(), discovery.Input{
+ 		Locator: "many.sql", ObservedAt: time.Now(), Files: map[string][]byte{"many.sql": []byte(strings.Repeat("SELECT 1;", 10_001))},
+--- a/internal/adapters/postgres/discovery.go
++++ b/internal/adapters/postgres/discovery.go
+@@ -123,7 +123,7 @@
+ 				QualifiedName: dataset.QualifiedName, ExternalKey: dataset.ExternalKey,
+ 			}); lookupErr == nil {
+ 				findings = append(findings, domain.Finding{
+-					Code: "POSSIBLE_RENAME", Severity: "warning", Locator: dataset.Locator,
++					Code: "POSSIBLE_RENAME", Severity: "warning", Locator: dataset.Locator, CoverageKey: dataset.CoverageKey,
+ 					Details: map[string]any{"previous_external_key": possibleRename.ExternalKey, "new_external_key": dataset.ExternalKey},
+ 				})
+ 			} else if lookupErr != pgx.ErrNoRows {
+@@ -161,7 +161,7 @@
+ 				downstreamID, downstreamExists := datasetIDs[edge.DownstreamExternalKey]
+ 				if !upstreamExists || !downstreamExists {
+ 					findings = append(findings, domain.Finding{
+-						Code: "UNRESOLVED_LINEAGE", Severity: "warning", Locator: edge.CodePath,
++						Code: "UNRESOLVED_LINEAGE", Severity: "warning", Locator: edge.CodePath, CoverageKey: edge.CoverageKey,
+ 						Details: map[string]any{
+ 							"upstream_external_key":   edge.UpstreamExternalKey,
+ 							"downstream_external_key": edge.DownstreamExternalKey,
+--- a/internal/adapters/postgres/source_snapshot.go
++++ b/internal/adapters/postgres/source_snapshot.go
+@@ -89,7 +89,7 @@
+ 		if len(pinned.ArtifactPaths) > 0 {
+ 			sql := domain.Snapshot{AdapterKind: "postgresql_sql", AdapterVersion: "1.0.0", Findings: snapshot.Findings}
+ 			for _, path := range pinned.ArtifactPaths {
+-				sql.DeclareCoverage("sql:"+path, path)
++				sql.DeclareCoverage(domain.PathCoverageKey("sql", path), path)
+ 			}
+ 			snapshot.Coverage = append(snapshot.Coverage, sql.Coverage...)
+ 			snapshot.AdapterVersion += "+sql-1.0.0"
+@@ -117,14 +117,14 @@
+ 		switch kind {
+ 		case "sql_bundle":
+ 			for _, path := range paths {
+-				snapshot.DeclareCoverage("sql:"+path, path)
++				snapshot.DeclareCoverage(domain.PathCoverageKey("sql", path), path)
+ 			}
+ 		case "dbt_bundle":
+ 			snapshot.DeclareCoverage("dbt", strings.Join(paths, ";"))
+ 		case "file":
+ 			snapshot.AdapterKind = "file_" + artifactKind
+ 			for _, path := range paths {
+-				snapshot.DeclareCoverage("file:"+path, path)
++				snapshot.DeclareCoverage(domain.PathCoverageKey("file", path), path)
+ 			}
+ 		}
+ 	}
+@@ -198,7 +198,7 @@
+ 	codeRevisions := map[string]pgtype.UUID{}
+ 	for _, code := range snapshot.CodeArtifacts {
+ 		if len(code.Content) == 0 {
+-			findings = append(findings, domain.Finding{Code: "CODE_BYTES_UNAVAILABLE", Severity: "error"})
++			findings = append(findings, domain.Finding{Code: "CODE_BYTES_UNAVAILABLE", Severity: "error", CoverageKey: code.CoverageKey})
+ 			continue
+ 		}
+ 		bytesHash := sha256.Sum256(code.Content)
+@@ -231,7 +231,7 @@
+ 		down, downOK := datasets[edge.DownstreamExternalKey]
+ 		codeID := codeRevisions[edge.CodePath]
+ 		if !upOK || !downOK || (edge.CodePath != "" && !codeID.Valid) {
+-			findings = append(findings, domain.Finding{Code: "UNRESOLVED_LINEAGE", Severity: "error"})
++			findings = append(findings, domain.Finding{Code: "UNRESOLVED_LINEAGE", Severity: "error", CoverageKey: edge.CoverageKey})
+ 			continue
+ 		}
+ 		upID, _ := identity.ParseAny(up.ObjectID)
+@@ -262,30 +262,7 @@
+ 	}
+ 	sort.Slice(members, func(i, j int) bool { return members[i].Kind+members[i].ObjectID < members[j].Kind+members[j].ObjectID })
+ 	// Normalize diagnostics without retaining untrusted raw errors or adapter details.
+-	diagnostics := []domain.SnapshotDiagnostic{}
+-	seen := map[string]bool{}
+-	for _, unit := range snapshot.Coverage {
+-		for _, code := range unit.DiagnosticCodes {
+-			key := unit.Key + code
+-			if !seen[key] {
+-				seen[key] = true
+-				diagnostics = append(diagnostics, domain.SafeSnapshotDiagnostic(domain.Finding{Code: code, Severity: "warning"}, unit.Key, 0))
+-			}
+-		}
+-	}
+-	for _, finding := range findings {
+-		key := snapshot.Coverage[0].Key + finding.Code
+-		if !seen[key] {
+-			seen[key] = true
+-			diagnostics = append(diagnostics, domain.SafeSnapshotDiagnostic(finding, snapshot.Coverage[0].Key, 0))
+-		}
+-	}
+-	sort.Slice(diagnostics, func(i, j int) bool {
+-		return diagnostics[i].CoverageKey+diagnostics[i].Code < diagnostics[j].CoverageKey+diagnostics[j].Code
+-	})
+-	for i := range diagnostics {
+-		diagnostics[i].Ordinal = i + 1
+-	}
++	diagnostics := domain.SnapshotDiagnostics(findings, snapshot.Coverage)
+ 	quality, status := snapshot.CoverageState()
+ 	for _, diagnostic := range diagnostics {
+ 		if diagnostic.Severity == "blocker" {
+--- a/internal/domain/discovery/model.go
++++ b/internal/domain/discovery/model.go
+@@ -134,11 +134,12 @@
+ }
+ 
+ type Finding struct {
+-	Code     string
+-	Severity string
+-	Locator  string
+-	Details  map[string]any
+-	Terminal bool
++	CoverageKey string `json:"coverageKey,omitempty"`
++	Code        string
++	Severity    string
++	Locator     string
++	Details     map[string]any
++	Terminal    bool
+ }
+ 
+ func (snapshot *Snapshot) Canonicalize() error {
+@@ -228,9 +229,9 @@
+ 	})
+ 	sort.Slice(snapshot.Findings, func(left, right int) bool {
+ 		leftKey := snapshot.Findings[left].Code + "\x00" + snapshot.Findings[left].Locator +
+-			"\x00" + fingerprint(snapshot.Findings[left].Details)
++			"\x00" + fingerprint(snapshot.Findings[left])
+ 		rightKey := snapshot.Findings[right].Code + "\x00" + snapshot.Findings[right].Locator +
+-			"\x00" + fingerprint(snapshot.Findings[right].Details)
++			"\x00" + fingerprint(snapshot.Findings[right])
+ 		return leftKey < rightKey
+ 	})
+ 	return snapshot.CanonicalizeCoverage()
+--- a/internal/domain/discovery/snapshot.go
++++ b/internal/domain/discovery/snapshot.go
+@@ -12,7 +12,7 @@
+ )
+ 
+ const SnapshotPageBytes = 1 << 20
+-const MaxCodeBytes = 8 << 20
++const MaxCodeBytes = 50 << 20
+ 
+ var diagnosticCode = regexp.MustCompile(`^[A-Z][A-Z0-9_]{2,63}$`)
+ var digestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
+@@ -85,6 +85,16 @@
+ 	return "sha256:" + hex.EncodeToString(digest[:])
+ }
+ 
++func PathCoverageKey(kind, path string) string {
++	key := kind + ":" + path
++	if len(key) <= 256 {
++		return key
++	}
++	digest := sha256.Sum256([]byte(path))
++	// A separate namespace cannot collide with a short literal path's key.
++	return kind + "#sha256:" + hex.EncodeToString(digest[:])
++}
++
+ func (snapshot Snapshot) Clone() Snapshot {
+ 	snapshot.Datasets = slices.Clone(snapshot.Datasets)
+ 	for i := range snapshot.Datasets {
+@@ -117,6 +127,9 @@
+ 	status, complete := "complete", true
+ 	codes := []string{}
+ 	for _, finding := range snapshot.Findings {
++		if finding.CoverageKey != "" && finding.CoverageKey != key {
++			continue
++		}
+ 		codes = append(codes, finding.Code)
+ 		if finding.Terminal {
+ 			status, complete = "failed", false
+@@ -176,6 +189,15 @@
+ 		unit.DiagnosticCodes = codes
+ 	}
+ 	sort.Slice(snapshot.Coverage, func(i, j int) bool { return snapshot.Coverage[i].Key < snapshot.Coverage[j].Key })
++	for index := range snapshot.Findings {
++		finding := &snapshot.Findings[index]
++		if finding.CoverageKey == "" && len(snapshot.Coverage) == 1 {
++			finding.CoverageKey = snapshot.Coverage[0].Key
++		}
++		if finding.CoverageKey != "" && !seen[finding.CoverageKey] {
++			return ErrInvalidSnapshot
++		}
++	}
+ 	for _, dataset := range snapshot.Datasets {
+ 		if !seen[dataset.CoverageKey] || len(dataset.QualifiedName) > 1024 || len(dataset.Locator) > 2048 {
+ 			return ErrInvalidSnapshot
+@@ -248,3 +270,46 @@
+ 	// Raw adapter details and locators may contain secrets; only stable codes are published.
+ 	return SnapshotDiagnostic{Ordinal: ordinal, Code: code, Severity: severity, CoverageKey: key, Message: strings.ReplaceAll(code, "_", " ")}
+ }
++
++func SnapshotDiagnostics(findings []Finding, coverage []CoverageUnit) []SnapshotDiagnostic {
++	type diagnosticKey struct{ coverage, code string }
++	byKey := map[diagnosticKey]SnapshotDiagnostic{}
++	severityRank := map[string]int{"info": 0, "warning": 1, "blocker": 2}
++	for _, finding := range findings {
++		for _, unit := range coverage {
++			// Unscoped failures conservatively apply to all declared units.
++			if finding.CoverageKey != "" && finding.CoverageKey != unit.Key {
++				continue
++			}
++			diagnostic := SafeSnapshotDiagnostic(finding, unit.Key, 0)
++			key := diagnosticKey{unit.Key, diagnostic.Code}
++			current, exists := byKey[key]
++			if !exists || severityRank[diagnostic.Severity] > severityRank[current.Severity] {
++				byKey[key] = diagnostic
++			}
++		}
++	}
++	for _, unit := range coverage {
++		for _, code := range unit.DiagnosticCodes {
++			diagnostic := SafeSnapshotDiagnostic(Finding{Code: code, Severity: "warning"}, unit.Key, 0)
++			key := diagnosticKey{unit.Key, diagnostic.Code}
++			if _, exists := byKey[key]; !exists {
++				byKey[key] = diagnostic
++			}
++		}
++	}
++	diagnostics := make([]SnapshotDiagnostic, 0, len(byKey))
++	for _, diagnostic := range byKey {
++		diagnostics = append(diagnostics, diagnostic)
++	}
++	sort.Slice(diagnostics, func(i, j int) bool {
++		if diagnostics[i].CoverageKey != diagnostics[j].CoverageKey {
++			return diagnostics[i].CoverageKey < diagnostics[j].CoverageKey
++		}
++		return diagnostics[i].Code < diagnostics[j].Code
++	})
++	for i := range diagnostics {
++		diagnostics[i].Ordinal = i + 1
++	}
++	return diagnostics
++}
+--- a/internal/domain/discovery/snapshot_test.go
++++ b/internal/domain/discovery/snapshot_test.go
+@@ -2,6 +2,8 @@
+ 
+ import (
+ 	"encoding/json"
++	"reflect"
++	"slices"
+ 	"strings"
+ 	"testing"
+ 
+@@ -57,3 +59,70 @@
+ 		t.Fatalf("unsafe diagnostic=%s", wire)
+ 	}
+ }
++
++func TestSnapshotDiagnosticsPreserveScopeAndMaximumSeverity(t *testing.T) {
++	coverage := []discovery.CoverageUnit{{Key: "a", DiagnosticCodes: []string{"SHARED_CODE"}}, {Key: "b", DiagnosticCodes: []string{"SHARED_CODE", "FALLBACK_CODE"}}}
++	findings := []discovery.Finding{
++		{CoverageKey: "a", Code: "SHARED_CODE", Severity: "info"},
++		{CoverageKey: "b", Code: "SHARED_CODE", Severity: "warning"},
++		{CoverageKey: "b", Code: "SHARED_CODE", Severity: "error"},
++		{CoverageKey: "b", Code: "SHARED_CODE", Severity: "info"},
++	}
++	want := []discovery.SnapshotDiagnostic{
++		{Ordinal: 1, CoverageKey: "a", Code: "SHARED_CODE", Severity: "info", Message: "SHARED CODE"},
++		{Ordinal: 2, CoverageKey: "b", Code: "FALLBACK_CODE", Severity: "warning", Message: "FALLBACK CODE"},
++		{Ordinal: 3, CoverageKey: "b", Code: "SHARED_CODE", Severity: "blocker", Message: "SHARED CODE"},
++	}
++	for iteration := 0; iteration < 2; iteration++ {
++		if got := discovery.SnapshotDiagnostics(findings, coverage); !reflect.DeepEqual(got, want) {
++			t.Fatalf("diagnostics=%+v want=%+v", got, want)
++		}
++		slices.Reverse(findings)
++	}
++	global := discovery.SnapshotDiagnostics([]discovery.Finding{{Code: "GLOBAL_FAILURE", Severity: "info", Terminal: true}}, coverage)
++	blockers := 0
++	for _, diagnostic := range global {
++		if diagnostic.Code == "GLOBAL_FAILURE" && diagnostic.Severity == "blocker" {
++			blockers++
++		}
++	}
++	if blockers != 2 {
++		t.Fatalf("unscoped terminal failure covered %d units", blockers)
++	}
++}
++
++func TestCoverageFindingsBindOnlyToDeclaredUnits(t *testing.T) {
++	snapshot := discovery.Snapshot{Findings: []discovery.Finding{{CoverageKey: "b", Code: "SCOPED_FAILURE", Severity: "error"}}}
++	snapshot.DeclareCoverage("a", "a.sql")
++	snapshot.DeclareCoverage("b", "b.sql")
++	if snapshot.Coverage[0].Status != "complete" || snapshot.Coverage[1].Status != "partial" {
++		t.Fatalf("coverage=%+v", snapshot.Coverage)
++	}
++	snapshot.Findings[0].CoverageKey = "undeclared"
++	if err := snapshot.CanonicalizeCoverage(); err == nil {
++		t.Fatal("unknown diagnostic scope accepted")
++	}
++}
++
++func TestPathCoverageKeyIsBoundedStableAndNamespaced(t *testing.T) {
++	short := strings.Repeat("x", 252)
++	if got := discovery.PathCoverageKey("sql", short); got != "sql:"+short {
++		t.Fatalf("short readable key changed: %s", got)
++	}
++	long := strings.Repeat("x", 1024)
++	key := discovery.PathCoverageKey("sql", long)
++	if len(key) > 256 || key != discovery.PathCoverageKey("sql", long) || key == discovery.PathCoverageKey("sql", long[:1023]+"y") || key == discovery.PathCoverageKey("file", long) {
++		t.Fatalf("unstable, unbounded or colliding key=%s", key)
++	}
++	if key == discovery.PathCoverageKey("sql", strings.TrimPrefix(key, "sql#")) {
++		t.Fatal("digest namespace collides with a literal short path")
++	}
++}
++
++func TestSnapshotCodeStorageRejectsBytesAboveUploadBoundary(t *testing.T) {
++	snapshot := discovery.Snapshot{CodeArtifacts: []discovery.CodeArtifact{{Path: "schema.sql", Language: "sql", Content: make([]byte, (50<<20)+1)}}}
++	snapshot.DeclareCoverage("sql:schema.sql", "schema.sql")
++	if err := snapshot.CanonicalizeCoverage(); err == nil {
++		t.Fatal("code retention accepted bytes beyond the existing internal staging boundary")
++	}
++}
+--- a/migrations/000022_semantic_production_sources.down.sql
++++ b/migrations/000022_semantic_production_sources.down.sql
+@@ -1,6 +1,14 @@
+ BEGIN;
+ DO $$ BEGIN
+-    IF EXISTS(SELECT 1 FROM source_snapshots) OR EXISTS(SELECT 1 FROM source_code_revisions) OR EXISTS(SELECT 1 FROM source_lineage_revisions) THEN
++    IF EXISTS(SELECT 1 FROM source_snapshots)
++        OR EXISTS(SELECT 1 FROM source_snapshot_runs)
++        OR EXISTS(SELECT 1 FROM source_snapshot_scope)
++        OR EXISTS(SELECT 1 FROM source_snapshot_members)
++        OR EXISTS(SELECT 1 FROM source_snapshot_diagnostics)
++        OR EXISTS(SELECT 1 FROM source_code_revisions)
++        OR EXISTS(SELECT 1 FROM source_lineage_revisions)
++        OR EXISTS(SELECT 1 FROM source_coverage_heads)
++        OR EXISTS(SELECT 1 FROM source_effective_snapshots) THEN
+         RAISE EXCEPTION 'DOWN_MIGRATION_UNSAFE: source history cannot be represented by schema 21; downgrade refused' USING ERRCODE='55000';
+     END IF;
+ END; $$;
+--- a/migrations/000022_semantic_production_sources.up.sql
++++ b/migrations/000022_semantic_production_sources.up.sql
+@@ -58,7 +58,7 @@
+     path text NOT NULL CHECK(length(path) BETWEEN 1 AND 1024),
+     language text NOT NULL CHECK(length(language) BETWEEN 1 AND 128),
+     blob_oid text NOT NULL CHECK(blob_oid ~ '^sha256:[0-9a-f]{64}$'),
+-    content_bytes bytea NOT NULL CHECK(octet_length(content_bytes) BETWEEN 1 AND 8388608),
++    content_bytes bytea NOT NULL CHECK(octet_length(content_bytes) BETWEEN 1 AND 52428800),
+     content_digest text NOT NULL CHECK(content_digest ~ '^sha256:[0-9a-f]{64}$'),
+     created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+     UNIQUE(workspace_id,id),
+--- a/tests/integration/db/semantic_production_migrations_test.go
++++ b/tests/integration/db/semantic_production_migrations_test.go
+@@ -134,3 +134,32 @@
+ 		t.Fatal("verified complete snapshot sealed without any declared coverage")
+ 	}
+ }
++
++func TestSemanticProductionMigrationCoverageAttemptBlocksDowngrade(t *testing.T) {
++	pool, migrator := semanticProductionDatabase(t, "source22_attempt_only", 22)
++	workspace, source, _, run := seedSourceHistoryRun(t, pool)
++	ctx := context.Background()
++	if _, err := pool.Exec(ctx, `UPDATE discovery_runs SET status='running',completed_at=NULL WHERE id=$1`, run.UUID()); err != nil {
++		t.Fatal(err)
++	}
++	if _, err := pool.Exec(ctx, `INSERT INTO source_coverage_heads(workspace_id,source_connection_id,coverage_key,selector_digest,latest_attempt_run_id,latest_attempt_status,version) VALUES($1,$2,'catalog',$3,$4,'partial',1)`, workspace.UUID(), source.UUID(), distributionDigest("selector"), run.UUID()); err != nil {
++		t.Fatal(err)
++	}
++	var heads, snapshots int
++	var before string
++	if err := pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM source_coverage_heads),(SELECT count(*) FROM source_snapshots),(SELECT md5(row_to_json(h)::text) FROM source_coverage_heads h)`).Scan(&heads, &snapshots, &before); err != nil || heads != 1 || snapshots != 0 {
++		t.Fatalf("attempt fixture heads=%d snapshots=%d err=%v", heads, snapshots, err)
++	}
++	inventory := strings.Join(tableInventory(t, pool), ",")
++	if err := migrator.Steps(-1); err == nil || !strings.Contains(err.Error(), "ERROR: DOWN_MIGRATION_UNSAFE:") {
++		t.Fatalf("authoritative attempt downgrade was not refused: %v", err)
++	}
++	var after string
++	var dirty bool
++	if err := pool.QueryRow(ctx, `SELECT (SELECT md5(row_to_json(h)::text) FROM source_coverage_heads h),(SELECT dirty FROM schema_migrations)`).Scan(&after, &dirty); err != nil || after != before || !dirty {
++		t.Fatalf("refusal changed attempt or hid dirty state before=%s after=%s dirty=%v err=%v", before, after, dirty, err)
++	}
++	if got := strings.Join(tableInventory(t, pool), ","); got != inventory {
++		t.Fatalf("unsafe downgrade changed business table inventory: %s", got)
++	}
++}
+--- a/tests/integration/discovery/source_snapshot_test.go
++++ b/tests/integration/discovery/source_snapshot_test.go
+@@ -508,3 +508,58 @@
+ 		t.Fatalf("deletion history old=%d new=%d err=%v", oldMembers, newMembers, err)
+ 	}
+ }
++
++func TestSourceSnapshotUnresolvedLineageKeepsUnitAndMaximumSeverity(t *testing.T) {
++	for _, order := range []string{"adapter-only", "warning-first", "error-first"} {
++		t.Run(order, func(t *testing.T) {
++			pool, store := newStore(t)
++			resetData(t, pool)
++			workspace, source := createSource(t, pool, store, "snapshot-lineage-"+order)
++			ctx := context.Background()
++			snapshot, err := (postgresql.Adapter{}).Discover(ctx, domain.Input{Locator: "git://two-units", ObservedAt: time.Now().UTC(), Files: map[string][]byte{
++				"a_good.sql": []byte("CREATE TABLE public.good(id bigint);"),
++				"b_bad.sql":  []byte("CREATE VIEW public.bad(id) AS SELECT id FROM public.missing;"),
++			}})
++			if err != nil {
++				t.Fatal(err)
++			}
++			if order != "adapter-only" {
++				severities := []string{"warning", "error"}
++				if order == "error-first" {
++					severities[0], severities[1] = severities[1], severities[0]
++				}
++				for _, severity := range severities {
++					finding := domain.Finding{Code: "UNRESOLVED_LINEAGE", Severity: severity, Locator: "b_bad.sql", Details: map[string]any{}}
++					// Remains executable against the prior Finding model for a genuine RED.
++					if err := json.Unmarshal([]byte(`{"coverageKey":"sql:b_bad.sql"}`), &finding); err != nil {
++						t.Fatal(err)
++					}
++					snapshot.Findings = append(snapshot.Findings, finding)
++				}
++			}
++			result, err := store.PersistDiscoverySnapshot(ctx, workspace, source, snapshot)
++			if err != nil {
++				t.Fatal(err)
++			}
++			id, _ := identity.ParseSourceSnapshotID(result.SnapshotID)
++			var quality, overall, good, bad, diagnosticKey, severity string
++			var diagnosticCount, effective, verifiedHeads, lineageMembers int
++			err = pool.QueryRow(ctx, `SELECT s.history_quality,s.coverage_status,
++(SELECT status FROM source_snapshot_scope WHERE snapshot_id=s.id AND coverage_key='sql:a_good.sql'),
++(SELECT status FROM source_snapshot_scope WHERE snapshot_id=s.id AND coverage_key='sql:b_bad.sql'),
++(SELECT min(coverage_key) FROM source_snapshot_diagnostics WHERE snapshot_id=s.id AND code='UNRESOLVED_LINEAGE'),
++(SELECT min(severity) FROM source_snapshot_diagnostics WHERE snapshot_id=s.id AND code='UNRESOLVED_LINEAGE'),
++(SELECT count(*) FROM source_snapshot_diagnostics WHERE snapshot_id=s.id AND code='UNRESOLVED_LINEAGE'),
++(SELECT count(*) FROM source_effective_snapshots WHERE workspace_id=s.workspace_id),
++(SELECT count(*) FROM source_coverage_heads WHERE workspace_id=s.workspace_id AND coverage_key='sql:a_good.sql' AND latest_verified_snapshot_id=s.id),
++(SELECT count(*) FROM source_snapshot_members WHERE snapshot_id=s.id AND kind='lineage')
++FROM source_snapshots s WHERE id=$1`, id.UUID()).Scan(&quality, &overall, &good, &bad, &diagnosticKey, &severity, &diagnosticCount, &effective, &verifiedHeads, &lineageMembers)
++			if err != nil {
++				t.Fatal(err)
++			}
++			if quality != "verified" || overall != "partial" || good != "complete" || bad != "partial" || diagnosticKey != "sql:b_bad.sql" || severity != "blocker" || diagnosticCount != 1 || effective != 0 || verifiedHeads != 1 || lineageMembers != 0 {
++				t.Fatalf("lineage safety quality=%s overall=%s good=%s bad=%s diagnostic=%s/%s count=%d effective=%d goodVerified=%d lineage=%d", quality, overall, good, bad, diagnosticKey, severity, diagnosticCount, effective, verifiedHeads, lineageMembers)
++			}
++		})
++	}
++}
+--- a/tests/integration/ingestion/source_snapshot_retention_test.go
++++ b/tests/integration/ingestion/source_snapshot_retention_test.go
+@@ -3,19 +3,198 @@
+ import (
+ 	"bytes"
+ 	"context"
++	"encoding/json"
++	"errors"
+ 	"io"
++	"strings"
+ 	"testing"
+ 	"time"
+ 
+ 	localartifacts "github.com/iiwish/semlia/internal/adapters/artifacts/local"
++	dbtartifact "github.com/iiwish/semlia/internal/adapters/discovery/dbt"
+ 	fileartifact "github.com/iiwish/semlia/internal/adapters/discovery/files"
++	sqlartifact "github.com/iiwish/semlia/internal/adapters/discovery/postgresql"
+ 	discoveryapp "github.com/iiwish/semlia/internal/application/discovery"
++	ingestionapp "github.com/iiwish/semlia/internal/application/ingestion"
+ 	"github.com/iiwish/semlia/internal/application/jobs"
+ 	discoverydomain "github.com/iiwish/semlia/internal/domain/discovery"
+ 	ingestiondomain "github.com/iiwish/semlia/internal/domain/ingestion"
+ 	"github.com/iiwish/semlia/pkg/identity"
+ )
+ 
++type snapshotBeginObserver struct {
++	discoverydomain.Adapter
++	beforeDiscover func()
++}
++
++func (adapter snapshotBeginObserver) Discover(ctx context.Context, input discoverydomain.Input) (discoverydomain.Snapshot, error) {
++	adapter.beforeDiscover()
++	return adapter.Adapter.Discover(ctx, input)
++}
++
++func TestSourceSnapshotLongPathsBeginAndPersistConsistently(t *testing.T) {
++	longPath := strings.Repeat("nested/", 140) + strings.Repeat("x", 40) + ".sql"
++	if len(longPath) != 1024 {
++		t.Fatalf("fixture path bytes=%d", len(longPath))
++	}
++	manifest := map[string]any{
++		"metadata": map[string]any{"dbt_schema_version": "https://schemas.getdbt.com/dbt/manifest/v12.json"},
++		"nodes": map[string]any{"model.shop.orders": map[string]any{
++			"database": "warehouse", "schema": "analytics", "name": "orders", "resource_type": "model",
++			"package_name": "shop", "path": longPath, "original_file_path": longPath, "unique_id": "model.shop.orders",
++			"fqn": []string{"shop", "orders"}, "alias": "orders", "checksum": map[string]string{"name": "sha256", "checksum": "abc"},
++			"raw_code": "select 1 as id", "depends_on": map[string]any{"nodes": []string{}},
++		}},
++	}
++	for _, key := range []string{"sources", "macros", "docs", "exposures", "metrics", "groups", "selectors", "disabled", "parent_map", "child_map", "group_map", "saved_queries", "semantic_models", "unit_tests"} {
++		manifest[key] = map[string]any{}
++	}
++	manifestBytes, err := json.Marshal(manifest)
++	if err != nil {
++		t.Fatal(err)
++	}
++	largeCode := strings.Repeat(" ", (10<<20)-8) + "select 1"
++	manifest["nodes"].(map[string]any)["model.shop.orders"].(map[string]any)["raw_code"] = largeCode
++	largeManifestBytes, err := json.Marshal(manifest)
++	if err != nil {
++		t.Fatal(err)
++	}
++	longName := strings.Repeat("x", 251) + ".csv"
++	largeSQL := strings.Repeat(" ", (50<<20)-len("CREATE TABLE orders (id bigint);")) + "CREATE TABLE orders (id bigint);"
++	for _, test := range []struct {
++		name, sourceKind, originalName, logicalPath, selector, mediaType string
++		kind                                                             ingestiondomain.ArtifactKind
++		adapter                                                          discoverydomain.Adapter
++		content                                                          []byte
++		code                                                             string
++	}{
++		{"sql", "sql_bundle", "schema.sql", longPath, longPath, "application/sql", ingestiondomain.ArtifactSQL, sqlartifact.Adapter{}, []byte("CREATE TABLE orders (id bigint);"), "CREATE TABLE orders (id bigint);"},
++		{"sql-max-upload", "sql_bundle", "schema.sql", longPath, longPath, "application/sql", ingestiondomain.ArtifactSQL, sqlartifact.Adapter{}, []byte(largeSQL), largeSQL},
++		{"dbt", "dbt_bundle", "manifest.json", "manifest.json", "manifest.json", "application/json", ingestiondomain.ArtifactDBTManifest, dbtartifact.Adapter{}, manifestBytes, "select 1 as id"},
++		{"dbt-max-code", "dbt_bundle", "manifest.json", "manifest.json", "manifest.json", "application/json", ingestiondomain.ArtifactDBTManifest, dbtartifact.Adapter{}, largeManifestBytes, largeCode},
++		{"file-max-name", "file", longName, longName, longName, "text/csv", ingestiondomain.ArtifactCSV, fileartifact.CSV(), []byte("id\n1\n"), ""},
++	} {
++		t.Run(test.name, func(t *testing.T) {
++			ctx := context.Background()
++			pool, store := openStore(t)
++			workspace := createWorkspace(t, pool, "snapshot-long-path-"+test.name)
++			principal, _ := identity.NewPrincipalID()
++			if _, err := pool.Exec(ctx, `INSERT INTO principals(id,workspace_id,kind,display_name,status) VALUES($1,$2,'human','Snapshot runner','active')`, principal.UUID(), workspace.UUID()); err != nil {
++				t.Fatal(err)
++			}
++			now := time.Now().UTC()
++			artifact := artifactCommand(t, workspace, &principal, test.content, now)
++			artifact.Artifact.Kind, artifact.Artifact.OriginalName, artifact.Artifact.MediaType = test.kind, test.originalName, test.mediaType
++			artifact.Object.MediaType = test.mediaType
++			storage, err := localartifacts.New(t.TempDir())
++			if err != nil {
++				t.Fatal(err)
++			}
++			if err = storage.Put(ctx, workspace, artifact.Object.ContentDigest, bytes.NewReader(test.content), int64(len(test.content))); err != nil {
++				t.Fatal(err)
++			}
++			if err = store.ReserveArtifactObject(ctx, artifact); err != nil {
++				t.Fatal(err)
++			}
++			if _, err = store.CreateArtifact(ctx, artifact); err != nil {
++				t.Fatal(err)
++			}
++			source, _ := identity.NewSourceConnectionID()
++			set := artifactSetCommand(t, workspace, source, principal, artifact, "long-path-set", now, nil, now.Add(24*time.Hour))
++			set.Set.SourceKind, set.Set.Members[0].LogicalPath = test.sourceKind, test.logicalPath
++			if _, err = store.FinalizeArtifactSet(ctx, set); err != nil {
++				t.Fatal(err)
++			}
++			var attemptKey string
++			observed := false
++			adapter := snapshotBeginObserver{Adapter: test.adapter, beforeDiscover: func() {
++				observed = true
++				var status, selectorDigest string
++				var snapshots int
++				if err := pool.QueryRow(ctx, `SELECT h.coverage_key,h.latest_attempt_status,h.selector_digest,(SELECT count(*) FROM source_snapshots s WHERE s.workspace_id=h.workspace_id AND s.source_connection_id=h.source_connection_id) FROM source_coverage_heads h WHERE h.workspace_id=$1 AND h.source_connection_id=$2`, workspace.UUID(), source.UUID()).Scan(&attemptKey, &status, &selectorDigest, &snapshots); err != nil {
++					t.Fatal(err)
++				}
++				if status != "partial" || snapshots != 0 || len(attemptKey) > 256 || selectorDigest != discoverydomain.CoverageSelectorDigest(discoverydomain.CoverageUnit{Selector: test.selector}) {
++					t.Fatalf("begin key=%q status=%s selectorDigest=%s snapshots=%d", attemptKey, status, selectorDigest, snapshots)
++				}
++			}}
++			loader, _ := discoveryapp.NewArtifactLoader("")
++			control := discoveryapp.NewControlService(store, nil, nil, loader, nil, nil, discoveryapp.ClockFunc(time.Now)).WithArtifactStore(storage, map[ingestiondomain.ArtifactKind]discoverydomain.Adapter{test.kind: adapter})
++			run, err := control.StartRun(ctx, discoveryapp.StartRunRequest{SourceRequest: discoveryapp.SourceRequest{WorkspaceID: workspace, SourceID: source, PrincipalRef: principal.String(), TraceID: "4bf92f3577b34da6a3ce929d0e0e4736"}, IdempotencyKey: "long-path-run"})
++			if err != nil {
++				t.Fatal(err)
++			}
++			if _, err = pool.Exec(ctx, `UPDATE jobs SET status='succeeded',completed_at=$2,updated_at=$2 WHERE id<>$1 AND status IN('queued','retryable')`, run.JobID.UUID(), now); err != nil {
++				t.Fatal(err)
++			}
++			worker := jobs.NewWorker(store, jobs.ClockFunc(time.Now), jobs.BackoffFunc(func(int32) time.Duration { return 0 }), time.Minute)
++			worker.Register(discoveryapp.DiscoveryJobType, control.JobHandler())
++			if done, err := worker.RunOne(ctx, "snapshot-long-path"); err != nil || !done {
++				t.Fatalf("run=%v err=%v", done, err)
++			}
++			if !observed {
++				t.Fatal("valid long path never reached adapter; BeginDiscoveryRun stranded the run")
++			}
++			var status, coverageKey, selector, headStatus, codePath string
++			var headCount int
++			if err = pool.QueryRow(ctx, `SELECT r.status,u.coverage_key,u.selector,h.latest_attempt_status,COALESCE(c.path,''),(SELECT count(*) FROM source_coverage_heads WHERE workspace_id=r.workspace_id AND source_connection_id=r.source_connection_id) FROM discovery_runs r JOIN source_snapshot_runs l ON l.workspace_id=r.workspace_id AND l.run_id=r.id JOIN source_snapshot_scope u ON u.workspace_id=l.workspace_id AND u.snapshot_id=l.snapshot_id JOIN source_coverage_heads h ON h.workspace_id=u.workspace_id AND h.source_connection_id=r.source_connection_id AND h.coverage_key=u.coverage_key LEFT JOIN source_code_revisions c ON c.workspace_id=l.workspace_id AND c.source_revision_id=r.source_revision_id WHERE r.id=$1`, run.ID.UUID()).Scan(&status, &coverageKey, &selector, &headStatus, &codePath, &headCount); err != nil {
++				t.Fatal(err)
++			}
++			wantCodePath := longPath
++			if test.code == "" {
++				wantCodePath = ""
++			}
++			if status != "succeeded" || coverageKey != attemptKey || selector != test.selector || headStatus != "complete" || codePath != wantCodePath || headCount != 1 {
++				t.Fatalf("persist status=%s key=%q beginKey=%q selector=%q head=%s codePath=%q heads=%d", status, coverageKey, attemptKey, selector, headStatus, codePath, headCount)
++			}
++			if test.name == "sql" || test.name == "dbt" || test.name == "file-max-name" {
++				if err := storage.Delete(ctx, workspace, artifact.Object.ContentDigest); err != nil {
++					t.Fatal(err)
++				}
++				failed, err := control.StartRun(ctx, discoveryapp.StartRunRequest{SourceRequest: discoveryapp.SourceRequest{WorkspaceID: workspace, SourceID: source, PrincipalRef: principal.String(), TraceID: "4bf92f3577b34da6a3ce929d0e0e4736"}, IdempotencyKey: "long-path-missing-bytes"})
++				if err != nil {
++					t.Fatal(err)
++				}
++				if _, err = pool.Exec(ctx, `UPDATE jobs SET max_attempts=1 WHERE id=$1`, failed.JobID.UUID()); err != nil {
++					t.Fatal(err)
++				}
++				if done, err := worker.RunOne(ctx, "snapshot-long-path-failure"); err != nil || !done {
++					t.Fatalf("failed run=%v err=%v", done, err)
++				}
++				var preserved bool
++				if err = pool.QueryRow(ctx, `SELECT r.status,u.coverage_key,u.selector,h.latest_attempt_status,h.latest_verified_snapshot_id=(SELECT snapshot_id FROM source_snapshot_runs WHERE workspace_id=r.workspace_id AND run_id=$2) FROM discovery_runs r JOIN source_snapshot_runs l ON l.workspace_id=r.workspace_id AND l.run_id=r.id JOIN source_snapshot_scope u ON u.workspace_id=l.workspace_id AND u.snapshot_id=l.snapshot_id JOIN source_coverage_heads h ON h.workspace_id=u.workspace_id AND h.source_connection_id=r.source_connection_id AND h.coverage_key=u.coverage_key WHERE r.id=$1`, failed.ID.UUID(), run.ID.UUID()).Scan(&status, &coverageKey, &selector, &headStatus, &preserved); err != nil {
++					t.Fatal(err)
++				}
++				if status != "failed" || headStatus != "failed" || coverageKey != attemptKey || selector != test.selector || !preserved {
++					t.Fatalf("failed attempt lost scope/history: run=%s key=%q selector=%q head=%s preserved=%v", status, coverageKey, selector, headStatus, preserved)
++				}
++			}
++			if test.code == "" {
++				return
++			}
++			var retained []byte
++			var blob string
++			if err = pool.QueryRow(ctx, `SELECT content_bytes,blob_oid FROM source_code_revisions WHERE workspace_id=$1`, workspace.UUID()).Scan(&retained, &blob); err != nil {
++				t.Fatal(err)
++			}
++			if string(retained) != test.code || blob != digestText(test.code) {
++				t.Fatalf("retained code bytes=%d want=%d digest=%s want=%s", len(retained), len(test.code), blob, digestText(test.code))
++			}
++			if test.name == "sql-max-upload" {
++				uploads := ingestionapp.NewService(store, storage, nil, ingestionapp.ClockFunc(time.Now), map[ingestiondomain.ArtifactKind]discoverydomain.Adapter{test.kind: test.adapter})
++				request := ingestionapp.StageRequest{WorkspaceID: workspace, PrincipalRef: principal.String(), TraceID: "4bf92f3577b34da6a3ce929d0e0e4736", Kind: test.kind, OriginalName: "schema.sql", TrustedLogicalPath: longPath, MediaType: "application/sql", ContentLength: ingestiondomain.MaxUploadBytes + 1, Content: strings.NewReader("x"), IdempotencyKey: "overflow-length"}
++				if _, err := uploads.Stage(ctx, request); !errors.Is(err, ingestiondomain.ErrInvalid) {
++					t.Fatalf("upload above existing content-length limit: %v", err)
++				}
++				request.ContentLength, request.Content, request.IdempotencyKey = ingestiondomain.MaxUploadBytes, io.MultiReader(strings.NewReader(test.code), strings.NewReader("x")), "overflow-body"
++				if _, err := uploads.Stage(ctx, request); !errors.Is(err, ingestiondomain.ErrLimitExceeded) {
++					t.Fatalf("upload body above existing limit: %v", err)
++				}
++			}
++		})
++	}
++}
++
+ func TestSourceSnapshotPinsHistoricalArtifactBytesDuringCleanup(t *testing.T) {
+ 	ctx := context.Background()
+ 	pool, store := openStore(t)

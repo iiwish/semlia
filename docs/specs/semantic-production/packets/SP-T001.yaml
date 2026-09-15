@@ -1,0 +1,92 @@
+task_id: SP-T001
+attempt_id: SP-T001-A002
+status: Accepted
+attempt_status: Integrated
+review_result: A001 four findings fixed in A002; independent re-review found no new blocker. User explicitly accepted T001 on 2026-09-09 and authorized sequential T002/T003 execution.
+mode: Delegated Execute
+approved_at: '2026-09-09T04:16:25Z'
+approval: 用户要求 PM 创建子任务完成重构，先完成 T001 校准耗时。
+goal: >-
+  固定可独立实施的来源版本、新建生产、原子治理发布及恢复详细契约，运行真实基线，
+  用实测时间修订估算。本任务不实现应用、数据库迁移或正式 API。
+context:
+  root: .
+  root_resolution: All artifact paths are relative to this repository root; resolve with git rev-parse --show-toplevel.
+  product: docs/specs/semantic-production/product-design.md
+  plan: docs/specs/semantic-production/plan.md
+  tasks: docs/specs/semantic-production/tasks.md
+  checklist: docs/specs/semantic-production/checklists/requirements.md
+  analysis: docs/specs/semantic-production/analysis.md
+  requirements: [SP-US-001, SP-US-004, SP-FR-001..010, SP-NFR-001..005, SP-TD-001..008]
+  checkout: main at source-revision-redacted plus existing dirty and untracked files
+dependencies: [Confirmed product, Confirmed plan and task graph, completed requirements checklist, no uncontrolled High finding]
+conflicts: 所有后续 SP 任务、应用改动、共享契约和迁移生成；不得并行 governed task。
+ownership:
+  worker: 仅一个受限实现 attempt；不得再委派；先读真实代码，再完成契约和静态测试。
+  orchestrator: 工作区预检、只读基线命令、覆盖矩阵、时间校准、评审、任务元数据和最终证据。
+  reviewer: worker 返回后独立只读评审；不改实现、不标记 Accepted。
+allowed_files:
+  - docs/specs/semantic-production/data-model.md
+  - docs/specs/semantic-production/contracts/production.openapi.yaml
+  - docs/specs/semantic-production/contracts/production.md
+  - tests/contracts/semantic_production_contract_test.go
+  - docs/evidence/SP-T001/attempts/SP-T001-A001.md
+  - docs/evidence/SP-T001/attempts/SP-T001-A002.md
+  - docs/evidence/SP-T001/worker/
+orchestrator_allowed_files:
+  - docs/specs/semantic-production/packets/SP-T001.yaml
+  - docs/specs/semantic-production/analysis.md
+  - docs/specs/semantic-production/checklists/requirements.md
+  - docs/specs/semantic-production/tasks.md (metadata, current task state and estimates only)
+  - docs/specs/semantic-production/plan.md (approval/status references and section 6 estimates only)
+  - docs/specs/semantic-production/product-design.md (execution status reference only)
+  - docs/README.md (semantic-production status index only)
+  - docs/SSOT.md (semantic-production execution status references only)
+  - docs/evidence/SP-T001/
+forbidden:
+  - 不改任何应用代码、原有测试、迁移、依赖、正式 OpenAPI、生成物或其他历史证据。
+  - 不删除或恢复用户及其他 agent 的工作；新文件冲突或范围不足时报告 PM。
+  - 不调用付费或实际模型、不部署、不操作默认数据库或 Compose 栈、不提交或推送。
+  - 不因测试失败放松断言，不将静态契约通过报告为 API/数据库实现通过。
+design_obligations:
+  - 来源快照须精确成员、名称、revision、范围及覆盖；复用未变化 revision；历史不足不可伪造。
+  - create/update 明确区分，create 无 base revision；精确说明旧 proposals NOT NULL/check 的 expand-first 迁移和身份预留。
+  - 32 targets / 100 changes per target / 256 total，规范化摘要、有界输入及输出、服务端幂等和重放重新鉴权。
+  - 固定生产集合、输入和依赖闭合；复用 Proposal/Validation/Review，不创建第二审批状态机。
+  - 所有成员原子发布，事务内授权/SoD/版本复查；禁止 group member 用旧单项发布绕过。
+  - 多提案 release 归因完整；旧 digest/消费兼容；回滚恢复完整 before manifest，包括新建对象缺席。
+  - 明确新旧 API/旧数据库/旧二进制兼容矩阵；不可无损表达时拒绝 down migration，不空表装成功。
+  - 模型网络在事务外，结果重验，实际模型与 stub 分开；桌面限定 1440x900 和 1024x768。
+  - HTTP 方法/路径/权限/错误/分页/请求响应 schema 必须足够实现；详细文档是 planned contract 非已上线接口。
+  - 不扩张机器 allowlist，不暴露密钥；来源文本不构成模型或执行权限。
+tdd:
+  red: 先新增 TestSemanticProductionContract 并对缺失契约运行，保存真实失败日志与退出码。
+  green: 用现有 kin-openapi 验证详细 YAML 及关键 schema 不变量，补完整契约后运行至通过。
+  refactor: 仅受限整理新增校验辅助代码，使用现有依赖和结构化解析，不只匹配关键词。
+worker_validation:
+  - go test -count=1 ./tests/contracts -run '^TestSemanticProductionContract$'
+  - make test-contracts
+  - make test-repository
+  - git diff --check -- tests/contracts/semantic_production_contract_test.go docs/specs/semantic-production
+orchestrator_validation:
+  - go test -count=1 ./internal/application/discovery ./internal/application/ingestion ./internal/application/governance ./internal/platform/http
+  - env -u SEMLIA_INGESTION_TEST_DATABASE_URL -u SEMLIA_EXECUTION_CRASH_HELPER -u SEMLIA_EXECUTION_TEST_DB -u SEMLIA_DATABASE_URL go test -count=1 -timeout=20m ./tests/integration/ingestion ./tests/integration/discovery ./tests/integration/governance ./tests/integration/projection
+environment:
+  docker: local OrbStack, server 29.4.0 linux; TestMain creates postgres:18-alpine temporary containers and terminates its own containers
+  prohibition: 禁止 make check / make dev / 默认 compose；不得迁移任何现有用户数据库。
+evidence:
+  worker: 精确文件清单、命令与 exit status、RED/GREEN、开始结束 UTC、残余设计风险和输出语义。
+  pm: exact checkout 与依赖文件摘要、baseline.md、SP-AC 覆盖矩阵、review、test-results、summary、估算校准。
+stop_conditions:
+  - 发现范围外的基础故障：保留失败，报告所需受限修复，不自行修改应用。
+  - 新产品决策、需求冲突、不可实现契约或缺少授权：指出最小决策；不猜测扩大范围。
+  - worker 返回后须 spec compliance、工程风险和 QA 评审；只有用户可接受 T001。
+review_fix:
+  source: docs/evidence/SP-T001/review-a001.md
+  scope: 仅修正四个已证实契约缺口与对应静态测试，不实现应用或扩大产品范围。
+  required:
+    - 旧 governance rollback 对 production release 及全部回滚后继拒绝或统一新权威命令；事务/数据库防线不能只依赖新路由。
+    - 固定 validation attempt 身份、旧唯一约束迁移、legacy 分支、队列/查询/有效完整结果选择；in_review 重验不倒退原 Proposal 状态，不拼凑新旧通过结果。
+    - 有界 immutable AI structured output 持久化、digest、授权/保留及人工应用版本/差异/actor；不得持久化 prompt 或隐藏推理。
+    - create/update 两意图内定义当前发布 pin absent、历史身份保留时的受治理重引入；可信历史、head CAS、身份唯一、全套验证审核，不伪造 base。
+  tdd: 先补能区分缺口的静态 schema/不变量正反例并运行 RED，再改详细契约至 GREEN；保留 A001 全部日志，A002 使用独立日志名前缀。

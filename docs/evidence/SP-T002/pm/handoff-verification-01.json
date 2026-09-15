@@ -1,0 +1,138 @@
+{
+  "capturedAt": "2026-09-09T07:22:32.348Z",
+  "implementationCount": 44,
+  "hashMismatches": [],
+  "outsideAllowedFiles": [],
+  "workerLogs": [
+    {
+      "name": "final-unit-03",
+      "command": [
+        "go",
+        "test",
+        "-count=1",
+        "./pkg/identity",
+        "./internal/domain/discovery",
+        "./internal/application/discovery",
+        "./internal/adapters/discovery/...",
+        "./internal/platform/http",
+        "./cmd/semlia"
+      ],
+      "start": "2026-09-09T07:17:54.371Z",
+      "end": "2026-09-09T07:18:14.685Z",
+      "exit": 0,
+      "output": "ok  \tgithub.com/iiwish/semlia/pkg/identity\t1.558s\nok  \tgithub.com/iiwish/semlia/internal/domain/discovery\t1.925s\nok  \tgithub.com/iiwish/semlia/internal/application/discovery\t2.325s\nok  \tgithub.com/iiwish/semlia/internal/adapters/discovery/catalog\t3.314s\nok  \tgithub.com/iiwish/semlia/internal/adapters/discovery/dbt\t3.880s\nok  \tgithub.com/iiwish/semlia/internal/adapters/discovery/files\t4.141s\n?   \tgithub.com/iiwish/semlia/internal/adapters/discovery/postgreslive\t[no test files]\nok  \tgithub.com/iiwish/semlia/internal/adapters/discovery/postgresql\t4.164s\nok  \tgithub.com/iiwish/semlia/internal/platform/http\t4.529s\nok  \tgithub.com/iiwish/semlia/cmd/semlia\t15.608s\n",
+      "error": ""
+    },
+    {
+      "name": "final-integration-04",
+      "command": [
+        "go",
+        "test",
+        "-p=1",
+        "-count=1",
+        "-timeout=20m",
+        "./tests/integration/discovery",
+        "./tests/integration/ingestion",
+        "./tests/integration/catalog"
+      ],
+      "start": "2026-09-09T07:18:28.709Z",
+      "end": "2026-09-09T07:18:49.170Z",
+      "exit": 0,
+      "output": "ok  \tgithub.com/iiwish/semlia/tests/integration/discovery\t7.433s\nok  \tgithub.com/iiwish/semlia/tests/integration/ingestion\t4.575s\nok  \tgithub.com/iiwish/semlia/tests/integration/catalog\t5.539s\n",
+      "error": ""
+    },
+    {
+      "name": "final-migration-04",
+      "command": [
+        "go",
+        "test",
+        "-p=1",
+        "-count=1",
+        "-timeout=15m",
+        "./tests/integration/db",
+        "-run",
+        "^TestSemanticProductionMigration|^TestMigrationLifecycleAndTenantSchema$|^TestPostgres17MigrationLifecycle$"
+      ],
+      "start": "2026-09-09T07:17:07.144Z",
+      "end": "2026-09-09T07:17:22.139Z",
+      "exit": 0,
+      "output": "ok  \tgithub.com/iiwish/semlia/tests/integration/db\t13.186s\n",
+      "error": ""
+    },
+    {
+      "name": "final-db-generate-check-03",
+      "command": [
+        "make",
+        "db-generate-check"
+      ],
+      "start": "2026-09-09T07:17:55.558Z",
+      "end": "2026-09-09T07:17:56.462Z",
+      "exit": 0,
+      "output": "",
+      "error": ""
+    },
+    {
+      "name": "final-contracts-check-03",
+      "command": [
+        "make",
+        "contracts-check"
+      ],
+      "start": "2026-09-09T07:15:51.612Z",
+      "end": "2026-09-09T07:15:52.266Z",
+      "exit": 0,
+      "output": "✨ openapi-typescript 7.13.0\n🚀 /workspace/api/openapi/semlia.v1.yaml → /var/folders/my/cfl1vvhj0jgdz48pmvgc27lw0000gn/T//semlia-contracts.fMgTvW2R/schema.gen.ts [83.1ms]\n",
+      "error": ""
+    },
+    {
+      "name": "final-test-contracts-03",
+      "command": [
+        "make",
+        "test-contracts"
+      ],
+      "start": "2026-09-09T07:15:50.429Z",
+      "end": "2026-09-09T07:15:51.650Z",
+      "exit": 0,
+      "output": "go test ./tests/contracts/...\nok  \tgithub.com/iiwish/semlia/tests/contracts\t0.939s\n",
+      "error": ""
+    },
+    {
+      "name": "final-test-repository-03",
+      "command": [
+        "make",
+        "test-repository"
+      ],
+      "start": "2026-09-09T07:17:56.529Z",
+      "end": "2026-09-09T07:18:07.356Z",
+      "exit": 0,
+      "output": "go test ./tests/repository\nok  \tgithub.com/iiwish/semlia/tests/repository\t10.436s\n",
+      "error": ""
+    },
+    {
+      "name": "final-sdk-test-03",
+      "command": [
+        "pnpm",
+        "--filter",
+        "@semlia/sdk-typescript",
+        "test"
+      ],
+      "start": "2026-09-09T07:15:52.305Z",
+      "end": "2026-09-09T07:15:52.772Z",
+      "exit": 0,
+      "output": "",
+      "error": "$ tsc --noEmit\n"
+    },
+    {
+      "name": "final-diff-check-03",
+      "command": [
+        "git",
+        "diff",
+        "--check"
+      ],
+      "start": "2026-09-09T07:20:40.264Z",
+      "end": "2026-09-09T07:20:40.301Z",
+      "exit": 0,
+      "output": "",
+      "error": ""
+    }
+  ]
+}

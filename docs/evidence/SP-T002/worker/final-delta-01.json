@@ -1,0 +1,1005 @@
+{
+  "capturedAt": "2026-09-09T07:13:55.039Z",
+  "checkoutCapturedAt": "2026-09-09T05:36:11.854Z",
+  "head": "source-revision-redacted",
+  "implementation": [
+    {
+      "path": "api/README.md",
+      "owner": "worker",
+      "beforeSha256": "f66524fedd554694554c4d2ae3c5236e5ee0c299fa795d9941d84c60604c2d43",
+      "afterSha256": "d37ae9af92726d33cd4ea0439a755683778dcfc9df7f75c4e395aeea3e915763",
+      "bytes": 3865
+    },
+    {
+      "path": "api/gen/go/types.gen.go",
+      "owner": "worker",
+      "beforeSha256": "2919214c4fc7c2f6f59e73efec3c823355ab17cb243736eb4ffc40b0a7a68e63",
+      "afterSha256": "3cef50bf0e8e877bc1d66d53a6d0e84bae1457c67c7ba04d56f94abcaa3b665f",
+      "bytes": 267512
+    },
+    {
+      "path": "api/openapi/semlia.v1.yaml",
+      "owner": "worker",
+      "beforeSha256": "1862ecab4410e2866dd572e776dd420531b05843bbca25e6139755f92330dce8",
+      "afterSha256": "2d49660ffb555b63694202dd3f8e73e87f9b579a41c146c3604a19b858357dd6",
+      "bytes": 287621
+    },
+    {
+      "path": "cmd/semlia/main.go",
+      "owner": "worker",
+      "beforeSha256": "180c56bcfd319c8143c8723b6bfe813622e5064f366d1f2271994ff1dc2cd31f",
+      "afterSha256": "3bb548e78f86bc5ec3813894a74264702e31384842f8571cae78a43a61abd667",
+      "bytes": 24419
+    },
+    {
+      "path": "cmd/semlia/readiness.go",
+      "owner": "worker",
+      "beforeSha256": "aa907ee1b50eda31e4a8edc0cdb96b26d05b9deda6534f0b7efd08adb2e2ffed",
+      "afterSha256": "984a7476f9f1bfd30456cbc0602260c33719e7cd26a9f0189b11a1eb2c3436dc",
+      "bytes": 5973
+    },
+    {
+      "path": "cmd/semlia/readiness_test.go",
+      "owner": "worker",
+      "beforeSha256": "916b5361ed9120d054716cbfd93fae96df3a2506fd4424633f3a92ed7239f2a4",
+      "afterSha256": "0a9246337f65fab507305f86be218df3d7b90fc95bb7de421432d9c541e2e942",
+      "bytes": 5533
+    },
+    {
+      "path": "db/queries/discovery.sql",
+      "owner": "worker",
+      "beforeSha256": "93f25e6621feef74aec1f7c7e04c066fd848daf6db4f2bc1905f32aecb0632f2",
+      "afterSha256": "365c8cbf7f54cd4dc60c13b7b206e4ec4e8d2fb96ab0434076b2bab10c3b890a",
+      "bytes": 6987
+    },
+    {
+      "path": "db/sqlc.yaml",
+      "owner": "worker",
+      "beforeSha256": "87fbfa5d748b0a89f368b1181c8acaaf480dd67fcaa1df9adaf262d9b4f19423",
+      "afterSha256": "d10ec5d13ff56992b89102c1098dd45c1c1d011b5521fe39ba279aff4b031832",
+      "bytes": 1570
+    },
+    {
+      "path": "internal/adapters/discovery/catalog/adapter.go",
+      "owner": "worker",
+      "beforeSha256": "8748b2dfebbc5e667d936c35674b876d01fbfde28f8f6bc440efb979f9435f6f",
+      "afterSha256": "5d120d531b1c82899263d1f346935431c4e9218b44610eeb36f297985aefcf46",
+      "bytes": 2760
+    },
+    {
+      "path": "internal/adapters/discovery/dbt/adapter.go",
+      "owner": "worker",
+      "beforeSha256": "679467c9e452b2d4cae751f523b1795a387b7e39bad938e0a06f454c1637b0c4",
+      "afterSha256": "c3bb4a447fefcefb67706d1e3debe23e7fce0a4a9397a31134a5f1e598856945",
+      "bytes": 13213
+    },
+    {
+      "path": "internal/adapters/discovery/files/adapter.go",
+      "owner": "worker",
+      "beforeSha256": "260f90e402a56e4abc5a886e07a93cc09c1c910d806a45b9ffd60b8e838c3ca2",
+      "afterSha256": "fdf3eb44efefa94a56da330a8edbbc4a257a8fbe23453c54a4fec5f3afe8d1e6",
+      "bytes": 25227
+    },
+    {
+      "path": "internal/adapters/discovery/postgreslive/collector.go",
+      "owner": "worker",
+      "beforeSha256": "4a4f66847fa0248b84574e4690ebbc4c8a9c7ebb04dbf876c16af119781def18",
+      "afterSha256": "e9322a4c0960f997f18054ff44ded6dcf50abd8f7cadc89506b701a74fd21ab4",
+      "bytes": 8787
+    },
+    {
+      "path": "internal/adapters/discovery/postgresql/adapter.go",
+      "owner": "worker",
+      "beforeSha256": "d47c1321ea598fd788abbd504811be72ba24f0091bdc29572c4dd39f314b6b66",
+      "afterSha256": "799f0c0d54c5cc0687c80b92cc72d74ec69b39549f0fdde931c90fa15603276e",
+      "bytes": 11140
+    },
+    {
+      "path": "internal/adapters/postgres/artifacts.go",
+      "owner": "worker",
+      "beforeSha256": "36c9660382b81017ef155504b2dbf1ddd1c96135f2a6c2a7a12730b22ecb5cd3",
+      "afterSha256": "41d6d3d63e6649468c069d63e7798c63100df65cbd31f61f092bd6bacd00da8f",
+      "bytes": 46915
+    },
+    {
+      "path": "internal/adapters/postgres/discovery.go",
+      "owner": "worker",
+      "beforeSha256": "222b74646f7b0d622cef26bddaaaa4330ddbdc4a124b88298f7ff31928bf0763",
+      "afterSha256": "ee43888521b181e8f59c266e2f3c5d97828da35417eefc2b9900d0fe0aea6bec",
+      "bytes": 29376
+    },
+    {
+      "path": "internal/adapters/postgres/source_discovery.go",
+      "owner": "worker",
+      "beforeSha256": "d8a380954f05ad6e678b41a60857105ed2d10ef67e27310e4b127fe7474f8067",
+      "afterSha256": "04c4ff00a5da55a755093f644071dc2f84f06be98e579ec686c42c5d0ea2741b",
+      "bytes": 57426
+    },
+    {
+      "path": "internal/adapters/postgres/source_snapshot.go",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "4c18cacb9442676bf74161b2eac3b94d7c712b698c4897ed6500e5cc6577f62e",
+      "bytes": 32646
+    },
+    {
+      "path": "internal/adapters/postgres/sqlc/discovery.sql.go",
+      "owner": "worker",
+      "beforeSha256": "45857bb98373f16530ae815048494920308cd1109713f811da2031a673020d89",
+      "afterSha256": "a7b0fbde6acc66c2f14b016b5404e7640d2a42906514da429eb768814f927c65",
+      "bytes": 23661
+    },
+    {
+      "path": "internal/adapters/postgres/sqlc/models.go",
+      "owner": "worker",
+      "beforeSha256": "563d2abb1b9f01344e00a2b460c80642c3ba52b77de8ff5a170906f37cecbf2d",
+      "afterSha256": "f3bdcf08adb8cc9188dedcf25eda7f779d2300d9cdf7941e3c1509b1a6d6e9e4",
+      "bytes": 71427
+    },
+    {
+      "path": "internal/application/discovery/control.go",
+      "owner": "worker",
+      "beforeSha256": "9f8df7ce8c751b5aa880b7feb3321d64609a05a98cf74043c75eaff52cf88ecb",
+      "afterSha256": "91c942c189a7898966c431d10e8a60b17b96a1652a9200ad89e7b9871af4ae92",
+      "bytes": 32303
+    },
+    {
+      "path": "internal/application/discovery/service.go",
+      "owner": "worker",
+      "beforeSha256": "867c98e396b37a726752382ca3929710b1153b6ec934623f0073a3bf90fe3853",
+      "afterSha256": "c69ead79dc1779867c6c3eba35f6daebab3d121f15fafefd61785eb2392ea791",
+      "bytes": 2260
+    },
+    {
+      "path": "internal/application/discovery/snapshot.go",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "90713a90233b0f2399c41ed69b584e3a453d1423abdcee3683ba81505bb5d731",
+      "bytes": 9012
+    },
+    {
+      "path": "internal/application/discovery/snapshot_test.go",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "1afc79bdfc9af51bf87ff8b1d335f1d0264cb2cdd9c045b2628817636a201541",
+      "bytes": 2321
+    },
+    {
+      "path": "internal/domain/discovery/model.go",
+      "owner": "worker",
+      "beforeSha256": "1cb17238c0aa2b6acdf8fbcdab7c3cc50eb3022d77beda3a388117c8ff32f22f",
+      "afterSha256": "3cd3114b7a0641476f1d5136482cb05fa64db0ce91a06c225cb039690cc77918",
+      "bytes": 8125
+    },
+    {
+      "path": "internal/domain/discovery/snapshot.go",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "210956a810970d2dc479c60581223293c1bad36c178a48b8e72d63f3110503d1",
+      "bytes": 8832
+    },
+    {
+      "path": "internal/domain/discovery/snapshot_test.go",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "533292b3047fbb7ba142a21a7f0e8f6f98303c97e8fb100a09a5a6f35864a3f5",
+      "bytes": 2389
+    },
+    {
+      "path": "internal/domain/discovery/source.go",
+      "owner": "worker",
+      "beforeSha256": "d70370d054453ff0bb457e9c6132fe8db7d6c4f916f747792ed111133313b6e5",
+      "afterSha256": "1c392efb6aeccc15a5c764f0d4fbb334206335f295a5ec349abeaf130e29ffd5",
+      "bytes": 3571
+    },
+    {
+      "path": "internal/platform/http/catalog.go",
+      "owner": "worker",
+      "beforeSha256": "0c5b2f2102cb08ba586f3d59ba1b9138bd95506a31821270b308be0e2fe9e936",
+      "afterSha256": "4bcf4ee6d3fb7c37f3d056c3ec99ad7ec08f097682397cc4dad9ad208546b7b6",
+      "bytes": 33612
+    },
+    {
+      "path": "internal/platform/http/discovery.go",
+      "owner": "worker",
+      "beforeSha256": "16b8248fa66490cffabfc718315ff3fcdbc15c16283a3593a161e49cbc4ee679",
+      "afterSha256": "314d70ffdce4a7b9d177bcf0b10c7b9f57b835f2bc84cff12e66f59f8440dcdb",
+      "bytes": 17513
+    },
+    {
+      "path": "internal/platform/http/source_snapshot_test.go",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "839ed13079853285f9ae9dfcb091cba69fdb9c3db4e141aaaec753d4abb4baa5",
+      "bytes": 4139
+    },
+    {
+      "path": "migrations/000022_semantic_production_sources.down.sql",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "4cfeabc8db77360f7e6313092413ce459cf9fc83b9825a78bc7226094037d286",
+      "bytes": 1332
+    },
+    {
+      "path": "migrations/000022_semantic_production_sources.up.sql",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "836dec86738826a5549f8c115dda3647b37783f7deb96196e8b64df19574af8d",
+      "bytes": 21112
+    },
+    {
+      "path": "pkg/identity/id.go",
+      "owner": "worker",
+      "beforeSha256": "34fbe9312a1b420350afe0c8d354800fc3801ec0ceebf44f232255e62e9b24ff",
+      "afterSha256": "45e56f65b0bf0addb1289567401f01f88ade40f44a934a95060dd1738dabc62f",
+      "bytes": 35031
+    },
+    {
+      "path": "sdk/typescript/src/client.test.ts",
+      "owner": "worker",
+      "beforeSha256": "1a891adef096db7637500855394885e912b2573be0828c2b8ec0a39b808a4695",
+      "afterSha256": "cfed055f0aa39463c059933968aababfeeb737bebaba7ebedea31153af5c32a2",
+      "bytes": 4704
+    },
+    {
+      "path": "sdk/typescript/src/client.ts",
+      "owner": "worker",
+      "beforeSha256": "9245aca5bc817cac595abccf098102877cafb1b6b8102e0ca14a6f1ec67fd7e7",
+      "afterSha256": "95118b0c02017cbde526ef6cd39d6887955ea9501a2eda9048b19a5a37ed0877",
+      "bytes": 5053
+    },
+    {
+      "path": "sdk/typescript/src/ids.test.ts",
+      "owner": "worker",
+      "beforeSha256": "4d0548e79596fa294b4b265605a3e19dbc1bb15af7c15cd276a8cf5003fa1969",
+      "afterSha256": "76b76639987266a9418b3d091f775c8a3ec092d6a4b3def5657dde96132b69fb",
+      "bytes": 633
+    },
+    {
+      "path": "sdk/typescript/src/ids.ts",
+      "owner": "worker",
+      "beforeSha256": "55221acb61a08659d3be2ff9516a869dcae8b0f7c4da51820ad8ad10d42551cd",
+      "afterSha256": "7e2a79208372c9d6ea9176f9957ede3a6a9c7cb0bbb7f462fce7431c7d6a26ed",
+      "bytes": 2373
+    },
+    {
+      "path": "sdk/typescript/src/index.ts",
+      "owner": "worker",
+      "beforeSha256": "fb9c28b87f8f7725ec9e78e279649c8bde48140d5ce68e7905ae2db2b3c58cc4",
+      "afterSha256": "ec4d1b4369c06daf21f484f604ba77779df5523a679f733e5ca2761950268dff",
+      "bytes": 826
+    },
+    {
+      "path": "sdk/typescript/src/schema.gen.ts",
+      "owner": "worker",
+      "beforeSha256": "ad31f70a029deefb8e4f70824c9a7737b3ef29973756fd98f76424f0476a9f23",
+      "afterSha256": "6e4213640b4dd59a54aa5baa530d2bc512149d579af0bd7e9f01781876cc64d8",
+      "bytes": 313950
+    },
+    {
+      "path": "tests/contracts/contract_test.go",
+      "owner": "worker",
+      "beforeSha256": "8d607df5dfd49b0ab5d7da4823243ab0b8d7a144bb2b3c89352d9144d0f90ae6",
+      "afterSha256": "7928eec7bee9852cf4fbfd10cbde52e955fd36b87d9d0021b700f79ef15bc882",
+      "bytes": 32816
+    },
+    {
+      "path": "tests/integration/db/database_test.go",
+      "owner": "worker",
+      "beforeSha256": "ce95df2a99613874ab25aa6f2c7f454d88e1a8956326a0aeb4ba5f82db5a8548",
+      "afterSha256": "bc69374224f535ad712a1ab2d55b530194c754ff840ad884d2aa16d2c8caf17f",
+      "bytes": 48797
+    },
+    {
+      "path": "tests/integration/db/semantic_production_migrations_test.go",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "001146cb098ac069a73615680efa91753fecb948efebb3f4156f40ab539d6cd9",
+      "bytes": 5936
+    },
+    {
+      "path": "tests/integration/discovery/source_snapshot_test.go",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "2623382f30f8ed8805e86f0861d80b67a600454b56bbc55214bd1d260be70875",
+      "bytes": 23583
+    },
+    {
+      "path": "tests/integration/ingestion/source_snapshot_retention_test.go",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "d2064ea447225959d22096fa2c0c4255da58c15fa8ae7397bd44b77284911fde",
+      "bytes": 9691
+    }
+  ],
+  "changes": [
+    {
+      "path": "api/README.md",
+      "owner": "worker",
+      "beforeSha256": "f66524fedd554694554c4d2ae3c5236e5ee0c299fa795d9941d84c60604c2d43",
+      "afterSha256": "d37ae9af92726d33cd4ea0439a755683778dcfc9df7f75c4e395aeea3e915763",
+      "bytes": 3865
+    },
+    {
+      "path": "api/gen/go/types.gen.go",
+      "owner": "worker",
+      "beforeSha256": "2919214c4fc7c2f6f59e73efec3c823355ab17cb243736eb4ffc40b0a7a68e63",
+      "afterSha256": "3cef50bf0e8e877bc1d66d53a6d0e84bae1457c67c7ba04d56f94abcaa3b665f",
+      "bytes": 267512
+    },
+    {
+      "path": "api/openapi/semlia.v1.yaml",
+      "owner": "worker",
+      "beforeSha256": "1862ecab4410e2866dd572e776dd420531b05843bbca25e6139755f92330dce8",
+      "afterSha256": "2d49660ffb555b63694202dd3f8e73e87f9b579a41c146c3604a19b858357dd6",
+      "bytes": 287621
+    },
+    {
+      "path": "cmd/semlia/main.go",
+      "owner": "worker",
+      "beforeSha256": "180c56bcfd319c8143c8723b6bfe813622e5064f366d1f2271994ff1dc2cd31f",
+      "afterSha256": "3bb548e78f86bc5ec3813894a74264702e31384842f8571cae78a43a61abd667",
+      "bytes": 24419
+    },
+    {
+      "path": "cmd/semlia/readiness.go",
+      "owner": "worker",
+      "beforeSha256": "aa907ee1b50eda31e4a8edc0cdb96b26d05b9deda6534f0b7efd08adb2e2ffed",
+      "afterSha256": "984a7476f9f1bfd30456cbc0602260c33719e7cd26a9f0189b11a1eb2c3436dc",
+      "bytes": 5973
+    },
+    {
+      "path": "cmd/semlia/readiness_test.go",
+      "owner": "worker",
+      "beforeSha256": "916b5361ed9120d054716cbfd93fae96df3a2506fd4424633f3a92ed7239f2a4",
+      "afterSha256": "0a9246337f65fab507305f86be218df3d7b90fc95bb7de421432d9c541e2e942",
+      "bytes": 5533
+    },
+    {
+      "path": "db/queries/discovery.sql",
+      "owner": "worker",
+      "beforeSha256": "93f25e6621feef74aec1f7c7e04c066fd848daf6db4f2bc1905f32aecb0632f2",
+      "afterSha256": "365c8cbf7f54cd4dc60c13b7b206e4ec4e8d2fb96ab0434076b2bab10c3b890a",
+      "bytes": 6987
+    },
+    {
+      "path": "db/sqlc.yaml",
+      "owner": "worker",
+      "beforeSha256": "87fbfa5d748b0a89f368b1181c8acaaf480dd67fcaa1df9adaf262d9b4f19423",
+      "afterSha256": "d10ec5d13ff56992b89102c1098dd45c1c1d011b5521fe39ba279aff4b031832",
+      "bytes": 1570
+    },
+    {
+      "path": "docs/README.md",
+      "owner": "orchestrator",
+      "beforeSha256": "f6e46c50af859ff32bab8bb7db8111ad6dff72b6b62396279003b9426844d976",
+      "afterSha256": "6ff96c08e01e361850e2b8b8652ea0f5059934e83bb08b440a9f56126eed34b5",
+      "bytes": 7913
+    },
+    {
+      "path": "docs/SSOT.md",
+      "owner": "orchestrator",
+      "beforeSha256": "b5ea866e48b19c304efcc43ef007cf46e52c5a1f0a2ce1e2c9e78a1c7efb717f",
+      "afterSha256": "00bdb88fa2adc42f197a96a5a07ff6318c3633d48b142ac72a2d89217ccba3d6",
+      "bytes": 88836
+    },
+    {
+      "path": "docs/evidence/SP-T001/summary.md",
+      "owner": "outside-packet",
+      "beforeSha256": "fd7e27245f4c4f784ec673add66350b03dc4f175ee11aa069ba9e92eeaac887e",
+      "afterSha256": "f00d5fa370e622e31f085bace00e4e7ac658ed4ce8e7cc6b6c439ada9806fec3",
+      "bytes": 3222
+    },
+    {
+      "path": "docs/evidence/SP-T002/checkout.json",
+      "owner": "orchestrator",
+      "beforeSha256": null,
+      "afterSha256": "25bc0892344f17f41e516fbddb0ab204af06b056b7f5b7b2550086a7953630e9",
+      "bytes": 263485
+    },
+    {
+      "path": "docs/evidence/SP-T002/scope-in-progress.json",
+      "owner": "orchestrator",
+      "beforeSha256": null,
+      "afterSha256": "4f4f61e3fdccff327d8c625fa5bebadc7bbe1b93a8020c714979b3c73a299e5f",
+      "bytes": 3155
+    },
+    {
+      "path": "docs/evidence/SP-T002/worker/capture-delta.mjs",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "015a9909c80c1e8bf4d72afde5bd63dc14e91ef255b8d29d0b488578c85e6ddc",
+      "bytes": 3479
+    },
+    {
+      "path": "docs/evidence/SP-T002/worker/final-contracts-check-01.json",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "c75b9fab217b337af4f4f60b4dc9dae2019aec50e02b053a6c7f3cfe059ca693",
+      "bytes": 563
+    },
+    {
+      "path": "docs/evidence/SP-T002/worker/final-contracts-check-02.json",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "fe619035b471cbae4b5f09d00e20931f1e1a9fa83a219487efc192d95215844d",
+      "bytes": 563
+    },
+    {
+      "path": "docs/evidence/SP-T002/worker/final-db-generate-check-01.json",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "cd2a4015b93f2fdecab3e6fb42f9429d738438f0e9af103c456f81a38787fa75",
+      "bytes": 371
+    },
+    {
+      "path": "docs/evidence/SP-T002/worker/final-db-generate-check-02.json",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "2c8e64b0a559182eef32cb8bbf4141e93bd22b4d76867828d50f304b463b864b",
+      "bytes": 371
+    },
+    {
+      "path": "docs/evidence/SP-T002/worker/final-integration-01.json",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "c06972d6a14b064a3bdb85527958aec6e3a116eb68cfbd899d8e35fbc83dfde6",
+      "bytes": 706
+    },
+    {
+      "path": "docs/evidence/SP-T002/worker/final-integration-02.json",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "1ae7238fbae8b5176eda38ff7345baceafb6251eb5b0967786cdd3690d3e29cc",
+      "bytes": 7234
+    },
+    {
+      "path": "docs/evidence/SP-T002/worker/final-integration-03.json",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "ea946cece93515430072b205b78b7c8e71371e17b5be1f730ce8fcc527815059",
+      "bytes": 715
+    },
+    {
+      "path": "docs/evidence/SP-T002/worker/final-migration-01.json",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "b31e3e939868a4894341aed4120bb014265af1468ca487a9ece41b65bfc2773f",
+      "bytes": 611
+    },
+    {
+      "path": "docs/evidence/SP-T002/worker/final-migration-02.json",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "e47a93e231592d94b75f443f5ba7a97f7f78e0ce78180efb66e84b1405413dde",
+      "bytes": 5689
+    },
+    {
+      "path": "docs/evidence/SP-T002/worker/final-sdk-test-01.json",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "77c54852db0b8a36c622b59f9b161e6ed032df97e091b2b2e83ec42171f7a34d",
+      "bytes": 420
+    },
+    {
+      "path": "docs/evidence/SP-T002/worker/final-sdk-test-02.json",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "6aeae080f6af76dcaf4b42f1f8219f2158171bc610c1db13136f927df773eded",
+      "bytes": 420
+    },
+    {
+      "path": "docs/evidence/SP-T002/worker/final-test-contracts-01.json",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "c999efa6dfb37707bef51716798c18123511c7a79e982df998f5850963bed2b1",
+      "bytes": 455
+    },
+    {
+      "path": "docs/evidence/SP-T002/worker/final-test-contracts-02.json",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "a79709f42205d213fdff6d2f6b02f2862e0e76d064161f06405d9c2b2e0a55c1",
+      "bytes": 457
+    },
+    {
+      "path": "docs/evidence/SP-T002/worker/final-test-repository-01.json",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "77949d59ec4c4592a218682b925396e8a682b89fddee5fd524da457cf5bc3f5c",
+      "bytes": 454
+    },
+    {
+      "path": "docs/evidence/SP-T002/worker/final-test-repository-02.json",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "40eae8e915cd5eac542ea1a25a25a30c6f3c5f88071185b71c3b6a73a594cfd6",
+      "bytes": 454
+    },
+    {
+      "path": "docs/evidence/SP-T002/worker/final-unit-01.json",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "34d4c6ed5d93b277438d201a2172cca3f9a98a7eed075b9bfc81cf2eb4cd21b3",
+      "bytes": 1257
+    },
+    {
+      "path": "docs/evidence/SP-T002/worker/final-unit-02.json",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "8fe822f36ea01cbe9ca013a5ce5c975cb28f4ccee0f35fab6e8a6cd7febdc7fe",
+      "bytes": 1257
+    },
+    {
+      "path": "docs/evidence/SP-T002/worker/iteration-01.json",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "f4491f289378ff5ac5583158b974de6d09b2353c1a1b4535aea5875c2aab9138",
+      "bytes": 2888
+    },
+    {
+      "path": "docs/evidence/SP-T002/worker/iteration-02.json",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "e25e3bddcc0f937ab856e89a662cfced3a6cdba0c900d748d55b3231a073e7f1",
+      "bytes": 1111
+    },
+    {
+      "path": "docs/evidence/SP-T002/worker/iteration-integration-01.json",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "0a09f62165103f7a95b80a44c396973982af8114f45019a96f346450ca5fee78",
+      "bytes": 703
+    },
+    {
+      "path": "docs/evidence/SP-T002/worker/iteration-integration-02.json",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "b733af54e22f62842efa0509855f6e4523349cf799deebf5da80ccc0b9c88a91",
+      "bytes": 703
+    },
+    {
+      "path": "docs/evidence/SP-T002/worker/iteration-migration-02.json",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "ab09a5b1a03816aa76fc7e405303609c2fcd116c1c22758836211c6fcd60e405",
+      "bytes": 2779
+    },
+    {
+      "path": "docs/evidence/SP-T002/worker/iteration-ordering-02.json",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "e052fd6b2ff8f964585f8d6cb5482c70a518bb1735a0f803a4b14c239f784ea8",
+      "bytes": 2507
+    },
+    {
+      "path": "docs/evidence/SP-T002/worker/iteration-read-api-01.json",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "5c915da565e9c9ecf829a88348bdc8b13da3658a74b14ee5e00d93f709147113",
+      "bytes": 3328
+    },
+    {
+      "path": "docs/evidence/SP-T002/worker/iteration-read-api-02.json",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "1938b7699c44a0c24c7e7fd9308c5038f852fa918049f679b88d21a5cac7ccfd",
+      "bytes": 4702
+    },
+    {
+      "path": "docs/evidence/SP-T002/worker/iteration-readiness-02.json",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "2190eda7280b286f3b7732c4ad879c9b48ad25d39dfd855ae7f4df1994c2b12c",
+      "bytes": 3573
+    },
+    {
+      "path": "docs/evidence/SP-T002/worker/iteration-unit-contract-01.json",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "06eb399696d1ec8afb18f7b7510a94caf8b5a48e47da04d6fd9812fe85099a08",
+      "bytes": 2165
+    },
+    {
+      "path": "docs/evidence/SP-T002/worker/iteration-worker-01.json",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "ceb299750448a7a4cbebe58865df5fcfb7492932f2881445215e96a99c378d67",
+      "bytes": 899
+    },
+    {
+      "path": "docs/evidence/SP-T002/worker/iteration-worker-02.json",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "6b3240d5f3ec419627fbe0eee93c6f84ff4cb7a8e01f0f3f7c8972f73670c402",
+      "bytes": 2670
+    },
+    {
+      "path": "docs/evidence/SP-T002/worker/red-config-head-01.json",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "3f6b44cd73da52bf8d99a0f2d97f3f35779fc7ac7b8490d4475985003ab57f6d",
+      "bytes": 2659
+    },
+    {
+      "path": "docs/evidence/SP-T002/worker/red-http-01.json",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "971e8958575b2b52adfcea870a1fd7eec3f754f50a163241eb2fea0f06138b6c",
+      "bytes": 1107
+    },
+    {
+      "path": "docs/evidence/SP-T002/worker/red-http-02.json",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "63400f6a07e79451774aa64dd63fb8a03079d1cb4a11ba93bdfe1adcc2137257",
+      "bytes": 884
+    },
+    {
+      "path": "docs/evidence/SP-T002/worker/red-migration-01.json",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "dcc3d0538380632889389899a369b08ada83fdbc7a1a67525c5ed9bf36b280a8",
+      "bytes": 2897
+    },
+    {
+      "path": "docs/evidence/SP-T002/worker/red-ordering-01.json",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "ec8cca821250d3f5b164e1c119d32111e2f3ee462abe4617e890493dc181e969",
+      "bytes": 2630
+    },
+    {
+      "path": "docs/evidence/SP-T002/worker/red-readiness-01.json",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "70c86e8b0114f9746f326258986f6b8ac1e16cc722694474f42d4776a849e949",
+      "bytes": 2749
+    },
+    {
+      "path": "docs/evidence/SP-T002/worker/red-retention-01.json",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "d688eb1fc35b4d0d717a82ac4cb42a5f1b90563a75ac794745a12804e06ddc2e",
+      "bytes": 2607
+    },
+    {
+      "path": "docs/evidence/SP-T002/worker/red-retention-02.json",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "47b6ef477cdb9cf00dc66364a655a9dfb2659f108f09a63e1eb77c1bef791688",
+      "bytes": 2737
+    },
+    {
+      "path": "docs/evidence/SP-T002/worker/red-runtime-01.json",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "5eafa93984684a6614b31a4e179a5ff2134ca6c9d726d1b3b5165513d66cb00a",
+      "bytes": 3255
+    },
+    {
+      "path": "docs/evidence/SP-T002/worker/run-check.mjs",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "8b0c6314c40d86529c56ec2d29cafeb2daf3147dc46873d9ac729650101b7d53",
+      "bytes": 968
+    },
+    {
+      "path": "docs/specs/semantic-production/analysis.md",
+      "owner": "orchestrator",
+      "beforeSha256": "3cbd718d567cc68408ca8912b964d028610b60779d249ff83ceb1340b022691a",
+      "afterSha256": "c390df3611303339006b49e680737911c273e65bcb1a26c6c2f1b84e3296ad69",
+      "bytes": 6498
+    },
+    {
+      "path": "docs/specs/semantic-production/checklists/requirements.md",
+      "owner": "orchestrator",
+      "beforeSha256": "86e15283b26e6606af3131718bd4efeeb67a32b846be23d5b991102dfea53330",
+      "afterSha256": "19dc7740abe48c38f75d2701d6f8358ead95aa421de771efba9ed3c98446d829",
+      "bytes": 3028
+    },
+    {
+      "path": "docs/specs/semantic-production/packets/SP-T001.yaml",
+      "owner": "outside-packet",
+      "beforeSha256": "a094b38fdc63f90c0a26380b3294d23aac42910a2bb97063ed869bfb304ae6d5",
+      "afterSha256": "b46a074e9b3c5e4c016bfbc3daba71c5071ae99f29f9ca9cd2be00025538dc68",
+      "bytes": 7527
+    },
+    {
+      "path": "docs/specs/semantic-production/packets/SP-T002.yaml",
+      "owner": "orchestrator",
+      "beforeSha256": null,
+      "afterSha256": "5aa2474886331874dd2dcc73b0b93652d61898b2803478a527f951762f78d05d",
+      "bytes": 9836
+    },
+    {
+      "path": "docs/specs/semantic-production/plan.md",
+      "owner": "orchestrator",
+      "beforeSha256": "219107b5ed315ef5559fd01d6696edcd4560e6a4eaa4ea5be945fa1d2e18f177",
+      "afterSha256": "c14edf631842ac90b1e82239842e52046168648838f5d9793591f15deaedaf75",
+      "bytes": 20670
+    },
+    {
+      "path": "docs/specs/semantic-production/product-design.md",
+      "owner": "orchestrator",
+      "beforeSha256": "a87081942311f7146338da597bfa973b7e2ba3981c1d0fdc9390c24fdb1723fe",
+      "afterSha256": "85c279622263a156be4f507200475ad22121ab25abfd04aa881cef959f2182d4",
+      "bytes": 17451
+    },
+    {
+      "path": "docs/specs/semantic-production/tasks.md",
+      "owner": "orchestrator",
+      "beforeSha256": "14e1824325561d0697275638f1b2e09afbfc205e4fb788052c969b7ed843af34",
+      "afterSha256": "b492b93ea510252cd8f75d7fc0488c6fa42e199f74c3a051645e1784a7da4a72",
+      "bytes": 33346
+    },
+    {
+      "path": "internal/adapters/discovery/catalog/adapter.go",
+      "owner": "worker",
+      "beforeSha256": "8748b2dfebbc5e667d936c35674b876d01fbfde28f8f6bc440efb979f9435f6f",
+      "afterSha256": "5d120d531b1c82899263d1f346935431c4e9218b44610eeb36f297985aefcf46",
+      "bytes": 2760
+    },
+    {
+      "path": "internal/adapters/discovery/dbt/adapter.go",
+      "owner": "worker",
+      "beforeSha256": "679467c9e452b2d4cae751f523b1795a387b7e39bad938e0a06f454c1637b0c4",
+      "afterSha256": "c3bb4a447fefcefb67706d1e3debe23e7fce0a4a9397a31134a5f1e598856945",
+      "bytes": 13213
+    },
+    {
+      "path": "internal/adapters/discovery/files/adapter.go",
+      "owner": "worker",
+      "beforeSha256": "260f90e402a56e4abc5a886e07a93cc09c1c910d806a45b9ffd60b8e838c3ca2",
+      "afterSha256": "fdf3eb44efefa94a56da330a8edbbc4a257a8fbe23453c54a4fec5f3afe8d1e6",
+      "bytes": 25227
+    },
+    {
+      "path": "internal/adapters/discovery/postgreslive/collector.go",
+      "owner": "worker",
+      "beforeSha256": "4a4f66847fa0248b84574e4690ebbc4c8a9c7ebb04dbf876c16af119781def18",
+      "afterSha256": "e9322a4c0960f997f18054ff44ded6dcf50abd8f7cadc89506b701a74fd21ab4",
+      "bytes": 8787
+    },
+    {
+      "path": "internal/adapters/discovery/postgresql/adapter.go",
+      "owner": "worker",
+      "beforeSha256": "d47c1321ea598fd788abbd504811be72ba24f0091bdc29572c4dd39f314b6b66",
+      "afterSha256": "799f0c0d54c5cc0687c80b92cc72d74ec69b39549f0fdde931c90fa15603276e",
+      "bytes": 11140
+    },
+    {
+      "path": "internal/adapters/postgres/artifacts.go",
+      "owner": "worker",
+      "beforeSha256": "36c9660382b81017ef155504b2dbf1ddd1c96135f2a6c2a7a12730b22ecb5cd3",
+      "afterSha256": "41d6d3d63e6649468c069d63e7798c63100df65cbd31f61f092bd6bacd00da8f",
+      "bytes": 46915
+    },
+    {
+      "path": "internal/adapters/postgres/discovery.go",
+      "owner": "worker",
+      "beforeSha256": "222b74646f7b0d622cef26bddaaaa4330ddbdc4a124b88298f7ff31928bf0763",
+      "afterSha256": "ee43888521b181e8f59c266e2f3c5d97828da35417eefc2b9900d0fe0aea6bec",
+      "bytes": 29376
+    },
+    {
+      "path": "internal/adapters/postgres/source_discovery.go",
+      "owner": "worker",
+      "beforeSha256": "d8a380954f05ad6e678b41a60857105ed2d10ef67e27310e4b127fe7474f8067",
+      "afterSha256": "04c4ff00a5da55a755093f644071dc2f84f06be98e579ec686c42c5d0ea2741b",
+      "bytes": 57426
+    },
+    {
+      "path": "internal/adapters/postgres/source_snapshot.go",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "4c18cacb9442676bf74161b2eac3b94d7c712b698c4897ed6500e5cc6577f62e",
+      "bytes": 32646
+    },
+    {
+      "path": "internal/adapters/postgres/sqlc/discovery.sql.go",
+      "owner": "worker",
+      "beforeSha256": "45857bb98373f16530ae815048494920308cd1109713f811da2031a673020d89",
+      "afterSha256": "a7b0fbde6acc66c2f14b016b5404e7640d2a42906514da429eb768814f927c65",
+      "bytes": 23661
+    },
+    {
+      "path": "internal/adapters/postgres/sqlc/models.go",
+      "owner": "worker",
+      "beforeSha256": "563d2abb1b9f01344e00a2b460c80642c3ba52b77de8ff5a170906f37cecbf2d",
+      "afterSha256": "f3bdcf08adb8cc9188dedcf25eda7f779d2300d9cdf7941e3c1509b1a6d6e9e4",
+      "bytes": 71427
+    },
+    {
+      "path": "internal/application/discovery/control.go",
+      "owner": "worker",
+      "beforeSha256": "9f8df7ce8c751b5aa880b7feb3321d64609a05a98cf74043c75eaff52cf88ecb",
+      "afterSha256": "91c942c189a7898966c431d10e8a60b17b96a1652a9200ad89e7b9871af4ae92",
+      "bytes": 32303
+    },
+    {
+      "path": "internal/application/discovery/service.go",
+      "owner": "worker",
+      "beforeSha256": "867c98e396b37a726752382ca3929710b1153b6ec934623f0073a3bf90fe3853",
+      "afterSha256": "c69ead79dc1779867c6c3eba35f6daebab3d121f15fafefd61785eb2392ea791",
+      "bytes": 2260
+    },
+    {
+      "path": "internal/application/discovery/snapshot.go",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "90713a90233b0f2399c41ed69b584e3a453d1423abdcee3683ba81505bb5d731",
+      "bytes": 9012
+    },
+    {
+      "path": "internal/application/discovery/snapshot_test.go",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "1afc79bdfc9af51bf87ff8b1d335f1d0264cb2cdd9c045b2628817636a201541",
+      "bytes": 2321
+    },
+    {
+      "path": "internal/domain/discovery/model.go",
+      "owner": "worker",
+      "beforeSha256": "1cb17238c0aa2b6acdf8fbcdab7c3cc50eb3022d77beda3a388117c8ff32f22f",
+      "afterSha256": "3cd3114b7a0641476f1d5136482cb05fa64db0ce91a06c225cb039690cc77918",
+      "bytes": 8125
+    },
+    {
+      "path": "internal/domain/discovery/snapshot.go",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "210956a810970d2dc479c60581223293c1bad36c178a48b8e72d63f3110503d1",
+      "bytes": 8832
+    },
+    {
+      "path": "internal/domain/discovery/snapshot_test.go",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "533292b3047fbb7ba142a21a7f0e8f6f98303c97e8fb100a09a5a6f35864a3f5",
+      "bytes": 2389
+    },
+    {
+      "path": "internal/domain/discovery/source.go",
+      "owner": "worker",
+      "beforeSha256": "d70370d054453ff0bb457e9c6132fe8db7d6c4f916f747792ed111133313b6e5",
+      "afterSha256": "1c392efb6aeccc15a5c764f0d4fbb334206335f295a5ec349abeaf130e29ffd5",
+      "bytes": 3571
+    },
+    {
+      "path": "internal/platform/http/catalog.go",
+      "owner": "worker",
+      "beforeSha256": "0c5b2f2102cb08ba586f3d59ba1b9138bd95506a31821270b308be0e2fe9e936",
+      "afterSha256": "4bcf4ee6d3fb7c37f3d056c3ec99ad7ec08f097682397cc4dad9ad208546b7b6",
+      "bytes": 33612
+    },
+    {
+      "path": "internal/platform/http/discovery.go",
+      "owner": "worker",
+      "beforeSha256": "16b8248fa66490cffabfc718315ff3fcdbc15c16283a3593a161e49cbc4ee679",
+      "afterSha256": "314d70ffdce4a7b9d177bcf0b10c7b9f57b835f2bc84cff12e66f59f8440dcdb",
+      "bytes": 17513
+    },
+    {
+      "path": "internal/platform/http/source_snapshot_test.go",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "839ed13079853285f9ae9dfcb091cba69fdb9c3db4e141aaaec753d4abb4baa5",
+      "bytes": 4139
+    },
+    {
+      "path": "migrations/000022_semantic_production_sources.down.sql",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "4cfeabc8db77360f7e6313092413ce459cf9fc83b9825a78bc7226094037d286",
+      "bytes": 1332
+    },
+    {
+      "path": "migrations/000022_semantic_production_sources.up.sql",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "836dec86738826a5549f8c115dda3647b37783f7deb96196e8b64df19574af8d",
+      "bytes": 21112
+    },
+    {
+      "path": "pkg/identity/id.go",
+      "owner": "worker",
+      "beforeSha256": "34fbe9312a1b420350afe0c8d354800fc3801ec0ceebf44f232255e62e9b24ff",
+      "afterSha256": "45e56f65b0bf0addb1289567401f01f88ade40f44a934a95060dd1738dabc62f",
+      "bytes": 35031
+    },
+    {
+      "path": "sdk/typescript/src/client.test.ts",
+      "owner": "worker",
+      "beforeSha256": "1a891adef096db7637500855394885e912b2573be0828c2b8ec0a39b808a4695",
+      "afterSha256": "cfed055f0aa39463c059933968aababfeeb737bebaba7ebedea31153af5c32a2",
+      "bytes": 4704
+    },
+    {
+      "path": "sdk/typescript/src/client.ts",
+      "owner": "worker",
+      "beforeSha256": "9245aca5bc817cac595abccf098102877cafb1b6b8102e0ca14a6f1ec67fd7e7",
+      "afterSha256": "95118b0c02017cbde526ef6cd39d6887955ea9501a2eda9048b19a5a37ed0877",
+      "bytes": 5053
+    },
+    {
+      "path": "sdk/typescript/src/ids.test.ts",
+      "owner": "worker",
+      "beforeSha256": "4d0548e79596fa294b4b265605a3e19dbc1bb15af7c15cd276a8cf5003fa1969",
+      "afterSha256": "76b76639987266a9418b3d091f775c8a3ec092d6a4b3def5657dde96132b69fb",
+      "bytes": 633
+    },
+    {
+      "path": "sdk/typescript/src/ids.ts",
+      "owner": "worker",
+      "beforeSha256": "55221acb61a08659d3be2ff9516a869dcae8b0f7c4da51820ad8ad10d42551cd",
+      "afterSha256": "7e2a79208372c9d6ea9176f9957ede3a6a9c7cb0bbb7f462fce7431c7d6a26ed",
+      "bytes": 2373
+    },
+    {
+      "path": "sdk/typescript/src/index.ts",
+      "owner": "worker",
+      "beforeSha256": "fb9c28b87f8f7725ec9e78e279649c8bde48140d5ce68e7905ae2db2b3c58cc4",
+      "afterSha256": "ec4d1b4369c06daf21f484f604ba77779df5523a679f733e5ca2761950268dff",
+      "bytes": 826
+    },
+    {
+      "path": "sdk/typescript/src/schema.gen.ts",
+      "owner": "worker",
+      "beforeSha256": "ad31f70a029deefb8e4f70824c9a7737b3ef29973756fd98f76424f0476a9f23",
+      "afterSha256": "6e4213640b4dd59a54aa5baa530d2bc512149d579af0bd7e9f01781876cc64d8",
+      "bytes": 313950
+    },
+    {
+      "path": "tests/contracts/contract_test.go",
+      "owner": "worker",
+      "beforeSha256": "8d607df5dfd49b0ab5d7da4823243ab0b8d7a144bb2b3c89352d9144d0f90ae6",
+      "afterSha256": "7928eec7bee9852cf4fbfd10cbde52e955fd36b87d9d0021b700f79ef15bc882",
+      "bytes": 32816
+    },
+    {
+      "path": "tests/integration/db/database_test.go",
+      "owner": "worker",
+      "beforeSha256": "ce95df2a99613874ab25aa6f2c7f454d88e1a8956326a0aeb4ba5f82db5a8548",
+      "afterSha256": "bc69374224f535ad712a1ab2d55b530194c754ff840ad884d2aa16d2c8caf17f",
+      "bytes": 48797
+    },
+    {
+      "path": "tests/integration/db/semantic_production_migrations_test.go",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "001146cb098ac069a73615680efa91753fecb948efebb3f4156f40ab539d6cd9",
+      "bytes": 5936
+    },
+    {
+      "path": "tests/integration/discovery/source_snapshot_test.go",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "2623382f30f8ed8805e86f0861d80b67a600454b56bbc55214bd1d260be70875",
+      "bytes": 23583
+    },
+    {
+      "path": "tests/integration/ingestion/source_snapshot_retention_test.go",
+      "owner": "worker",
+      "beforeSha256": null,
+      "afterSha256": "d2064ea447225959d22096fa2c0c4255da58c15fa8ae7397bd44b77284911fde",
+      "bytes": 9691
+    }
+  ],
+  "outsidePacket": [
+    {
+      "path": "docs/evidence/SP-T001/summary.md",
+      "owner": "outside-packet",
+      "beforeSha256": "fd7e27245f4c4f784ec673add66350b03dc4f175ee11aa069ba9e92eeaac887e",
+      "afterSha256": "f00d5fa370e622e31f085bace00e4e7ac658ed4ce8e7cc6b6c439ada9806fec3",
+      "bytes": 3222
+    },
+    {
+      "path": "docs/specs/semantic-production/packets/SP-T001.yaml",
+      "owner": "outside-packet",
+      "beforeSha256": "a094b38fdc63f90c0a26380b3294d23aac42910a2bb97063ed869bfb304ae6d5",
+      "afterSha256": "b46a074e9b3c5e4c016bfbc3daba71c5071ae99f29f9ca9cd2be00025538dc68",
+      "bytes": 7527
+    }
+  ]
+}

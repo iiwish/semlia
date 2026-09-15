@@ -1,0 +1,24 @@
+{
+  "command": [
+    "go",
+    "test",
+    "-count=1",
+    "-timeout=10m",
+    "./tests/integration/discovery",
+    "-run",
+    "^TestSourceSnapshot",
+    "-v"
+  ],
+  "clearedEnvironment": [
+    "SEMLIA_INGESTION_TEST_DATABASE_URL",
+    "SEMLIA_EXECUTION_CRASH_HELPER",
+    "SEMLIA_EXECUTION_TEST_DB",
+    "SEMLIA_DATABASE_URL"
+  ],
+  "start": "2026-09-09T05:42:43.757Z",
+  "end": "2026-09-09T05:42:53.352Z",
+  "exitStatus": 1,
+  "signal": null,
+  "stdout": "2026/09/09 13:42:48 github.com/testcontainers/testcontainers-go - Connected to docker: \n  Server Version: 29.4.0\n  API Version: 1.54\n  Operating System: OrbStack\n  Total Memory: 16040 MB\n  Testcontainers for Go Version: v0.44.0\n  Resolved Docker Host: unix:///var/run/docker.sock\n  Resolved Docker Socket Path: /var/run/docker.sock\n  Test SessionID: 5eae51d8aabbf6c43cd2c95e73ce03dfac9d759daf44b70e30a2906aee779ea5\n  Test ProcessID: 964d0448-582d-46eb-8e98-3007a39da6ff\n2026/09/09 13:42:48 🐳 Creating container for image postgres:18-alpine\n2026/09/09 13:42:48 🐳 Creating container for image testcontainers/ryuk:0.14.0\n2026/09/09 13:42:48 ✅ Container created: 241e7c668537\n2026/09/09 13:42:48 🐳 Starting container: 241e7c668537\n2026/09/09 13:42:49 ✅ Container started: 241e7c668537\n2026/09/09 13:42:49 ⏳ Waiting for container id 241e7c668537 image: testcontainers/ryuk:0.14.0. Waiting for: all of: [log message \"Started\", port 8080/tcp to be listening]\n2026/09/09 13:42:49 Shell not found in container\n2026/09/09 13:42:49 🔔 Container is ready: 241e7c668537\n2026/09/09 13:42:49 ✅ Container created: c0fca6cd86ca\n2026/09/09 13:42:49 🐳 Starting container: c0fca6cd86ca\n2026/09/09 13:42:49 ✅ Container started: c0fca6cd86ca\n2026/09/09 13:42:49 ⏳ Waiting for container id c0fca6cd86ca image: postgres:18-alpine. Waiting for: all of: [log message \"database system is ready to accept connections\" (occurrence: 2), port 5432/tcp to be listening]\n2026/09/09 13:42:51 🔔 Container is ready: c0fca6cd86ca\n=== RUN   TestSourceSnapshotUnchangedMembersAndHistoricalNames\n    source_snapshot_test.go:38: ERROR: relation \"source_snapshot_runs\" does not exist (SQLSTATE 42P01)\n--- FAIL: TestSourceSnapshotUnchangedMembersAndHistoricalNames (0.12s)\n=== RUN   TestSourceSnapshotPartialFailedAndOutOfOrderHeads\n    source_snapshot_test.go:69: ERROR: relation \"source_coverage_heads\" does not exist (SQLSTATE 42P01)\n--- FAIL: TestSourceSnapshotPartialFailedAndOutOfOrderHeads (0.12s)\n=== RUN   TestSourceSnapshotConcurrentReplay\n    source_snapshot_test.go:93: ERROR: relation \"source_snapshots\" does not exist (SQLSTATE 42P01)\n--- FAIL: TestSourceSnapshotConcurrentReplay (0.12s)\n=== RUN   TestSourceSnapshotCodeBytesAndPreciseLineage\n    source_snapshot_test.go:106: ERROR: relation \"source_code_revisions\" does not exist (SQLSTATE 42P01)\n--- FAIL: TestSourceSnapshotCodeBytesAndPreciseLineage (0.99s)\nFAIL\n2026/09/09 13:42:53 🐳 Stopping container: c0fca6cd86ca\n2026/09/09 13:42:53 ✅ Container stopped: c0fca6cd86ca\n2026/09/09 13:42:53 🐳 Terminating container: c0fca6cd86ca\n2026/09/09 13:42:53 🚫 Container terminated: c0fca6cd86ca\nFAIL\tgithub.com/iiwish/semlia/tests/integration/discovery\t7.067s\nFAIL\n",
+  "stderr": ""
+}

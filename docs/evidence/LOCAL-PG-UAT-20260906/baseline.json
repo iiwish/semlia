@@ -1,0 +1,10 @@
+{
+  "customers": 240,
+  "products": 30,
+  "regions": 4,
+  "orders": 1200,
+  "orderItems": 3600,
+  "netRevenue": "440940.00000000",
+  "paidOrders": 960,
+  "precisionSum": "123456789.123456790"
+}

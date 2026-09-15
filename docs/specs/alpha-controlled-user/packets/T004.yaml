@@ -1,0 +1,70 @@
+schema_version: 1
+packet_id: ALPHA-T004-A001
+task_id: T004
+feature_id: alpha-controlled-user
+mode: execute_one_task
+status: Completed
+
+goal: >-
+  Replace production source, discovery-run and semantic-candidate fixtures with authenticated real
+  APIs, preserve the accepted desktop workspace, and connect candidate conversion to the existing
+  governed proposal workbench without ever simulating persisted success.
+
+requirements:
+  - FR-005 PostgreSQL source configuration and write-only credential rotation
+  - FR-006 asynchronous discovery inspection and semantic candidate decisions
+  - FR-011 explicit Prototype boundary outside the Alpha real path
+  - NFR-004 keyboard-accessible desktop UX at 1440x900 and 1024x768
+
+dependencies:
+  - T003 is Needs_Review with source, run and candidate contracts and evidence
+  - Existing M2 proposal authoring, validation and workbench runtime
+  - Controlled-User Alpha technical baseline 0.1.0 approved on 2026-09-04
+
+allowed_files:
+  - api/**
+  - docs/specs/alpha-controlled-user/**
+  - docs/evidence/ALPHA-T004/**
+  - sdk/typescript/**
+  - web/**
+
+forbidden_changes:
+  - Do not prefill, read back, log or retain a source password after its write completes.
+  - Do not fall back to source, run, candidate or proposal fixtures after a production API failure.
+  - Do not report a candidate as converted until both the proposal and immutable decision exist.
+  - Do not present file imports, schedules or generic build tasks as persisted Alpha functionality.
+  - Do not remove or collapse the complete desktop product navigation.
+
+tdd:
+  red:
+    - Source list or run API loss renders a retryable failure instead of fixture data.
+    - Connection failure, overlap, queued/running/degraded/failed runs and refresh are explicit.
+    - Credential rotation starts empty and clears the password after success.
+    - Proposal creation failure leaves the candidate pending; converted candidates cannot convert twice.
+  green:
+    - An authorized user creates, edits, tests, rotates, pauses and deletes a PostgreSQL source.
+    - Discovery start and refresh show the exact persisted run and its findings.
+    - A pending candidate creates a real M2 proposal, records its conversion and opens that proposal.
+    - File and automation controls are visibly Prototype and never claim server persistence.
+  refactor:
+    - Keep generated-contract transport separate from React query and presentation state.
+    - Retain the existing fixture SourcesView only behind explicit fixture mode.
+
+validation:
+  - focused source API and component tests
+  - source-to-candidate-to-proposal browser journey
+  - navigation and viewport screenshots at 1440x900 and 1024x768
+  - zero serious or critical axe findings
+  - pnpm --filter @semlia/web test
+  - make check-source
+  - git diff --check
+
+acceptance:
+  - Production source pages contain no seeded PostgreSQL connection, timer or candidate fallback.
+  - Every source command has a real loading, success and failure state.
+  - Candidate evidence remains tied to the immutable run and source revision when opened in M2.
+  - Unsupported source and automation surfaces are honest Prototype experiences.
+
+evidence:
+  summary: docs/evidence/ALPHA-T004/summary.md
+  test_results: docs/evidence/ALPHA-T004/test-results.md

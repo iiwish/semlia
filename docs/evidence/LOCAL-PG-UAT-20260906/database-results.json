@@ -1,0 +1,15 @@
+{
+  "orders": 1200,
+  "customers": 240,
+  "products": 30,
+  "order_items": 3600,
+  "regions": 4,
+  "precision_samples": 2,
+  "reconciledNetRevenue": "440940.00000000",
+  "precisionSum": "123456789.123456790",
+  "insertDenied": "PASS: SQLSTATE 42501",
+  "updateDenied": "PASS: SQLSTATE 42501",
+  "deleteDenied": "PASS: SQLSTATE 42501",
+  "schemaCreateDenied": "PASS: SQLSTATE 42501",
+  "tempCreateDenied": "PASS: SQLSTATE 42501"
+}

@@ -1,0 +1,105 @@
+schema_version: 1
+packet_id: SP-T005-A001
+task_id: SP-T005
+feature_id: semantic-production
+mode: execute_one_task
+adapter: codex
+status: Needs_Review
+governance_inputs:
+  product: docs/specs/semantic-production/product-design.md
+  plan: docs/specs/semantic-production/plan.md
+  tasks: docs/specs/semantic-production/tasks.md
+  contract: docs/specs/semantic-production/contracts/production.md
+  schema: docs/specs/semantic-production/contracts/production.openapi.yaml
+  data_model: docs/specs/semantic-production/data-model.md
+  checklist: docs/specs/semantic-production/checklists/requirements.md
+  analysis: docs/specs/semantic-production/analysis.md
+  approval: 2026-09-11 用户明确验收 T004、授权完成 T005，批准 A001 预检的受限范围扩展，并明确批准共享 production_validation_worker.go 及对应测试纳入 T005。
+work_unit:
+  objective: 固定来源生成受约束建议，持久化运行和未知结果，通过显式人工 PUT 应用，同一验证审核发布路径继续治理。
+  dependencies: [SP-T004 Accepted]
+  parallel: false
+  forbidden: 不执行 T006/T007，不调用付费模型、不部署、不提交或推送，不修改已验收迁移。
+codebase_context:
+  baseline: .semlia/evidence-work/SP-T005-A001-baseline.tar
+  shared_worktree: 既有未提交和未跟踪实现保留；以本次前像而非 HEAD 识别本任务变化。
+  entry_points: [internal/application/governance/production.go, internal/application/governance/generation.go, internal/adapters/postgres/semantic_production.go, internal/platform/http/semantic_production.go]
+  persistence: 保留 production_generation_outputs/applications，migration 27 追加运行请求/调用领取状态，成功关联仅在成功事务写入。
+  authorization: 默认无 grant；服务端配置按 workspace/principal/model/config revision 限定，客户端上限只能缩小，未知费用上限拒绝排队。
+  spending: 可信配置提供单次 ceiling 和保守的输入字节/输出 token 计费上界；只作执行前限制，不充当实际账单。实际费用未知返回 null。
+  recovery: 持久化调用领取后不自动重复供应商调用；未能确定结果记 outcome_unknown。重放 key 只查询原运行。
+execution_constraints:
+  mode: Direct Execute；无主动子代理委派，规格、风险和 QA 分别自检，不冒充独立评审。
+  allowed_files:
+    - internal/application/governance/production_validation_worker.go
+    - internal/application/governance/production_validation_worker_test.go
+    - tests/integration/governance/production_authoring_fixture_test.go
+    - internal/application/governance/generation.go
+    - internal/application/governance/aiproposal.go
+    - internal/application/governance/aiproposal_test.go
+    - internal/application/governance/production.go
+    - internal/application/governance/production_generation*.go
+    - internal/application/governance/production_output.v1.schema.json
+    - internal/domain/governance/production_generation*.go
+    - internal/adapters/postgres/semantic_production.go
+    - internal/adapters/postgres/governance.go
+    - internal/adapters/postgres/production_generation*.go
+    - db/queries/semantic_production.sql
+    - internal/adapters/postgres/sqlc/*.go
+    - migrations/000027_semantic_production_generation.up.sql
+    - migrations/000027_semantic_production_generation.down.sql
+    - db/sqlc.yaml
+    - internal/platform/config/config.go
+    - internal/platform/config/config_test.go
+    - .env.example
+    - internal/platform/http/semantic_production.go
+    - internal/platform/http/semantic_production_test.go
+    - internal/platform/http/production_generation*.go
+    - internal/platform/http/modelconfig.go
+    - internal/platform/http/handler.go
+    - internal/platform/http/catalog.go
+    - cmd/semlia/main.go
+    - cmd/semlia/readiness.go
+    - cmd/semlia/readiness_test.go
+    - tests/integration/db/database_test.go
+    - tests/integration/db/semantic_production_migrations_test.go
+    - tests/integration/governance/production_generation*.go
+    - tests/fixtures/semantic-production/**
+    - api/openapi/semlia.v1.yaml
+    - api/gen/go/types.gen.go
+    - sdk/typescript/src/schema.gen.ts
+    - sdk/typescript/src/client.ts
+    - sdk/typescript/src/client.test.ts
+    - sdk/typescript/src/index.ts
+    - api/README.md
+    - tests/contracts/contract_test.go
+  generation_only: sqlc 与 API/SDK schema 只由仓库生成命令更新。
+  orchestrator_files: [docs/specs/semantic-production/tasks.md, docs/specs/semantic-production/analysis.md, docs/specs/semantic-production/checklists/requirements.md, docs/specs/semantic-production/packets/SP-T005.yaml, docs/evidence/SP-T005/**]
+  infrastructure: 仅自行创建的一次性 PostgreSQL 测试容器；不操作默认 Compose/已有数据库，不清理共享 Docker。
+tdd_plan:
+  red: 先写 schema/身份/授权上限/运行恢复失败断言并实际运行，再实现。
+  green: 最小 schema gate、服务端预算、事务运行记录、异步调用、原始输出和人工应用。
+  refactor: 只整理本任务的生成输入、状态及事务帮助函数。
+validation_loop:
+  commands:
+    - go test -count=1 ./internal/application/governance ./internal/platform/http ./internal/platform/config ./cmd/semlia
+    - go test -count=1 -p=1 -timeout=20m ./tests/integration/governance
+    - go test -count=1 -p=1 -timeout=10m ./tests/integration/db -run '^TestSemanticProductionMigration'
+    - make db-generate-check
+    - make contracts-check
+    - make test-contracts
+    - make test-repository
+  retry_budget: 针对真实失败修复并复验；不降低断言、不以跳过代替成功。
+evidence_contract:
+  path: docs/evidence/SP-T005/A001
+  required: [RED/GREEN logs, source delta, protocol stub disclosure, failure and replay evidence, migration evidence, review and residual risks]
+review_contract:
+  order: [spec compliance, engineering risks, QA]
+  coverage: 权限/源/输入/模型修订失效，提交故障，调用未知与重放，成功输出原子持久化，原文/人工差异，SoD 与治理重检。
+handoff:
+  final_status: Needs_Review
+  acceptance: 仅用户明确验收可 Accepted；不自动进入 T006。
+stop_conditions:
+  - 改变产品或安全边界，或超过本执行包受限路径。
+  - 实际模型费用/数据调用没有独立授权。
+  - 无法保证调用重试不重复费用，或测试只能以伪造输出/状态通过。

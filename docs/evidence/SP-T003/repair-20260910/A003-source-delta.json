@@ -1,0 +1,279 @@
+{
+  "generatedAt": "2026-09-10T10:01:55.880Z",
+  "baselineArchive": ".semlia/evidence-work/SP-T003-A003-baseline.tar",
+  "baselineArchiveSHA256": "d29c13e51fafebd5890be881b302ac506c45b9b37ff2b7423bb904ce75e93796",
+  "scope": "All archived files and new files in archived directories; evidence excluded to avoid recursive hashes",
+  "changes": [
+    {
+      "file": "cmd/semlia/readiness.go",
+      "baseline": "2ac20a63f19bef1bea25feb24d199b3a8f432868a5a2c201a91641b48ba12e8f",
+      "current": "ccfe50421668bb3f5889b0ee5bd192779f31e3f17f6d59e35f7d08c5cc709e3e"
+    },
+    {
+      "file": "cmd/semlia/readiness_test.go",
+      "baseline": "dda60f71b8885d081a47738ced95569db335a0f6f74b3c91ae5a735f6fb7eee8",
+      "current": "ea3e9f05697f91997298633298e0ba6d0bad0a5859c3f3bd5dd6d42ceff3854d"
+    },
+    {
+      "file": "db/queries/semantic_production.sql",
+      "baseline": "9f4f02f7a6eebabfb381e71d7828c46127ed212228f90709319054e48db8157f",
+      "current": "36b536a578baa0fff0dac20a8cc46a391ea8c28140bf5a817b046f4f9845a8cd"
+    },
+    {
+      "file": "db/sqlc.yaml",
+      "baseline": "a8911ed64432a754c7341146e36fcac9cc2342cd82bbf4d59c35c9cdaaf4b9c2",
+      "current": "6c428ba094765608919a59ad0ebf54d56e7517d2a8ccf60a0b1173bb141e4f63"
+    },
+    {
+      "file": "docs/specs/semantic-production/packets/SP-T003.yaml",
+      "baseline": "ff11da8d62938f98f02a09f3c1ca934cb7dc3be8fae9f13a50237e067fc770a2",
+      "current": "ec4b0de31076edb64a7647f70cfcc283f88894a8fcde3133c149e8b29c2eb619"
+    },
+    {
+      "file": "docs/specs/semantic-production/tasks.md",
+      "baseline": "1538977ddfba93f1338732ccd1c5666f375a3e7bb58e745467fb2157353e27d2",
+      "current": "fc4aa2c475d85d70c040fe761cab1da99369c02238129c6958fb104c0fd89993"
+    },
+    {
+      "file": "internal/adapters/postgres/production_authoring.go",
+      "baseline": "16889775819ee8519867667f96027cc0cbd43c0c86c763562d27af1c3fca1280",
+      "current": "22f3cc8c189630afdc6b0fb7b7644fdb347df09274364ae9bccf8ce158cd87b5"
+    },
+    {
+      "file": "internal/adapters/postgres/production_baseline.go",
+      "baseline": null,
+      "current": "242210f65d3c387143c6127dd35cb22a8f938459a12e7165945600f0732dcd35"
+    },
+    {
+      "file": "internal/adapters/postgres/production_decisions.go",
+      "baseline": null,
+      "current": "a3e9a41df9ccd7e312024bed0e838d8c72e0348de45c8147751daba36f11e6a4"
+    },
+    {
+      "file": "internal/adapters/postgres/production_dependencies.go",
+      "baseline": null,
+      "current": "79c2d77ffc73eab1b98c3d9be5879d5139c8007535fa80d533121ea6a96bbd33"
+    },
+    {
+      "file": "internal/adapters/postgres/production_input.go",
+      "baseline": "d36333e7f8c806851ccea7f0d7790e919fffd868b7159e3559ace24b22cd02fd",
+      "current": "5415159c97b9c8127f4a39049e6fda0f94ee031c9d600d17016c5b19a6f68c38"
+    },
+    {
+      "file": "internal/adapters/postgres/production_list.go",
+      "baseline": null,
+      "current": "794c492e590cd20a7e617cd4c972fb00c613deaf006403cb9fd2e246f3c48756"
+    },
+    {
+      "file": "internal/adapters/postgres/production_object_baseline.go",
+      "baseline": null,
+      "current": "e3faf943f4ae63c5916d44f94231b204ebd605843a8ad015a9eb4a90f4bfaf3d"
+    },
+    {
+      "file": "internal/adapters/postgres/production_recovery.go",
+      "baseline": null,
+      "current": "5ab7bc16eac79091e5724a5216e278fcb5088d1ec822e20c1c2e6e2e9853dbb3"
+    },
+    {
+      "file": "internal/adapters/postgres/production_references.go",
+      "baseline": null,
+      "current": "1466276d9976f24d5caecad8326382555980425b6f46f86f0a82931ab3f51021"
+    },
+    {
+      "file": "internal/adapters/postgres/production_resource_history.go",
+      "baseline": null,
+      "current": "29912237a288fcb1c6d97cf732c2039fe36934bde0d7e19ca0135feb2db0a85a"
+    },
+    {
+      "file": "internal/adapters/postgres/production_supersede.go",
+      "baseline": null,
+      "current": "2e734013829283e19dcf21bb8b3bd7b7fa310c437547f72ed46eddc8398a1fe5"
+    },
+    {
+      "file": "internal/adapters/postgres/semantic_production.go",
+      "baseline": "fcfe780cb9814c7d83879811031d670aabe04f185ebe9759df3bf5a5852d34f5",
+      "current": "93d266b37e561b389327fed75a930e8bcc76bf9b4b272a29e5203dac451c6c02"
+    },
+    {
+      "file": "internal/adapters/postgres/sqlc/models.go",
+      "baseline": "4e989ec68d956a481e47cee937642ad5f78df0a8b69e5ca0413ecde3f73f4f3a",
+      "current": "91578b6c1633320fa9313b41ae012a4e430db8f8a78a0e7733c5249394c3a1f3"
+    },
+    {
+      "file": "internal/adapters/postgres/sqlc/semantic_production.sql.go",
+      "baseline": "4327b7f524ecdd8cd050c44fa5a57cb3b7eb3ec40abef16f1ff5f59dafdb0d72",
+      "current": "5a6ef51716603622615caab7f7d7ca6a3f2a32dd737649d2edc815b62e29ef20"
+    },
+    {
+      "file": "internal/application/governance/production.go",
+      "baseline": "c9578e02dcd1c35d92f50e0c8643adfe8e66d04296731d0a87544c3d0b88b08d",
+      "current": "a6d0fdff1b33232ca6a09199afec4ca44a523679bc3f357f901e775af3b55016"
+    },
+    {
+      "file": "internal/application/governance/production_address_test.go",
+      "baseline": null,
+      "current": "400ec8b6d90ab662ab18f615dab9d120839a890086e07f89ca6f4dd0beacdb2e"
+    },
+    {
+      "file": "internal/application/governance/production_history.go",
+      "baseline": "154e121f4518bfe9b4f4c1720b736ac54ac5fce0fde6f665282ef4855b31a2cc",
+      "current": "d04b89f4eca309487c6ad4cc5c42acf945303281bdae91c1fff9c0fd42fa5483"
+    },
+    {
+      "file": "internal/application/governance/production_list.go",
+      "baseline": null,
+      "current": "7e2fca6c33b186aedcdb1f4768f0e86d61f605333def177f1a68833f48224757"
+    },
+    {
+      "file": "internal/application/governance/production_targets.go",
+      "baseline": null,
+      "current": "c34a32c95864f557353cb14955a27df146fa5d19b4d8039b631ea4757e2af851"
+    },
+    {
+      "file": "internal/application/governance/production_test.go",
+      "baseline": "8db9326804099a2302b052e796f765efe70c2ffd8aacfdb0dbbcad75ce5315e6",
+      "current": "0ea8d2a2611f5951d5c34f7986effdc4c622b874c6dc00f08722249ee89e78ef"
+    },
+    {
+      "file": "internal/domain/governance/production.go",
+      "baseline": "4423cdea262b3503474c7769fc4cd7b8939ac86d406e41da94c14a7658ece34e",
+      "current": "fdbbe454db3392c9cbfeee508f2599de3a72603aead18a28ceff94aaa5b60459"
+    },
+    {
+      "file": "internal/domain/governance/production_authoring_test.go",
+      "baseline": "d4d4a5fb332fa98dc983e50180693901ce706056c04d58bf6e6abc22c36fec0c",
+      "current": "8c62830336009c886f8f7498a5e29742663470768dfaf6af65e9d59a86927fe3"
+    },
+    {
+      "file": "internal/domain/governance/production_baseline.go",
+      "baseline": null,
+      "current": "5bfd136a493007aa5c504e387eee10d0e63a22d4a690974224745f1209b4e583"
+    },
+    {
+      "file": "internal/domain/governance/production_canonical.go",
+      "baseline": null,
+      "current": "b73cf21b09800101ac2e8b3119d75df91425ab402828a521b7bd093116a72cf7"
+    },
+    {
+      "file": "internal/domain/governance/production_schema.go",
+      "baseline": null,
+      "current": "4c43025be71f2ee3120255454acdab4b2c69d8043a8a49818c9cdbcdf441ccbd"
+    },
+    {
+      "file": "internal/domain/governance/production_test.go",
+      "baseline": "7cf157a9af360f7e1bfe6cb232991424b1f36007a09291ae0a5b114f6129e3ec",
+      "current": "cbca8686b032e4d1c8670b75ca6b8c9a042ccc25f56756e2533b35d9a8da9dd3"
+    },
+    {
+      "file": "internal/platform/http/production_authorization.go",
+      "baseline": null,
+      "current": "5c4ee94e1a178ecc2e2a25d77b5cccad25348a2a0bde8bf0aa2c67a6d8a65d6e"
+    },
+    {
+      "file": "internal/platform/http/production_recovery.go",
+      "baseline": null,
+      "current": "a00c14ce6426b412dc40a52eb8ed372259b3246d59f632df8bbc3bbd7bb43750"
+    },
+    {
+      "file": "internal/platform/http/production_request.go",
+      "baseline": null,
+      "current": "a7dae8123e0e19464be48f113b52efa0501d4c702c06e757ebaf3485fbe70baa"
+    },
+    {
+      "file": "internal/platform/http/production_request_test.go",
+      "baseline": null,
+      "current": "1cab550fef85e5dc917f564a353e7ba137ccd4ba5ac0231c2dff50c7ed1d00f5"
+    },
+    {
+      "file": "internal/platform/http/semantic_production.go",
+      "baseline": "399cdc0603f6d6fcdbd86daa8ff5db9f57f495e1d4c474c61523fbd8810479f1",
+      "current": "9ca28b47b299ff407b13a4c6eec6a2d320899fcb27095f3640765ddace24d5b9"
+    },
+    {
+      "file": "internal/platform/http/semantic_production_test.go",
+      "baseline": "91e7a6844cfe719a07e772b50d4eecd796be77989694a92f88f8f8b9976a1fb9",
+      "current": "7f8cfdba93f92895224fc33b0ddeb38f1332fbde7ee9a1d3b7b480b13c83472d"
+    },
+    {
+      "file": "migrations/000025_semantic_production_authoring_integrity.down.sql",
+      "baseline": null,
+      "current": "4ad253a2ef19a27b14195060706958201bcb44cbf5da7899858a67e63980f7cd"
+    },
+    {
+      "file": "migrations/000025_semantic_production_authoring_integrity.up.sql",
+      "baseline": null,
+      "current": "5fa1a8e23192cdfa4c9ee6c767caa36da528845bea7847074d383ddfaafa65e2"
+    },
+    {
+      "file": "tests/integration/governance/production_authoring_baseline_test.go",
+      "baseline": null,
+      "current": "8f98c04853ddaf707d3d879e6809086bb7e7db0ce22e4ea959b1b9da0bb22153"
+    },
+    {
+      "file": "tests/integration/governance/production_authoring_decisions_test.go",
+      "baseline": null,
+      "current": "3e163dc0b7eb4076132e8f2a98a7ee96024bb066519c661e1660b85d866ea425"
+    },
+    {
+      "file": "tests/integration/governance/production_authoring_fixture_test.go",
+      "baseline": "d3dfa5d007ec9b8d5f268f52013fa5793612fc3da1292fb935f27cbc4a05d884",
+      "current": "739ea71d876b17126331e3024f69278834748fdd5667e1bf51d640ec59c32105"
+    },
+    {
+      "file": "tests/integration/governance/production_authoring_recovery_test.go",
+      "baseline": null,
+      "current": "4a1f86c61d025481eaec3dcfd2f16f2b585d4cf61b7c20c42610ac1e5e2569da"
+    },
+    {
+      "file": "tests/integration/governance/production_authoring_regression_test.go",
+      "baseline": "efe6a1a229723982a07c3aa34181b9dd823c059401a0dd731ab8f9a250a7726a",
+      "current": "d409c9d434392af22ded85642a6144f47e9c820e4223fee7c96350d062362f0f"
+    },
+    {
+      "file": "tests/integration/governance/production_authoring_scope_test.go",
+      "baseline": null,
+      "current": "f99c02e2b17e7bf9d7389c77807897b4e73250882a9b9ad7a1cbeea0053ca9c8"
+    },
+    {
+      "file": "tests/integration/governance/production_authoring_storage_test.go",
+      "baseline": null,
+      "current": "b1333c0bccfbf03b5cae94d395f58b712b87aea63aa500ee1d64f2b7ba550ad3"
+    },
+    {
+      "file": "tests/integration/governance/production_authoring_supersede_test.go",
+      "baseline": null,
+      "current": "1b83a7a3921c6dbded9b07b3074728d9da07e42efd14266981cd4dcb85508a2c"
+    },
+    {
+      "file": "tests/integration/governance/production_authoring_targets_test.go",
+      "baseline": null,
+      "current": "f43543866005db3e9ac51cb34b1f7702a1df101a9234bff8cd4ffc55f12ad5fc"
+    },
+    {
+      "file": "tests/integration/governance/production_authoring_test.go",
+      "baseline": "8af51518cb035e61fb0a5db0b150992196e04ed83f23119bfae3fc8233a865ba",
+      "current": "98ad82a8fbcdcdcff90f4b136b84a17c00a40b8d710fdad5c33bfa66b3f9ff6d"
+    },
+    {
+      "file": "tests/integration/governance/production_release_test.go",
+      "baseline": "36276f18cb5ee67cfd628f8304b193672ba951e7ac8f593bec342a85debfc5c6",
+      "current": "a706711c73f65655d006b34f45fc3b363315e8d2c83aa64f0f3b6a46573a387d"
+    },
+    {
+      "file": "tests/integration/db/database_test.go",
+      "baselineArchive": ".semlia/evidence-work/SP-T003-A002-baseline.tar",
+      "baseline": "2bec347788a536638d59157f38b2f50c20f47bb4b359431d481a75820d62a700",
+      "current": "201872e17643ff6a611620c1af9c3afbe74411bfb673959e04ecbc12abbf9ee3"
+    },
+    {
+      "file": "tests/integration/db/semantic_production_migrations_test.go",
+      "baselineArchive": ".semlia/evidence-work/SP-T003-A002-baseline.tar",
+      "baseline": "34b612e0328a25480ff457a0bbf2a36de875f828db48eb826cba82975dcf50bc",
+      "current": "874799a5d5361c055ee1c4e6f55b32f7264d0762a14332e77ee8bd9078af34d2"
+    }
+  ],
+  "supplementalBaseline": {
+    "archive": ".semlia/evidence-work/SP-T003-A002-baseline.tar",
+    "reason": "A003 archive omitted tests/integration/db. These two allowed files are compared with the available A002 pre-repair archive; this is not an exact A003 snapshot claim."
+  }
+}

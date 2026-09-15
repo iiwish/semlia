@@ -1,0 +1,24 @@
+{
+  "command": [
+    "go",
+    "test",
+    "-count=1",
+    "-timeout=10m",
+    "./tests/integration/discovery",
+    "-run",
+    "^TestSourceSnapshot",
+    "-v"
+  ],
+  "clearedEnvironment": [
+    "SEMLIA_INGESTION_TEST_DATABASE_URL",
+    "SEMLIA_EXECUTION_CRASH_HELPER",
+    "SEMLIA_EXECUTION_TEST_DB",
+    "SEMLIA_DATABASE_URL"
+  ],
+  "start": "2026-09-09T05:50:58.226Z",
+  "end": "2026-09-09T05:51:07.160Z",
+  "exitStatus": 1,
+  "signal": null,
+  "stdout": "2026/09/09 13:51:03 github.com/testcontainers/testcontainers-go - Connected to docker: \n  Server Version: 29.4.0\n  API Version: 1.54\n  Operating System: OrbStack\n  Total Memory: 16040 MB\n  Testcontainers for Go Version: v0.44.0\n  Resolved Docker Host: unix:///var/run/docker.sock\n  Resolved Docker Socket Path: /var/run/docker.sock\n  Test SessionID: 6147bea0118f6c6bb946f179eed9a5d7f1fd2a94b9e689f7f65dbd892752f49a\n  Test ProcessID: 5eeabfa4-785d-4afa-9331-a448e7e1c5d8\n2026/09/09 13:51:03 🐳 Creating container for image postgres:18-alpine\n2026/09/09 13:51:03 🐳 Creating container for image testcontainers/ryuk:0.14.0\n2026/09/09 13:51:03 ✅ Container created: 47bf85959e5c\n2026/09/09 13:51:03 🐳 Starting container: 47bf85959e5c\n2026/09/09 13:51:03 ✅ Container started: 47bf85959e5c\n2026/09/09 13:51:03 ⏳ Waiting for container id 47bf85959e5c image: testcontainers/ryuk:0.14.0. Waiting for: all of: [log message \"Started\", port 8080/tcp to be listening]\n2026/09/09 13:51:03 Shell not found in container\n2026/09/09 13:51:03 🔔 Container is ready: 47bf85959e5c\n2026/09/09 13:51:03 ✅ Container created: cdfc1031e13f\n2026/09/09 13:51:03 🐳 Starting container: cdfc1031e13f\n2026/09/09 13:51:03 ✅ Container started: cdfc1031e13f\n2026/09/09 13:51:03 ⏳ Waiting for container id cdfc1031e13f image: postgres:18-alpine. Waiting for: all of: [log message \"database system is ready to accept connections\" (occurrence: 2), port 5432/tcp to be listening]\n2026/09/09 13:51:05 🔔 Container is ready: cdfc1031e13f\n=== RUN   TestSourceSnapshotUnchangedMembersAndHistoricalNames\n--- PASS: TestSourceSnapshotUnchangedMembersAndHistoricalNames (0.12s)\n=== RUN   TestSourceSnapshotPartialFailedAndOutOfOrderHeads\n--- PASS: TestSourceSnapshotPartialFailedAndOutOfOrderHeads (0.12s)\n=== RUN   TestSourceSnapshotConcurrentReplay\n    source_snapshot_test.go:144: snapshots=4 members=8\n--- FAIL: TestSourceSnapshotConcurrentReplay (0.16s)\n=== RUN   TestSourceSnapshotCodeBytesAndPreciseLineage\n--- PASS: TestSourceSnapshotCodeBytesAndPreciseLineage (0.55s)\nFAIL\n2026/09/09 13:51:06 🐳 Stopping container: cdfc1031e13f\n2026/09/09 13:51:06 ✅ Container stopped: cdfc1031e13f\n2026/09/09 13:51:06 🐳 Terminating container: cdfc1031e13f\n2026/09/09 13:51:07 🚫 Container terminated: cdfc1031e13f\nFAIL\tgithub.com/iiwish/semlia/tests/integration/discovery\t5.422s\nFAIL\n",
+  "stderr": ""
+}

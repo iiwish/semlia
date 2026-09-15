@@ -1,0 +1,25 @@
+package postgresql_test
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/iiwish/semlia/internal/adapters/discovery/postgresql"
+	"github.com/iiwish/semlia/internal/domain/discovery"
+)
+
+func TestA002LegacySQLUploadBytes(t *testing.T) {
+	for _, size := range []int{11 << 20, 50 << 20} {
+		t.Run(fmt.Sprint(size), func(t *testing.T) {
+			statement := "CREATE TABLE orders (id bigint);"
+			content := strings.Repeat(" ", size-len(statement)) + statement
+			snapshot, err := (postgresql.Adapter{}).Discover(context.Background(), discovery.Input{Locator: "artifact-set:fixture", ObservedAt: time.Now(), Files: map[string][]byte{"schema.sql": []byte(content)}})
+			if err != nil || len(snapshot.CodeArtifacts) != 1 {
+				t.Fatalf("legacy SQL bytes=%d codes=%d err=%v", size, len(snapshot.CodeArtifacts), err)
+			}
+		})
+	}
+}

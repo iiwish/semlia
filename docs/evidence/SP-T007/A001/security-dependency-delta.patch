@@ -1,0 +1,75 @@
+--- a/go.mod
++++ b/go.mod
+@@ -192,7 +192,7 @@
+ 	golang.org/x/tools v0.49.0 // indirect
+ 	google.golang.org/genproto/googleapis/api v0.0.0-20260526163538-3dc84a4a5aaa // indirect
+ 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa // indirect
+-	google.golang.org/grpc v1.83.1 // indirect
++	google.golang.org/grpc v1.83.2 // indirect
+ 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
+ 	gopkg.in/warnings.v0 v0.1.2 // indirect
+ 	gopkg.in/yaml.v3 v3.0.1 // indirect
+--- a/go.sum
++++ b/go.sum
+@@ -538,8 +538,8 @@
+ google.golang.org/genproto/googleapis/api v0.0.0-20260526163538-3dc84a4a5aaa/go.mod h1:q4lMZS6kskjT5HvCPrnnypcDPVJqT/f4nfxmkE7gryY=
+ google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa h1:mZHHdPZl0dbGHCflZgAq/Q468DWVFcU2whhB2KAo8fk=
+ google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa/go.mod h1:4Hqkh8ycfw05ld/3BWL7rJOSfebL2Q+DVDeRgYgxUU8=
+-google.golang.org/grpc v1.83.1 h1:HIO0+BEtBP6soyqvqC8sNUjZ7bTs+0hFQuFF+RAy++Y=
+-google.golang.org/grpc v1.83.1/go.mod h1:kDyl6SKsiHKt0uylY5gtn5cEjkrIOhQOGDgIc4JGwzQ=
++google.golang.org/grpc v1.83.2 h1:EManeRomTObA0BU7I8vXgg/78uE5MJ9M8B39EX2WscU=
++google.golang.org/grpc v1.83.2/go.mod h1:YPI1hK3kDked6iHvgX3tR0y+nX/qpMFKhPgFsokw1S8=
+ google.golang.org/protobuf v0.0.0-20200109180630-ec00e32a8dfd/go.mod h1:DFci5gLYBciE7Vtevhsrf46CRTquxDuWsQurQQe4oz8=
+ google.golang.org/protobuf v0.0.0-20200221191635-4d8936d0db64/go.mod h1:kwYJMbMJ01Woi6D6+Kah6886xMZcty6N08ah7+eCXa0=
+ google.golang.org/protobuf v0.0.0-20200228230310-ab0ca4ff8a60/go.mod h1:cfTl7dwQJ+fmap5saPgwCLgHXTUD7jkjRqWcaiX5VyM=
+--- a/pnpm-lock.yaml
++++ b/pnpm-lock.yaml
+@@ -5,7 +5,7 @@
+   excludeLinksFromLockfile: false
+ 
+ overrides:
+-  js-yaml: 4.3.1
++  js-yaml: 4.3.2
+   nanoid: 3.3.18
+ 
+ importers:
+@@ -1005,8 +1005,8 @@
+   js-tokens@4.0.0:
+     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
+ 
+-  js-yaml@4.3.1:
+-    resolution: {integrity: sha512-CY6crGq313MX8GkwvB7tzgp99vjQxY1++5y10/BKN/GUfHqWaOGQMNZkBvqSzsZKWk/ijwHlWzzkLulsGHhjWQ==}
++  js-yaml@4.3.2:
++    resolution: {integrity: sha512-SFNOvSJ+Dgf/9An904Yx+CgSlIPCkIpao4qo51lpee25TIRejdH3rhR4EZMGoNx3/TP3O+wzWuiTFl4sqbltzA==}
+     hasBin: true
+ 
+   jsdom@30.0.1:
+@@ -1890,7 +1890,7 @@
+       colorette: 1.4.0
+       https-proxy-agent: 7.0.6(supports-color@10.2.2)
+       js-levenshtein: 1.1.6
+-      js-yaml: 4.3.1
++      js-yaml: 4.3.2
+       minimatch: 5.1.9
+       pluralize: 8.0.0
+       yaml-ast-parser: 0.0.43
+@@ -2501,7 +2501,7 @@
+ 
+   js-tokens@4.0.0: {}
+ 
+-  js-yaml@4.3.1:
++  js-yaml@4.3.2:
+     dependencies:
+       argparse: 2.0.1
+ 
+--- a/pnpm-workspace.yaml
++++ b/pnpm-workspace.yaml
+@@ -4,7 +4,7 @@
+   - "integrations/*"
+ 
+ overrides:
+-  js-yaml: 4.3.1
++  js-yaml: 4.3.2
+   nanoid: 3.3.18
+ 
+ minimumReleaseAgeExclude:

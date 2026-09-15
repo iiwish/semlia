@@ -1,0 +1,78 @@
+schema_version: 1
+packet_id: ALPHA-T006-A001
+task_id: T006
+feature_id: alpha-controlled-user
+mode: execute_one_task
+status: Completed
+
+goal: >-
+  Deliver real Web Ask through the configured model and the shared immutable-release resolver.
+  Replace demonstration answers with attributable definitions, plans, clarifications, refusals and
+  explicit provider or execution-boundary states.
+
+requirements:
+  - FR-007 natural-language Ask over released semantics
+  - FR-008 canonical SemanticQuery resolution and explicit refusal
+  - FR-009 current, explicit and binding-selected release contexts
+  - FR-010 honest no-execution boundary when no adapter is configured
+  - FR-011 visible Prototype and session-only disclosure outside the Alpha real scope
+  - NFR-001 prompt and credential privacy
+  - NFR-004 accessible desktop and compact-desktop behavior
+
+dependencies:
+  - T005 is Needs_Review with immutable release resolver evidence
+  - M2 configured model provider and agent-run persistence are present
+  - Controlled-User Alpha technical baseline 0.1.0 approved on 2026-09-04
+
+allowed_files:
+  - api/**
+  - cmd/**
+  - docs/specs/alpha-controlled-user/**
+  - docs/specs/m3-headless-semantic-distribution/**
+  - docs/evidence/ALPHA-T006/**
+  - internal/**
+  - migrations/**
+  - pkg/**
+  - sdk/typescript/**
+  - tests/**
+  - web/**
+
+forbidden_changes:
+  - Do not retain raw questions, model prompts, source credentials, provider reasoning or fact rows.
+  - Do not let model output contain raw SQL, source locations or caller-selected semantic authority.
+  - Do not fabricate execution results, evidence, release facts or numeric answers.
+  - Do not fall back to fixture answers after provider, schema, resolver or API failure.
+  - Do not resolve draft or mutable semantic state.
+
+tdd:
+  red:
+    - Invalid model JSON, unknown fields, raw SQL or credential-shaped output fails closed.
+    - Provider timeout or unavailability creates an attributable failed run and no semantic plan.
+    - Ambiguity, unauthorized assets, stale release and unavailable execution stay explicit.
+  green:
+    - Ask interprets one natural-language question into the canonical SemanticQuery schema.
+    - The shared T005 resolver persists the plan or refusal under channel ask.
+    - Web Ask renders pending, definition, plan, clarification, refusal and provider-error states.
+  refactor:
+    - Reuse the configured provider client, agent-run service and distribution resolver.
+    - Keep transport DTOs, schema gating and UI rendering free of demonstration data.
+
+validation:
+  - schema and provider-stub application tests
+  - HTTP authentication, capability and redaction tests
+  - React behavior and accessibility tests
+  - live browser acceptance at 1440x900 and 1024x768
+  - route disclosure inventory
+  - make contracts-check
+  - make check-source
+  - git diff --check
+
+acceptance:
+  - No Ask success state can be reached through timers or fixture fallback in the real runtime.
+  - Every definition and plan fact shown by Ask comes from one selected immutable release.
+  - No-adapter plans visibly report not_configured and never claim query execution.
+  - Raw question text is absent from persisted Ask, audit and usage records.
+
+evidence:
+  summary: docs/evidence/ALPHA-T006/summary.md
+  test_results: docs/evidence/ALPHA-T006/test-results.md

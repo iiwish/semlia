@@ -1,0 +1,71 @@
+schema_version: 1
+packet_id: SP-T007-A001
+task_id: SP-T007
+status: Accepted
+mode: direct_execute
+approval: 用户授权验收 T006 后完成 T007，并授权实际模型最多 30 次调用、不设费用限额。
+dependencies: [SP-T006 Accepted]
+objective: 按 SP-AC-001 至 SP-AC-012 完整回归，区分确定性协议能力、实际模型质量及兼容性失败。
+inputs:
+  - docs/specs/semantic-production/product-design.md
+  - docs/specs/semantic-production/tasks.md
+  - docs/specs/semantic-production/contracts/production.md
+allowed_files:
+  - go.mod
+  - go.sum
+  - pnpm-lock.yaml
+  - pnpm-workspace.yaml
+  - internal/platform/http/handler.go
+  - internal/application/governance/production_history.go
+  - internal/domain/governance/release.go
+  - internal/domain/governance/proposal.go
+  - internal/domain/governance/production.go
+  - docs/evidence/SP-T005/acceptance-review/re-review.md
+  - docs/evidence/SP-T006/A001/test-results.md
+  - tests/integration/governance/production_acceptance_test.go
+  - tests/integration/governance/production_generation_test.go
+  - tests/integration/db/semantic_production_migrations_test.go
+  - tests/integration/db/database_test.go
+  - tests/integration/db/execution_test.go
+  - tests/integration/db/governed_objects_test.go
+  - tests/integration/db/webhook_interfaces_test.go
+  - tests/integration/db/machine_interfaces_test.go
+  - tests/integration/operations/operations_test.go
+  - tests/integration/projection/production_test.go
+  - tests/fixtures/semantic-production/**
+  - web/e2e-production/production.spec.ts
+  - web/e2e-production/fixtures.ts
+  - scripts/dev/production-acceptance.sh
+  - docs/specs/semantic-production/release-report.md
+  - docs/evidence/SP-T007/**
+  - docs/specs/semantic-production/packets/SP-T007.yaml
+orchestrator_files: [docs/specs/semantic-production/tasks.md, docs/specs/semantic-production/analysis.md, docs/specs/semantic-production/checklists/requirements.md]
+constraints:
+  - 用户明确授权 grpc 1.83.2、js-yaml 4.3.2 最小安全补丁升级及完整门禁复验；只调整上述四个依赖文件的对应版本和校验信息，不忽略漏洞或降低扫描标准。
+  - 上述五个业务 Go 文件仅授权 gofmt；两份历史验收文档仅替换本机路径为仓库相对路径，不修改历史结论或结果。
+  - 用户已批准 operations_test.go 与持久化来源 revision 摘要核对的测试基线修复，保留原有事务、终态与幂等断言。
+  - 用户已批准 machine_interfaces_test.go 测试时钟按 PostgreSQL 微秒精度固定，保留全部轮换和撤销断言。
+  - 用户已明确批准四个旧数据库测试文件的基线与夹具修复，以及临时隔离 Docker 环境创建和本轮归属资源清理。
+  - 保留广泛脏工作区，不提交、推送、部署，不修改应用业务代码。
+  - 实现由主代理直接执行；用户已授权一个只读子代理独立复核本轮差异及证据，不修改文件、不调用供应商、不执行部署或 Git 写操作。
+  - 数据库测试使用自身一次性容器，禁止将已有数据库 URL 注入测试。
+  - 实际模型仅合成案例，黄金答案不进入模型输入；密钥只经子进程环境传递，不写文件或日志。
+  - 最多 30 次实际调用，调用前持久化计数；不自动重试不明结果，不填充无关上下文。
+  - 完整门禁和 full suite 必须在完整工作区快照及已授权专用环境执行，不触碰默认栈或共享镜像标签。
+tdd:
+  red: 缺失验收断言先证明失败；已有覆盖只复跑，不破坏实现制造 RED。
+  green: 测试新增覆盖和 fixture；产品问题另行申请责任模块修复范围。
+  refactor: 仅整理测试辅助，不放宽断言。
+validation:
+  - go test -count=1 -p=1 -timeout=30m ./tests/integration/ingestion ./tests/integration/discovery ./tests/integration/governance ./tests/integration/projection ./tests/integration/catalog ./tests/integration/db
+  - SEMLIA_RUN_M1_BENCHMARK=1 go test -count=1 -timeout=10m ./tests/performance/catalog -run '^TestCatalog10000Performance$'
+  - SEMLIA_RUN_PRODUCTION_MODEL=1 go test -count=1 -timeout=10m ./tests/integration/governance -run '^TestSemanticProductionConfiguredModel$'
+  - ./scripts/dev/production-acceptance.sh --suite full
+  - make check
+evidence: docs/evidence/SP-T007/A001
+review: 规格矩阵、工程反例、两个桌面尺寸、原始与纠正质量、迁移/性能/完整门禁；失败和受阻单列。
+stop_conditions:
+  - 需要修改允许范围外产品代码或旧测试。
+  - 无法确认专用环境、资源归属或密钥保护。
+  - 实际调用达到 30 次，或上次结果不明。
+handoff: 用户于 2026-09-11 授权检查验收，复核通过后 Accepted；见 docs/evidence/SP-T007/acceptance-review.md。不自动启动 EAI。

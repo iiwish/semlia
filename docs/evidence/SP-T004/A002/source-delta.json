@@ -1,0 +1,398 @@
+[
+  {
+    "path": "cmd/semlia/readiness.go",
+    "status": "modified",
+    "before_sha256": "ccfe50421668bb3f5889b0ee5bd192779f31e3f17f6d59e35f7d08c5cc709e3e",
+    "after_sha256": "e6b5247ae2164e3991a18a2fe29c97214f98def3208483b3929dc8ec82221144"
+  },
+  {
+    "path": "cmd/semlia/readiness_test.go",
+    "status": "modified",
+    "before_sha256": "ea3e9f05697f91997298633298e0ba6d0bad0a5859c3f3bd5dd6d42ceff3854d",
+    "after_sha256": "e4eb9b8ccc920d94bcca41a3892a004a67c6ef32ea0037ff740238a7402eae15"
+  },
+  {
+    "path": "db/queries/semantic_production.sql",
+    "status": "modified",
+    "before_sha256": "36b536a578baa0fff0dac20a8cc46a391ea8c28140bf5a817b046f4f9845a8cd",
+    "after_sha256": "9b27d84f74ee06c16efad251b9ac336f6aede7db75e5b282eacf81c4cde9a096"
+  },
+  {
+    "path": "db/sqlc.yaml",
+    "status": "modified",
+    "before_sha256": "6c428ba094765608919a59ad0ebf54d56e7517d2a8ccf60a0b1173bb141e4f63",
+    "after_sha256": "044c26acad748cc88fe3fc4d9ecae22abb012bf7e495c8c6a4f6e648b9db30ed"
+  },
+  {
+    "path": "docs/specs/semantic-production/analysis.md",
+    "status": "modified",
+    "before_sha256": "825c153c10136d6b65516992f5df389ae3d44744522fae4c493c5e94ea1edff7",
+    "after_sha256": "ebf53e23abd5376321917a0364b77670275802b1254c77d99802debd2c392deb"
+  },
+  {
+    "path": "docs/specs/semantic-production/checklists/requirements.md",
+    "status": "modified",
+    "before_sha256": "b12d1d8c9786d56d3753ec7057e0dc3164e66529c70a5df733e4908355771552",
+    "after_sha256": "dbcfa4972c131b5b8641a618b1b57925ebb3f919549b64317f3cc9a3a13aa99f"
+  },
+  {
+    "path": "docs/specs/semantic-production/packets/SP-T004.yaml",
+    "status": "modified",
+    "before_sha256": "3ed97c0a32035028f9c746e05c6455015bd782803a6645cfa6628be6f4a2168d",
+    "after_sha256": "c7483572656130a86073dcaf1ddb00b66c954d8e2b604dee4ca9aff808b7b186"
+  },
+  {
+    "path": "docs/specs/semantic-production/tasks.md",
+    "status": "modified",
+    "before_sha256": "e8a159b36c6bb474489dbff999dd298be8d5d02284af258f220cd12693118aa6",
+    "after_sha256": "7605a316688ea4ce286f2dbb560314526b42623c14d2ce28166aeb5ac6b4ac72"
+  },
+  {
+    "path": "internal/adapters/gitcontent/adapter.go",
+    "status": "modified",
+    "before_sha256": "4ff5c12eb88472ef84e6a10d63cc096418813a5de46fc43db82bf294d1599dc7",
+    "after_sha256": "61b9cef23c95e7626e042bdb51ca1d09dbff4e06c6ea4a78c8ab60baaa1d949f"
+  },
+  {
+    "path": "internal/adapters/postgres/production_actions.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "7cf400159d4ef827c1a1faeaa04215a026253d80e0c9935f4ce5949b5cac1369"
+  },
+  {
+    "path": "internal/adapters/postgres/production_authoring.go",
+    "status": "modified",
+    "before_sha256": "22f3cc8c189630afdc6b0fb7b7644fdb347df09274364ae9bccf8ce158cd87b5",
+    "after_sha256": "75734faa72bd3aafede5b720ee4b53e14fb62acded751357ff82597cd8254fb3"
+  },
+  {
+    "path": "internal/adapters/postgres/production_baseline.go",
+    "status": "modified",
+    "before_sha256": "242210f65d3c387143c6127dd35cb22a8f938459a12e7165945600f0732dcd35",
+    "after_sha256": "ce8c123960f381bd9e851d5914e48a008d0faf0de2138410cf45fda61fff59e8"
+  },
+  {
+    "path": "internal/adapters/postgres/production_decisions.go",
+    "status": "modified",
+    "before_sha256": "a3e9a41df9ccd7e312024bed0e838d8c72e0348de45c8147751daba36f11e6a4",
+    "after_sha256": "a7a243a12d1cdeb6fd7e09933bad96bf5c67bb234ed74edb9dd324f712c62d02"
+  },
+  {
+    "path": "internal/adapters/postgres/production_input.go",
+    "status": "modified",
+    "before_sha256": "5415159c97b9c8127f4a39049e6fda0f94ee031c9d600d17016c5b19a6f68c38",
+    "after_sha256": "15a22b21298bc855bfe5854387ad1c0f2e2fab50b33a026ec67013c35e57e7c6"
+  },
+  {
+    "path": "internal/adapters/postgres/production_manifest_access.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "abf57d870dcdf3196f626f35388a9c9cdba65ddd2393c27625e24fe2c1f66ef3"
+  },
+  {
+    "path": "internal/adapters/postgres/production_mutation_events.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "ed116bc696abad908f2e79f599b566069e5f60237a46e5b7ff51c327faeebf1c"
+  },
+  {
+    "path": "internal/adapters/postgres/production_projection.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "141771567afdd9354e02c04ea2a695456a0c0db754bd0211c34e8d4682cfa00e"
+  },
+  {
+    "path": "internal/adapters/postgres/production_publish.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "ed0ea1d5b4a059a9323614814ef850e3812010e7a1b888890abb2ddc24fc2495"
+  },
+  {
+    "path": "internal/adapters/postgres/production_reintroduction.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "a5cdab9ecfb5156e03c0930dbc50205531e5c57fc8cb4cf5ae416a3b5ef0e7d1"
+  },
+  {
+    "path": "internal/adapters/postgres/production_release_objects.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "59b6d5f9ef2d981ce72574491cc1e90c40f9fae322b6bbaab60d92d48f7e98f7"
+  },
+  {
+    "path": "internal/adapters/postgres/production_release_persistence.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "d78b6d3bbe8df62065dfd884c7d44083053166ea15f75d1b3fddac7264eb7420"
+  },
+  {
+    "path": "internal/adapters/postgres/production_release_read.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "734edc86b85a7f3a3a8070e8dd3ce478a8753a7e8a2f2a0ec7a53b14d1ec69f5"
+  },
+  {
+    "path": "internal/adapters/postgres/production_rollback.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "c6ff411b94b0254023a304aa4c4a5d6959587a9add24a92e20915b691ea6173c"
+  },
+  {
+    "path": "internal/adapters/postgres/production_rollback_restore.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "9a39a49c0e26a17f6282d0553392688338537119f6493735019207a510cbd595"
+  },
+  {
+    "path": "internal/adapters/postgres/production_validation.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "282d9ee94712077f24096b834459857f7a2651c67ba9becedf6ae08e8c1cf51e"
+  },
+  {
+    "path": "internal/adapters/postgres/production_validation_failure.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "fd2c735fde0b2859914a9f7f0d413092d2a5d2ecc7f1e743bfccfe88e19a15da"
+  },
+  {
+    "path": "internal/adapters/postgres/production_validation_gate.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "c181dc07177feff8ba0d305e40577f5484f179cdf9a9758b18ff3ea4a3fef1d3"
+  },
+  {
+    "path": "internal/adapters/postgres/production_validation_history.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "346d1a731f1bd5929e316f31ac7f3637651ecf7510fa7ac8602c7aa3eed7a185"
+  },
+  {
+    "path": "internal/adapters/postgres/production_validation_worker.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "2633537ca28dc5176e277931f0db1ef5421c3e417f5da97d9fddbab820bfb2ba"
+  },
+  {
+    "path": "internal/adapters/postgres/projection.go",
+    "status": "modified",
+    "before_sha256": "c3b54c6c5aaf5076eba9921b8bb208ceeb9e7f63db50ef10f8c033e8156e195b",
+    "after_sha256": "bf6c0769f35f857ffdea72066f5c907d6194538adc2c99ca670592030ad5161f"
+  },
+  {
+    "path": "internal/adapters/postgres/semantic_production.go",
+    "status": "modified",
+    "before_sha256": "93d266b37e561b389327fed75a930e8bcc76bf9b4b272a29e5203dac451c6c02",
+    "after_sha256": "b4f83f6846ece860f5879bb2c4ecd9c88a2f3abedc89a77ab56ee4fbe68951ad"
+  },
+  {
+    "path": "internal/adapters/postgres/sqlc/models.go",
+    "status": "modified",
+    "before_sha256": "91578b6c1633320fa9313b41ae012a4e430db8f8a78a0e7733c5249394c3a1f3",
+    "after_sha256": "aedf867f7470f016e3af515e8bb3387b5c92fc58307b66c75535140644d6d5b8"
+  },
+  {
+    "path": "internal/adapters/postgres/sqlc/semantic_production.sql.go",
+    "status": "modified",
+    "before_sha256": "5a6ef51716603622615caab7f7d7ca6a3f2a32dd737649d2edc815b62e29ef20",
+    "after_sha256": "11a7c7af514dfad8288f7e3763588b9b296730efc972884bb774bb6f9ec9725d"
+  },
+  {
+    "path": "internal/application/governance/orchestration.go",
+    "status": "modified",
+    "before_sha256": "e66994f3dc72e09fcae221735851746c53060e843a4f3b77e659d59f1fbb5e8d",
+    "after_sha256": "21d9f00c26adc086563efb12cd94b2b09097baec1d7477e451fa60c9dcd06d55"
+  },
+  {
+    "path": "internal/application/governance/production.go",
+    "status": "modified",
+    "before_sha256": "a6d0fdff1b33232ca6a09199afec4ca44a523679bc3f357f901e775af3b55016",
+    "after_sha256": "007fe41a86804124fc1d4c3d011c887914be4ad503c0ed365a5746cc9b330df7"
+  },
+  {
+    "path": "internal/application/governance/production_actions.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "e57c94f12d6aa15073fb6ada7a1cb7dc12995c47ef0332c66ae318ebef8bf393"
+  },
+  {
+    "path": "internal/application/governance/production_publishing.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "524f06e5995e245ee951fd96946e97f4e473b0131261f1025d131af001075b3a"
+  },
+  {
+    "path": "internal/application/governance/production_reintroduction.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "edd7257ade63bef9d6605193e89cd72c42144dd2a312a537aa9b4775d8cd94e2"
+  },
+  {
+    "path": "internal/application/governance/production_release_read.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "75d2267fc23ddb9ca0dfd49f990dd802bf6ee96bc3b4a8680ac3da9c967569bd"
+  },
+  {
+    "path": "internal/application/governance/production_review.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "e7ab1ae9e0b4ee4b6cb56a114c53a4be08be0c3de40911dc916a2cd1bf959978"
+  },
+  {
+    "path": "internal/application/governance/production_rollback.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "93cbac32ffabf913e325ff263ade13554d89898cb66a151c38bf4eaf62bc8f8a"
+  },
+  {
+    "path": "internal/application/governance/production_targets.go",
+    "status": "modified",
+    "before_sha256": "c34a32c95864f557353cb14955a27df146fa5d19b4d8039b631ea4757e2af851",
+    "after_sha256": "00f8c6e7968080f4e399cdbb38c9f55e606a421e41ad88b1a6a2add05677d9e5"
+  },
+  {
+    "path": "internal/application/governance/production_validation.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "85fd8550d0b1bb79665d494165f46c8605e608630ff38f39913e811f92b6b94e"
+  },
+  {
+    "path": "internal/application/governance/production_validation_history.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "ba888dd550f03f2735b659108cd3ced081e4a5b10c327c29e8cb65999131eb0b"
+  },
+  {
+    "path": "internal/application/governance/production_validation_integrity_test.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "0d3e024759993478d32837b0e9ce6343ac8ccbc1ec31636a39251a9f7310dd28"
+  },
+  {
+    "path": "internal/application/governance/production_validation_worker.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "6ada6f473f63d17e7ff7cca57aa1d6c898ac8c6b7fe283f0eb5030ee70c5a816"
+  },
+  {
+    "path": "internal/application/governance/validatejob.go",
+    "status": "modified",
+    "before_sha256": "1beb3501a36f3c767b63c4825daaf4254ddfcba79d548b4da24f83f8f0e0f31d",
+    "after_sha256": "0e3c82102f9bc24a1204f0b9c9e4e62b229dc95d357791fba2d6be19c2f7e1d6"
+  },
+  {
+    "path": "internal/domain/governance/production.go",
+    "status": "modified",
+    "before_sha256": "fdbbe454db3392c9cbfeee508f2599de3a72603aead18a28ceff94aaa5b60459",
+    "after_sha256": "ac8300fb909eaf7c37b5bdbc16e1868f9d855c8da0d844fe9f59966bf27bdd59"
+  },
+  {
+    "path": "internal/domain/governance/production_manifest.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "7fcab740174bc8906b7178df798d14f15052b03ba495251923affcfbdd267abc"
+  },
+  {
+    "path": "internal/domain/governance/production_schema.go",
+    "status": "modified",
+    "before_sha256": "4c43025be71f2ee3120255454acdab4b2c69d8043a8a49818c9cdbcdf441ccbd",
+    "after_sha256": "246096265d473e601a84b35a8ee7d0e8faf64ac6fbf695799adb41593d9621fa"
+  },
+  {
+    "path": "internal/domain/projection/model.go",
+    "status": "modified",
+    "before_sha256": "3fd297c20143b90c8a68e068c50920aa26fa84396f279828e90e0acb7de31b4e",
+    "after_sha256": "30740fdf2b10377283443ed6f824df63a204e4e829d70481d52bc3a0cf9fcea4"
+  },
+  {
+    "path": "internal/platform/http/production_recovery.go",
+    "status": "modified",
+    "before_sha256": "a00c14ce6426b412dc40a52eb8ed372259b3246d59f632df8bbc3bbd7bb43750",
+    "after_sha256": "e1847f60b6a59c30caa7c5589f630b22c679ce007e6e5f7adbc1e5f05059932d"
+  },
+  {
+    "path": "internal/platform/http/production_validation_history.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "5841bf946c6ceb07ac5245f44ddc2ed7fcffc15d0e6becb6f9874aecd73d8071"
+  },
+  {
+    "path": "internal/platform/http/semantic_production.go",
+    "status": "modified",
+    "before_sha256": "f757bdb2eae1c5b94ee9cfc67346915bed4d4430849c38f1b89f03f75d3abb42",
+    "after_sha256": "1391b316d969f9fb534198f929ea09f70ac0bb8f564384d7429bc6fd814007e8"
+  },
+  {
+    "path": "migrations/000026_semantic_production_release_integrity.down.sql",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "2313ad9afa9f68bdac866ae1eacae0370efd866c8e3bfcbf3d36616e1cfb7c37"
+  },
+  {
+    "path": "migrations/000026_semantic_production_release_integrity.up.sql",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "7d91bac5f54606350d0eccc8aa17aaeb84a12d72a81ce8992f00c672502e322e"
+  },
+  {
+    "path": "tests/integration/db/database_test.go",
+    "status": "modified",
+    "before_sha256": "201872e17643ff6a611620c1af9c3afbe74411bfb673959e04ecbc12abbf9ee3",
+    "after_sha256": "db1cb36939f4e7450ced39d187d261a90bcc117c36cea1c23bf8da4c497753df"
+  },
+  {
+    "path": "tests/integration/db/semantic_production_migrations_test.go",
+    "status": "modified",
+    "before_sha256": "874799a5d5361c055ee1c4e6f55b32f7264d0762a14332e77ee8bd9078af34d2",
+    "after_sha256": "4ca4fb34f6c63c19408c60471a7c58a4cda212f0c2c7332fe9324e2a1a6ca629"
+  },
+  {
+    "path": "tests/integration/governance/production_atomic_failure_test.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "b446df8cca9100059984e5262c746f8a77ae782a847bc6a893b02dc87f60db24"
+  },
+  {
+    "path": "tests/integration/governance/production_composite_release_test.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "9ec49ba4486919407252669ca8565bb2ce876d97e509e627d5b4d0757a4098af"
+  },
+  {
+    "path": "tests/integration/governance/production_projection_test.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "fd6703905940bef5a8d41512653f1fd9b9e5ac6cc1d35ab80d8cbf5cbc49e3d8"
+  },
+  {
+    "path": "tests/integration/governance/production_publish_concurrency_test.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "a64de5a697e0deaa981328d2842c8185b4af85ff88cf97d56b4789d73b449b68"
+  },
+  {
+    "path": "tests/integration/governance/production_publish_integrity_test.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "48f18bf3bd9a960f66437541f9d11cf08b8005efe222129562b717a8ff9632f3"
+  },
+  {
+    "path": "tests/integration/governance/production_release_test.go",
+    "status": "modified",
+    "before_sha256": "a706711c73f65655d006b34f45fc3b363315e8d2c83aa64f0f3b6a46573a387d",
+    "after_sha256": "4f4add50bad8bed7f4dae8076fc69367152e89d6d5362c03bc09b08a99bb173a"
+  },
+  {
+    "path": "tests/integration/governance/production_review_fencing_test.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "df0eb5df9426be1ee6030b2c4825d3b9d67a2298e76444bccf0d017260d818d9"
+  },
+  {
+    "path": "tests/integration/governance/production_validation_integrity_test.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "e2cfb57b6695989067fc72edbbcec2da0cde73cb999973aa8060f03961cad123"
+  }
+]

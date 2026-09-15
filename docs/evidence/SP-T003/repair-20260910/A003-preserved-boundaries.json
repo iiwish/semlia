@@ -1,0 +1,53 @@
+{
+  "checkedAt": "2026-09-10T09:56:15.745Z",
+  "checks": [
+    {
+      "file": "internal/application/governance/production.go",
+      "marker": "func (s *ProductionService) SubmitOperation(",
+      "baseline": "24a6c60b63b398a906b4f91933e3be22c1ae58ff009c5d6850811509c60ada72",
+      "current": "bc04e9e167a90ab0e5f98a48d69820a93eeb918851711c479eb09f9a4bf09253",
+      "formattedBaseline": "bc04e9e167a90ab0e5f98a48d69820a93eeb918851711c479eb09f9a4bf09253",
+      "formattedCurrent": "bc04e9e167a90ab0e5f98a48d69820a93eeb918851711c479eb09f9a4bf09253",
+      "businessTailUnchanged": true
+    },
+    {
+      "file": "internal/adapters/postgres/semantic_production.go",
+      "marker": "func (s *Store) SubmitOperationTx(",
+      "baseline": "29a3355b01e9c7da987c3a31ed5989f12271fb1d805de9b0f100e304e50488e4",
+      "current": "29a3355b01e9c7da987c3a31ed5989f12271fb1d805de9b0f100e304e50488e4",
+      "formattedBaseline": "29a3355b01e9c7da987c3a31ed5989f12271fb1d805de9b0f100e304e50488e4",
+      "formattedCurrent": "29a3355b01e9c7da987c3a31ed5989f12271fb1d805de9b0f100e304e50488e4",
+      "businessTailUnchanged": true
+    },
+    {
+      "file": "internal/platform/http/semantic_production.go",
+      "marker": "func (handler *Handler) submitProductionOperation(",
+      "baseline": "bd54e344508e2e4cad76db83a8d16d41e2d08032407c57c5c79c94ec2d0ef84a",
+      "current": "4d226e631b8681eea6d49b42895018f3e475d473c7f6ee3356a3b25e9c879bcd",
+      "formattedBaseline": "4d226e631b8681eea6d49b42895018f3e475d473c7f6ee3356a3b25e9c879bcd",
+      "formattedCurrent": "4d226e631b8681eea6d49b42895018f3e475d473c7f6ee3356a3b25e9c879bcd",
+      "businessTailUnchanged": true
+    },
+    {
+      "file": "migrations/000023_semantic_production_authoring.down.sql",
+      "baseline": "f057c5a2b2598a2ced818a51022db77b3c902b6d57848aa0c2e537c95dc94ea2",
+      "current": "f057c5a2b2598a2ced818a51022db77b3c902b6d57848aa0c2e537c95dc94ea2"
+    },
+    {
+      "file": "migrations/000023_semantic_production_authoring.up.sql",
+      "baseline": "c57bb9c331b9448356e5474e61d96f41ea002c3b6fc554de8695ad16b0bfd53a",
+      "current": "c57bb9c331b9448356e5474e61d96f41ea002c3b6fc554de8695ad16b0bfd53a"
+    },
+    {
+      "file": "migrations/000024_semantic_production_publishing.down.sql",
+      "baseline": "fc115d9029e99a8357d23583b63859c3ee1458beb29248b3917cb7fdc566ee45",
+      "current": "fc115d9029e99a8357d23583b63859c3ee1458beb29248b3917cb7fdc566ee45"
+    },
+    {
+      "file": "migrations/000024_semantic_production_publishing.up.sql",
+      "baseline": "d8b40dbc4f44541225c9fea33f7253e6088ed1117a5092afa28b5ca18de9f4a1",
+      "current": "d8b40dbc4f44541225c9fea33f7253e6088ed1117a5092afa28b5ca18de9f4a1"
+    }
+  ],
+  "note": "T004 function tails are byte-identical after gofmt; raw differences are formatting only. Migrations 23/24 are raw byte-identical."
+}

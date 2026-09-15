@@ -1,0 +1,9 @@
+{
+  "disclosure": "Synthetic human answer, never included in the initial model prompt. Missing commercial policy must remain unresolved until a human declaration.",
+  "orders": {"definition":"One order per order_id.","scope":"Sales orders."},
+  "customers": {"definition":"One customer per customer_id.","scope":"Customers referenced by sales orders."},
+  "revenue": {"definition":"Sum of paid order amounts, excluding cancelled orders.","scope":"Paid sales orders only; cancelled orders are excluded."},
+  "transform":"CASE WHEN status = 'paid' THEN amount ELSE 0 END",
+  "grain":"one row per order_id",
+  "join":"orders.customer_id = customers.customer_id"
+}

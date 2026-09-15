@@ -1,0 +1,226 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://semlia.dev/schemas/semlia.proposal-input/v1",
+  "title": "semlia.proposal-input/v1",
+  "description": "SSOT \u00a78.6: every AI structured output is validated against this versioned schema before it enters the governance domain layer. The schema is additive-per-version: breaking changes require a new /vN id.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "targetObjectType",
+    "targetObjectId",
+    "title",
+    "changeSet",
+    "agentAttribution"
+  ],
+  "properties": {
+    "targetObjectType": {
+      "enum": [
+        "semantic_asset",
+        "physical_binding",
+        "model_grain",
+        "entity_key",
+        "join_contract"
+      ]
+    },
+    "targetObjectId": {
+      "$ref": "#/$defs/targetObjectId"
+    },
+    "baseRevisionId": {
+      "type": "string",
+      "pattern": "^rev_[0-7][0-9a-hjkmnp-tv-z]{25}$"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "summary": {
+      "type": "string",
+      "maxLength": 4096
+    },
+    "reason": {
+      "type": "string",
+      "maxLength": 4096
+    },
+    "changeSet": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100,
+      "items": {
+        "$ref": "#/$defs/changeSetItem"
+      }
+    },
+    "agentAttribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "agentRunId",
+        "model",
+        "configRevision",
+        "inputHash"
+      ],
+      "properties": {
+        "agentRunId": {
+          "type": "string",
+          "pattern": "^agr_[0-7][0-9a-hjkmnp-tv-z]{25}$"
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "configRevision": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "inputHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "targetObjectType": {
+            "const": "semantic_asset"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "baseRevisionId"
+        ]
+      }
+    }
+  ],
+  "$defs": {
+    "targetObjectId": {
+      "type": "string",
+      "pattern": "^(ast|phb|mgn|eky|jct)_[0-7][0-9a-hjkmnp-tv-z]{25}$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "changeSetItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fieldPath",
+        "op"
+      ],
+      "properties": {
+        "fieldPath": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "op": {
+          "enum": [
+            "add",
+            "update",
+            "remove"
+          ]
+        },
+        "beforeDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "afterDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "beforeValue": {},
+        "afterValue": {}
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "op": {
+                "const": "add"
+              }
+            },
+            "required": [
+              "op"
+            ]
+          },
+          "then": {
+            "required": [
+              "afterDigest",
+              "afterValue"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "beforeDigest"
+                  ]
+                },
+                {
+                  "required": [
+                    "beforeValue"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "op": {
+                "const": "update"
+              }
+            },
+            "required": [
+              "op"
+            ]
+          },
+          "then": {
+            "required": [
+              "beforeDigest",
+              "afterDigest",
+              "beforeValue",
+              "afterValue"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "op": {
+                "const": "remove"
+              }
+            },
+            "required": [
+              "op"
+            ]
+          },
+          "then": {
+            "required": [
+              "beforeDigest",
+              "beforeValue"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "afterDigest"
+                  ]
+                },
+                {
+                  "required": [
+                    "afterValue"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

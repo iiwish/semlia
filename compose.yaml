@@ -1,22 +1,29 @@
 name: semlia-local
 
 x-semlia-app: &semlia-app
-  image: semlia:local
+  image: ${SEMLIA_IMAGE:-semlia:local}
   build:
     context: .
     dockerfile: deploy/local/Dockerfile
   environment: &semlia-environment
     SEMLIA_ENV: development
+    SEMLIA_AUTH_MODE: ${SEMLIA_AUTH_MODE:-password}
+    SEMLIA_ALLOWED_ORIGINS: ${SEMLIA_ALLOWED_ORIGINS:-http://127.0.0.1:8080}
     SEMLIA_DATABASE_URL: postgresql://semlia:${SEMLIA_POSTGRES_PASSWORD:?SEMLIA_POSTGRES_PASSWORD is required}@postgres:5432/semlia?sslmode=disable
     SEMLIA_SECRET_KEY: ${SEMLIA_SECRET_KEY:?SEMLIA_SECRET_KEY is required}
     SEMLIA_BUILD_VERSION: ${SEMLIA_BUILD_VERSION:-local}
     SEMLIA_LOG_FORMAT: json
+    SEMLIA_ARTIFACT_STORE: local
+    SEMLIA_ARTIFACT_ROOT: /var/lib/semlia/artifacts
+    SEMLIA_ARTIFACT_RETENTION: 720h
+    SEMLIA_EXECUTION_SOURCES: ${SEMLIA_EXECUTION_SOURCES:-}
+    SEMLIA_EXECUTION_ALLOW_PLAINTEXT: ${SEMLIA_EXECUTION_ALLOW_PLAINTEXT:-false}
   networks:
     - backend
   init: true
   read_only: true
   tmpfs:
-    - /tmp:size=16m,mode=1777
+    - /tmp:size=256m,mode=1777
 
 services:
   postgres:
@@ -56,6 +63,9 @@ services:
     environment:
       <<: *semlia-environment
       SEMLIA_HTTP_ADDR: 0.0.0.0:8080
+      SEMLIA_WORKER_CONFIGURED: "true"
+      SEMLIA_SOURCE_ARTIFACT_ROOT: /var/lib/semlia/content
+      SEMLIA_UAT_LLM_KEY: ${SEMLIA_UAT_LLM_KEY:-}
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -67,6 +77,9 @@ services:
       start_period: 3s
     restart: unless-stopped
     stop_grace_period: 15s
+    volumes:
+      - artifact-data:/var/lib/semlia/artifacts
+      - git-content:/var/lib/semlia/content:ro
 
   worker:
     <<: *semlia-app
@@ -74,6 +87,7 @@ services:
     environment:
       <<: *semlia-environment
       SEMLIA_GIT_REPOSITORY: /var/lib/semlia/content
+      SEMLIA_SOURCE_ARTIFACT_ROOT: /var/lib/semlia/content
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -81,6 +95,7 @@ services:
     stop_grace_period: 15s
     volumes:
       - git-content:/var/lib/semlia/content
+      - artifact-data:/var/lib/semlia/artifacts
 
 networks:
   backend:
@@ -88,3 +103,4 @@ networks:
 volumes:
   postgres-data:
   git-content:
+  artifact-data:

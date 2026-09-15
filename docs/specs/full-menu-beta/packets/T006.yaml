@@ -1,0 +1,167 @@
+schema_version: 1
+packet_id: FMB-T006-SPRINT-A001
+task_id: FMB-T006
+feature_id: full-menu-beta
+mode: execute_one_task
+status: Needs_Review
+adapter: agent-neutral
+
+governance_inputs:
+  constitution: [AGENTS.md, docs/SSOT.md]
+  product_contract: docs/specs/full-menu-beta/spec.md
+  technical_decisions: docs/specs/full-menu-beta/technology-decision-record.md
+  data_model: docs/specs/full-menu-beta/data-model.md
+  feature_plan: docs/specs/full-menu-beta/plan.md
+  work_graph: docs/specs/full-menu-beta/tasks.md
+  requirements_checklist: docs/specs/full-menu-beta/checklists/requirements.md
+  analysis: docs/specs/full-menu-beta/analysis.md
+  approval: Founder confirmed continuous FMB-T001-T007 delivery and the second three-hour sprint on 2026-09-05, starting 04:49:54 UTC.
+
+work_unit:
+  title: Machine credentials and semantic distribution channels
+  goal: >-
+    Deliver accountable machine principals and verifier-only credentials, canonical REST/MCP/CLI/SDK
+    semantics, and signed durable webhook delivery. Replace integration fixtures with server-owned
+    lists and commands. Reuse the existing resolver, authorization evaluator and immutable releases.
+  story: FMB-US-006
+  requirements: [FR-001, FR-008, FR-009, FR-010, NFR-001, NFR-002, NFR-004, NFR-005]
+  depends_on: [FMB-T001 evidence, FMB-T003 evidence, existing M3 resolver evidence, preceding shared-file handoff]
+  blocks: [FMB-T007]
+  parallel: false
+
+codebase_context:
+  relevant_files:
+    - internal/application/distribution/service.go
+    - internal/adapters/postgres/distribution.go
+    - internal/application/authorization/service.go
+    - internal/platform/http/identity.go
+    - internal/platform/http/distribution.go
+    - internal/application/jobs/router.go
+    - internal/application/jobs/dispatcher.go
+    - internal/application/projection/publisher.go
+    - cmd/semlia/main.go
+    - sdk/typescript/src/client.ts
+    - web/src/IntegrationSettingsView.tsx
+  invariants:
+    - Credential actions and scopes narrow current principal authority; they never grant extra authority.
+    - Current consumer/principal/grant/revocation/expiry state is checked on every request.
+    - Cookie plus bearer is rejected; machine workspace and consumer context are server-derived.
+    - Known-ID query/plan reads and idempotent replay must not bypass current credential or asset restrictions.
+    - Browser CSRF/Origin behavior remains unchanged and production rejects development identities.
+    - Canonical resolver controls matching, release selection, plan digests and refusal codes across channels.
+    - Existing outbox completion cannot be reused as an individual webhook delivery receipt.
+    - Git projection and webhook delivery have independent idempotent outcomes and retries.
+
+execution_constraints:
+  owner: One delegated implementation worker; do not delegate further, commit, push or revert existing work.
+  coordination: Shared OpenAPI/sqlc/identity/HTTP/composition/Web files remain serialized with T004/T005/T007.
+  allowed_files:
+    - api/openapi/semlia.v1.yaml
+    - api/gen/go/types.gen.go
+    - sdk/typescript/**
+    - migrations/000020_fmb_distribution_interfaces.up.sql
+    - migrations/000020_fmb_distribution_interfaces.down.sql
+    - db/queries/distribution.sql
+    - db/queries/identity.sql
+    - db/queries/webhooks.sql
+    - db/queries/jobs.sql
+    - db/sqlc.yaml
+    - internal/domain/identity/**
+    - internal/domain/authorization/**
+    - internal/domain/distribution/**
+    - internal/domain/webhooks/**
+    - internal/application/identity/**
+    - internal/application/authorization/**
+    - internal/application/distribution/**
+    - internal/application/webhooks/**
+    - internal/application/jobs/**
+    - internal/adapters/postgres/identity.go
+    - internal/adapters/postgres/authorization.go
+    - internal/adapters/postgres/distribution.go
+    - internal/adapters/postgres/webhooks.go
+    - internal/adapters/postgres/operations.go
+    - internal/adapters/postgres/sqlc/**
+    - internal/adapters/mcp/**
+    - internal/adapters/webhooks/**
+    - internal/platform/http/**
+    - internal/platform/config/**
+    - internal/domain/operations/**
+    - cmd/semlia/**
+    - pkg/identity/**
+    - web/src/integrations.ts
+    - web/src/integrationRuntime.tsx
+    - web/src/integration*.test.tsx
+    - web/src/IntegrationSettingsView.tsx
+    - web/src/IntegrationSettingsView.test.tsx
+    - web/src/ProductApp.tsx
+    - web/src/ProductApp.test.tsx
+    - web/src/localUAT.ts
+    - web/src/localUAT.test.tsx
+    - web/src/styles.css
+    - internal/platform/web/static/**
+    - tests/integration/**
+    - tests/contracts/**
+    - web/e2e/product-journey.spec.ts
+    - web/e2e-live/distribution-live.spec.ts
+    - go.mod
+    - go.sum
+    - .env.example
+    - docs/operations/**
+    - api/README.md
+    - docs/evidence/FMB-T006/**
+
+forbidden_changes:
+  - No plaintext credential storage, logging, recoverable list response or persistent browser storage.
+  - No transport-specific resolver, policy bypass, draft release disclosure or arbitrary SQL tool.
+  - No simulated client credential, copy success, webhook delivery, MCP connection or SDK capability.
+  - No outbound request before destination/IP policy validation; redirects and DNS changes must remain safe.
+  - No forwarding internal outbox payloads or secret-bearing metadata as external event bodies.
+  - No mutations to migrations 000001-000019 or 000021.
+
+tdd_plan:
+  red:
+    - Credential entropy/digest/one-time display, revoke/rotate/expiry and principal suspension.
+    - Mixed auth, forged workspace/consumer context, narrowed actions/scopes and known-ID replay restrictions.
+    - REST/MCP/CLI/SDK golden parity for describe, search, resolve and plan/refusal inspection.
+    - Webhook HMAC timestamp, stable event identity, retry/dead-letter and independent fanout receipts.
+    - SSRF tests for private/loopback/link-local, IPv4/IPv6, redirect and DNS rebinding.
+    - UI permission, pending, persisted success, refresh failure, empty, stale and clipboard failure states.
+  green:
+    - Add typed domain/repository/services, generated contracts and thin channel adapters.
+    - Use the official MCP Go SDK after checking its upstream current API.
+    - Connect real integration settings and authoritative Operations delivery visibility.
+
+validation_loop:
+  resource_policy: Use go test -p 1 for database suites and one Vitest worker on this host.
+  commands:
+    - go test -p 1 ./internal/application/distribution/... ./internal/application/authorization/... ./internal/platform/http/... ./cmd/semlia/...
+    - go test -p 1 ./tests/integration/... ./tests/contracts/...
+    - pnpm --dir sdk/typescript test
+    - pnpm --dir web typecheck
+    - pnpm --dir web exec vitest run --maxWorkers=1
+    - pnpm --dir web lint
+    - make contracts-check
+    - make db-generate-check
+    - GOFLAGS=-p=1 make check-source
+    - git diff --check
+  proof:
+    - Migration 19-to-20 populated up/down/up preserves prior state.
+    - Real PostgreSQL credential lifecycle and next-request revocation, not a mocked repository.
+    - Equivalent golden plan digests/refusals through actual channel entry points.
+    - A receiver verifies real signed delivery and duplicate/retry semantics under explicit test network policy.
+    - An unavailable external receiver or hosted environment is reported separately from local transport proof.
+    - 1440x900 and 1024x768 keyboard, focus, secret dismissal and refresh behavior.
+
+evidence_contract:
+  summary: docs/evidence/FMB-T006/summary.md
+  test_results: docs/evidence/FMB-T006/test-results.md
+  attempt: docs/evidence/FMB-T006/attempts/sprint-a001.md
+  required: [changed files, RED/GREEN results, migrations, auth and SSRF evidence, channel parity, UI evidence, residual risks]
+review_contract:
+  required_passes: [spec_compliance, bug_code_quality, security_privacy, qa_acceptance]
+  acceptance_rule: The orchestrator may mark Needs_Review after proof; only the founder accepts the release.
+stop_conditions:
+  - A preceding task still owns shared files or has unresolved blocking findings.
+  - Required work relaxes authorization, credential privacy, SSRF or release-only semantics.
+  - Sprint implementation cutoff 2026-09-05T07:24:54Z; preserve actual work and hand off for final validation.
+  - Sprint final deadline 2026-09-05T07:49:54Z; do not start T007 or claim unavailable hosted acceptance.

@@ -1,0 +1,23 @@
+{
+  "command": [
+    "go",
+    "test",
+    "-count=1",
+    "./internal/domain/discovery",
+    "./internal/adapters/discovery/postgresql",
+    "-run",
+    "TestSnapshotDiagnostics|TestCoverageFindings|TestPostgreSQLAdapterMaps"
+  ],
+  "clearedEnvironment": [
+    "SEMLIA_INGESTION_TEST_DATABASE_URL",
+    "SEMLIA_EXECUTION_CRASH_HELPER",
+    "SEMLIA_EXECUTION_TEST_DB",
+    "SEMLIA_DATABASE_URL"
+  ],
+  "start": "2026-09-09T07:50:31.770Z",
+  "end": "2026-09-09T07:52:25.530Z",
+  "exitStatus": 0,
+  "signal": null,
+  "stdout": "ok  \tgithub.com/iiwish/semlia/internal/domain/discovery\t2.214s\nok  \tgithub.com/iiwish/semlia/internal/adapters/discovery/postgresql\t0.495s [no tests to run]\n",
+  "stderr": "go: downloading google.golang.org/protobuf v1.36.11\ngo: downloading github.com/wasilibs/go-pgquery v0.0.0-20250409022910-10ac41983c07\ngo: downloading github.com/pganalyze/pg_query_go/v6 v6.2.2\ngo: downloading github.com/wasilibs/wazero-helpers v0.0.0-20240620070341-3dff1577cd52\ngo: downloading github.com/tetratelabs/wazero v1.11.0\n"
+}

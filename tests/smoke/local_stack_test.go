@@ -157,10 +157,10 @@ func TestRuntimeJourneyContract(t *testing.T) {
 }
 
 func TestSmokeTargetPinsTenMinuteProcessTimeout(t *testing.T) {
-	makefile := readFile(t, filepath.Join(repositoryRoot(t), "Makefile"))
-	const command = `$(GO) test -timeout=10m -count=1 ./tests/smoke/...`
-	if strings.Count(makefile, command) != 1 {
-		t.Fatalf("Makefile smoke target must contain exactly one %q", command)
+	launcher := readFile(t, filepath.Join(repositoryRoot(t), "scripts", "ci", "check-smoke.sh"))
+	const command = `go test -timeout=10m -count=1 ./tests/smoke/...`
+	if strings.Count(launcher, command) != 1 {
+		t.Fatalf("isolated smoke launcher must contain exactly one %q", command)
 	}
 }
 

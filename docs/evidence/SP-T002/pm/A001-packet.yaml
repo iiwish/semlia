@@ -1,0 +1,138 @@
+task_id: SP-T002
+attempt_id: SP-T002-A001
+status: Running
+attempt_status: Running
+mode: Delegated Execute
+approval: 2026-09-09 用户接受 T001，明确要求继续完成 T002、T003。本包仅授权串行批次中的 T002。
+goal: 来源历史由不可变的完整成员、名称、revision、覆盖和可复核证据组成；实现受授权、有界的快照读取，不依赖 current 指针拼装历史。
+context:
+  root: .
+  root_resolution: Resolve all paths from git rev-parse --show-toplevel.
+  product: docs/specs/semantic-production/product-design.md
+  plan: docs/specs/semantic-production/plan.md
+  tasks: docs/specs/semantic-production/tasks.md
+  checklist: docs/specs/semantic-production/checklists/requirements.md
+  analysis: docs/specs/semantic-production/analysis.md
+  data_model: docs/specs/semantic-production/data-model.md
+  wire_semantics: docs/specs/semantic-production/contracts/production.md
+  wire_schema: docs/specs/semantic-production/contracts/production.openapi.yaml
+  handoff: docs/evidence/SP-T001/handoff.md
+  checkout: docs/evidence/SP-T002/checkout.json
+  baseline_copy: .semlia/evidence-work/SP-T002-baseline
+requirements: [SP-FR-001, SP-FR-002, SP-FR-008, SP-AC-001-input, SP-AC-002, SP-AC-008-replay, SP-AC-010-source-isolation, SP-TD-002, SP-TD-008]
+dependencies: [T001 explicitly accepted, migration 000022 unoccupied, local Docker available, no uncontrolled high finding]
+parallel: false
+conflicts: T003 and all discovery/ingestion/source-contract/schema/generated-file work. One worker owns implementation; PM owns metadata/evidence; reviewer is read-only after return.
+allowed_files:
+  - migrations/000022_semantic_production_sources.up.sql
+  - migrations/000022_semantic_production_sources.down.sql
+  - db/sqlc.yaml
+  - db/queries/discovery.sql
+  - db/queries/catalog.sql
+  - internal/adapters/postgres/sqlc/*.go
+  - internal/domain/discovery/model.go
+  - internal/domain/discovery/model_test.go
+  - internal/domain/discovery/source.go
+  - internal/domain/discovery/snapshot.go
+  - internal/domain/discovery/snapshot_test.go
+  - internal/application/discovery/service.go
+  - internal/application/discovery/service_test.go
+  - internal/application/discovery/control.go
+  - internal/application/discovery/control_test.go
+  - internal/application/discovery/snapshot.go
+  - internal/application/discovery/snapshot_test.go
+  - internal/application/discovery/artifacts.go
+  - internal/application/discovery/artifacts_test.go
+  - internal/adapters/postgres/discovery.go
+  - internal/adapters/postgres/source_discovery.go
+  - internal/adapters/postgres/source_snapshot.go
+  - internal/adapters/postgres/catalog.go
+  - internal/adapters/postgres/artifacts.go
+  - internal/adapters/discovery/catalog/adapter.go
+  - internal/adapters/discovery/catalog/adapter_test.go
+  - internal/adapters/discovery/files/adapter.go
+  - internal/adapters/discovery/files/adapter_test.go
+  - internal/adapters/discovery/dbt/adapter.go
+  - internal/adapters/discovery/dbt/adapter_test.go
+  - internal/adapters/discovery/postgresql/adapter.go
+  - internal/adapters/discovery/postgresql/adapter_test.go
+  - internal/adapters/discovery/postgreslive/collector.go
+  - internal/platform/http/discovery.go
+  - internal/platform/http/catalog.go
+  - internal/platform/http/handler.go
+  - internal/platform/http/source_snapshot_test.go
+  - cmd/semlia/main.go
+  - cmd/semlia/readiness.go
+  - cmd/semlia/readiness_test.go
+  - pkg/identity/id.go
+  - pkg/identity/id_test.go
+  - sdk/typescript/src/ids.ts
+  - sdk/typescript/src/ids.test.ts
+  - api/openapi/semlia.v1.yaml
+  - api/gen/go/types.gen.go
+  - sdk/typescript/src/schema.gen.ts
+  - sdk/typescript/src/client.ts
+  - sdk/typescript/src/client.test.ts
+  - sdk/typescript/src/index.ts
+  - api/README.md
+  - tests/contracts/contract_test.go
+  - tests/integration/discovery/source_snapshot_test.go
+  - tests/integration/ingestion/source_snapshot_retention_test.go
+  - tests/integration/db/semantic_production_migrations_test.go
+  - tests/integration/db/database_test.go
+  - docs/evidence/SP-T002/attempts/SP-T002-A001.md
+  - docs/evidence/SP-T002/worker/
+orchestrator_allowed_files:
+  - docs/evidence/SP-T002/
+  - docs/specs/semantic-production/packets/SP-T002.yaml
+  - docs/specs/semantic-production/tasks.md
+  - docs/specs/semantic-production/analysis.md
+  - docs/specs/semantic-production/checklists/requirements.md
+  - docs/specs/semantic-production/plan.md
+  - docs/specs/semantic-production/product-design.md
+  - docs/SSOT.md
+  - docs/README.md
+scope_rules:
+  - Allowed list is a maximum, not a requirement to edit every file. Existing work is the baseline; never revert it.
+  - Generated Go/sqlc/SDK files may only change through existing generators; do not hand edit generated files.
+  - Adapter edits only propagate proven coverage and existing code content; no new source kinds or external behavior.
+  - Readiness/schema inventory edits assert exact newly required schema and retain real old-stage migration assertions. Do not weaken tests to pass.
+  - Only add the four source snapshot GET routes plus additive nullable discovery-run snapshotId. No production-operation routes yet.
+implementation_obligations:
+  - Implement data-model section 2 and source API semantics exactly, including all nine tables, workspace/identity/revision FKs, immutable constraints and append-only codrev/linrev.
+  - Every observed dataset/field including reused revisions is a member; field parent identity/revision must match this snapshot. Historical names and locators never read from current rows.
+  - Code bytes are content-addressed and protected from cleanup while snapshots depend on them; verify byte availability, not only hash storage. Lineage endpoints and code reference precise revisions.
+  - Cover declared selectors and per-unit completeness explicitly. Partial/failed never imply deletion or globally advance effective complete state. Complete units may advance per-unit head; failed attempts invalidate freshness of their required unit.
+  - Handle first scan, unchanged replay, repeated runs, rename, deletion, shrink scope, partial/failed, concurrent/out-of-order runs and source config changes deterministically with source locks/CAS.
+  - Historical migration must not fabricate names/members/scope from current state; preserve unverifiable quality. No blanket mark of legacy records as verified.
+  - All four reads reauthorize source scope and workspace; wrong relation is 404, known denied scope 403. Machine allowlist remains unchanged.
+  - Cursor binds kind/resource/workspace/filters/upper watermark and last key; limit 1..200, default 50, byte-budget bounded pages and immutable historical data.
+  - Expand-first migration is atomic, schema readiness rejects mismatched databases, empty rollback is tested and rollback with unrepresentable authoritative history rejects without data loss.
+  - No application-level approval, asset creation, generation, publishing, frontend rewrite or new dependencies.
+tdd:
+  red: Add focused runtime tests first and preserve actual failing output for unchanged members, historical names, partial/failed coverage, concurrent/replay, cross-workspace authorization, retention and migration safety.
+  green: Implement minimum schema/domain/persistence/service/HTTP/SDK changes against current repository patterns; all DB assertions use actual isolated PostgreSQL.
+  refactor: Only simplify touched discovery helpers. Preserve transaction ownership and existing contracts; no nested self-committing repository calls.
+validation:
+  - go test -count=1 ./pkg/identity ./internal/domain/discovery ./internal/application/discovery ./internal/adapters/discovery/... ./internal/platform/http ./cmd/semlia
+  - env -u SEMLIA_INGESTION_TEST_DATABASE_URL -u SEMLIA_EXECUTION_CRASH_HELPER -u SEMLIA_EXECUTION_TEST_DB -u SEMLIA_DATABASE_URL go test -p=1 -count=1 -timeout=20m ./tests/integration/discovery ./tests/integration/ingestion ./tests/integration/catalog
+  - env -u SEMLIA_DATABASE_URL go test -p=1 -count=1 -timeout=15m ./tests/integration/db -run '^TestSemanticProductionMigration|^TestMigrationLifecycleAndTenantSchema$|^TestPostgres17MigrationLifecycle$'
+  - make db-generate-check
+  - make contracts-check
+  - make test-contracts
+  - make test-repository
+  - pnpm --filter @semlia/sdk-typescript test
+  - git diff --check
+environment:
+  database: New T002 database tests use local testcontainers PostgreSQL 18-alpine. The required existing TestPostgres17MigrationLifecycle may create its own postgres:17-alpine container unchanged for compatibility evidence. Confirm each TestMain owns its containers; cleanup only containers created by these tests.
+  prohibited: No make check/dev/default Compose, deploy, existing DB migration, paid/live models, Git commit/push/reset, dependency changes or front-end build.
+  dirty_worktree: checkout.json hashes plus ignored baseline copies identify existing tracked/untracked content. Ordinary git diff is not the task delta.
+  storage_pressure: Final database verification uses serial package execution with -p=1 due host ENOSPC. Keep identical tests and original failure logs; do not prune shared Docker resources to bypass capacity checks.
+evidence:
+  output: Exact changed files, actual diff versus baseline copy, original RED/GREEN/commands stdout stderr exit statuses, UTC start/end, scope, unverified cases and remaining risks.
+  file_policy: Manual code and Markdown edits use apply_patch; generated raw logs/diffs/checks may use structured file APIs. Never overwrite prior attempt logs.
+stop_conditions:
+  - Do not delegate further. Do not change task to Accepted.
+  - If necessary file is outside allowlist or current contract cannot be implemented without a product/security decision, message PM with precise requirement and stop that write.
+  - Do not revert user or parallel-agent changes. Unexpected unrelated edits stay untouched; conflicts are reported.
+  - Failing safety tests or missing runtime evidence are not passes. Do not relax bounds, FK/CAS/authorization or assertion semantics to make tests green.

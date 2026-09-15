@@ -1,0 +1,69 @@
+schema_version: 1
+packet_id: M2-T004-A001
+task_id: T004
+feature_id: m2-governed-authoring
+mode: execute_one_task
+status: Ready
+
+goal: >-
+  Add the deterministic validator registry and job-driven validation orchestration so every
+  submitted proposal runs schema, reference and structural validators that record version, input
+  digest and results, with any failure degrading to human handling and never a silent pass.
+
+dependencies:
+  - T003 Accepted (2026-09-02)
+  - founder continuous M2 execution authorization through T007 (2026-09-02)
+  - docs/SSOT.md §8.2 (deterministic-validator-first; failure degrades to human), NFR-003
+  - docs/specs/semantic-assets/semantic-asset-design.md §3.3 (severity enum)
+  - docs/specs/m2-governed-authoring/data-model.md (validation aggregates)
+
+allowed_files:
+  - internal/**
+  - api/openapi/**
+  - db/**
+  - migrations/**
+  - sdk/typescript/**
+  - tests/**
+  - docs/specs/m2-governed-authoring/**
+  - docs/evidence/M2-T004/**
+
+forbidden_changes:
+  - Do not add review, release or rollback endpoints; those belong to T006/T007.
+  - Do not let AI output or validator findings replace deterministic gates.
+  - Do not auto-reject or auto-publish from validation outcomes in this task; a finished run only
+    moves the proposal to in_review with results recorded (T005/T006 decide routing and review).
+  - Do not skip or weaken the strict outbox envelope or existing tests.
+  - Do not expose storage UUIDs on the wire.
+
+tdd:
+  red:
+    - Registry: an unknown validator id is refused when recording a run; validator ids and
+      versions are stable and reported by the registry.
+    - Orchestration: submitting a proposal (draft→proposed) enqueues exactly one validation job;
+      the job executes the v1 validators, records results with input digests and moves the
+      proposal validating→in_review on completion.
+    - Degradation: a validator reporting a blocker (or an infra failure after retries) records
+      the failure outcome and the proposal still reaches in_review — never silent pass, never
+      auto-rejection.
+    - Read surface: validation runs for a proposal are listed via the API with versions and
+      digests.
+  green:
+    - End-to-end against real PostgreSQL: submit → worker executes → results persisted →
+      in_review, including at least one blocker finding and one clean run.
+  refactor:
+    - Extract the validator-execution loop so future validator additions are registry entries,
+      not orchestration changes.
+
+validation:
+  - go test ./...
+  - go vet ./...
+  - make contracts-check
+  - make check-source
+  - git diff --check
+
+acceptance:
+  - v1 validators (schema, reference, structural) run as jobs with stable ids and versions.
+  - Results record validator version, input digest, severity and outcome; blockers gate later
+    release candidacy via the T002 gate.
+  - Any failure degrades to human handling; no silent pass and no auto-rejection.
+  - Validation runs are readable via the governance API with regenerated contracts.

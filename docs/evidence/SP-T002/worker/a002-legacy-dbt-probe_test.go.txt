@@ -1,0 +1,39 @@
+package dbt_test
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/iiwish/semlia/internal/adapters/discovery/dbt"
+	"github.com/iiwish/semlia/internal/domain/discovery"
+)
+
+func TestA002LegacyDBTCodeBounds(t *testing.T) {
+	for _, size := range []int{9 << 20, 10 << 20} {
+		t.Run(fmt.Sprint(size), func(t *testing.T) {
+			document := map[string]any{
+				"metadata": map[string]any{"dbt_schema_version": "https://schemas.getdbt.com/dbt/manifest/v12.json"},
+				"nodes": map[string]any{"model.shop.orders": map[string]any{
+					"database": "warehouse", "schema": "analytics", "name": "orders", "resource_type": "model", "package_name": "shop",
+					"path": "orders.sql", "original_file_path": "orders.sql", "unique_id": "model.shop.orders", "fqn": []string{"shop", "orders"}, "alias": "orders",
+					"checksum": map[string]string{"name": "sha256", "checksum": "abc"}, "raw_code": strings.Repeat(" ", size-8) + "select 1", "depends_on": map[string]any{"nodes": []string{}},
+				}},
+			}
+			for _, key := range []string{"sources", "macros", "docs", "exposures", "metrics", "groups", "selectors", "disabled", "parent_map", "child_map", "group_map", "saved_queries", "semantic_models", "unit_tests"} {
+				document[key] = map[string]any{}
+			}
+			data, err := json.Marshal(document)
+			if err != nil {
+				t.Fatal(err)
+			}
+			snapshot, err := (dbt.Adapter{}).Discover(context.Background(), discovery.Input{Locator: "target", ObservedAt: time.Now(), Files: map[string][]byte{"manifest.json": data}})
+			if err != nil || len(snapshot.CodeArtifacts) != 1 {
+				t.Fatalf("legacy raw code size=%d codes=%d err=%v", size, len(snapshot.CodeArtifacts), err)
+			}
+		})
+	}
+}

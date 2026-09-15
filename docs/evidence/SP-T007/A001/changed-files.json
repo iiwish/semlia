@@ -1,0 +1,35 @@
+{
+  "baselineArchives": [
+    ".semlia/evidence-work/SP-T007-before.tar",
+    ".semlia/evidence-work/SP-T007-db-before.tar",
+    ".semlia/evidence-work/SP-T007-clock-before.tar",
+    ".semlia/evidence-work/SP-T007-operations-before.tar",
+    ".semlia/evidence-work/SP-T007-format-before.tar",
+    ".semlia/evidence-work/SP-T007-security-before.tar"
+  ],
+  "sourceAndAuthorizedPriorEvidenceFiles": [
+    "tests/integration/governance/production_generation_test.go",
+    "scripts/dev/production-acceptance.sh",
+    "tests/integration/db/database_test.go",
+    "tests/integration/db/execution_test.go",
+    "tests/integration/db/governed_objects_test.go",
+    "tests/integration/db/webhook_interfaces_test.go",
+    "tests/integration/db/machine_interfaces_test.go",
+    "tests/integration/operations/operations_test.go",
+    "internal/platform/http/handler.go",
+    "internal/application/governance/production_history.go",
+    "internal/domain/governance/release.go",
+    "internal/domain/governance/proposal.go",
+    "internal/domain/governance/production.go",
+    "docs/evidence/SP-T005/acceptance-review/re-review.md",
+    "docs/evidence/SP-T006/A001/test-results.md",
+    "go.mod",
+    "go.sum",
+    "pnpm-lock.yaml",
+    "pnpm-workspace.yaml",
+    "tests/integration/governance/production_acceptance_test.go",
+    "tests/fixtures/semantic-production/commerce.catalog.json",
+    "tests/fixtures/semantic-production/commerce.gold.json"
+  ],
+  "documentation": "docs/evidence/SP-T007/**; docs/specs/semantic-production/{tasks.md,packets/SP-T007.yaml,release-report.md,analysis.md,checklists/requirements.md}"
+}

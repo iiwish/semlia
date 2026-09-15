@@ -1,0 +1,74 @@
+import AxeBuilder from "@axe-core/playwright";
+import { selectAcceptanceWorkspace } from "./acceptance-controls";
+import { expect, test } from "@playwright/test";
+import { mkdirSync } from "node:fs";
+import { resolve } from "node:path";
+import type { components } from "@semlia/sdk-typescript";
+
+const workspace = process.env.SEMLIA_EMBEDDING_QA_WORKSPACE;
+const enabled = process.env.SEMLIA_EMBEDDING_QA === "1";
+const evidence = process.env.SEMLIA_BROWSER_EVIDENCE_DIR ?? resolve(process.cwd(), "../docs/evidence/FMB-T005/screenshots");
+
+test("persisted embedding state, released search and owning Operations remain usable", async ({ page, request }, testInfo) => {
+  test.skip(!enabled || !workspace, "Explicit isolated embedding QA workspace is required; no default-database mutations.");
+  expect(workspace).toMatch(/^wsp_[0-9a-z]+$/);
+  mkdirSync(evidence, { recursive: true });
+  const statusResponse = await request.get(`/api/v1/workspaces/${workspace}/embedding-index`, { headers: { "X-Semlia-Principal": "local-author" } });
+  expect(statusResponse.status()).toBe(200);
+  const status = await statusResponse.json() as components["schemas"]["EmbeddingIndexStatus"];
+  expect(status.configured).toBe(true);
+  expect(status.active?.state).toBe("active");
+  expect(status.latest).toBeTruthy();
+  const latest = status.latest!;
+
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
+  await selectAcceptanceWorkspace(page, workspace!);
+  await page.getByRole("button", { name: "系统设置", exact: true }).click();
+  await page.getByRole("complementary", { name: "治理上下文" }).getByRole("button", { name: /模型配置/ }).click();
+  await page.getByRole("tab", { name: "Embedding 模型" }).click();
+  const panel = page.getByRole("region", { name: "持久向量索引" });
+  await expect(panel).toContainText(latest.id);
+  await expect(panel).toContainText(`${latest.vectorCount} / ${latest.chunkCount}`);
+  await expect(panel.getByRole("link", { name: "查看运行" })).toHaveAttribute("href", `/operations/runtime?run=${latest.runtimeRunId}`);
+  const trigger = panel.getByRole("button", { name: "重建向量索引" });
+  await expect(trigger).toBeEnabled();
+  await trigger.click();
+  const dialog = page.getByRole("dialog", { name: "重建向量索引" });
+  await expect(dialog.getByRole("button", { name: "开始重建" })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(dialog.getByRole("button", { name: "关闭重建确认" })).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(dialog.getByRole("button", { name: "开始重建" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+
+  await panel.getByLabel("已发布知识检索").fill("revenue");
+  const searched = page.waitForResponse(response => response.url().includes("/embedding-search?") && response.request().method() === "GET");
+  await panel.getByRole("button", { name: "检索已发布知识" }).click();
+  const searchResponse = await searched;
+  expect(searchResponse.status()).toBe(200);
+  const result = await searchResponse.json() as components["schemas"]["EmbeddingSearchResult"];
+  expect(result.mode).toBe("vector");
+  expect(result.items.length).toBeGreaterThan(0);
+  for (const item of result.items) await expect(panel).toContainText(item.revisionId);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1)).toBe(false);
+  const accessibility = await new AxeBuilder({ page }).include(".embedding-index-panel").analyze();
+  expect(accessibility.violations.filter(item => item.impact === "serious" || item.impact === "critical")).toEqual([]);
+  await page.screenshot({ path: resolve(evidence, `${testInfo.project.name}-persistent-search.png`), fullPage: true });
+
+  await page.reload();
+  await selectAcceptanceWorkspace(page, workspace!);
+  await expect(page.getByRole("combobox", { name: "工作区" })).toHaveValue(workspace!);
+  await page.getByRole("button", { name: "系统设置", exact: true }).click();
+  await page.getByRole("complementary", { name: "治理上下文" }).getByRole("button", { name: /模型配置/ }).click();
+  await page.getByRole("tab", { name: "Embedding 模型" }).click();
+  await expect(panel).toContainText(latest.id);
+  await panel.getByRole("link", { name: "查看运行" }).click();
+  await expect(page).toHaveURL(new RegExp(`run=${latest.runtimeRunId}`));
+  const runtime = page.getByRole("dialog");
+  await expect(runtime).toContainText(latest.runtimeRunId);
+  await expect(runtime).toContainText("Job ID");
+  await page.screenshot({ path: resolve(evidence, `${testInfo.project.name}-owning-operations.png`), fullPage: true });
+});

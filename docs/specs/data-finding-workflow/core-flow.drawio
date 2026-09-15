@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="drawio" version="26.0.0">
+  <diagram id="data-finding-core" name="外部 AI 接入与调研验证">
+    <mxGraphModel dx="2200" dy="1700" grid="1" gridSize="10" page="1" pageWidth="2200" pageHeight="1700" background="#ffffff">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="Semlia · 外部 AI 接入与调研验证（产品目标，非实现声明）" style="text;html=0;fontSize=26;fontStyle=1;fontFamily=PingFang SC;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="80" y="10" width="1900" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="request" value="F-01 向外部 AI 委托调研&#xa;接入方保存目标、范围和任务&#xa;确认公开接口能力与预算" style="rounded=1;arcSize=8;whiteSpace=wrap;html=0;fontSize=18;fontFamily=PingFang SC;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="80" y="150" width="300" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="research" value="F-02 外部 AI 调研与选数&#xa;通过 MCP/API 获取授权上下文&#xa;Semlia 返回候选、版本与证据" style="rounded=1;arcSize=8;whiteSpace=wrap;html=0;fontSize=18;fontFamily=PingFang SC;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="680" y="150" width="300" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="alignment" value="F-03 外部 AI 对齐口径&#xa;依据 Semlia 规则与证据&#xa;复用、补查或请求业务决定？" style="rhombus;whiteSpace=wrap;html=0;fontSize=18;fontFamily=PingFang SC;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="1260" y="110" width="340" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="business" value="F-04 必要业务决定&#xa;外部 AI 组织问题与沟通&#xa;有权主体通过治理渠道确认" style="rounded=1;arcSize=8;whiteSpace=wrap;html=0;fontSize=18;fontFamily=PingFang SC;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="1260" y="580" width="340" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="external" value="确需新材料时&#xa;业务方维护映射并上传中台&#xa;已有材料不重复索取" style="rounded=1;arcSize=8;whiteSpace=wrap;html=0;fontSize=18;fontFamily=PingFang SC;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="1860" y="580" width="320" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="reference" value="Semlia 保存权威材料与决定&#xa;外部 AI 读取版本引用后继续&#xa;材料接收不等于业务批准" style="rounded=1;arcSize=8;whiteSpace=wrap;html=0;fontSize=18;fontFamily=PingFang SC;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="1860" y="1000" width="320" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="checks" value="F-05 外部 AI 调用检查&#xa;Semlia 返回验证与限制&#xa;范围、粒度、冲突、有效性" style="rhombus;whiteSpace=wrap;html=0;fontSize=18;fontFamily=PingFang SC;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="1260" y="960" width="340" height="190" as="geometry" />
+        </mxCell>
+        <mxCell id="plan" value="在外部 AI 中集中复核&#xa;数据人员检查并纠正判断&#xa;接入方调度受影响项重检" style="rounded=1;arcSize=8;whiteSpace=wrap;html=0;fontSize=18;fontFamily=PingFang SC;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="680" y="1000" width="300" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="reuse" value="F-06 外部 AI 交付调研成果&#xa;保存 Semlia 引用与使用限制&#xa;不表示知识发布或数字交付" style="rounded=1;arcSize=8;whiteSpace=wrap;html=0;fontSize=18;fontFamily=PingFang SC;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="80" y="1000" width="300" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="governance" value="Semlia 治理与发布&#xa;独立授权提交候选，验证与策略审核&#xa;技术复核不批准发布或查询" style="rounded=1;arcSize=8;whiteSpace=wrap;html=0;fontSize=18;fontFamily=PingFang SC;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="1260" y="1440" width="380" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="blocked" value="外部 AI 记录调研受阻&#xa;缺能力、权限或证据时明确停止&#xa;不得使用内部接口或管理员旁路" style="rounded=1;arcSize=8;whiteSpace=wrap;html=0;fontSize=18;fontFamily=PingFang SC;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="80" y="580" width="320" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="note" value="Semlia：语义基础设施；外部 AI：业务任务；第一方 AI：测试与验证。&#xa;MCP/API 提供领域能力，Skill 组织工作方法，不承担授权或权威语义存储。&#xa;发布消费、授权探索、候选提交分别受控；探索与提案接口缺口见规格第 10 节。&#xa;A1 是接入方验证场景；本图不定义 Semlia 调研页面或业务任务状态机。&#xa;初始案例全合成；参考 AI 使用与外部消费者相同的公开契约。" style="text;html=0;whiteSpace=wrap;fontSize=18;fontFamily=PingFang SC;align=left;verticalAlign=middle;fontColor=#4b5563;" vertex="1" parent="1">
+          <mxGeometry x="80" y="1420" width="1000" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;endArrow=block;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="request" target="research"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;endArrow=block;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="research" target="alignment"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e3" value="规则可能存在，继续调研" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;fontSize=16;endArrow=block;exitX=0.25;exitY=0;entryX=0.5;entryY=0;" edge="1" parent="1" source="alignment" target="research"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1340" y="80" /><mxPoint x="830" y="80" /></Array></mxGeometry></mxCell>
+        <mxCell id="e4" value="需要新业务决定" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;fontSize=16;endArrow=block;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="alignment" target="business"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e5" value="已有规则，检查适用性" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;fontSize=16;endArrow=block;exitX=0.25;exitY=1;entryX=0.25;entryY=0;" edge="1" parent="1" source="alignment" target="checks"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1130" y="350" /><mxPoint x="1130" y="870" /><mxPoint x="1340" y="870" /></Array></mxGeometry></mxCell>
+        <mxCell id="e6" value="需要材料" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;fontSize=16;endArrow=block;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="business" target="external"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e7" value="回收结果" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;fontSize=16;endArrow=block;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="external" target="reference"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e8" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;endArrow=block;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="1" source="reference" target="checks"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e9" value="仍缺决定或映射有冲突" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;fontSize=16;endArrow=block;exitX=0.75;exitY=0;entryX=0.75;entryY=1;" edge="1" parent="1" source="checks" target="business"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1510" y="820" /></Array></mxGeometry></mxCell>
+        <mxCell id="e10" value="带着已完成的工作进入复核" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;fontSize=16;endArrow=block;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="1" source="checks" target="plan"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e11" value="复核有效且必需检查均满足" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;fontSize=16;endArrow=block;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="1" source="plan" target="reuse"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e12" value="用于新任务" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;fontSize=16;endArrow=block;exitX=0.5;exitY=0;entryX=0;entryY=0.5;" edge="1" parent="1" source="reuse" target="request"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="230" y="830" /><mxPoint x="30" y="830" /><mxPoint x="30" y="200" /></Array></mxGeometry></mxCell>
+        <mxCell id="e13" value="按需准备提案，独立授权与治理" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;fontSize=16;endArrow=block;dashed=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="reuse" target="governance"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="230" y="1280" /><mxPoint x="1450" y="1280" /></Array></mxGeometry></mxCell>
+        <mxCell id="e14" value="纠正后由外部 AI 重做受影响工作" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;fontSize=16;endArrow=block;exitX=0.5;exitY=0;entryX=0.5;entryY=1;" edge="1" parent="1" source="plan" target="research"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e15" value="在预算内无法恢复" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;fontSize=16;endArrow=block;exitX=0.25;exitY=0;entryX=0.5;entryY=1;" edge="1" parent="1" source="checks" target="blocked"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1210" y="900" /><mxPoint x="240" y="900" /></Array></mxGeometry></mxCell>
+        <mxCell id="e16" value="有效业务答复，无需新材料" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;fontSize=16;endArrow=block;exitX=1;exitY=0.8;entryX=0.25;entryY=0;" edge="1" parent="1" source="business" target="reference"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1740" y="680" /><mxPoint x="1740" y="880" /><mxPoint x="1940" y="880" /></Array></mxGeometry></mxCell>
+        <mxCell id="e17" value="依据不足，暂不能解决" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;fontSize=16;endArrow=block;exitX=0;exitY=0.25;entryX=1;entryY=0.5;" edge="1" parent="1" source="plan" target="blocked"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="530" y="1030" /><mxPoint x="530" y="640" /></Array></mxGeometry></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

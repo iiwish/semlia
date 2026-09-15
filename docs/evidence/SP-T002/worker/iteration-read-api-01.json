@@ -1,0 +1,25 @@
+{
+  "command": [
+    "go",
+    "test",
+    "./tests/integration/discovery",
+    "-run",
+    "^TestSourceSnapshot",
+    "-count=1",
+    "-v",
+    "-timeout",
+    "10m"
+  ],
+  "clearedEnvironment": [
+    "SEMLIA_INGESTION_TEST_DATABASE_URL",
+    "SEMLIA_EXECUTION_CRASH_HELPER",
+    "SEMLIA_EXECUTION_TEST_DB",
+    "SEMLIA_DATABASE_URL"
+  ],
+  "start": "2026-09-09T07:01:11.648Z",
+  "end": "2026-09-09T07:01:21.899Z",
+  "exitStatus": 1,
+  "signal": null,
+  "stdout": "2026/09/09 15:01:14 github.com/testcontainers/testcontainers-go - Connected to docker: \n  Server Version: 29.4.0\n  API Version: 1.54\n  Operating System: OrbStack\n  Total Memory: 16040 MB\n  Testcontainers for Go Version: v0.44.0\n  Resolved Docker Host: unix:///var/run/docker.sock\n  Resolved Docker Socket Path: /var/run/docker.sock\n  Test SessionID: ababe6249a8909903772beb1e3679c3bdbc8f0f37ffc6ce8a059a95b13b657f6\n  Test ProcessID: 17b14ef8-998a-429e-a910-6d90f2104ac4\n2026/09/09 15:01:14 🐳 Creating container for image postgres:18-alpine\n2026/09/09 15:01:15 🐳 Creating container for image testcontainers/ryuk:0.14.0\n2026/09/09 15:01:15 ✅ Container created: 0b4ed73b7a29\n2026/09/09 15:01:15 🐳 Starting container: 0b4ed73b7a29\n2026/09/09 15:01:15 ✅ Container started: 0b4ed73b7a29\n2026/09/09 15:01:15 ⏳ Waiting for container id 0b4ed73b7a29 image: testcontainers/ryuk:0.14.0. Waiting for: all of: [log message \"Started\", port 8080/tcp to be listening]\n2026/09/09 15:01:15 Shell not found in container\n2026/09/09 15:01:15 🔔 Container is ready: 0b4ed73b7a29\n2026/09/09 15:01:15 ✅ Container created: 76aa61221b3d\n2026/09/09 15:01:15 🐳 Starting container: 76aa61221b3d\n2026/09/09 15:01:15 ✅ Container started: 76aa61221b3d\n2026/09/09 15:01:15 ⏳ Waiting for container id 76aa61221b3d image: postgres:18-alpine. Waiting for: all of: [log message \"database system is ready to accept connections\" (occurrence: 2), port 5432/tcp to be listening]\n2026/09/09 15:01:17 🔔 Container is ready: 76aa61221b3d\n=== RUN   TestSourceSnapshotUnchangedMembersAndHistoricalNames\n--- PASS: TestSourceSnapshotUnchangedMembersAndHistoricalNames (0.20s)\n=== RUN   TestSourceSnapshotPartialFailedAndOutOfOrderHeads\n--- PASS: TestSourceSnapshotPartialFailedAndOutOfOrderHeads (0.24s)\n=== RUN   TestSourceSnapshotConcurrentReplay\n--- PASS: TestSourceSnapshotConcurrentReplay (0.37s)\n=== RUN   TestSourceSnapshotCodeBytesAndPreciseLineage\n--- PASS: TestSourceSnapshotCodeBytesAndPreciseLineage (1.45s)\n=== RUN   TestSourceSnapshotOutOfOrderDoesNotRegressCurrent\n--- PASS: TestSourceSnapshotOutOfOrderDoesNotRegressCurrent (0.31s)\n=== RUN   TestSourceSnapshotReadIsolationCursorsAndWatermark\n    source_snapshot_test.go:262: create discovery finding: semantic registry invariant violated\n--- FAIL: TestSourceSnapshotReadIsolationCursorsAndWatermark (0.22s)\n=== RUN   TestSourceSnapshotMemberByteBudgetAndSourceConfig\n--- PASS: TestSourceSnapshotMemberByteBudgetAndSourceConfig (0.84s)\nFAIL\n2026/09/09 15:01:21 🐳 Stopping container: 76aa61221b3d\n2026/09/09 15:01:21 ✅ Container stopped: 76aa61221b3d\n2026/09/09 15:01:21 🐳 Terminating container: 76aa61221b3d\n2026/09/09 15:01:21 🚫 Container terminated: 76aa61221b3d\nFAIL\tgithub.com/iiwish/semlia/tests/integration/discovery\t7.651s\nFAIL\n",
+  "stderr": ""
+}

@@ -1,0 +1,23 @@
+{
+  "formatVersion": 1,
+  "product": "Semlia",
+  "version": "0.2.0-beta.1-a002.1",
+  "commit": "source-revision-redacted",
+  "target": {
+    "os": "darwin",
+    "arch": "arm64"
+  },
+  "executable": "semlia",
+  "apiVersion": "v1",
+  "schemaVersion": "0.9.0",
+  "sbom": "SBOM.cdx.json",
+  "checksumFile": "SHA256SUMS",
+  "signingSubject": "SHA256SUMS",
+  "migrationVersion": 21,
+  "sourceDigest": "sha256:dc81f75b93285a9c7d894b165336ed6863d7a394cb8138ffec483f98be15d4ce",
+  "sourceDirty": true,
+  "artifactKind": "local_candidate",
+  "acceptance": "unreviewed",
+  "buildEnvironment": "GOWORK=off GOENV=off GOFLAGS= GOTOOLCHAIN=local CGO_ENABLED=0 VITE_LOCAL_UAT_IDENTITIES=0",
+  "goVersion": "go1.26.6"
+}

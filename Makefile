@@ -19,9 +19,9 @@ help:
 		'  make sbom            Generate a CycloneDX SBOM for the local binary' \
 		'  make release         Build a versioned, checksummed release bundle' \
 		'  make server          Run the Semlia control-plane server' \
-		'  make dev             Build and start the complete local stack' \
+		'  make dev             Start native Go server, worker and Vite with existing PostgreSQL' \
 		'  make smoke           Verify the running local stack' \
-		'  make dev-down        Stop the local stack and preserve its data' \
+		'  make dev-down        Stop owned native processes and preserve PostgreSQL/data' \
 		'  make contracts       Generate Go and TypeScript contract artifacts' \
 		'  make contracts-check Verify committed contract artifacts are current' \
 		'  make db-generate      Generate typed PostgreSQL queries with sqlc' \
@@ -58,16 +58,14 @@ build-image:
 server: build
 	./build/semlia server
 
-dev: web-embed
-	@./scripts/dev/compose.sh up --detach --build --wait --wait-timeout 240
+dev:
+	@node scripts/dev/native.mjs up
 
 dev-down:
-	@./scripts/dev/compose.sh down --remove-orphans
+	@node scripts/dev/native.mjs down
 
 smoke:
-	@./scripts/dev/ensure-env.sh
-	@port="$$(sed -n 's/^SEMLIA_HTTP_PORT=//p' .semlia/dev.env)"; \
-	SEMLIA_RUN_SMOKE=1 SEMLIA_SMOKE_URL="http://127.0.0.1:$$port" $(GO) test -timeout=10m -count=1 ./tests/smoke/...
+	@node scripts/dev/native.mjs status
 
 contracts:
 	@./scripts/generate-contracts.sh --write
@@ -119,6 +117,13 @@ test:
 check-source:
 	@./scripts/ci/check-source.sh
 
+.PHONY: browser-bootstrap check-browser
+browser-bootstrap:
+	$(PNPM) --dir web exec playwright install --with-deps chromium
+
+check-browser:
+	bash scripts/dev/browser-acceptance.sh
+
 check-smoke:
 	@./scripts/ci/check-smoke.sh
 
@@ -127,13 +132,14 @@ security-check: build-image
 
 check:
 	$(MAKE) --no-print-directory check-source
+	$(MAKE) --no-print-directory check-browser
 	$(MAKE) --no-print-directory check-smoke
 	$(MAKE) --no-print-directory security-check
 
 sbom: build
 	@./scripts/release/sbom.sh build/semlia build/release/semlia.sbom.cdx.json
 
-release: web-embed
+release:
 	@./scripts/release/build.sh
 
 clean:

@@ -7,12 +7,15 @@ import {
   CircleAlert,
   FileCheck2,
   GitPullRequestArrow,
+  LoaderCircle,
   LockKeyhole,
   Play,
   Save,
   ShieldCheck,
+  Sparkles,
 } from "lucide-react";
 
+import { useCan } from "./authorization";
 import type { Asset, KnowledgeRevisionRequest, KnowledgeRevisionSubmission } from "./types";
 
 type EditableKnowledgeField = "definition" | "expression" | "includes" | "excludes" | "disambiguation" | "relations";
@@ -64,15 +67,18 @@ interface KnowledgeRevisionWorkbenchProps {
   request: KnowledgeRevisionRequest;
   onCancel: () => void;
   onNotify: (message: string) => void;
-  onSubmit: (submission: KnowledgeRevisionSubmission) => void;
+  onSubmit: (submission: KnowledgeRevisionSubmission) => Promise<void>;
+  onStartAIGeneration: () => void;
 }
 
-export function KnowledgeRevisionWorkbench({ asset, request, onCancel, onNotify, onSubmit }: KnowledgeRevisionWorkbenchProps) {
+export function KnowledgeRevisionWorkbench({ asset, request, onCancel, onNotify, onSubmit, onStartAIGeneration }: KnowledgeRevisionWorkbenchProps) {
+  const canPropose = useCan("asset.propose");
   const publishedValues = useMemo(() => fieldValues(asset), [asset]);
   const [draftValues, setDraftValues] = useState(() => fieldValues(asset));
   const [activeField, setActiveField] = useState<EditableKnowledgeField>(() => initialFieldFor(request.fieldPath));
   const [reason, setReason] = useState(request.context ?? "");
   const [checksRun, setChecksRun] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const descriptor = knowledgeFields.find((field) => field.key === activeField) ?? knowledgeFields[0];
   const changedFields = knowledgeFields.filter((field) => normalize(draftValues[field.key]) !== normalize(publishedValues[field.key]));
@@ -101,24 +107,34 @@ export function KnowledgeRevisionWorkbench({ asset, request, onCancel, onNotify,
     }
     setError("");
     setChecksRun(true);
-    onNotify(`${asset.name} 知识草稿预检完成：结构、证据引用与消费影响均已形成可审核结果。`);
+    onNotify(`预检通过：提交后治理服务将运行结构、引用与回归验证。`);
   };
 
-  const submit = () => {
-    if (!checksRun || changedFields.length === 0 || !reason.trim()) return;
+  const submit = async () => {
+    if (!checksRun || changedFields.length === 0 || !reason.trim() || submitting) return;
     const labels = changedFields.map((field) => field.label);
-    onSubmit({
-      assetId: asset.id,
-      baseRevision: asset.revision,
-      title: `修订${asset.name}的${labels.join("、")}`,
-      summary: `修订${labels.join("、")}，保留来源资料与已发布 ${asset.revision} 的不可变记录。`,
-      reason: reason.trim(),
-      changes: changedFields.map((field) => ({
-        field: field.fieldPath,
-        before: publishedValues[field.key],
-        after: draftValues[field.key].trim(),
-      })),
-    });
+    setSubmitting(true);
+    setError("");
+    try {
+      await onSubmit({
+        assetId: asset.id,
+        baseRevision: asset.revision,
+        title: `修订${asset.name}的${labels.join("、")}`,
+        summary: `修订${labels.join("、")}，保留来源资料与已发布 ${asset.revision} 的不可变记录。`,
+        reason: reason.trim(),
+        changes: changedFields.map((field) => ({
+          field: field.fieldPath,
+          before: publishedValues[field.key],
+          after: draftValues[field.key].trim(),
+        })),
+      });
+    } catch (submitError) {
+      const message = submitError instanceof Error ? submitError.message : "提案提交失败，请稍后重试。";
+      setError(message);
+      setChecksRun(false);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -169,15 +185,16 @@ export function KnowledgeRevisionWorkbench({ asset, request, onCancel, onNotify,
             <p><BookOpenCheck size={14} />修订只改变候选知识，不会覆盖这份来源或历史证据。</p>
           </section>
           <section className="knowledge-checks">
-            <header><span className="content-label">候选预检</span><strong>{checksRun ? "3/3 完成" : "等待运行"}</strong></header>
-            {["结构契约", "证据引用", "消费影响"].map((label) => <div key={label} className={checksRun ? "knowledge-check-passed" : undefined}><span>{checksRun ? <CheckCircle2 size={15} /> : <ShieldCheck size={15} />}</span><strong>{label}</strong><small>{checksRun ? label === "消费影响" ? `${asset.consumerBindings.length} 个消费者已纳入审核范围` : "通过" : "待运行"}</small></div>)}
+            <header><span className="content-label">候选预检</span><strong>{checksRun ? "已就绪" : "等待运行"}</strong></header>
+            {["结构契约", "证据引用", "结果回归"].map((label) => <div key={label} className={checksRun ? "knowledge-check-passed" : undefined}><span>{checksRun ? <CheckCircle2 size={15} /> : <ShieldCheck size={15} />}</span><strong>{label}</strong><small>{checksRun ? "提交后由治理验证器执行" : "提交后运行"}</small></div>)}
+            <p className="knowledge-checks-note">提交将创建真实提案并进入验证流水线；验证结果在候选版本页展示。</p>
           </section>
         </aside>
       </div>
 
       <footer className="knowledge-revision-actions">
-        <div><strong>{checksRun ? "候选已经具备审核上下文" : changedFields.length > 0 ? `${changedFields.length} 项知识变化尚未检查` : "尚未修改知识"}</strong><span>{checksRun ? "提交后将进入不可变版本审核，不会直接发布。" : "运行检查后才能提交审核。"}</span></div>
-        <div><button className="text-button" type="button" onClick={onCancel}>取消修订</button><button className="secondary-button" type="button" onClick={() => onNotify(`${asset.name} 知识草稿已保存在当前原型会话。`)} disabled={changedFields.length === 0}><Save size={15} />保存草稿</button>{checksRun ? <button className="primary-button" type="button" onClick={submit}><GitPullRequestArrow size={15} />提交审核</button> : <button className="primary-button" type="button" onClick={runChecks}><Play size={15} />运行检查</button>}</div>
+        <div><strong>{submitting ? "正在提交治理提案" : checksRun ? "候选已经具备审核上下文" : changedFields.length > 0 ? `${changedFields.length} 项知识变化尚未检查` : "尚未修改知识"}</strong><span>{submitting ? "正在创建提案并提交验证。" : checksRun ? "提交后进入不可变版本审核，不会直接发布。" : "运行检查后才能提交审核。"}</span></div>
+        <div><button className="text-button" type="button" onClick={onCancel}>取消修订</button><button className="text-button" type="button" onClick={onStartAIGeneration} disabled={!canPropose}><Sparkles size={15} />AI 提案</button><button className="secondary-button" type="button" onClick={() => onNotify(`${asset.name} 知识草稿已保存在当前浏览器会话，不会持久化。`)} disabled={changedFields.length === 0}><Save size={15} />保存草稿</button>{checksRun ? <button className="primary-button" type="button" onClick={submit} disabled={!canPropose || submitting}>{submitting ? <LoaderCircle className="spin" size={15} /> : <GitPullRequestArrow size={15} />}提交审核</button> : <button className="primary-button" type="button" onClick={runChecks}><Play size={15} />运行检查</button>}</div>
       </footer>
     </section>
   );

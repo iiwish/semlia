@@ -3,12 +3,31 @@ package postgresql_test
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/iiwish/semlia/internal/adapters/discovery/postgresql"
 	"github.com/iiwish/semlia/internal/domain/discovery"
+	"github.com/iiwish/semlia/internal/domain/ingestion"
 )
+
+func TestPostgreSQLAdapterPreservesSupportedUploadBytes(t *testing.T) {
+	for _, size := range []int{11 << 20, 50 << 20} {
+		t.Run(fmt.Sprint(size), func(t *testing.T) {
+			statement := "CREATE TABLE orders (id bigint);"
+			content := strings.Repeat(" ", size-len(statement)) + statement
+			snapshot, err := (postgresql.Adapter{}).Discover(context.Background(), discovery.Input{Locator: "artifact-set:fixture", ObservedAt: time.Now(), Files: map[string][]byte{"schema.sql": []byte(content)}})
+			if err != nil {
+				t.Fatalf("SQL within the existing internal staging boundary rejected: %v", err)
+			}
+			if len(snapshot.CodeArtifacts) != 1 || string(snapshot.CodeArtifacts[0].Content) != content {
+				t.Fatal("SQL upload bytes not retained")
+			}
+		})
+	}
+}
 
 func TestPostgreSQLAdapterParsesTablesViewsAndLineage(t *testing.T) {
 	input := discovery.Input{
@@ -50,6 +69,42 @@ func TestPostgreSQLAdapterRejectsInvalidSQL(t *testing.T) {
 		Locator: "broken.sql", ObservedAt: time.Now(), Files: map[string][]byte{"broken.sql": []byte("SELECT FROM")},
 	})
 	if !errors.Is(err, discovery.ErrInvalidInput) {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestPostgreSQLAdapterPreservesLongLogicalPaths(t *testing.T) {
+	for _, length := range []int{252, 253, 261, 1024} {
+		prefix := strings.Repeat("segment/", (length-100)/8)
+		path := prefix + strings.Repeat("x", length-len(prefix)-4) + ".sql"
+		snapshot, err := (postgresql.Adapter{}).Discover(context.Background(), discovery.Input{Locator: "git://long-path", ObservedAt: time.Now().UTC(), Files: map[string][]byte{path: []byte("CREATE TABLE public.orders(id bigint);")}})
+		if err != nil {
+			t.Fatalf("logical path of %d bytes rejected: %v", length, err)
+		}
+		if len(snapshot.Coverage) != 1 || len(snapshot.Coverage[0].Key) > 256 || snapshot.Coverage[0].Selector != path || len(snapshot.CodeArtifacts) != 1 || snapshot.CodeArtifacts[0].Path != path {
+			t.Fatalf("path of %d bytes lost or unbounded: %+v", length, snapshot.Coverage)
+		}
+	}
+	path := strings.Repeat("segment/", 40)
+	input := discovery.Input{Locator: "git://distinct-long-paths", ObservedAt: time.Now().UTC(), Files: map[string][]byte{path + "a.sql": []byte("CREATE TABLE public.a(id bigint);"), path + "b.sql": []byte("CREATE TABLE public.b(id bigint);")}}
+	first, err := (postgresql.Adapter{}).Discover(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := (postgresql.Adapter{}).Discover(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Coverage[0].Key == first.Coverage[1].Key || first.Coverage[0].Key != second.Coverage[0].Key || first.Coverage[1].Key != second.Coverage[1].Key {
+		t.Fatal("long-path coverage identities collide or are unstable")
+	}
+}
+
+func TestPostgreSQLAdapterBoundsStatementCount(t *testing.T) {
+	_, err := (postgresql.Adapter{}).Discover(context.Background(), discovery.Input{
+		Locator: "many.sql", ObservedAt: time.Now(), Files: map[string][]byte{"many.sql": []byte(strings.Repeat("SELECT 1;", 10_001))},
+	})
+	if !errors.Is(err, ingestion.ErrLimitExceeded) {
 		t.Fatalf("error = %v", err)
 	}
 }

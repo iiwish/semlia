@@ -1,0 +1,2144 @@
+diff --git a/docs/specs/semantic-production/data-model.md b/docs/specs/semantic-production/data-model.md
+new file mode 100644
+index 0000000..c35a445
+--- /dev/null
++++ b/docs/specs/semantic-production/data-model.md
+@@ -0,0 +1,221 @@
++# 语义生产数据模型
++
++| 元数据 | 值 |
++| --- | --- |
++| Version | 0.1.0 |
++| Status | Planned Contract，供 SP-T002 至 SP-T007 实施与评审；不是已上线数据库或 API |
++| Scope | [生产设计](product-design.md)、[计划](plan.md) SP-TD-001 至 SP-TD-008 |
++| Wire contract | [生产接口](contracts/production.md)、[OpenAPI](contracts/production.openapi.yaml) |
++
++## 1. 权威与复用
++
++系统采用现有 PostgreSQL 模块化单体。来源、工件、发现运行、物理对象 revision、候选、Proposal、Validation、Review、Release、审计和 outbox 保持各自权威。生产操作只协调固定输入、目标、命令幂等及结果定位；不增加审批状态机、语义内容副本或消费者前置条件。
++
++当前代码依据如下，全部以工作区实际内容为准：
++
++| 依据 | 实施约束 |
++| --- | --- |
++| `internal/adapters/postgres/discovery.go:465`、`:521` | dataset/field 内容未变时复用 revision；历史成员必须独立记录，不能以 revision 创建时间归属推断扫描成员 |
++| `db/queries/discovery.sql` | 身份行名称可更新；历史名称必须来自不可变快照 |
++| `migrations/000003_semantic_registry_foundation.up.sql:247` | semantic_assets 允许 `current_revision_id IS NULL`，可持有未发布稳定身份 |
++| `migrations/000006_m2_governed_authoring.up.sql:65` | `target_object_id NOT NULL`；asset/base 两列本身可空，但 `proposals_target_shape` 强制 semantic_asset 有真实 base revision |
++| `migrations/000007_m2_governance_objects.up.sql:165`、`internal/domain/governance/object.go` | 实际支持五类 target：semantic_asset、physical_binding、model_grain、entity_key、join_contract；绑定是独立治理对象 |
++| `internal/application/governance/proposal.go`、`authoring.go` | create/submit、100 changes、不可变提交和已有 Proposal 状态转换复用，补 intent 分支而非伪造基线 |
++| `internal/adapters/postgres/release_publishing.go:261`、`:597` | 现有单提案发布和回滚为事务入口；生产集合扩展同一存储边界 |
++| `internal/domain/governance/release.go`、`canonical.go` | 旧 manifest digest 算法和 1 MiB canonical JSON 限额保持原样 |
++
++以下表名和新增列是精确的规划存储契约，不是本任务创建的迁移。数据库 UUIDv7、workspace 复合外键、TypeID wire 编码、UTC 时间、`ON DELETE RESTRICT` 及既有错误/审计规范沿用。新资源前缀预留 `ssnp`（来源快照）和 `prodop`（生产操作）；不得把存储 UUID 暴露到 API。
++
++## 2. 来源快照
++
++### 2.1 表与键
++
++| 表 | 字段与约束 |
++| --- | --- |
++| `source_snapshots` | `id, workspace_id, source_connection_id, source_revision_id, adapter_version, scope_digest, content_digest, history_quality, coverage_status, created_at`；`history_quality IN (verified,unverifiable)`；`coverage_status IN (complete,partial,failed)`；快照及内容 immutable |
++| `source_snapshot_runs` | `(workspace_id, run_id)` 唯一，FK 到现有 discovery run 与 snapshot；一次新扫描可关联复用的相同快照，不丢本次运行时间/诊断 |
++| `source_snapshot_scope` | `(workspace_id,snapshot_id,coverage_key)` PK；固定 selector、适配器配置摘要、`status`、`enumeration_complete` 和诊断 codes；不包含凭据 |
++| `source_snapshot_members` | `(workspace_id,snapshot_id,kind,object_id)` PK；`revision_id, historical_name, historical_locator, content_digest, coverage_key, parent_object_id NULL, parent_revision_id NULL`；kind 为 dataset/field/code/lineage；FK 指向本次快照范围与真实版本 |
++| `source_snapshot_diagnostics` | `(workspace_id,snapshot_id,ordinal)` PK；`code,severity,coverage_key,locator,message`，无敏感原始错误；运行特有诊断同时留在 run，不覆写快照 |
++| `source_code_revisions` | `id (TypeID codrev),workspace_id,code_artifact_id,source_revision_id,adapter_version,path,language,blob_oid,content_digest,created_at`；append-only；`UNIQUE(workspace_id,code_artifact_id,adapter_version,content_digest)`，digest 包含路径/语言/可复核内容摘要 |
++| `source_lineage_revisions` | `id (TypeID linrev),workspace_id,lineage_edge_id,source_revision_id,adapter_version,upstream_object_id,upstream_revision_id,downstream_object_id,downstream_revision_id,edge_kind,code_revision_id NULL,confidence,content_digest,created_at`；append-only；`UNIQUE(workspace_id,lineage_edge_id,adapter_version,content_digest)` |
++| `source_effective_snapshots` | `(workspace_id,source_connection_id,scope_digest)` 唯一；仅指向 verified + complete 快照；版本 CAS 和来源锁保证原子切换 |
++| `source_coverage_heads` | `(workspace_id,source_connection_id,coverage_key,selector_digest)` PK；`latest_attempt_run_id,latest_attempt_status,latest_verified_snapshot_id NULL,version`；每次声明覆盖的尝试都 CAS 更新 attempt，只有该 unit verified+complete 才更新 verified pointer；partial 全局快照中的 complete unit 可独立推进 |
++
++dataset/field 的 revision 必须属于指定 object；field 的 parent 是本快照内 dataset 及其 revision。`code_artifacts` 的 Upsert 会修改 blob/language/digest，`lineage_edges` 的唯一性不含 adapter，二者均不能充当历史 revision。固定使用上述两个 append-only revision 表及新增 codrev/linrev TypeID；旧行只提供兼容 identity/当前投影。代码 blob 必须内容寻址且保留可复核字节，不跟随可变文件路径读取；无法恢复旧字节则该历史 unverifiable。lineage 两端和代码依据均引用本快照精确 revision，不足时保留未解析诊断并阻断依赖它的生产。
++
++`UNIQUE(workspace_id, source_connection_id, source_revision_id, adapter_version, scope_digest, content_digest)` 保证相同投影重放复用。`content_digest` 包含版本化 schema、adapter、完整范围/覆盖、按 `(kind, object_id)` 排序的成员（包括名称、定位、revision、父引用）与规范化诊断；不包含 run ID、凭据、时间戳。范围 selector 规范化后排序，不能把不同范围的相同成员误当同一快照。
++
++### 2.2 历史与覆盖
++
++1. 每个 observed member 均进入快照，包括复用旧 revision 的未变化表/字段。改名保留同一可证明 identity 时，保存本次名称；若外部 stable key 改变，只能记录 possible rename，不能凭相似名称合并身份。
++2. `complete` 表示声明范围内枚举及必需成员元数据都完成，不表示整库；范围本身始终可见。只有两个覆盖相同范围且 `enumeration_complete=true` 的可信快照之间，缺席成员才能判定为删除。
++3. `partial` 保存真实已观察成员和逐范围缺口，不继承上次成员来假装本次观察。`failed` 保存诊断与确实得到的有限成员，不切换有效指针。缩小范围不等于删除范围外对象。
++4. 生产可选择 partial 快照内单独 `complete` 的 coverage unit，但必须显式固定 coverage keys；所有直接/传递依赖都在选定完整范围或已发布 pin 内。选择失败/部分 unit 返回 `INPUT_INCOMPLETE`，不能由客户端 `allowPartial` 绕过。快照仍显示 partial；不将局部可用标为全量成功。
++5. 历史迁移只根据可信不可变记录构建 verified 快照。任何缺失成员集合、旧名称、范围或覆盖的运行标为 `unverifiable`，成员列表返回已证明的记录及 `historyQuality`，不回填当前值。新扫描建立新的可信版本，不修饰过去。
++6. 来源新快照发布后，受影响的输入判 stale；未变化且依赖覆盖、成员版本/名称/证据摘要均一致的输入可通过确定性影响复核获得新的 validation 结果。原结果从不改写或直接沿用为新输入通过。
++
++生产 freshness 按 source_coverage_heads 逐选定 unit 检查，不只看全局 effective 指针；最新尝试在必要 unit 失败/不完整即不能用旧缓存推导“当前已检查”。同一操作对同 source 的同 coverage unit 只能选择一个快照；重叠范围/同 object 的互相矛盾 revision 拒绝，历史对比不是同一生产输入的两个权威版本。完整成员定义包含父 dataset revision，因此父 revision 改变时 field 可能需要新 revision 以满足现有 parent 约束；不强制复用错误父版本。
++
++读取索引：snapshot `(workspace_id,source_connection_id,created_at DESC,id DESC)`；member `(workspace_id,snapshot_id,kind,object_id)`；diagnostic 按 ordinal。列表最多 200，不加载全库到浏览器。
++
++## 3. 生产操作与命令
++
++| 表 | 字段与约束 |
++| --- | --- |
++| `production_operations` | `id,workspace_id,created_by,current_version,created_at,updated_at,supersedes_operation_id NULL`；不存 approved/released 等独立审批状态 |
++| `production_versions` | `(workspace_id,operation_id,version)` PK；`input_json,input_digest,request_digest,set_digest,frozen_at NULL,created_by,created_at`；每个版本的输入及内容 append-only，冻结标志只能由 submit CAS 一次设置 |
++| `production_targets` | `(workspace_id,operation_id,version,local_key)` PK；`kind,intent,target_id,identity_key NULL,base_revision_id NULL,base_object_version NULL,registry_write_version NULL,content_json,content_digest,proposal_id NULL,outcome`；每版本 target identity 唯一；outcome 为 proposal/no_change |
++| `production_candidate_links` | `(workspace_id,candidate_id,candidate_digest,operation_id,version,local_key)` 唯一；`decision_id,is_primary`；FK 至实际候选/目标/既有 candidate decision；每 candidate/version 恰好一个 primary；不解析 summary 判断关联 |
++| `production_contributors` | `(workspace_id,operation_id,principal_id)` 唯一；记录作者、实质编辑者、生成发起人及 agent 作者的贡献角色；不可删以规避 SoD |
++| `production_identity_reservations` | `(workspace_id,kind,identity_key)` 唯一；`target_id,creation_operation_id,owner_operation_id,created_at`；creation_operation_id 不可变，owner_operation_id 是当前受权操作的 CAS claim；target ID 不可重新分配；保留拒绝/回滚后的身份 |
++| `production_commands` | `(workspace_id,principal_id,command_kind,idempotency_key)` 唯一；`request_digest,operation_id,operation_version,result_kind,result_id,committed_at`；与业务写入同事务。无靠 TTL 后失忆而重建的窗口 |
++| `production_request_claims` | `(workspace_id,business_digest)` 唯一；`operation_id,created_at`；business_digest 固定规范化 input、声明/更新目标、真实 published bases 和 supersedes，排除 caller、幂等键、trace 与分配 ID；防不同键且无候选的同输入更新重复造 Proposal |
++| `production_generation_links` | `(workspace_id,operation_id,agent_run_id)` 唯一；`input_version,input_digest,model_config_revision,output_digest,provider_mode`；引用现有 AgentRun/Step；人工应用由独立 immutable 关联记录，不储存隐藏推理 |
++| `production_generation_outputs` | `(workspace_id,agent_run_id)` PK/FK 至 AgentRun 与 generation link；`operation_id,input_version,schema_version,canonical_output bytea,output_digest,canonical_bytes,created_at`；正文为符合 StructuredGenerationOutput 的规范 UTF-8 JSON 字节，canonical_bytes=octet_length(canonical_output) 且 1..1048576；append-only，无 prompt/raw_provider/hidden_reasoning 列 |
++| `production_generation_applications` | `(workspace_id,operation_id,applied_version)` PK；`agent_run_id,source_version,source_output_digest,applied_content_digest,canonical_delta bytea,delta_digest,actor_principal_id,created_at`；FK 至输出、来源版本及应用后 immutable version；delta 为服务器计算的有界规范 JSON 差异，append-only |
++
++命令用途包括 create、replace_draft、submit、validate、review、publish、generate、rollback；命令摘要含目标资源 ID，不能用同键跨资源重放。幂等主体是当前认证 principal，不是请求 body 声称的作者。request 中 unknown keys、重复 JSON object keys、非法 UTF-8、非有限/越界数字及尾随 JSON 拒绝；体积为 min(1,048,576 bytes, 现有端点/代理更小限制)，模型输入/输出同限，嵌套深度最多 32。
++
++规范化使用版本 `semlia.production/v1`：TypeID 严格 parse 后规范输出；enum 原样；标题 trim；业务定义/表达式不随意 trim/改写；Unicode 文本原样；不将 `1` 和 `1.0` 擅自视为相同。键递归排序与数字字面量保留复用 `CanonicalJSON`。无序集合（targets 按 localKey、snapshots 按 sourceId/snapshotId、coverage keys、evidence IDs、candidate IDs、dependency pins）排序并拒绝重复；changes 为执行顺序，保留数组次序并拒绝重叠/重复 field paths。摘要排除幂等键、trace、服务端时间及派生 ID；包含 supersedes、期望版本、来源、配置引用和所有业务内容。服务器计算权威摘要，客户端摘要只作一致性断言。
++
++最多 32 targets，每 target 0..100 changes，总共最多 256；服务端在 schema 解析后检查 aggregate，OpenAPI 无法单独表达跨数组求和。create 是真实创建声明，不要求合成 `add /`；其 content 是全部初始草稿，changes 必须空。update 的完整 desired content 与 changes 重放结果必须一致；服务器生成并核验 before/after digest，拒绝客户端伪造旧值。规范化结果等于基线时 outcome=no_change、proposal_id=NULL。若全部 no_change，操作仍可查询，但不能 submit/publish，不生成 Proposal 或 release。
++
++同键同内容重放先重新检查当前 workspace membership、所有源/证据/目标权限，再返回原结果定位和 `replayed=true`；权限撤销返回 403，不回显缓存内容。同键不同内容 409。另一个 principal 不能用同键取到作者结果；有范围权限者可在操作列表恢复合法可见对象，不能借此复用他人命令身份。不同键相同 candidate/create identity 同样由唯一约束串行处理：同规范输入且有权读取时返回既有操作链接 `ALREADY_PRODUCED`，内容不同则 `IDENTITY_CONFLICT`；不能自动选择无关现有资产。
++
++create operation 还在同事务写 production_request_claims，使相同规范业务输入的 update（即使没有 candidate，或另一主体用不同 key）只能创建一套 Proposal；返回 ALREADY_PRODUCED 前仍重新授权完整已有操作。不得用 dedup 把另一主体变为原作者。显式 supersede 的 digest 包含前序操作 ID，允许必要纠正/重验证的新尝试，同时保留前次失败事实；重复的同一 successor 仍唯一。
++
++同步 create/replace/publish 的业务结果不使用会提前提交的 running 行；事务 commit 前崩溃没有结果，重试安全；commit 后丢响应可按同键或列表找回。异步 validate/generate 在短事务内写既有 job 与命令结果，然后 worker 在事务外执行；超时不确定的模型调用标为 `outcome_unknown`，不自动付费重试。客户端恢复缓存仅作便利，不承担权威。
++
++## 4. 新建与更新
++
++### 4.1 新建身份
++
++create 的根字段不接收 targetId、baseRevisionId 或 baseObjectVersion。普通首次 create 不带 reuseIdentity，服务端在同一事务中检查当前授权、锁定自然身份、分配五种现有 target TypeID、写 reservation。semantic_asset 同时只插入 `lifecycle_state=draft,current_revision_id=NULL` 的身份行，不写 asset_revision、不写 active、不造 release。其他四类对象不插入不完整正式行，草稿内容保存在 Proposal 关联声明；发布事务才插入完整治理对象行。已发布后被可信回滚移除的身份使用 §4.4 的 create+reuseIdentity，不占用新的业务身份。
++
++`identityKey` 对 semantic_asset 必须等于 namespace.key 的 address；对其余对象是工作区内该 kind 的稳定声明键，并同时检查既有领域唯一性（例如 binding 的 asset/dataset/field、实体 key、grain 的约束）。不能只靠自由文本 identityKey 规避已有对象匹配。相互引用以本版本 localKey 解析，解析后持久化稳定 target ID；只允许本集合 create 声明及固定已发布 dependency pin，不允许任意外部草稿。
++
++同事务创建原有 `Proposal(state=draft,intent=create)`、完整初始内容、candidate decision 和关联行、幂等结果、审计/outbox。candidate 可以关联多个相关产物，但同一 candidate digest + 产物身份不得重复创建。模型建议只是草稿，definition/scope 暂缺时用显式 null 及 unresolved 结果表示，不用假文本表示业务事实；submit 的确定性验证阻止缺依据/未决业务规则发布。
++
++每个 CandidateSelection 显式包含 `primaryTargetKey`，且必须属于 targetKeys。primary 对应一个实际 changed/create Proposal，禁止任取数组第一项。`semantic_candidate_decisions.proposal_id` 写 primary Proposal，`semantic_candidates.proposal_id` 是最新该 immutable decision 的兼容投影；完整关联以 production_candidate_links 为准。全 no_change 不创建 convert decision、不改变候选决定；混合集合若某候选的 primary 为 no_change，返回 `CONTENT_MISMATCH`，由调用者明确选择实际变化的 primary 或不转换该候选。supersede 写新的 immutable decision（关联前一 decision ID）并 CAS 更新候选当前 singular 投影，绝不修改旧 decision；旧链接持续定位原版本。旧 convert 命令遇到 production 已关联候选返回 `PRODUCTION_SET_REQUIRED`，不能覆盖多目标关联。
++
++### 4.2 Proposal 的 expand-first 约束
++
++追加迁移为 proposals 增加 `intent NOT NULL DEFAULT 'update'`、`creation_content jsonb NULL`、`base_object_version integer NULL`、`production_operation_id NULL`、`production_version integer NULL`、`reintroduction_creation_release_id NULL`、`reintroduction_absence_release_id NULL` 和冻结摘要关联。保持 `target_object_id NOT NULL`，绝不先将其放空。增加 workspace 复合 FK 及延迟约束触发器，目标必须是同集合 reservation 或真实对象。两个 reintroduction 字段同时有值或同时为 NULL，只允许生产 create 携带。
++
++替换 `proposals_target_shape` 的精确分支如下；原有 semantic_asset 的 asset/base 两列并非列级 NOT NULL，但 check 等效要求它们非空：
++
++| intent / target | 强制条件 |
++| --- | --- |
++| create / semantic_asset | asset_id=target_object_id，asset_id 非空；base_revision_id/base_object_version 为 NULL；creation_content 为 object；有效 reservation；asset 当前无发布 pin；历史已发布身份须有可信 reintroduction 关联 |
++| create / governed object | asset_id/base_revision_id/base_object_version 为 NULL；creation_content 为 object；有效 reservation；首次目标正式对象不存在，或满足 §4.4 的可信缺席重引入且固定 registry_write_version；不得仅凭已有 row 伪造 baseline |
++| update / semantic_asset | asset_id=target_object_id，asset_id/base_revision_id 非空；base revision 属同 workspace/asset；仅生产成员要求其为冻结 baseline release 中精确 pin，非生产 legacy update 保留真实草稿 revision 作为 base 的旧合法路径；creation_content/base_object_version 为 NULL |
++| update / governed object | asset_id/base_revision_id/creation_content 为 NULL；生产成员必须有正 base_object_version 且匹配冻结 published object snapshot；非生产历史 update 保留旧路径，无凭据不得猜填 version |
++
++旧调用默认 update，既有调用者仍需原有 base；这不是向旧接口开放 create。新约束先 `NOT VALID` 添加并校验已迁移行，替换旧 check 在单次 DDL 事务完成，不留无约束窗口。新生产语义由 feature fence 控制，旧进程清空前禁用 create/生产集合写入。历史 proposal 保留原状态/内容/归因，不因无法恢复历史 base_object_version 而伪造数值。
++
++### 4.3 编辑与状态
++
++draft 的 PUT 为整个集合 replacement + `expectedVersion` CAS；新建 version 保留旧 input/content/actor；未提交原 Proposal 的 change set 可按现有 draft 规则更新，删除的成员 Proposal 按既有合法拒绝路径终结，reserved identity 不复用给别的业务对象。新版本关联具体 proposal ID；版本历史不是当前审批事实。
++
++submit 冻结版本，禁止成员/内容变更，沿 `draft -> proposed -> validating -> in_review -> released|rejected`，复用原验证排队与结果。内容、来源选择、依赖或业务修正发生在冻结后时，创建显式 `supersedesOperationId` 的新操作和新 Proposal；旧审批不迁移。旧集合如仍非终态，原 proposal 状态机逐成员受权拒绝，并在一个事务中转移 reservation 所有权；当前仍有 published pin 的后继使用 update，历史 released 但当前可信 absent 的身份使用 §4.4 的 create+reuseIdentity。不存在任意将 in_review 改回 draft 的新边。
++
++工具失败恢复或来源无影响复核可对同一冻结输入新建完整 validation attempt；不覆写旧失败。审批入口创建原 Review 行且携带集合版本/摘要关联，无独立 collection_approval 表。集合 progress 由 Proposal 状态、完整验证集合、有效 Review 和 release 关联计算。
++
++### 4.4 缺席身份的重引入
++
++`intent=create` 的可选 `reuseIdentity` 精确包含 targetId、creationOperationId、creationReleaseId、absenceReleaseId 和 present expectedHead（releaseId+manifestDigest）。服务端在同一 workspace/head/reservation 锁事务验证：原 operation 确实创建该 kind+identityKey+targetId；creation release 的完整归因及 pin 可复核；absenceReleaseId 是受保护回滚链中将该 target 从 present 移为 absent 的实际事件；当前 expectedHead 等于工作区 head 且仍无该 target 的 pin。旧历史不可验证、任意未发布 legacy row、只声称 absent 或使用 absent head 均拒绝，不能借此采用他人的无关身份。
++
++reservation 的 creation_operation_id 永不更改；owner_operation_id 在原操作无活动写入 claim 后 CAS 转移到本次生产，唯一业务身份/已有 domain uniqueness 继续检查。操作者须有同身份及全部来源/证据权限，不能用知道原 ID 替代授权。新 set digest 包含完整 reuseIdentity、当前真实 absent head、registry_write_version 和所有新 desired content；create 的两个 base 列仍为 NULL。贡献者包含本次作者/编辑者及被复用原内容的贡献者，旧批准不迁移，必须全新验证与独立审核。
++
++发布时再次检查 current head 与 absence、reservation、registry CAS 和依赖闭合，原子恢复所有新 pins。semantic_asset 保留同一 identity，可创建新真实 revision；若 desired content digest 与已有不可变 revision 完全相同，复用该 revision，遵循现有 `(asset_id,content_digest)` 唯一约束，absence->presence 本身仍是实质变化。governed object 如已有历史 row，则以捕获的 registry_write_version CAS 更新完整新内容、分配递增版本并恢复适用的非 retired 状态，不插入重复主键。不存在正式 row 时才 insert。完整 before pin 仍是 absent，后续回滚可再次移除发布 pin而不删除历史。全流程只有 create/update 两意图及原 Proposal 状态机。
++
++## 5. 固定集合与治理
++
++`set_digest` 包含 schema version、input digest、baseline release（空工作区为显式 absent）、每个稳定 target/intent/base/content/proposal ID、依赖边、选定证据和 policy/validator registry 版本。draft creation 返回当前 set digest；submit CAS 后该集合不可变。publication 以该 digest 为唯一候选内容，禁止使用 mutable registry/current snapshot 代替依赖。
++
++每个验证结果及审核关联 `(operation_id,version,set_digest,proposal_id,proposal_content_digest,input_digest,attempt_no)`。原 Review 行不可变；集合绑定在附加 `production_validation_bindings` / `production_review_bindings` 表中，以原 validation_run/review ID 为唯一 FK。审核绑定额外固定 validation_digest。集合一致性结果使用既有 validation run/result：每个适用成员均有关联，不添加第二审批状态机。required validators 的列表和版本冻结；failed/cancelled/running/missing/not_checked 不等于通过；not_applicable 必须具有确定性适用范围理由。
++
++`production_validation_bindings` 同时固定 `freshness_witness_json,freshness_digest`：每个所选 coverage unit 的 head version、所比较 snapshot ID、required member/证据摘要和影响判断。freshness witness 是该 validation attempt 的输入，不覆写原 production input。发布事务锁定 coverage heads 后逐项对照 witness；head 在验证后再次变化则需要新 impact attempt，不能只接受相同 setDigest 的旧通过。即使 business content 未变且新 witness 确认无影响，新 attempt 也使所有旧审核不能用于发布，要求重新独立审核；受影响内容则拒绝并走 successor。
++
++### 5.1 Validation Attempt 的持久化与执行
++
++`production_validation_attempts` 的 PK 为 `(workspace_id,operation_id,production_version,attempt_no)`，attempt_no 由服务器从 1 递增，单版本最多 256。字段为 `set_digest,input_digest,freshness_witness_json,freshness_digest,required_checks_json,required_checks_digest,status,validation_digest NULL,created_by,created_at,completed_at NULL`。required_checks 是完整排序的 `(proposal_id,validator_id,validator_version)` 集合，最多 256，包含所有成员必需的单对象及集合一致性检查；声明/输入 immutable，status 只表示该执行组 queued/running/succeeded/failed，不是审批。production_versions 增加 `active_validation_attempt_no NULL`，FK 至同版本 attempt；enqueue 时即 CAS 切到新 attempt，旧成功不能自动回退为有效。
++
++expand-first 为既有 validation_runs 增加可空 `production_operation_id,production_version,production_attempt_no`，三者全 NULL 为 legacy 或全非空为 production，复合 FK 至 attempt。将 000006 的 `UNIQUE(proposal_id,validator_id,validator_version)` 用同一 DDL 事务替换为两个索引：legacy 部分唯一键保持原三列且 `WHERE production_operation_id IS NULL`；production 部分唯一键为 `(workspace_id,production_operation_id,production_version,production_attempt_no,proposal_id,validator_id,validator_version)`，`WHERE production_operation_id IS NOT NULL`。旧行保持 NULL，旧查询显式仅匹配 NULL 分支；不能给历史行猜填 attempt。
++
++submit 在事务内分配 attempt=1，并为该集合每个 proposal 排队既有 validation job。production payload 扩充 operationId、productionVersion、productionAttemptNo、setDigest；幂等 job key 包含 workspace/operation/version/attempt/proposal，不能沿用仅 proposal/旧 orchestration attempt 的 key。旧 payload/旧分支原样工作；旧 job 的 transport retries 与 production semantic attempt 是不同字段，重试同 job 只续跑同一 attempt 的相同 run/result，不生成新 attempt或读取别的 attempt 终态结果。`GetProposalValidationRun`、结果/政策查询以及 `EnsureDecisionForProposal` 的 production 分支必须带完整 attempt key。
++
++`/validations` 的 previousAttemptNo 与 active pointer 做 CAS；有相同 attempt 在运行则同键返回原结果，不同键拒绝并发 enqueue。可以从 validating（初次工具失败）或 in_review 重验；production executor 在 in_review 不使用现有“只 EnsureDecision 后返回”的 shortcut，也不倒退 Proposal 为 validating。它按本 attempt 的完整 required checks 重跑全部确定性检查（包括无影响来源复核），不拼接前一次通过。初次 validating 完成后沿原规则进入 in_review；in_review 重验完成保持 in_review，发布资格仅由当前完整结果决定。terminal Proposal 不可重验。
++
++完成器在一次事务检查该 attempt 恰好有 required checks 全集、每个 run/result 的 input/set/freshness digest 一致、全体 terminal succeeded、无 blocker 且 applicability 正确；计算 validation_digest，内容包括 operation/version/attempt、required checks、按固定键排序的全部 run/result 内容摘要、freshness 和 policy inputs。任何缺失、failed、cancelled、工具未完成或多余不匹配 run 都不能 succeeded。job 最终失败将 attempt 置 failed，部分结果只作诊断。只选择 active pointer 指向的完整 succeeded attempt；不允许按 validator 逐条取最新或挑选不同 attempt 的成功。每 check 最多 256 findings，attempt 全部 checks 的规范响应内容合计最多 1 MiB；worker 持久化前执行字节预算检查，预留有界失败诊断空间，超限记录 LIMIT_EXCEEDED 并失败而非截断成功。历史 GET 按 attempt 完整投影既有 run/results，不建立第二结果副本。
++
++ReviewProductionRequest 和 PublishProductionRequest 必须给 `validation={attemptNo,validationDigest}`，事务内与唯一 active completed attempt 比较。production_review_bindings 持有相同 FK/digest；新 attempt enqueue 起旧 Review 即不再有效，全部成员重新审核，包括 source 无影响重验。旧不可变 Review 仍保留；现有 CountProposalReviews 的 production 分支只计当前 attempt/channel，允许独立 reviewer 对新 attempt 重新审核，legacy 分支保留原 stage 唯一性。发布时同时复核该 attempt 的完整集合、当前 freshness、原 policy 和全体绑定 Review，不能仅凭提案 state=in_review 或旧 policy decision 放行。
++
++依赖闭合：内部局部引用必须指向同一冻结集合，并采用其 proposed content；外部引用只能是输入固定 baseline release 的完整 pin。字段必须属于固定 dataset revision；binding、grain、key 和 JoinContract 以一致字段、实体与 grain 校验。禁止悬空引用；允许图中的语义关系循环，但 resolver 必须 visited-set 有界遍历，执行型 dependency cycle 由确定性 validator 拒绝，不能无限拓扑排序或部分发布。
++
++发布者必须是当前有权 human，不能是任意成员作者、任何已采用审核的 reviewer；审核者不能是集合中任意成员作者（包含产生内容的 agent principal、发起 generation 的人以及参与实质 draft 编辑的人），不能通过分拆成员自审。记录 contributors 集合与真实 principal ID，不信任 display name。所有成员均要求既有 policy 指定的有效独立人工审核；不开放 G2/G3 或模型自动批准。发布时重新核实 reviewer 当前 membership/作用域和必要 review capability，撤销的授权不能支撑新发布。
++
++事务顺序固定：workspace/authorization version fence -> operation -> proposals 按 ID 排序 -> targets/reservations 按 kind/ID 排序 -> source effective pointers -> dependency pins。发布事务内重新读取当前主体授权、SoD、集合/内容摘要、来源影响复核结果、全部 base/current published pins、验证/审核、policy 及依赖闭合；authorization/grant 修改沿相同 workspace fence，撤权不得越过已读取授权快照。并发 head 或基线变化返回 409，不自动 rebase。
++
++同事务写全体新 revisions/object rows、完整 manifest、release snapshots、归因、全体 Proposal released、catalog published 指针/投影 intent、审计和 outbox、幂等结果；任意一步失败全部回滚。外部投影由 outbox 幂等交付，读取以 committed release 为准；异步投影未 ready 明示，不宣称数据库半提交。模型/网络、消费者通知不在事务内。
++
++旧单项 publish/submit/review/changes 入口遇到 production 成员必须 `PRODUCTION_SET_REQUIRED`，包括 draft、冻结及已释放成员；不得以省略新字段或直接 catalog status 更新绕过。旧单 proposal validation-runs 聚合读取对 production 成员同样拒绝，改用按 operation/version/attempt 分页并含完整 checks/results 投影的明确历史入口。旧 `/governance/releases/{releaseId}/rollback` 及旧 PublishingService/Store.RestoreRelease 同样拒绝所有 production release 与其任意层回滚后继，依据 §6 的持久化 protection 而不是 singular origin。普通非集合历史提案/非保护 release 继续原路径。数据库发布与回滚防线必须验证保护继承、成员归因完整与 manifest 一致；仅应用路由 guard 不足。
++
++## 6. Release、归因与回滚
++
++| 表/扩展 | 约束 |
++| --- | --- |
++| `release_proposals` | `(workspace_id,release_id,proposal_id)` PK；全体参与成员，每行固定 operation/version/set/content digest、author principal、validation attempt/digest、采用的 review IDs、role=applied/reverted；FK 及不可变触发器 |
++| `releases` 保护扩展 | `production_root_release_id NULL,production_rollback_parent_id NULL,production_rollback_depth NULL`；全 NULL 仅普通 release，root=self/depth=0/parent=NULL 为生产发布，后继 root=parent.root/depth=parent.depth+1/parent=实际 rollback target；workspace FK、序列单调及 immutable 约束 |
++| `production_release_manifests` | release ID 唯一；`before_release_id NULL,before_manifest_json,before_manifest_digest,after_manifest_digest,attribution_digest`；NULL before ID 表示已证明的空 manifest，不是未知历史 |
++| `production_release_before_pins` | 每受影响 target 恰好一行；presence=present 时精确 asset revision 或 object snapshot version/digest；presence=absent 时这些列必须全部 NULL |
++| `production_release_binding_inputs` | `(workspace_id,release_id,binding_id,binding_version)` PK；固定 `snapshot_id,dataset_revision_id` 与所需 field revision 引用；只保存来源关联，不复制第二份执行 payload |
++
++完整 before manifest 在 publish 前 head 上读取并同事务保存，包含未受影响 pins；after manifest 是应用整个集合后的完整闭合视图，不仅是变更对象。旧 `origin_proposal_id` 在恰好一个 applied proposal 时保持该值，多提案时 NULL；额外 `originProposalIds` 返回全体 proposal，不选第一个伪造唯一作者。新受权 release detail 返回精确 provenance，目录只从 release 读取已发布权威，不复制草稿业务内容。
++
++所有生产根 release 及每一层 rollback 都保存 protection；回滚空 manifest 或 originProposalId=NULL 不会解除保护。旧 HTTP handler、旧 PublishingService.Rollback 与 Store.RestoreRelease 在 workspace 锁内检查标记，返回 409 PRODUCTION_SET_REQUIRED，不调用旧 planRestore。新命令继承 root 与原全成员/验证/审核归因，再执行当前 R/SoD/exact-before 检查。生产根保护 FK 允许同一事务 self-reference，parent 序列必须更早且同 workspace，禁止循环或跳过继承。
++
++数据库 BEFORE INSERT 防线检查 releases.rolled_back_to_release_id（既有字段实际指向被回滚目标）：目标带保护时 NEW 必须带正确 root/parent/depth；未适配旧调用默认 NULL，因此不能提交旧旁路。DEFERRABLE constraint trigger 在 commit 核实保护 release 有匹配的新 production_commands(kind=publish/rollback) 结果、完整 production_release_manifests/release_proposals/before pins、所绑定 attempt/Review 与完整 manifest；无任一记录即拒绝。新 repository 按同 workspace/authorization fence 复核真实主体，不把任意客户端/session 自报“已授权”当数据库票据。更新/删除保护或无归因克隆 release 均被 immutable/constraint 防线拒绝。
++
++现有 `000021` 的 object snapshot trigger 已优先复制相同已发布版本的 immutable snapshot，应继续复用；新 binding 的 execution provenance 分支必须从 production_release_binding_inputs 的精确 source_snapshot_members/revisions 构造现有 `release_execution_relations` / `release_execution_binding_pins`，禁止落入读取当前 dataset/field 名称及 current_revision_id 的 legacy fallback。context 引用须在插入 release objects 前同事务准备。无该精确上下文的生产 binding 拒绝发布；原非生产绑定继续旧受支持路径。回滚/携带旧 pin 复制对应原 immutable provenance；同一 dataset 的不同 binding 产生冲突 provenance 时全体拒绝，不选任一结果。
++
++旧 `manifest_digest` 仍严格调用现有 `ManifestDigestPayloadWithObjects`：asset-only 保持旧数组形状，有 object 时保持原 wrapper/排序/storage UUID 摘要行为。任何旧 release bytes/digest 不重算；归因和 before manifest 使用独立 digest，不混入原 payload。空 after manifest 的 digest 仍是该既有算法对空数组的真实结果，不是空字符串。
++
++回滚只允许目标为当前 latest release，请求固定 expected head、set digest、版本与 reason，并独立授权 `release.rollback` 和 SoD（对原全部作者/审核者）后，在一个事务生成新 release。新完整 manifest 等于目标的可信 before manifest，包括未触及对象及新建对象的缺席；不存在的原 pin 必须从 current published 集合移除。保留 semantic identity、asset revisions、原 release、原审计和对象历史；不删除 asset，也不把未发布 draft revision 作为恢复 baseline。
++
++治理对象 current registry 如需反映恢复内容，写新的不可变版本及 current pointer，但新 release 的 pin/内容以 before snapshot 为准；不能通过 inverse patch 猜测历史内容。这里严格区分 published `baseObjectVersion` 与 registry 的写入 CAS token：后继生产以旧 published pin 的精确内容计算变更，同时服务端在 creation/submit 记录 `registryWriteVersion`；发布检查 published pin 未变、当前 registry token 未变且 registry 可治理内容等于该 published baseline（忽略 version/time/audit 元数据），然后从当前 registry counter 分配新版本。回滚造成 counter 大于 published version 本身不是 stale；counter 外部变化或内容偏离才冲突，不能要求两个 version 数值相等。`registryWriteVersion` 进入 set digest 但不是客户端可伪造的基线。被撤销首次创建的正式对象可保留为非发布/retired registry 历史，消费和目录 released 状态仅依赖发布 pins。回滚也可被回滚：恢复所回滚 release 的 before manifest，仍需 latest/head/授权检查。
++
++回滚复核恢复后的依赖闭合及原精确证据可读性；历史 before 不可信、删除关键 pin 造成悬空依赖、当前 head 改变或必要权限缺失则拒绝。服务端不从任意较早 asset pin/当前对象拼装 before，不要求本次来源 current 与历史快照相同（恢复的是已验证历史），但引用历史须真实可复核。仅不带 production protection 的旧 releases 走已有已支持 rollback 语义；带保护的任意后继必须用新权威命令。新生产 rollback 端点对没有可信 before 的旧 release 返回 `PRIOR_STATE_UNKNOWN`。
++
++## 7. 迁移与兼容矩阵
++
++| 二进制/API/数据库组合 | 支持条件 |
++| --- | --- |
++| 旧二进制 + 旧 schema | 原有行为，不具备本生产契约 |
++| 新二进制 + 旧 schema | 启动/写 readiness 拒绝，提示需要迁移；不能静默降级写生产 |
++| 新二进制 + expanded schema、feature 未启用 | 原有 API 和数据继续兼容；生产写入关闭 |
++| 旧二进制 + expanded schema、无新语义行 | 仅受演练的旧路径临时兼容；部署必须先 drain/fence 旧 writer，不能据此承诺混跑 |
++| 新二进制 + feature 已启用 | 新接口及旧普通提案兼容；旧单项命令对 production 成员拒绝 |
++| 旧二进制 + 任一新 create/生产集合/新历史快照/多提案/absence rollback 记录 | 不支持且必须由部署 fence 阻止启动/流量/worker；DB grant/运行身份隔离旧 writer，不能假设旧代码会读懂一个新 min_version 字段 |
++| 旧 REST/MCP/CLI/SDK client + 新 server | 旧消费 URL、旧 release pins/digest 不变，附加字段可忽略；旧 singular provenance 对多提案为 null，需完整归因的界面必须升级；禁止将 null 显示为某个猜测作者 |
++
++迁移顺序：备份/记录 schema 和二进制基线 -> append-only expand 表/nullable 关联/索引 -> 可信历史迁移与显式 unverifiable 标记 -> 新约束校验 -> 新 binary 启动并保持 feature off -> drain 所有旧 HTTP/job/migration writers（独立 DB role 撤权或全部停止） -> 启用 production feature。不得编辑原迁移文件或让未更新旧二进制自动写 expanded schema。source-only 阶段新增权威历史也必须记入退回能力判断。
++
++down 仅能在一个事务内确认所有新增表、关联字段及条件语义都可无损表达为旧 schema 后执行。最保守可执行条件是新来源快照、生产操作/命令/保留身份、create/reintroduction proposals、set/attempt/review bindings、release protection、多归因、before manifests、generation links/outputs/applications 均无权威记录；历史 defaults 可逆且旧 check/validation run 唯一键全通过。任一不可表达行存在立即报 `DOWN_MIGRATION_UNSAFE`，事务无 DDL/数据变动；不得 DELETE/TRUNCATE 新表后声称成功，不自动改 intent、不伪造 base revision。
++
++保留旧数据的 binary 回退需要停用 feature、冻结写入、导出证据并恢复启用前完整隔离备份，或另行批准有损迁移；不是常规 down。后续迁移测试必须覆盖空 expand/down、含旧数据 expand、可信/不足历史、create、多提案和 absent rollback 的拒绝，核对失败前后行数/digest/schema 相同。已有更早 destructive down（例如 000007）不因此变安全，验收仅在明确拥有的隔离数据库运行。
++
++## 8. 验证边界
++
++`TestSemanticProductionContract` 只校验 OpenAPI 结构、关键 schema 接受/拒绝与机器可读不变量，不证明数据库锁、事务、鉴权、模型质量或已部署接口。SP-T002 至 SP-T007 必须以实际实现补 source diff、冷启动、重复/并发/故障注入、撤权、SoD、所有成员原子发布、完整 rollback、旧 API/client 与迁移证据。
++
++模型和网络始终在事务外；模型配置/授权/input digest 在结果落库前复核，原结构化建议和人工修改分别归因。协议 stub 与实际/付费模型证据分列；本契约不授予真实模型调用、部署或访问客户数据权限。来源文本是数据，不构成系统指令、工具许可或业务规则批准。桌面验收仅 1440x900 与 1024x768；无消费者也能生产和发布。
++
++### 8.1 AI 输出的持久化与读取
++
++成功模型结果通过 StructuredGenerationOutput schema、有界大小/深度/总 changes、目标身份与当前授权/来源版本检查后，规范化为 `{schemaVersion,targets}`。同一事务写 production_generation_outputs 的正文+摘要+字节数、成功 AgentRun/Step 和 generation link；commit 后即使无人应用且进程重启，GET 也只从此行恢复原建议。正文与 delta 存规范 UTF-8 JSON 字节而不是依赖 jsonb 重序列化，避免数字字面量重编码改变已固定的摘要；数据库限制字节数及有效 JSON object/array 形状，应用仍需完整 schema 检查。AgentRun.output_digest、Step.output_hash 与输出行摘要必须一致，读取时重新计算校验，缺行/不符返回 INTERNAL_ERROR，不从摘要猜造正文，也不重发模型补内容。
++
++失败/未决/取消 run 不写输出正文，原始 prompt、raw provider response、无效输出和 hidden reasoning 从不落库；仅保留允许的错误 code、输入/输出 hash（如适用）、时间及可用成本。输出表 UPDATE/DELETE 被 immutable trigger 拒绝，保留期至少与关联 operation/Proposal/Release 的全部历史一致，无自动 TTL；不能先清除成功正文再继续声称可恢复。后续单独授权的数据擦除必须同步显式标记证据不可用并阻断依赖，不能在本契约默默降级。
++
++人工应用使用 PUT 的 suggestionRunId，并在同事务保存应用后 immutable version 与 production_generation_applications。run.input_version 必须等于请求 expectedVersion，source_version/output_digest 指向真实原输出；actor 取当前主体；服务器按 localKey 比较完整模型声明与人工声明，delta 为最多 256 个 `{localKey,change}`，沿用 add/update/remove 的值对，整体 target 增删使用仅供归因的 `$target` fieldPath，业务字段修改使用 dot path。delta 最大 1 MiB，输出和人工内容原文分别由 output 行与版本记录保持，差异摘要可重算。无差异也记录空 delta，不宣称纠正模型；应用操作不能由客户端提交 actor/delta/digest。每个 applied version 最多一个此关联，GET 指定 version 返回该关联，避免将全历史 diff 无界内联。已应用后的后续人工编辑用普通受权 PUT，保留其版本历史与此前应用关联，不将旧 run 偷当新输入的生成结果。读取输出/应用前重新检查当前完整 R scope，禁止以原 key/旧权限泄露正文。
+
+diff --git a/docs/specs/semantic-production/contracts/production.openapi.yaml b/docs/specs/semantic-production/contracts/production.openapi.yaml
+new file mode 100644
+index 0000000..f580a8a
+--- /dev/null
++++ b/docs/specs/semantic-production/contracts/production.openapi.yaml
+@@ -0,0 +1,1324 @@
++openapi: 3.0.3
++info:
++  title: Semlia Semantic Production Planned Contract
++  version: 0.1.0
++  description: >-
++    Planned SP-T001 design, not a deployed API or the canonical public bundle.
++    production.md and ../data-model.md specify transactional and migration rules
++    that OpenAPI cannot enforce. Existing REST/MCP/CLI/SDK consumption is unchanged.
++x-semlia-status: planned
++x-semlia-invariants:
++  maxTargets: 32
++  maxChangesPerTarget: 100
++  maxTotalChanges: 256
++  maxBodyBytes: 1048576
++  maxModelOutputBytes: 1048576
++  snapshotMembership: immutable_exact
++  unchangedRevision: reuse
++  partialCoverage: explicit_no_deletion_inference
++  legacyHistory: unverifiable
++  createBaseline: absent
++  updateBaseline: exact_published_pin
++  idempotencyScope: [workspace, principal, command, key]
++  replayAuthorization: current
++  recoveryAuthority: server
++  approvalAuthority: proposal_validation_review
++  publishAtomicity: all_members_one_transaction
++  publishRecheck: [authorization, sod, set_digest, input_freshness, baseline, dependency_closure, validations, reviews]
++  legacyMemberPublish: reject
++  rollback: exact_before_manifest_including_absence
++  releaseAttribution: all_proposals
++  legacyDigest: unchanged
++  migration: expand_first
++  lossyDown: reject
++  oldBinaryAfterActivation: unsupported_fenced
++  modelNetwork: outside_transaction
++  modelRetry: explicit_no_automatic_paid_replay
++  machineAllowlistAdditions: []
++  desktopViewports: [1440x900, 1024x768]
++  legacyProductionRollback: reject_including_descendants
++  validationAttemptSelection: one_complete_latest_attempt
++  reviewValidationBinding: exact_attempt_digest_reapprove_after_revalidation
++  modelOutputPersistence: immutable_schema_gated_body
++  identityReintroduction: create_with_trusted_absence
++security:
++  - SessionCookie: []
++paths:
++  /api/v1/workspaces/{workspaceId}/sources/{sourceId}/snapshots:
++    parameters:
++      - $ref: '#/components/parameters/WorkspaceId'
++      - $ref: '#/components/parameters/SourceId'
++    get:
++      operationId: listProductionSourceSnapshots
++      summary: List immutable projections, newest first
++      x-semlia-actions: [source.read]
++      x-semlia-reauthorize: true
++      parameters:
++        - $ref: '#/components/parameters/Limit'
++        - $ref: '#/components/parameters/Cursor'
++      responses:
++        '200':
++          description: Authorized snapshot page including partial and unverifiable records
++          content:
++            application/json:
++              schema: { $ref: '#/components/schemas/SnapshotPage' }
++        '400': { $ref: '#/components/responses/Error' }
++        '401': { $ref: '#/components/responses/Error' }
++        '403': { $ref: '#/components/responses/Error' }
++        '404': { $ref: '#/components/responses/Error' }
++  /api/v1/workspaces/{workspaceId}/sources/{sourceId}/snapshots/{snapshotId}:
++    parameters:
++      - $ref: '#/components/parameters/WorkspaceId'
++      - $ref: '#/components/parameters/SourceId'
++      - $ref: '#/components/parameters/SnapshotId'
++    get:
++      operationId: getProductionSourceSnapshot
++      summary: Read immutable scope, coverage and digest without joining current names
++      x-semlia-actions: [source.read]
++      x-semlia-reauthorize: true
++      responses:
++        '200':
++          description: Exact snapshot metadata; members and diagnostics have separate pages
++          content:
++            application/json:
++              schema: { $ref: '#/components/schemas/SourceSnapshot' }
++        '401': { $ref: '#/components/responses/Error' }
++        '403': { $ref: '#/components/responses/Error' }
++        '404': { $ref: '#/components/responses/Error' }
++  /api/v1/workspaces/{workspaceId}/sources/{sourceId}/snapshots/{snapshotId}/members:
++    parameters:
++      - $ref: '#/components/parameters/WorkspaceId'
++      - $ref: '#/components/parameters/SourceId'
++      - $ref: '#/components/parameters/SnapshotId'
++    get:
++      operationId: listProductionSnapshotMembers
++      summary: Read exact observed members including unchanged revisions
++      x-semlia-actions: [source.read]
++      x-semlia-reauthorize: true
++      parameters:
++        - $ref: '#/components/parameters/Limit'
++        - $ref: '#/components/parameters/Cursor'
++        - name: kind
++          in: query
++          schema: { $ref: '#/components/schemas/MemberKind' }
++      responses:
++        '200':
++          description: Page fixed to snapshot ID and history quality
++          content:
++            application/json:
++              schema: { $ref: '#/components/schemas/SnapshotMemberPage' }
++        '400': { $ref: '#/components/responses/Error' }
++        '401': { $ref: '#/components/responses/Error' }
++        '403': { $ref: '#/components/responses/Error' }
++        '404': { $ref: '#/components/responses/Error' }
++  /api/v1/workspaces/{workspaceId}/sources/{sourceId}/snapshots/{snapshotId}/diagnostics:
++    parameters:
++      - $ref: '#/components/parameters/WorkspaceId'
++      - $ref: '#/components/parameters/SourceId'
++      - $ref: '#/components/parameters/SnapshotId'
++    get:
++      operationId: listProductionSnapshotDiagnostics
++      summary: Read bounded sanitized coverage diagnostics
++      x-semlia-actions: [source.read]
++      x-semlia-reauthorize: true
++      parameters:
++        - $ref: '#/components/parameters/Limit'
++        - $ref: '#/components/parameters/Cursor'
++      responses:
++        '200':
++          description: Diagnostics page ordered by ordinal
++          content:
++            application/json:
++              schema: { $ref: '#/components/schemas/DiagnosticPage' }
++        '400': { $ref: '#/components/responses/Error' }
++        '401': { $ref: '#/components/responses/Error' }
++        '403': { $ref: '#/components/responses/Error' }
++        '404': { $ref: '#/components/responses/Error' }
++  /api/v1/workspaces/{workspaceId}/production-operations:
++    parameters:
++      - $ref: '#/components/parameters/WorkspaceId'
++    get:
++      operationId: listProductionOperations
++      summary: Recover authorized operations without browser state
++      x-semlia-actions: [asset.read, source.read, evidence.read, binding.read]
++      x-semlia-reauthorize: true
++      parameters:
++        - $ref: '#/components/parameters/Limit'
++        - $ref: '#/components/parameters/Cursor'
++        - name: sourceId
++          in: query
++          schema: { $ref: '#/components/schemas/ResourceId' }
++        - name: candidateId
++          in: query
++          schema: { $ref: '#/components/schemas/ResourceId' }
++        - name: createdBy
++          in: query
++          schema: { $ref: '#/components/schemas/ResourceId' }
++      responses:
++        '200':
++          description: Scope-filtered summaries, not all-workspace counts or full target content
++          content:
++            application/json:
++              schema: { $ref: '#/components/schemas/ProductionOperationPage' }
++        '400': { $ref: '#/components/responses/Error' }
++        '401': { $ref: '#/components/responses/Error' }
++        '403': { $ref: '#/components/responses/Error' }
++        '404': { $ref: '#/components/responses/Error' }
++    post:
++      operationId: createProductionOperation
++      summary: Atomically reserve identities and create linked draft proposals
++      x-semlia-actions: [asset.propose, source.read, evidence.read, binding.read]
++      x-semlia-conditional-actions: [binding.manage]
++      x-semlia-reauthorize: true
++      parameters:
++        - $ref: '#/components/parameters/IdempotencyKey'
++      requestBody:
++        required: true
++        content:
++          application/json:
++            schema: { $ref: '#/components/schemas/CreateProductionRequest' }
++      responses: &operationWriteResponses
++        '200':
++          description: Committed result, including replay or a no_change operation
++          content:
++            application/json:
++              schema: { $ref: '#/components/schemas/ProductionCommandResult' }
++        '201':
++          description: Newly committed operation; Location points to the operation GET
++          headers:
++            Location:
++              schema: { type: string, maxLength: 2048 }
++          content:
++            application/json:
++              schema: { $ref: '#/components/schemas/ProductionCommandResult' }
++        '400': { $ref: '#/components/responses/Error' }
++        '401': { $ref: '#/components/responses/Error' }
++        '403': { $ref: '#/components/responses/Error' }
++        '404': { $ref: '#/components/responses/Error' }
++        '409': { $ref: '#/components/responses/Error' }
++        '413': { $ref: '#/components/responses/Error' }
++        '422': { $ref: '#/components/responses/Error' }
++        '503': { $ref: '#/components/responses/Error' }
++  /api/v1/workspaces/{workspaceId}/production-operations/{operationId}:
++    parameters:
++      - $ref: '#/components/parameters/WorkspaceId'
++      - $ref: '#/components/parameters/OperationId'
++    get:
++      operationId: getProductionOperation
++      summary: Read server-authoritative input, targets, links and derived progress
++      x-semlia-actions: [asset.read, source.read, evidence.read, binding.read]
++      x-semlia-reauthorize: true
++      parameters:
++        - name: version
++          in: query
++          description: Exact immutable version; omitted selects current, never rewrites history
++          schema: { type: integer, minimum: 1, maximum: 2147483647 }
++      responses:
++        '200':
++          description: Authorized operation version with exact governance references
++          content:
++            application/json:
++              schema: { $ref: '#/components/schemas/ProductionOperation' }
++        '401': { $ref: '#/components/responses/Error' }
++        '403': { $ref: '#/components/responses/Error' }
++        '404': { $ref: '#/components/responses/Error' }
++    put:
++      operationId: replaceProductionDraft
++      summary: Replace the entire draft with a CAS-protected new immutable version
++      x-semlia-actions: [asset.propose, source.read, evidence.read, binding.read]
++      x-semlia-conditional-actions: [binding.manage]
++      x-semlia-reauthorize: true
++      parameters:
++        - $ref: '#/components/parameters/IdempotencyKey'
++      requestBody:
++        required: true
++        content:
++          application/json:
++            schema: { $ref: '#/components/schemas/ReplaceProductionRequest' }
++      responses: *operationWriteResponses
++  /api/v1/workspaces/{workspaceId}/production-operations/{operationId}/submit:
++    parameters:
++      - $ref: '#/components/parameters/WorkspaceId'
++      - $ref: '#/components/parameters/OperationId'
++    post:
++      operationId: submitProductionOperation
++      summary: Freeze all members, submit existing proposals and enqueue initial validation atomically
++      x-semlia-actions: [asset.propose, validation.run, source.read, evidence.read, binding.read]
++      x-semlia-reauthorize: true
++      parameters:
++        - $ref: '#/components/parameters/IdempotencyKey'
++      requestBody:
++        required: true
++        content:
++          application/json:
++            schema: { $ref: '#/components/schemas/SubmitProductionRequest' }
++      responses: &asyncResponses
++        '200':
++          description: Replayed committed command or completed result
++          content:
++            application/json:
++              schema: { $ref: '#/components/schemas/ProductionCommandResult' }
++        '202':
++          description: Durable validation job references committed; poll the operation
++          headers:
++            Location:
++              schema: { type: string, maxLength: 2048 }
++          content:
++            application/json:
++              schema: { $ref: '#/components/schemas/ProductionCommandResult' }
++        '400': { $ref: '#/components/responses/Error' }
++        '401': { $ref: '#/components/responses/Error' }
++        '403': { $ref: '#/components/responses/Error' }
++        '404': { $ref: '#/components/responses/Error' }
++        '409': { $ref: '#/components/responses/Error' }
++        '413': { $ref: '#/components/responses/Error' }
++        '422': { $ref: '#/components/responses/Error' }
++        '503': { $ref: '#/components/responses/Error' }
++  /api/v1/workspaces/{workspaceId}/production-operations/{operationId}/validations:
++    parameters:
++      - $ref: '#/components/parameters/WorkspaceId'
++      - $ref: '#/components/parameters/OperationId'
++    get:
++      operationId: listProductionValidationAttempts
++      summary: Read complete immutable validation attempt groups without mixing their runs
++      x-semlia-actions: [asset.read, source.read, evidence.read, binding.read]
++      x-semlia-reauthorize: true
++      parameters:
++        - name: version
++          in: query
++          required: true
++          schema: { $ref: '#/components/schemas/Version' }
++        - $ref: '#/components/parameters/Limit'
++        - $ref: '#/components/parameters/Cursor'
++      responses:
++        '200':
++          description: Attempt-number descending page fixed to one operation version; no implicit active-attempt fallback
++          content:
++            application/json:
++              schema: { $ref: '#/components/schemas/ValidationAttemptPage' }
++        '400': { $ref: '#/components/responses/Error' }
++        '401': { $ref: '#/components/responses/Error' }
++        '403': { $ref: '#/components/responses/Error' }
++        '404': { $ref: '#/components/responses/Error' }
++    post:
++      operationId: validateProductionOperation
++      summary: Queue a fresh validation attempt for the identical frozen set
++      x-semlia-actions: [validation.run, source.read, evidence.read, asset.read, binding.read]
++      x-semlia-reauthorize: true
++      parameters:
++        - $ref: '#/components/parameters/IdempotencyKey'
++      requestBody:
++        required: true
++        content:
++          application/json:
++            schema: { $ref: '#/components/schemas/ValidateProductionRequest' }
++      responses: *asyncResponses
++  /api/v1/workspaces/{workspaceId}/production-operations/{operationId}/reviews:
++    parameters:
++      - $ref: '#/components/parameters/WorkspaceId'
++      - $ref: '#/components/parameters/OperationId'
++    post:
++      operationId: reviewProductionOperation
++      summary: Add existing Review facts to selected members of one exact frozen set
++      x-semlia-actions: [proposal.review, asset.read, source.read, evidence.read, binding.read]
++      x-semlia-reauthorize: true
++      parameters:
++        - $ref: '#/components/parameters/IdempotencyKey'
++      requestBody:
++        required: true
++        content:
++          application/json:
++            schema: { $ref: '#/components/schemas/ReviewProductionRequest' }
++      responses: *operationWriteResponses
++  /api/v1/workspaces/{workspaceId}/production-operations/{operationId}/publish:
++    parameters:
++      - $ref: '#/components/parameters/WorkspaceId'
++      - $ref: '#/components/parameters/OperationId'
++    post:
++      operationId: publishProductionOperation
++      summary: Publish all proposals and complete manifest in one transaction
++      x-semlia-actions: [release.publish, asset.read, source.read, evidence.read, binding.read]
++      x-semlia-reauthorize: true
++      x-semlia-human-required: true
++      parameters:
++        - $ref: '#/components/parameters/IdempotencyKey'
++      requestBody:
++        required: true
++        content:
++          application/json:
++            schema: { $ref: '#/components/schemas/PublishProductionRequest' }
++      responses: &releaseWriteResponses
++        '200':
++          description: Authorized replay of the committed release
++          content:
++            application/json:
++              schema: { $ref: '#/components/schemas/ReleaseCommandResult' }
++        '201':
++          description: All members committed as one immutable release
++          headers:
++            Location:
++              schema: { type: string, maxLength: 2048 }
++          content:
++            application/json:
++              schema: { $ref: '#/components/schemas/ReleaseCommandResult' }
++        '400': { $ref: '#/components/responses/Error' }
++        '401': { $ref: '#/components/responses/Error' }
++        '403': { $ref: '#/components/responses/Error' }
++        '404': { $ref: '#/components/responses/Error' }
++        '409': { $ref: '#/components/responses/Error' }
++        '413': { $ref: '#/components/responses/Error' }
++        '422': { $ref: '#/components/responses/Error' }
++        '503': { $ref: '#/components/responses/Error' }
++  /api/v1/workspaces/{workspaceId}/production-operations/{operationId}/generation:
++    parameters:
++      - $ref: '#/components/parameters/WorkspaceId'
++      - $ref: '#/components/parameters/OperationId'
++    post:
++      operationId: generateProductionSuggestions
++      summary: Queue an explicitly authorized model run against a draft input version
++      x-semlia-actions: [asset.propose, source.read, evidence.read, binding.read]
++      x-semlia-reauthorize: true
++      parameters:
++        - $ref: '#/components/parameters/IdempotencyKey'
++      requestBody:
++        required: true
++        content:
++          application/json:
++            schema: { $ref: '#/components/schemas/GenerateProductionRequest' }
++      responses:
++        '200':
++          description: Replayed run; never triggers another model call
++          content:
++            application/json:
++              schema: { $ref: '#/components/schemas/GenerationResult' }
++        '202':
++          description: Existing AgentRun/job persisted; Location is the run recovery URL
++          headers:
++            Location:
++              schema: { type: string, maxLength: 2048 }
++          content:
++            application/json:
++              schema: { $ref: '#/components/schemas/GenerationResult' }
++        '400': { $ref: '#/components/responses/Error' }
++        '401': { $ref: '#/components/responses/Error' }
++        '403': { $ref: '#/components/responses/Error' }
++        '404': { $ref: '#/components/responses/Error' }
++        '409': { $ref: '#/components/responses/Error' }
++        '413': { $ref: '#/components/responses/Error' }
++        '422': { $ref: '#/components/responses/Error' }
++        '503': { $ref: '#/components/responses/Error' }
++  /api/v1/workspaces/{workspaceId}/production-operations/{operationId}/generation/{runId}:
++    parameters:
++      - $ref: '#/components/parameters/WorkspaceId'
++      - $ref: '#/components/parameters/OperationId'
++      - $ref: '#/components/parameters/RunId'
++    get:
++      operationId: getProductionGeneration
++      summary: Recover exact model provenance and structured suggestions without resending
++      x-semlia-actions: [asset.read, source.read, evidence.read, binding.read]
++      x-semlia-reauthorize: true
++      responses:
++        '200':
++          description: Existing AgentRun-derived status, sanitized error and bounded output
++          content:
++            application/json:
++              schema: { $ref: '#/components/schemas/GenerationResult' }
++        '401': { $ref: '#/components/responses/Error' }
++        '403': { $ref: '#/components/responses/Error' }
++        '404': { $ref: '#/components/responses/Error' }
++  /api/v1/workspaces/{workspaceId}/production-releases/{releaseId}:
++    parameters:
++      - $ref: '#/components/parameters/WorkspaceId'
++      - $ref: '#/components/parameters/ReleaseId'
++    get:
++      operationId: getProductionRelease
++      summary: Read complete production attribution and exact before/after pins
++      x-semlia-actions: [asset.read, source.read, evidence.read, binding.read]
++      x-semlia-reauthorize: true
++      responses:
++        '200':
++          description: Complete production detail, not a second release authority
++          content:
++            application/json:
++              schema: { $ref: '#/components/schemas/ProductionRelease' }
++        '401': { $ref: '#/components/responses/Error' }
++        '403': { $ref: '#/components/responses/Error' }
++        '404': { $ref: '#/components/responses/Error' }
++        '422': { $ref: '#/components/responses/Error' }
++  /api/v1/workspaces/{workspaceId}/production-releases/{releaseId}/rollback:
++    parameters:
++      - $ref: '#/components/parameters/WorkspaceId'
++      - $ref: '#/components/parameters/ReleaseId'
++    post:
++      operationId: rollbackProductionRelease
++      summary: Create a latest-only release restoring the exact before manifest including absence
++      x-semlia-actions: [release.rollback, asset.read, source.read, evidence.read, binding.read]
++      x-semlia-reauthorize: true
++      x-semlia-human-required: true
++      parameters:
++        - $ref: '#/components/parameters/IdempotencyKey'
++      requestBody:
++        required: true
++        content:
++          application/json:
++            schema: { $ref: '#/components/schemas/RollbackProductionRequest' }
++      responses: *releaseWriteResponses
++components:
++  securitySchemes:
++    SessionCookie:
++      type: apiKey
++      in: cookie
++      name: __Host-semlia_session
++      description: Existing authenticated management session; development cookie remains semlia_session_dev. Existing CSRF/origin checks apply. No machine bearer expansion.
++  parameters:
++    WorkspaceId:
++      name: workspaceId
++      in: path
++      required: true
++      schema: { $ref: '#/components/schemas/ResourceId' }
++    SourceId:
++      name: sourceId
++      in: path
++      required: true
++      schema: { $ref: '#/components/schemas/ResourceId' }
++    SnapshotId:
++      name: snapshotId
++      in: path
++      required: true
++      schema: { $ref: '#/components/schemas/ResourceId' }
++    OperationId:
++      name: operationId
++      in: path
++      required: true
++      schema: { $ref: '#/components/schemas/ResourceId' }
++    ReleaseId:
++      name: releaseId
++      in: path
++      required: true
++      schema: { $ref: '#/components/schemas/ResourceId' }
++    RunId:
++      name: runId
++      in: path
++      required: true
++      schema: { $ref: '#/components/schemas/ResourceId' }
++    IdempotencyKey:
++      name: Idempotency-Key
++      in: header
++      required: true
++      description: Workspace/principal/command scoped, no automatic expiry while authoritative records remain
++      schema: { type: string, minLength: 8, maxLength: 128, pattern: '^[A-Za-z0-9._:-]+$' }
++    Limit:
++      name: limit
++      in: query
++      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
++    Cursor:
++      name: cursor
++      in: query
++      description: Opaque authenticated keyset token bound to workspace, resource, filter and upper watermark; not an offset
++      schema: { type: string, maxLength: 2048 }
++  responses:
++    Error:
++      description: Stable sanitized error; status/code/recovery semantics are defined in production.md
++      content:
++        application/json:
++          schema: { $ref: '#/components/schemas/ProductionError' }
++  schemas:
++    ResourceId:
++      type: string
++      pattern: '^[a-z][a-z0-9_]{1,31}_[0-7][0-9a-hjkmnp-tv-z]{25}$'
++      maxLength: 59
++      description: TypeID shape only; server must enforce each domain prefix, UUIDv7, existence, ownership and workspace. ssnp and prodop are planned prefixes.
++    Digest:
++      type: string
++      pattern: '^sha256:[0-9a-f]{64}$'
++      minLength: 71
++      maxLength: 71
++    Timestamp: { type: string, format: date-time }
++    Version: { type: integer, minimum: 1, maximum: 2147483647 }
++    LocalKey: { type: string, pattern: '^[a-z][a-z0-9_]{0,63}$', maxLength: 64 }
++    TargetKind:
++      type: string
++      enum: [semantic_asset, physical_binding, model_grain, entity_key, join_contract]
++    ObjectKind:
++      type: string
++      enum: [physical_binding, model_grain, entity_key, join_contract]
++    MemberKind: { type: string, enum: [dataset, field, code, lineage] }
++    HistoryQuality: { type: string, enum: [verified, unverifiable] }
++    SourceSnapshot:
++      type: object
++      additionalProperties: false
++      required: [id, sourceId, sourceRevisionId, adapterVersion, scopeDigest, contentDigest, historyQuality, coverageStatus, coverage, memberCount, diagnosticCount, createdAt]
++      properties:
++        id: { $ref: '#/components/schemas/ResourceId' }
++        sourceId: { $ref: '#/components/schemas/ResourceId' }
++        sourceRevisionId: { $ref: '#/components/schemas/ResourceId' }
++        adapterVersion: { type: string, minLength: 1, maxLength: 128 }
++        scopeDigest: { $ref: '#/components/schemas/Digest' }
++        contentDigest: { $ref: '#/components/schemas/Digest' }
++        historyQuality: { $ref: '#/components/schemas/HistoryQuality' }
++        coverageStatus: { type: string, enum: [complete, partial, failed] }
++        coverage:
++          type: array
++          minItems: 1
++          maxItems: 256
++          items: { $ref: '#/components/schemas/CoverageUnit' }
++        memberCount: { type: integer, minimum: 0, maximum: 2147483647 }
++        diagnosticCount: { type: integer, minimum: 0, maximum: 2147483647 }
++        createdAt: { $ref: '#/components/schemas/Timestamp' }
++    CoverageUnit:
++      type: object
++      additionalProperties: false
++      required: [key, status, enumerationComplete, diagnosticCodes]
++      properties:
++        key: { type: string, minLength: 1, maxLength: 256 }
++        selector: { type: string, maxLength: 1024 }
++        status: { type: string, enum: [complete, partial, failed] }
++        enumerationComplete: { type: boolean }
++        diagnosticCodes:
++          type: array
++          maxItems: 64
++          uniqueItems: true
++          items: { type: string, pattern: '^[A-Z][A-Z0-9_]{2,63}$', maxLength: 64 }
++    SnapshotMember:
++      type: object
++      additionalProperties: false
++      required: [kind, objectId, revisionId, name, locator, contentDigest, coverageKey]
++      properties:
++        kind: { $ref: '#/components/schemas/MemberKind' }
++        objectId: { $ref: '#/components/schemas/ResourceId' }
++        revisionId: { $ref: '#/components/schemas/ResourceId' }
++        name: { type: string, minLength: 1, maxLength: 1024 }
++        locator: { type: string, minLength: 1, maxLength: 2048 }
++        contentDigest: { $ref: '#/components/schemas/Digest' }
++        coverageKey: { type: string, minLength: 1, maxLength: 256 }
++        parentObjectId: { $ref: '#/components/schemas/ResourceId' }
++        parentRevisionId: { $ref: '#/components/schemas/ResourceId' }
++    Diagnostic:
++      type: object
++      additionalProperties: false
++      required: [ordinal, code, severity, coverageKey, message]
++      properties:
++        ordinal: { type: integer, minimum: 1, maximum: 2147483647 }
++        code: { type: string, pattern: '^[A-Z][A-Z0-9_]{2,63}$', maxLength: 64 }
++        severity: { type: string, enum: [info, warning, blocker] }
++        coverageKey: { type: string, minLength: 1, maxLength: 256 }
++        locator: { type: string, maxLength: 2048 }
++        message: { type: string, maxLength: 2048 }
++    SnapshotPage:
++      type: object
++      additionalProperties: false
++      required: [items, nextCursor]
++      properties:
++        items: { type: array, maxItems: 200, items: { $ref: '#/components/schemas/SourceSnapshot' } }
++        nextCursor: { type: string, maxLength: 2048, nullable: true }
++    SnapshotMemberPage:
++      type: object
++      additionalProperties: false
++      required: [snapshotId, historyQuality, items, nextCursor]
++      properties:
++        snapshotId: { $ref: '#/components/schemas/ResourceId' }
++        historyQuality: { $ref: '#/components/schemas/HistoryQuality' }
++        items: { type: array, maxItems: 200, items: { $ref: '#/components/schemas/SnapshotMember' } }
++        nextCursor: { type: string, maxLength: 2048, nullable: true }
++    DiagnosticPage:
++      type: object
++      additionalProperties: false
++      required: [snapshotId, items, nextCursor]
++      properties:
++        snapshotId: { $ref: '#/components/schemas/ResourceId' }
++        items: { type: array, maxItems: 200, items: { $ref: '#/components/schemas/Diagnostic' } }
++        nextCursor: { type: string, maxLength: 2048, nullable: true }
++    SnapshotSelection:
++      type: object
++      additionalProperties: false
++      required: [sourceId, snapshotId, digest, coverageKeys]
++      properties:
++        sourceId: { $ref: '#/components/schemas/ResourceId' }
++        snapshotId: { $ref: '#/components/schemas/ResourceId' }
++        digest: { $ref: '#/components/schemas/Digest' }
++        coverageKeys:
++          type: array
++          minItems: 1
++          maxItems: 256
++          uniqueItems: true
++          items: { type: string, minLength: 1, maxLength: 256 }
++    CandidateSelection:
++      type: object
++      additionalProperties: false
++      required: [candidateId, digest, snapshotId, targetKeys, primaryTargetKey]
++      properties:
++        candidateId: { $ref: '#/components/schemas/ResourceId' }
++        digest: { $ref: '#/components/schemas/Digest' }
++        snapshotId: { $ref: '#/components/schemas/ResourceId' }
++        targetKeys: { type: array, minItems: 1, maxItems: 32, uniqueItems: true, items: { $ref: '#/components/schemas/LocalKey' } }
++        primaryTargetKey: { $ref: '#/components/schemas/LocalKey' }
++      description: Explicit primary must be a targetKeys member with a real proposal; it supplies the legacy singular candidate proposalId. All associations remain authoritative, not just primary.
++    EvidenceSelection:
++      type: object
++      additionalProperties: false
++      required: [evidenceId, digest]
++      properties:
++        evidenceId: { $ref: '#/components/schemas/ResourceId' }
++        digest: { $ref: '#/components/schemas/Digest' }
++        snapshotId: { $ref: '#/components/schemas/ResourceId' }
++      description: Declared rule evidence may be independent of a source; server checks immutable artifact and business attestation, never trusts model assertion as approval.
++    ProductionInput:
++      type: object
++      additionalProperties: false
++      required: [snapshots, candidates, evidence, dependencies]
++      properties:
++        snapshots: { type: array, minItems: 1, maxItems: 32, items: { $ref: '#/components/schemas/SnapshotSelection' } }
++        candidates: { type: array, maxItems: 256, items: { $ref: '#/components/schemas/CandidateSelection' } }
++        evidence: { type: array, maxItems: 256, items: { $ref: '#/components/schemas/EvidenceSelection' } }
++        dependencies: { type: array, maxItems: 256, items: { $ref: '#/components/schemas/PublishedReference' } }
++    PhysicalReference:
++      type: object
++      additionalProperties: false
++      required: [snapshotId, kind, objectId, revisionId]
++      properties:
++        snapshotId: { $ref: '#/components/schemas/ResourceId' }
++        kind: { type: string, enum: [dataset, field] }
++        objectId: { $ref: '#/components/schemas/ResourceId' }
++        revisionId: { $ref: '#/components/schemas/ResourceId' }
++    SemanticReference:
++      oneOf:
++        - type: object
++          additionalProperties: false
++          required: [localKey]
++          properties:
++            localKey: { $ref: '#/components/schemas/LocalKey' }
++        - $ref: '#/components/schemas/PublishedReference'
++    PublishedReference:
++      oneOf:
++        - type: object
++          additionalProperties: false
++          required: [kind, targetId, releaseId, revisionId]
++          properties:
++            kind: { type: string, enum: [semantic_asset] }
++            targetId: { $ref: '#/components/schemas/ResourceId' }
++            releaseId: { $ref: '#/components/schemas/ResourceId' }
++            revisionId: { $ref: '#/components/schemas/ResourceId' }
++        - type: object
++          additionalProperties: false
++          required: [kind, targetId, releaseId, objectVersion, contentDigest]
++          properties:
++            kind: { $ref: '#/components/schemas/ObjectKind' }
++            targetId: { $ref: '#/components/schemas/ResourceId' }
++            releaseId: { $ref: '#/components/schemas/ResourceId' }
++            objectVersion: { $ref: '#/components/schemas/Version' }
++            contentDigest: { $ref: '#/components/schemas/Digest' }
++    AssetContent:
++      type: object
++      additionalProperties: false
++      required: [address, assetType, displayName, definition, scope, ownerPrincipalId]
++      properties:
++        address: { type: string, pattern: '^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$', maxLength: 512 }
++        assetType: { type: string, enum: [concept, entity, semantic_model, dimension, measure, metric, segment] }
++        displayName: { type: string, minLength: 1, maxLength: 256 }
++        definition: { type: string, minLength: 1, maxLength: 16384, nullable: true }
++        scope: { type: string, minLength: 1, maxLength: 4096, nullable: true }
++        ownerPrincipalId: { $ref: '#/components/schemas/ResourceId' }
++      description: Null definition/scope explicitly means unresolved draft, blocked at validation; physical bindings are separate governed targets, not embedded copies.
++    BindingContent:
++      type: object
++      additionalProperties: false
++      required: [asset, dataset]
++      properties:
++        asset: { $ref: '#/components/schemas/SemanticReference' }
++        dataset: { $ref: '#/components/schemas/PhysicalReference' }
++        field: { $ref: '#/components/schemas/PhysicalReference' }
++        transform: { type: string, minLength: 1, maxLength: 4096 }
++    GrainContent:
++      type: object
++      additionalProperties: false
++      required: [asset, expression, fields]
++      properties:
++        asset: { $ref: '#/components/schemas/SemanticReference' }
++        expression: { type: string, minLength: 1, maxLength: 4096 }
++        fields: { $ref: '#/components/schemas/FieldReferences' }
++    EntityKeyContent:
++      type: object
++      additionalProperties: false
++      required: [asset, fields, uniqueness]
++      properties:
++        asset: { $ref: '#/components/schemas/SemanticReference' }
++        fields: { $ref: '#/components/schemas/FieldReferences' }
++        uniqueness: { type: string, enum: [exact, deduplicated] }
++    FieldReferences:
++      type: array
++      minItems: 1
++      maxItems: 64
++      uniqueItems: true
++      items: { $ref: '#/components/schemas/PhysicalReference' }
++    JoinContent:
++      type: object
++      additionalProperties: false
++      required: [leftDataset, rightDataset, pairs, joinType, cardinality, expression]
++      properties:
++        leftDataset: { $ref: '#/components/schemas/PhysicalReference' }
++        rightDataset: { $ref: '#/components/schemas/PhysicalReference' }
++        pairs:
++          type: array
++          minItems: 1
++          maxItems: 64
++          uniqueItems: true
++          items:
++            type: object
++            additionalProperties: false
++            required: [left, right]
++            properties:
++              left: { $ref: '#/components/schemas/PhysicalReference' }
++              right: { $ref: '#/components/schemas/PhysicalReference' }
++        joinType: { type: string, enum: [inner, left, right, full] }
++        cardinality: { type: string, enum: [one_to_one, one_to_many, many_to_one, many_to_many] }
++        expression: { type: string, minLength: 1, maxLength: 4096 }
++        notes: { type: string, maxLength: 4096 }
++    TargetKindContent:
++      oneOf:
++        - properties:
++            kind: { type: string, enum: [semantic_asset] }
++            content: { $ref: '#/components/schemas/AssetContent' }
++        - properties:
++            kind: { type: string, enum: [physical_binding] }
++            content: { $ref: '#/components/schemas/BindingContent' }
++        - properties:
++            kind: { type: string, enum: [model_grain] }
++            content: { $ref: '#/components/schemas/GrainContent' }
++        - properties:
++            kind: { type: string, enum: [entity_key] }
++            content: { $ref: '#/components/schemas/EntityKeyContent' }
++        - properties:
++            kind: { type: string, enum: [join_contract] }
++            content: { $ref: '#/components/schemas/JoinContent' }
++    JSONValue:
++      nullable: true
++      description: Structured JSON value bounded by 1 MiB request and depth 32; null remains a real value, not absence. Unknown target content fields are separately forbidden.
++    ChangeList:
++      type: array
++      maxItems: 100
++      items: { $ref: '#/components/schemas/Change' }
++    Change:
++      oneOf:
++        - type: object
++          additionalProperties: false
++          required: [fieldPath, op, afterValue]
++          properties:
++            fieldPath: { type: string, minLength: 1, maxLength: 512 }
++            op: { type: string, enum: [add] }
++            afterValue: { $ref: '#/components/schemas/JSONValue' }
++        - type: object
++          additionalProperties: false
++          required: [fieldPath, op, beforeValue, afterValue]
++          properties:
++            fieldPath: { type: string, minLength: 1, maxLength: 512 }
++            op: { type: string, enum: [update] }
++            beforeValue: { $ref: '#/components/schemas/JSONValue' }
++            afterValue: { $ref: '#/components/schemas/JSONValue' }
++        - type: object
++          additionalProperties: false
++          required: [fieldPath, op, beforeValue]
++          properties:
++            fieldPath: { type: string, minLength: 1, maxLength: 512 }
++            op: { type: string, enum: [remove] }
++            beforeValue: { $ref: '#/components/schemas/JSONValue' }
++    ProductionTarget:
++      oneOf:
++        - $ref: '#/components/schemas/CreateTarget'
++        - $ref: '#/components/schemas/UpdateAssetTarget'
++        - $ref: '#/components/schemas/UpdateObjectTarget'
++      description: Update branch is further discriminated by target kind. Create has no baseline fields; no fake base revision is accepted.
++    CreateTarget:
++      type: object
++      additionalProperties: false
++      required: [intent, kind, localKey, identityKey, title, content, changes, evidenceIds]
++      allOf:
++        - $ref: '#/components/schemas/TargetKindContent'
++      properties:
++        intent: { type: string, enum: [create] }
++        kind: { $ref: '#/components/schemas/TargetKind' }
++        localKey: { $ref: '#/components/schemas/LocalKey' }
++        identityKey: { type: string, minLength: 1, maxLength: 512 }
++        reuseIdentity: { $ref: '#/components/schemas/ReintroductionIdentity' }
++        title: { type: string, minLength: 1, maxLength: 256 }
++        content: { type: object }
++        changes: { type: array, maxItems: 0, items: { $ref: '#/components/schemas/Change' } }
++        evidenceIds: { type: array, maxItems: 256, uniqueItems: true, items: { $ref: '#/components/schemas/ResourceId' } }
++      description: Omit reuseIdentity for a new identity. Supply it only to reintroduce a trusted production-created identity absent from the exact current published head; intent remains create and no baseline fields are allowed.
++    ReintroductionIdentity:
++      type: object
++      additionalProperties: false
++      required: [targetId, creationOperationId, creationReleaseId, absenceReleaseId, expectedHead]
++      properties:
++        targetId: { $ref: '#/components/schemas/ResourceId' }
++        creationOperationId: { $ref: '#/components/schemas/ResourceId' }
++        creationReleaseId: { $ref: '#/components/schemas/ResourceId' }
++        absenceReleaseId: { $ref: '#/components/schemas/ResourceId' }
++        expectedHead: { $ref: '#/components/schemas/PresentHeadReference' }
++      description: Server proves original reservation kind/identityKey/ownership, the protected rollback absence event and continued absence at current head. This is not a client assertion of a published base.
++    UpdateAssetTarget:
++      type: object
++      additionalProperties: false
++      required: [intent, kind, localKey, targetId, baseRevisionId, title, content, changes, evidenceIds]
++      properties:
++        intent: { type: string, enum: [update] }
++        kind: { type: string, enum: [semantic_asset] }
++        localKey: { $ref: '#/components/schemas/LocalKey' }
++        targetId: { $ref: '#/components/schemas/ResourceId' }
++        baseRevisionId: { $ref: '#/components/schemas/ResourceId' }
++        title: { type: string, minLength: 1, maxLength: 256 }
++        content: { $ref: '#/components/schemas/AssetContent' }
++        changes: { $ref: '#/components/schemas/ChangeList' }
++        evidenceIds: { type: array, maxItems: 256, uniqueItems: true, items: { $ref: '#/components/schemas/ResourceId' } }
++    UpdateObjectTarget:
++      type: object
++      additionalProperties: false
++      required: [intent, kind, localKey, targetId, baseObjectVersion, title, content, changes, evidenceIds]
++      allOf:
++        - $ref: '#/components/schemas/TargetKindContent'
++      properties:
++        intent: { type: string, enum: [update] }
++        kind: { $ref: '#/components/schemas/ObjectKind' }
++        localKey: { $ref: '#/components/schemas/LocalKey' }
++        targetId: { $ref: '#/components/schemas/ResourceId' }
++        baseObjectVersion: { $ref: '#/components/schemas/Version' }
++        title: { type: string, minLength: 1, maxLength: 256 }
++        content: { type: object }
++        changes: { $ref: '#/components/schemas/ChangeList' }
++        evidenceIds: { type: array, maxItems: 256, uniqueItems: true, items: { $ref: '#/components/schemas/ResourceId' } }
++    CreateProductionRequest:
++      type: object
++      additionalProperties: false
++      required: [input, targets]
++      properties:
++        input: { $ref: '#/components/schemas/ProductionInput' }
++        targets: { type: array, minItems: 1, maxItems: 32, items: { $ref: '#/components/schemas/ProductionTarget' } }
++        supersedesOperationId: { $ref: '#/components/schemas/ResourceId' }
++      x-semlia-max-total-changes: 256
++    ReplaceProductionRequest:
++      type: object
++      additionalProperties: false
++      required: [expectedVersion, input, targets]
++      properties:
++        expectedVersion: { $ref: '#/components/schemas/Version' }
++        input: { $ref: '#/components/schemas/ProductionInput' }
++        targets: { type: array, minItems: 1, maxItems: 32, items: { $ref: '#/components/schemas/ProductionTarget' } }
++        suggestionRunId: { $ref: '#/components/schemas/ResourceId' }
++      x-semlia-max-total-changes: 256
++    SubmitProductionRequest:
++      type: object
++      additionalProperties: false
++      required: [expectedVersion, setDigest]
++      properties:
++        expectedVersion: { $ref: '#/components/schemas/Version' }
++        setDigest: { $ref: '#/components/schemas/Digest' }
++    ValidateProductionRequest:
++      type: object
++      additionalProperties: false
++      required: [expectedVersion, setDigest, previousAttemptNo, reason]
++      properties:
++        expectedVersion: { $ref: '#/components/schemas/Version' }
++        setDigest: { $ref: '#/components/schemas/Digest' }
++        previousAttemptNo: { type: integer, minimum: 1, maximum: 256 }
++        reason: { type: string, minLength: 1, maxLength: 4096 }
++    ReviewProductionRequest:
++      type: object
++      additionalProperties: false
++      required: [expectedVersion, setDigest, validation, proposalIds, decision, note]
++      properties:
++        expectedVersion: { $ref: '#/components/schemas/Version' }
++        setDigest: { $ref: '#/components/schemas/Digest' }
++        validation: { $ref: '#/components/schemas/ValidationReference' }
++        proposalIds: { type: array, minItems: 1, maxItems: 32, uniqueItems: true, items: { $ref: '#/components/schemas/ResourceId' } }
++        decision: { type: string, enum: [approve, reject] }
++        note: { type: string, maxLength: 4096 }
++    HeadReference:
++      oneOf:
++        - type: object
++          additionalProperties: false
++          required: [presence]
++          properties:
++            presence: { type: string, enum: [absent] }
++        - $ref: '#/components/schemas/PresentHeadReference'
++    PresentHeadReference:
++      type: object
++      additionalProperties: false
++      required: [presence, releaseId, manifestDigest]
++      properties:
++        presence: { type: string, enum: [present] }
++        releaseId: { $ref: '#/components/schemas/ResourceId' }
++        manifestDigest: { $ref: '#/components/schemas/Digest' }
++    ValidationReference:
++      type: object
++      additionalProperties: false
++      required: [attemptNo, validationDigest]
++      properties:
++        attemptNo: { type: integer, minimum: 1, maximum: 256 }
++        validationDigest: { $ref: '#/components/schemas/Digest' }
++      description: One complete active attempt for this operation/version/set. Clients cannot choose individual run IDs or combine results from different attempts.
++    ValidationAttemptResult:
++      type: object
++      additionalProperties: false
++      required: [attemptNo, status, setDigest, freshnessDigest, requiredChecksDigest, validationDigest, runIds, checks, completedAt]
++      allOf:
++        - oneOf:
++            - properties:
++                status: { type: string, enum: [succeeded] }
++                validationDigest: { $ref: '#/components/schemas/Digest' }
++                runIds: { type: array, minItems: 1, maxItems: 256, uniqueItems: true, items: { $ref: '#/components/schemas/ResourceId' } }
++                completedAt: { $ref: '#/components/schemas/Timestamp' }
++            - properties:
++                status: { type: string, enum: [queued, running] }
++                validationDigest: { nullable: true, enum: [null] }
++                completedAt: { nullable: true, enum: [null] }
++            - properties:
++                status: { type: string, enum: [failed] }
++                validationDigest: { nullable: true, enum: [null] }
++                completedAt: { $ref: '#/components/schemas/Timestamp' }
++      properties:
++        attemptNo: { type: integer, minimum: 1, maximum: 256 }
++        status: { type: string, enum: [queued, running, succeeded, failed] }
++        setDigest: { $ref: '#/components/schemas/Digest' }
++        freshnessDigest: { $ref: '#/components/schemas/Digest' }
++        requiredChecksDigest: { $ref: '#/components/schemas/Digest' }
++        validationDigest: { type: string, nullable: true, maxLength: 71 }
++        runIds: { type: array, maxItems: 256, uniqueItems: true, items: { $ref: '#/components/schemas/ResourceId' } }
++        checks: { type: array, maxItems: 256, items: { $ref: '#/components/schemas/ValidationCheckResult' } }
++        completedAt: { type: string, format: date-time, nullable: true }
++      x-semlia-max-canonical-result-bytes: 1048576
++      description: Entire latest requested attempt; succeeded requires every declared proposal/validator/version check, current freshness, and no blocker. A failed/running latest attempt never falls back to an older success.
++    ValidationCheckResult:
++      type: object
++      additionalProperties: false
++      required: [runId, proposalId, validatorId, validatorVersion, status, results]
++      properties:
++        runId: { $ref: '#/components/schemas/ResourceId' }
++        proposalId: { $ref: '#/components/schemas/ResourceId' }
++        validatorId: { type: string, pattern: '^[a-z][a-z0-9_.]{1,63}$', maxLength: 64 }
++        validatorVersion: { type: string, minLength: 1, maxLength: 128 }
++        status: { type: string, enum: [running, succeeded, failed, cancelled] }
++        results:
++          type: array
++          maxItems: 256
++          items:
++            type: object
++            additionalProperties: false
++            required: [severity, code, message, inputDigest, details]
++            properties:
++              severity: { type: string, enum: [blocker, warning, info, not_applicable] }
++              code: { type: string, pattern: '^[A-Z][A-Z0-9_]{2,63}$', maxLength: 64 }
++              message: { type: string, maxLength: 2048 }
++              inputDigest: { $ref: '#/components/schemas/Digest' }
++              details: { type: object, maxProperties: 32, additionalProperties: { $ref: '#/components/schemas/JSONValue' } }
++      description: Projection of existing ValidationRun/Result facts for this exact attempt; no extra result authority. All checks together have a 1 MiB canonical-result budget and never truncate into a successful attempt.
++    ValidationStatus:
++      oneOf:
++        - type: object
++          additionalProperties: false
++          required: [status]
++          properties:
++            status: { type: string, enum: [not_requested] }
++        - $ref: '#/components/schemas/ValidationAttemptResult'
++    ValidationAttemptPage:
++      type: object
++      additionalProperties: false
++      required: [operationId, version, items, nextCursor]
++      properties:
++        operationId: { $ref: '#/components/schemas/ResourceId' }
++        version: { $ref: '#/components/schemas/Version' }
++        items: { type: array, maxItems: 200, items: { $ref: '#/components/schemas/ValidationAttemptResult' } }
++        nextCursor: { type: string, maxLength: 2048, nullable: true }
++    PublishProductionRequest:
++      type: object
++      additionalProperties: false
++      required: [expectedVersion, setDigest, validation, expectedHead]
++      properties:
++        expectedVersion: { $ref: '#/components/schemas/Version' }
++        setDigest: { $ref: '#/components/schemas/Digest' }
++        validation: { $ref: '#/components/schemas/ValidationReference' }
++        expectedHead: { $ref: '#/components/schemas/HeadReference' }
++    RollbackProductionRequest:
++      type: object
++      additionalProperties: false
++      required: [expectedVersion, setDigest, expectedHead, reason]
++      properties:
++        expectedVersion: { $ref: '#/components/schemas/Version' }
++        setDigest: { $ref: '#/components/schemas/Digest' }
++        expectedHead: { $ref: '#/components/schemas/HeadReference' }
++        reason: { type: string, minLength: 1, maxLength: 4096 }
++    GenerateProductionRequest:
++      type: object
++      additionalProperties: false
++      required: [expectedVersion, inputDigest, modelSettingId, modelConfigRevision, instruction, maxOutputTokens, maxCostMicros]
++      properties:
++        expectedVersion: { $ref: '#/components/schemas/Version' }
++        inputDigest: { $ref: '#/components/schemas/Digest' }
++        modelSettingId: { $ref: '#/components/schemas/ResourceId' }
++        modelConfigRevision: { type: string, minLength: 1, maxLength: 128 }
++        instruction: { type: string, maxLength: 8192 }
++        maxOutputTokens: { type: integer, minimum: 1, maximum: 16384 }
++        maxCostMicros: { type: integer, format: int64, minimum: 0, maximum: 1000000000 }
++      description: Limits are ceilings subject to smaller server grants/config; request cannot authorize spend or elevate a model/tool. A run never publishes or automatically overwrites drafts.
++    ProposalState: { type: string, enum: [draft, proposed, validating, in_review, released, rejected] }
++    TargetResult:
++      type: object
++      additionalProperties: false
++      required: [localKey, targetId, declaration, outcome, contentDigest, proposalId, proposalState, validationRunIds, reviewIds]
++      properties:
++        localKey: { $ref: '#/components/schemas/LocalKey' }
++        targetId: { $ref: '#/components/schemas/ResourceId' }
++        declaration: { $ref: '#/components/schemas/ProductionTarget' }
++        outcome: { type: string, enum: [proposal, no_change] }
++        contentDigest: { $ref: '#/components/schemas/Digest' }
++        proposalId: { type: string, nullable: true, maxLength: 59 }
++        proposalState: { type: string, nullable: true, enum: [draft, proposed, validating, in_review, released, rejected, null] }
++        validationRunIds: { type: array, maxItems: 256, items: { $ref: '#/components/schemas/ResourceId' } }
++        reviewIds: { type: array, maxItems: 256, items: { $ref: '#/components/schemas/ResourceId' } }
++      description: Lists expose current effective attempts only; complete history remains on existing proposal validation/review pages. no_change requires null proposal fields and empty governance lists.
++    OperationSummary:
++      type: object
++      additionalProperties: false
++      required: [id, currentVersion, createdBy, createdAt, updatedAt, frozen, progress, targetCount, releaseId]
++      properties:
++        id: { $ref: '#/components/schemas/ResourceId' }
++        currentVersion: { $ref: '#/components/schemas/Version' }
++        createdBy: { $ref: '#/components/schemas/ResourceId' }
++        createdAt: { $ref: '#/components/schemas/Timestamp' }
++        updatedAt: { $ref: '#/components/schemas/Timestamp' }
++        frozen: { type: boolean }
++        progress: { type: string, enum: [draft, no_change, validating, needs_correction, in_review, ready_to_publish, released, rejected] }
++        targetCount: { type: integer, minimum: 1, maximum: 32 }
++        releaseId: { type: string, nullable: true, maxLength: 59 }
++      description: progress is a read-only derivation from existing Proposal/Validation/Review/Release, never a second approval state.
++    ProductionOperationPage:
++      type: object
++      additionalProperties: false
++      required: [items, nextCursor]
++      properties:
++        items: { type: array, maxItems: 200, items: { $ref: '#/components/schemas/OperationSummary' } }
++        nextCursor: { type: string, maxLength: 2048, nullable: true }
++    ProductionOperation:
++      type: object
++      additionalProperties: false
++      required: [summary, version, input, inputDigest, setDigest, baselineHead, targets, activeValidation, generationRunIds, generationApplications, unresolvedCodes]
++      properties:
++        summary: { $ref: '#/components/schemas/OperationSummary' }
++        version: { $ref: '#/components/schemas/Version' }
++        input: { $ref: '#/components/schemas/ProductionInput' }
++        inputDigest: { $ref: '#/components/schemas/Digest' }
++        setDigest: { $ref: '#/components/schemas/Digest' }
++        baselineHead: { $ref: '#/components/schemas/HeadReference' }
++        targets: { type: array, minItems: 1, maxItems: 32, items: { $ref: '#/components/schemas/TargetResult' } }
++        activeValidation: { $ref: '#/components/schemas/ValidationStatus' }
++        generationRunIds: { type: array, maxItems: 256, items: { $ref: '#/components/schemas/ResourceId' } }
++        generationApplications: { type: array, maxItems: 1, items: { $ref: '#/components/schemas/GenerationApplication' } }
++        unresolvedCodes: { type: array, maxItems: 256, uniqueItems: true, items: { type: string, maxLength: 64 } }
++      description: Exact requested version; frozen versions immutable even if summary reports newer currentVersion. Generation references are bounded by per-operation 256 run ceiling.
++    ProductionCommandResult:
++      type: object
++      additionalProperties: false
++      required: [operationId, version, setDigest, replayed, outcome, proposalIds, validationAttemptNo, validationRunIds, reviewIds]
++      properties:
++        operationId: { $ref: '#/components/schemas/ResourceId' }
++        version: { $ref: '#/components/schemas/Version' }
++        setDigest: { $ref: '#/components/schemas/Digest' }
++        replayed: { type: boolean }
++        outcome: { type: string, enum: [created, updated, no_change, submitted, validation_queued, reviewed] }
++        proposalIds: { type: array, maxItems: 32, uniqueItems: true, items: { $ref: '#/components/schemas/ResourceId' } }
++        validationAttemptNo: { type: integer, minimum: 1, maximum: 256, nullable: true }
++        validationRunIds: { type: array, maxItems: 256, items: { $ref: '#/components/schemas/ResourceId' } }
++        reviewIds: { type: array, maxItems: 32, items: { $ref: '#/components/schemas/ResourceId' } }
++    StructuredGenerationOutput:
++      type: object
++      additionalProperties: false
++      required: [schemaVersion, targets]
++      properties:
++        schemaVersion: { type: string, enum: [semlia.production-suggestions/v1] }
++        targets: { type: array, minItems: 1, maxItems: 32, items: { $ref: '#/components/schemas/ProductionTarget' } }
++      x-semlia-max-total-changes: 256
++      x-semlia-max-canonical-bytes: 1048576
++      description: This schema-gated canonical body is persisted immutably with its digest. No original prompt, raw provider envelope, failed output or hidden reasoning is stored.
++    GenerationApplication:
++      type: object
++      additionalProperties: false
++      required: [runId, sourceVersion, sourceOutputDigest, appliedVersion, appliedContentDigest, actorPrincipalId, deltaDigest, delta]
++      properties:
++        runId: { $ref: '#/components/schemas/ResourceId' }
++        sourceVersion: { $ref: '#/components/schemas/Version' }
++        sourceOutputDigest: { $ref: '#/components/schemas/Digest' }
++        appliedVersion: { $ref: '#/components/schemas/Version' }
++        appliedContentDigest: { $ref: '#/components/schemas/Digest' }
++        actorPrincipalId: { $ref: '#/components/schemas/ResourceId' }
++        deltaDigest: { $ref: '#/components/schemas/Digest' }
++        delta:
++          type: array
++          maxItems: 256
++          items:
++            type: object
++            additionalProperties: false
++            required: [localKey, change]
++            properties:
++              localKey: { $ref: '#/components/schemas/LocalKey' }
++              change: { $ref: '#/components/schemas/Change' }
++      description: Immutable human application provenance. Delta is server-computed against stored structured output; both full versions remain retrievable. No client-authored actor or digest is trusted.
++    GenerationResult:
++      type: object
++      additionalProperties: false
++      required: [runId, operationId, inputVersion, inputDigest, status, providerMode, model, modelConfigRevision, replayed, outputDigest, output, errorCode, costMicros, durationMs]
++      allOf:
++        - oneOf:
++            - properties:
++                status: { type: string, enum: [succeeded] }
++                output: { $ref: '#/components/schemas/StructuredGenerationOutput' }
++                outputDigest: { $ref: '#/components/schemas/Digest' }
++                errorCode: { nullable: true, enum: [null] }
++            - properties:
++                status: { type: string, enum: [queued, running, failed, cancelled, outcome_unknown] }
++                output: { nullable: true, enum: [null] }
++                outputDigest: { nullable: true, enum: [null] }
++      properties:
++        runId: { $ref: '#/components/schemas/ResourceId' }
++        operationId: { $ref: '#/components/schemas/ResourceId' }
++        inputVersion: { $ref: '#/components/schemas/Version' }
++        inputDigest: { $ref: '#/components/schemas/Digest' }
++        status: { type: string, enum: [queued, running, succeeded, failed, cancelled, outcome_unknown] }
++        providerMode: { type: string, enum: [protocol_stub, actual_model] }
++        model: { type: string, maxLength: 128 }
++        modelConfigRevision: { type: string, maxLength: 128 }
++        replayed: { type: boolean }
++        outputDigest: { type: string, nullable: true, maxLength: 71 }
++        output: { nullable: true }
++        errorCode: { type: string, nullable: true, maxLength: 64 }
++        costMicros: { type: integer, format: int64, minimum: 0, nullable: true }
++        durationMs: { type: integer, format: int64, minimum: 0, nullable: true }
++      description: Only succeeded has a stored immutable schema-valid output body and matching digest; absent vendor cost is null. Original output survives restarts before human application. Explicit draft PUT records a GenerationApplication with suggestionRunId and CAS.
++    BeforePin:
++      oneOf:
++        - type: object
++          additionalProperties: false
++          required: [kind, targetId, presence]
++          properties:
++            kind: { $ref: '#/components/schemas/TargetKind' }
++            targetId: { $ref: '#/components/schemas/ResourceId' }
++            presence: { type: string, enum: [absent] }
++        - type: object
++          additionalProperties: false
++          required: [kind, targetId, presence, revisionId]
++          properties:
++            kind: { type: string, enum: [semantic_asset] }
++            targetId: { $ref: '#/components/schemas/ResourceId' }
++            presence: { type: string, enum: [present] }
++            revisionId: { $ref: '#/components/schemas/ResourceId' }
++        - type: object
++          additionalProperties: false
++          required: [kind, targetId, presence, objectVersion, contentDigest]
++          properties:
++            kind: { $ref: '#/components/schemas/ObjectKind' }
++            targetId: { $ref: '#/components/schemas/ResourceId' }
++            presence: { type: string, enum: [present] }
++            objectVersion: { $ref: '#/components/schemas/Version' }
++            contentDigest: { $ref: '#/components/schemas/Digest' }
++    Manifest:
++      type: object
++      additionalProperties: false
++      required: [assets, objects, digest]
++      properties:
++        assets:
++          type: array
++          maxItems: 1000
++          items:
++            type: object
++            additionalProperties: false
++            required: [assetId, revisionId, position, compatibility]
++            properties:
++              assetId: { $ref: '#/components/schemas/ResourceId' }
++              revisionId: { $ref: '#/components/schemas/ResourceId' }
++              position: { type: integer, minimum: 1, maximum: 1000 }
++              compatibility: { type: object, maxProperties: 64, additionalProperties: { $ref: '#/components/schemas/JSONValue' } }
++        objects:
++          type: array
++          maxItems: 1000
++          items:
++            type: object
++            additionalProperties: false
++            required: [kind, targetId, objectVersion, contentDigest, position]
++            properties:
++              kind: { $ref: '#/components/schemas/ObjectKind' }
++              targetId: { $ref: '#/components/schemas/ResourceId' }
++              objectVersion: { $ref: '#/components/schemas/Version' }
++              contentDigest: { $ref: '#/components/schemas/Digest' }
++              position: { type: integer, minimum: 1, maximum: 1000 }
++        digest: { $ref: '#/components/schemas/Digest' }
++      description: Full immutable manifest; digest uses the unchanged existing release algorithm, not a hash of this wire view (wire IDs and contentDigest fields differ).
++    ReleaseAttribution:
++      type: object
++      additionalProperties: false
++      required: [operationId, version, setDigest, validation, reviewIds, proposalIds, contributors, role]
++      properties:
++        operationId: { $ref: '#/components/schemas/ResourceId' }
++        version: { $ref: '#/components/schemas/Version' }
++        setDigest: { $ref: '#/components/schemas/Digest' }
++        validation: { $ref: '#/components/schemas/ValidationReference' }
++        reviewIds: { type: array, minItems: 1, maxItems: 256, uniqueItems: true, items: { $ref: '#/components/schemas/ResourceId' } }
++        proposalIds: { type: array, minItems: 1, maxItems: 32, uniqueItems: true, items: { $ref: '#/components/schemas/ResourceId' } }
++        contributors: { type: array, minItems: 1, maxItems: 256, uniqueItems: true, items: { $ref: '#/components/schemas/ResourceId' } }
++        role: { type: string, enum: [applied, reverted] }
++    ProductionReleaseProtection:
++      oneOf:
++        - type: object
++          additionalProperties: false
++          required: [rootReleaseId, rollbackDepth]
++          properties:
++            rootReleaseId: { $ref: '#/components/schemas/ResourceId' }
++            rollbackDepth: { type: integer, enum: [0] }
++        - type: object
++          additionalProperties: false
++          required: [rootReleaseId, rollbackDepth, rollbackParentReleaseId]
++          properties:
++            rootReleaseId: { $ref: '#/components/schemas/ResourceId' }
++            rollbackDepth: { type: integer, minimum: 1, maximum: 2147483647 }
++            rollbackParentReleaseId: { $ref: '#/components/schemas/ResourceId' }
++      description: Root marks every production release; each rollback descendant inherits root and increments depth. Legacy rollback rejects every marked target regardless of singular originProposalId or current pin count.
++    ProductionRelease:
++      type: object
++      additionalProperties: false
++      required: [id, sequence, publishedBy, publishedAt, attribution, protection, beforeHead, beforeManifest, afterManifest, beforePins, originProposalId, originProposalIds, rolledBackReleaseId, projectionStatus]
++      properties:
++        id: { $ref: '#/components/schemas/ResourceId' }
++        sequence: { type: integer, format: int64, minimum: 1 }
++        publishedBy: { $ref: '#/components/schemas/ResourceId' }
++        publishedAt: { $ref: '#/components/schemas/Timestamp' }
++        attribution: { $ref: '#/components/schemas/ReleaseAttribution' }
++        protection: { $ref: '#/components/schemas/ProductionReleaseProtection' }
++        beforeHead: { $ref: '#/components/schemas/HeadReference' }
++        beforeManifest: { $ref: '#/components/schemas/Manifest' }
++        afterManifest: { $ref: '#/components/schemas/Manifest' }
++        beforePins: { type: array, minItems: 1, maxItems: 32, items: { $ref: '#/components/schemas/BeforePin' } }
++        originProposalId: { type: string, nullable: true, maxLength: 59 }
++        originProposalIds: { type: array, minItems: 1, maxItems: 32, uniqueItems: true, items: { $ref: '#/components/schemas/ResourceId' } }
++        rolledBackReleaseId: { type: string, nullable: true, maxLength: 59 }
++        projectionStatus: { type: string, enum: [pending, ready, failed] }
++      description: Single provenance remains populated only for one applied proposal. Multi-proposal/rollback detail uses complete attribution; immutable history is not rewritten by projection status.
++    ReleaseCommandResult:
++      type: object
++      additionalProperties: false
++      required: [releaseId, operationId, replayed, manifestDigest]
++      properties:
++        releaseId: { $ref: '#/components/schemas/ResourceId' }
++        operationId: { $ref: '#/components/schemas/ResourceId' }
++        replayed: { type: boolean }
++        manifestDigest: { $ref: '#/components/schemas/Digest' }
++    ProductionError:
++      type: object
++      additionalProperties: false
++      required: [code, message, traceId, retryable]
++      properties:
++        code:
++          type: string
++          enum: [INVALID_ARGUMENT, UNAUTHENTICATED, FORBIDDEN, NOT_FOUND, INVALID_CURSOR, IDEMPOTENCY_CONFLICT, ALREADY_PRODUCED, IDENTITY_CONFLICT, VERSION_CONFLICT, BASELINE_CONFLICT, HEAD_CONFLICT, INPUT_STALE, INPUT_INCOMPLETE, HISTORY_UNVERIFIABLE, EVIDENCE_MISSING, DEPENDENCY_INVALID, CONTENT_MISMATCH, NO_SUBSTANTIVE_CHANGE, PRODUCTION_SET_REQUIRED, VALIDATION_REQUIRED, REVIEW_REQUIRED, SOD_CONFLICT, PRIOR_STATE_UNKNOWN, PAYLOAD_TOO_LARGE, LIMIT_EXCEEDED, MODEL_NOT_CONFIGURED, MODEL_BUDGET_REQUIRED, MODEL_OUTCOME_UNKNOWN, MODEL_OUTPUT_INVALID, FEATURE_UNAVAILABLE, INTERNAL_ERROR]
++        message: { type: string, maxLength: 2048 }
++        traceId: { type: string, maxLength: 128 }
++        retryable: { type: boolean }
++        operationId: { $ref: '#/components/schemas/ResourceId' }
++        currentVersion: { $ref: '#/components/schemas/Version' }
++        fieldPath: { type: string, maxLength: 512 }
++      description: Optional context only after authorization; no raw source, secret, provider diagnostic, foreign-workspace ID or hidden reasoning.
+
+diff --git a/docs/specs/semantic-production/contracts/production.md b/docs/specs/semantic-production/contracts/production.md
+new file mode 100644
+index 0000000..0f0e4fc
+--- /dev/null
++++ b/docs/specs/semantic-production/contracts/production.md
+@@ -0,0 +1,161 @@
++# 语义生产接口契约
++
++| 元数据 | 值 |
++| --- | --- |
++| Version | 0.1.0 |
++| Status | Planned Contract；本文件与 YAML 是 SP-T001 的实施规格，不代表接口已上线 |
++| Schema | [production.openapi.yaml](production.openapi.yaml)（独立 OpenAPI 3.0.3，不替换正式 `api/openapi/semlia.v1.yaml`） |
++| Storage and invariants | [data-model.md](../data-model.md) |
++| Requirements | SP-FR-001 至 SP-FR-010、SP-NFR-001 至 SP-NFR-005、SP-TD-001 至 SP-TD-008 |
++
++## 1. 通用约定
++
++所有路径前缀为 `/api/v1/workspaces/{workspaceId}`，使用既有管理端 SessionCookie、CSRF/origin 防护和服务端 workspace/principal 解析。路径中的 workspace 是检查条件，不是权限来源。机器 bearer allowlist、机器发布权限和消费协议均不扩展；开发身份适配只限既有显式 development 模式。本契约中的公开管理 API 不等于外部 machine API。
++
++新 TypeID 为 ssnp、prodop、codrev、linrev；已有 ID 前缀保持不变。YAML ResourceId 验证通用 shape，服务端按字段强制 wsp/src/ssnp/prodop/agr/rls/ast/rev/phb/mgn/eky/jct/pds/pdr/pfd/pfr/evd/scd 等准确 domain 类型和 UUIDv7。ID、revision、candidate、evidence 及所有 nested 引用必须属于同 workspace；跨 workspace 或不存在的对象统一 404，不先泄露名称。已知 workspace 内 capability 拒绝为 403。
++
++OpenAPI 定义结构形状，以下为同等强制的服务端语义，不得只依赖生成 SDK/schema validator：
++
++- 写入 body 最大 1 MiB，服从已有更严格限制；仅 `application/json`，重复键、未知字段、尾随 JSON、非法 UTF-8、嵌套深度超过 32、非法数值拒绝。规范化 draft input+targets 最大 768 KiB，预留派生元数据空间；模型原始输入/输出各最大 1 MiB。
++- 最多 32 targets、每 target 最多 100 changes、合计最多 256 changes。create changes 必须为空；create 声明本身是真实语义变化。重复 localKey、target identity、候选或 evidence/pin 视为错误而非静默去重。
++- 所有返回 JSON 最大 4 MiB；列表可少于 limit，按字节预算停止在完整 item 边界并设置 nextCursor，不截断单个对象。完整 manifest 各最多 1 MiB、1000 asset pins 与 1000 object pins，遵循现有 release 边界；超过时明确 LIMIT_EXCEEDED，不丢未变对象。单 item 仍超预算则明确错误，不返回空成功页。
++- 字段文本限额以 YAML 字符长度为上限，存储字节更严格时取更小者。schema 没有携带 workspace、createdBy、reviewer、publishedBy、approved、toolName、凭据、provider endpoint 或 release state 的写入口。
++- HTTP 无副作用 GET 都重新鉴权；POST/PUT 的命令权限及结果读取权限分别检查。任何缺少必需对象 scope 的读取整项拒绝/从列表排除，不能隐藏一半输入后仍称“完整可审查”。现有低权限 release read 保留原脱敏行为，详见兼容部分。
++
++## 2. 方法与权限
++
++表中路径省略通用前缀。R 表示对实际关联的 asset/source/evidence/binding 分别核实 `asset.read`、`source.read`、`evidence.read`、`binding.read`，不是任意一个即可。W 表示 `asset.propose`；含 governed target 时额外按既有对象规则核实 `binding.manage`。创建新身份在 workspace scope 检查；更新在真实 target scope 检查。父对象与所有依赖读权限必须在同一授权快照内成立。
++
++| 方法与路径 | 权限与前置条件 | 成功与结果 |
++| --- | --- | --- |
++| GET `/sources/{sourceId}/snapshots` | source.read(source) | 200 SnapshotPage，包括 partial/failed/unverifiable，不静默只留完整版本 |
++| GET `/sources/{sourceId}/snapshots/{snapshotId}` | source.read(source)，source/snapshot 关系一致 | 200 SourceSnapshot，固定范围、覆盖与摘要；不内联无界成员 |
++| GET `/sources/{sourceId}/snapshots/{snapshotId}/members` | 同上 | 200 SnapshotMemberPage，包含未变化 revision 和历史名称 |
++| GET `/sources/{sourceId}/snapshots/{snapshotId}/diagnostics` | 同上 | 200 DiagnosticPage，已脱敏诊断 |
++| POST `/production-operations` | W、必要 binding.manage、R | 201 创建；全 no_change 或同键重放 200；返回命令结果及 Location |
++| GET `/production-operations` | R，每项按完整关联 scope 筛选 | 200 有界摘要，可用 sourceId/candidateId/createdBy 精确过滤 |
++| GET `/production-operations/{operationId}` | R | 200 当前或 `version` 指定历史的输入/目标/提案/验证/审核/生成 run 与发布链接 |
++| PUT `/production-operations/{operationId}` | W、必要 binding.manage、R；expectedVersion 当前且全体 draft | 200 全量替换后新版本；不修改任何冻结内容 |
++| POST `/production-operations/{operationId}/submit` | W、R、validation.run；exact version/setDigest | 202 冻结、原 Proposal 提交和初次验证队列同时提交；重放 200 |
++| GET `/production-operations/{operationId}/validations` | R；必填 version | 200 ValidationAttemptPage，按 attemptNo 降序读取该版本完整 attempt 归属与精确 run IDs |
++| POST `/production-operations/{operationId}/validations` | validation.run、R；相同冻结输入；previousAttemptNo CAS | 202 新完整确定性 attempt；同键仅返回原队列；不能更换 source/base 或混用旧结果 |
++| POST `/production-operations/{operationId}/reviews` | proposal.review、R、集合级 SoD；validation 指向当前完整成功 attempt | 201 原有 Review 行及 exact attempt/digest 绑定；重放 200；decision 对 selected proposalIds 原子生效 |
++| POST `/production-operations/{operationId}/publish` | human release.publish、R、SoD；validation 与全体 Review 绑定同一当前完整成功 attempt | 201 唯一新 release；同键重放 200；不需要 consumer/binding registration |
++| POST `/production-operations/{operationId}/generation` | W、R；当前 draft；有效模型配置及显式费用授权 | 202 已保存 AgentRun/job；重放 200，不重发模型 |
++| GET `/production-operations/{operationId}/generation/{runId}` | R，run 必须关联该 operation | 200 原始结构化建议、状态与可用归因；不返回 prompt/密钥/隐藏推理 |
++| GET `/production-releases/{releaseId}` | R，包括来源/evidence 历史读取 | 200 同一 Release 的生产详情；旧 release 无必要历史则 PRIOR_STATE_UNKNOWN |
++| POST `/production-releases/{releaseId}/rollback` | human release.rollback、R、集合级 SoD；目标是 current latest | 201 恢复完整 before manifest 的新 release；重放 200 |
++
++YAML 中共用 responses 是状态全集；具体 operation 必须遵循本表：PUT 只返回 200，review 首次返回 201，create 全 no_change 返回 200，不能随意互换。所有异步成功只表示队列意图已提交，不是 validation/model 已通过。
++
++## 3. 来源读取与分页
++
++快照由现有 ingestion/discovery 完成路径在同一投影事务产生，没有客户端写快照的新旁路，也没有新增 connector。后续正式 discovery run 响应以可空 `snapshotId` 附加关联，旧无可信历史运行可无 ID 或关联 historyQuality=unverifiable；不能为所有旧运行填当前 snapshot ID。snapshot/run 多对一关系保留每次运行。
++
++所有列表默认 limit=50，1..200；nextCursor 为 null 表示结束，不要求客户端猜 total。cursor 为版本化 opaque token，绑定 kind、workspace、source/snapshot、所有 filter、初次查询 upper watermark 及最后 key。每页重新鉴权，权限撤销不会因 cursor 固定而失效；无权 items 不计可见总数。游标篡改、错资源、错 workspace、不同 filters 或过期 schema 返回 400 INVALID_CURSOR，不自动从头重复。
++
++快照与 operation 按 `(created_at DESC,id DESC)` keyset；operation 的排序不使用会变的 updated_at，列表 summary 返回当前可见版本。成员按 `(kind,object_id)`，诊断按 ordinal。固定 watermark 防止翻页时新插入重复/漏读原集合；权限变化可导致可见结果减少，这是安全筛选而不是 snapshot 数据变化。返回 item 预算不足时使用最后实际输出的 key，下一页继续。
++
++validation attempt history 按 attemptNo 降序，version 必填且固定于 cursor，upper watermark 为首轮最大 attemptNo；每 item 是一个完整 attempt 的 result envelope，不将各 validator 的 latest result 拼成 item。当前 queued/running 元数据可变至 terminal，输入声明不可变；分页不暗示运行已成功。
++
++SnapshotMember 的 name/locator/revision/digest/coverageKey 是本次观察，不从 current 表取历史名称。field 必须带 parentObjectId 和 parentRevisionId，二者均匹配同一快照 dataset；dataset 不允许伪造 field parent。code 的 revisionId 为 codrev，lineage 为 linrev。完整性由 CoverageUnit.status 与 enumerationComplete 同时判定；`status=complete` 必须 enumerationComplete=true，无 blocker 缺失；partial/failed 不能假推删除。不可验证历史只返回确证成员，historyQuality 保留 unverifiable。
++
++## 4. 请求、摘要与幂等
++
++CreateProductionRequest 固定 ProductionInput 与所有 ProductionTarget。input.snapshots 的 digest 必须等于服务端快照；coverageKeys 显式选择可用完整 unit。candidate digest 绑定候选真实内容版本而非决定状态；snapshotId 必须是其实际 evidence 版本。candidate.targetKeys 都存在，primaryTargetKey 显式属于其中并对应真实 Proposal，用作旧 singular proposalId 的兼容桥；不允许数组顺序决定 primary。证据 ID+digest 必须存在、可读且属于固定 input，业务规则 attestation 来自有权人，不从 AI 文本/置信度推断。
++
++create 声明以 localKey 协调本集合引用；服务端保留 target TypeID，semantic asset 仅预留 draft 身份，不制造 base revision。首次 create 不带 reuseIdentity；可信首次发布后回滚缺席的同身份可带该明确证明重新 create，规则见下文。update 必须带目标 ID 和当前真实 published baseRevisionId 或 baseObjectVersion；两者互斥且按 kind 选择，不能传 create 的 identityKey。资产 address、assetType、稳定 target identity 不得作为普通 update 改写；这类领域迁移不在首个样例范围，返回 INVALID_ARGUMENT。仅非生产旧接口保留已有真实 draft revision update 行为。
++
++reuseIdentity 是 create 的条件数据，不是第三 intent。它要求 targetId、creationOperationId、creationReleaseId、实际移除 pin 的 absenceReleaseId 及 present expectedHead；服务端证明原 reservation 的 kind/identityKey/身份归属、创建与保护回滚链，当前 head digest 相符且该 pin 仍 absent。仅凭保留的 registry row 或“我想复用这个 ID”不构成证明，未知 legacy 历史 fail closed。其 expectedHead 必须与服务器冻结 baseline 一致，并在 submit/publish 再 CAS；不能填 absent head、root baseRevisionId/baseObjectVersion 或伪造旧 published pin。合法重引入沿原 create Proposal、新验证、新审核与完整原子发布，保留原 ID/history；已有 row 以 registry CAS 更新而非重复 INSERT，语义 revision 相同 digest 可安全复用。原已发布历史不强迫当前 absent 身份使用无合法基线的 update。数据模型 §4.4 固定所有存储条件。
++
++结构化字段映射沿用现有权威：AssetContent 写 asset revision 业务 content（identity address/type 校验既有身份）；BindingContent 写 PhysicalBinding，GrainContent 写 ModelGrain，EntityKeyContent 写 EntityKey，JoinContent 写 JoinContract。写入前将 localKey/PublishedReference 解到 existing domain IDs；snapshot revision/evidence 关联保留在 production input 与验证绑定中，不把物理历史伪装为 current field。`dataset`、Join 两端必须 PhysicalReference.kind=dataset，`field`、fields、pairs 必须 kind=field；字段与 dataset 归属和精确版本由服务端校验。Join pairs 同时提供左右值，保持顺序和相等数量。SemanticReference 的 asset 位置只允许 semantic_asset 类型。
++
++update changes 使用现有 dot-separated fieldPath（不使用 JSON Pointer），仅允许该 kind 内容 schema 的真实业务字段，不允许单独的 `.`, 空 segment、数组索引、`__proto__`、身份/权限/状态/摘要字段或相互重叠路径。标量/数组整体替换，原子 before/after value 根据基线校验，服务器生成 ChangeSetItem digests；desired content 必须等于 ApplyChangeSet 的输出，否则 CONTENT_MISMATCH。无变化的 target 没有 Proposal，其他成员可把它作为既有 pinned dependency，不创建虚假 diff。
++
++规范化与 digest 的算法、排序及数值边界见 data-model §3。`Idempotency-Key` 每个 POST/PUT 必填，ASCII 8..128。唯一键为 workspace+认证 principal+command kind+key；request digest 还包含 URI resource ID、API/schema version、expectedVersion 与完整规范化内容。相同 key 不同 body 409 IDEMPOTENCY_CONFLICT；相同 key 相同 body 在重新授权后返回原 commit 的 IDs/version/digest，`replayed=true`。原结果的 outcome 描述当时命令，不误写成当前治理状态；客户端接着 GET 获取当前状态。
++
++幂等记录与业务 commit 同事务保存且不默认 TTL 删除。进程死于 commit 前则重试可以执行；commit 后失去响应则重放只返回原结果。记录不可按浏览器/session 生命周期清除。不同 key 的 duplicate candidate/create identity 由自然键及候选关联约束拒绝，ALREADY_PRODUCED 只向有权主体附带 operationId；新 principal 不获得原命令重放身份。supersede 同时验证旧操作与 reservation 权限，写新 immutable candidate decision 并 CAS 更新旧 singular 投影，不修改历史 decision。
++
++没有候选的 update 也通过 workspace+business digest 的唯一 claim 防止不同 key 重复创建相同提案；business digest 不含作者/幂等键但含真实输入/base/supersedes。命中时只返回已授权 existing operation 的 ALREADY_PRODUCED，不把请求者归因为原作者。显式后继的新输入或 supersedes 引用形成新 claim；重复提交该后继仍唯一。
++
++## 5. 冻结、验证与审核
++
++ProductionOperation.version 是内容版本，summary.currentVersion 是最新版本；setDigest 包括精确输入、所有 targets/Proposal/content、baseline head、内部边/外部依赖及 validator/policy 版本。服务器同时固定 governed object registryWriteVersion，避免回滚后 published version 与 registry counter 不同导致永久冲突。该 token 是内部写 CAS，不由用户提供，也不替代 published base。activeValidation 返回当前请求的完整 attempt 元数据、requiredChecksDigest、freshnessDigest、runIds 和仅成功时存在的 validationDigest；未提交为 status=not_requested。TargetResult.validationRunIds 只来自同一 active attempt，不能混入历史成功。
++
++PUT 只替换全体 draft，保留旧 immutable operation version。body 的 expectedVersion 与当前不一致 409；即使只是更新 title，也不能绕过 version/set 与贡献者归因。supersedesOperationId 是冻结后的纠正路径；新提案重新验证审核，原集合/结果不覆写。数据模型明确 terminal、身份保留与合法状态转换。
++
++submit 短事务按固定锁序复核授权、源版本、候选、依赖和 base，固定 set、分配 attemptNo=1、让全体成员沿原 `draft -> proposed -> validating` 并与 validation jobs/outbox 同时提交。队列故障返回失败且不留下部分 submitted 集合。验证 worker 在事务外执行确定性检查，结果 commit 时检查授权/version/setDigest/freshness；状态不明、失败、未运行、缺证据不能汇总为通过。生成不可替代 schema/reference/grain/key/join/policy 校验。
++
++重验命令必须 previousAttemptNo=当前 active attempt；服务器 CAS 分配下一个序号（每版本最多 256），同键重放不新建，另一 key 在 active attempt 仍 queued/running 时返回 VERSION_CONFLICT。新 attempt 固定完整 required `(proposal,validator,version)` 集合并全部重跑，包括无影响来源检查。transport/job lease retry 只续跑同一个 attempt，新的人工重验才分配新 attempt。结果查询/去重/job payload/policy 输入必须包含 operation/version/attempt，旧单 proposal+validator 唯一键的扩展与 legacy 部分索引见 data-model §5.1。
++
++production executor 对 in_review 的新 attempt 实际执行检查，不进入当前代码的“仅补 policy 然后返回”分支；Proposal 不倒退到 validating。只选择当前 active attempt 的完整成功集合：不得按 validator 挑不同 attempt 通过结果、不得在当前失败或未完成时回退旧成功。validationDigest 固定全部 required checks、精确 run/result 内容、freshness 与 policy；成功完成时一次提交。full required set 不可由请求者删减，缺失/failed/cancelled/not_checked 不能变成成功。历史通过上述 GET validations 的有界完整 attempt page 读取，checks 投影既有 ValidationRun/Result 的 validator、proposal、状态和脱敏 findings；不假设存在未提供的 run-detail HTTP 接口，也不把全历史并入 activeValidation。每 attempt 最多 256 checks、每 check 最多 256 findings，全部 checks 的规范 JSON 合计最多 1 MiB，超过则记录明确 LIMIT_EXCEEDED 并失败，不能截断后判成功。旧单 proposal validation-runs 聚合入口对 production 成员返回 PRODUCTION_SET_REQUIRED，指向此 operation 历史入口，不静默返回混合或截断的结果；普通 legacy proposal 维持原响应。
++
++ReviewProductionRequest 可以审阅部分 selected members，但每个 Review 都绑定整个 setDigest 和 `validation={attemptNo,validationDigest}`；发布仍要求全体 members 达到原 policy 的全部有效审核。PublishProductionRequest 指定同一 validation，服务器核实 active attempt、完整结果和每个所采用 Review 的绑定一致。review actor 服务端解析，同一请求有任一成员无权/过期/违反 SoD 则全部不写 Review。命令 vocabulary 沿用现有 approve/reject：approve 写 approved Review，Proposal 留在 in_review；reject 写 rejected Review 并将对应 Proposal 转为 rejected。历史 changes_requested Review 仍可读，但本生产命令不新增此命令分支。后续实质更改走 successor，不能将已批准内容偷偷覆盖。
++
++新 attempt enqueue 起所有旧 attempt Review 均不再支持发布；即使 setDigest 未变且来源影响结论为无影响，也要求新的完整成功 attempt 后重新独立审核，不能自动迁移批准。旧 Review immutable 且可审计，production 的 reviewer/channel 去重按当前 attempt 计算，允许同一合法 reviewer 对新 attempt 重审；legacy 原 stage 去重不变。当前队列/失败使 progress 反映 validating/needs_correction，不因 Proposal 仍 in_review 而显示 ready_to_publish。
++
++SoD 按整个集合的真实作者/贡献者检查：任何成员作者、实质编辑者、生成发起人与 agent 作者都不能为该集合提供可用于发布的审核；publisher 不能属于作者集合或所采用 reviewer 集合。发布时 reviewer 当前身份与权限撤销也使该审核不能作为新发布依据。只改 display name、分拆 proposal、旧 endpoint、不同 idempotency key 都不能规避。
++
++## 6. 发布与恢复
++
++PublishProductionRequest 必须固定 expectedHead。首次空工作区传 `{ "presence": "absent" }`；非空必须同时给 releaseId 与 manifestDigest。absent 表示真实无 head，不是“忽略比较”。head 比冻结 baseline 改变即 409 HEAD_CONFLICT，即使认为无关也不自动 rebase；通过新的受审 operation 固定最新 baseline。
++
++发布事务重验当前 authorization/SoD、set digest、input freshness、基线、依赖闭合、全部验证/审核/策略，写全部新 pins、完整 after manifest、完整 before manifest、每 target 的 BeforePin、全提案归因、Proposal released、审计/outbox/幂等结果。任何成员失败 rollback 全事务。消费者不存在不影响提交；projectionStatus 是独立可恢复 outbox 派生状态，pending/failed 不改变 immutable release 或伪造 ready。
++
++input freshness 按选择的 complete coverage unit 和依赖子图判断：最新可靠观测对被引用成员、名称、规则或覆盖有变化，返回 INPUT_STALE；仅未受影响成员变化时必须有本 set 的新确定性 impact validation，固定所比对新 snapshot 后才能视为有效。旧 validation 仍指原输入，不能用 current 临时替换它。来源暂时失败且不能证明所需范围依然可靠时 fail closed，保留已有 release 可读；新通过不是由“扫描失败但缓存仍在”推断。
++
++ProductionRelease 是同一 Release 的受权详情投影，不是第二发布表：originProposalIds 为全部 member Proposal；多成员时旧 originProposalId=null；单 applied member 时保留原 singular ID。attribution 包括 operation/version/setDigest/contributors、完整 validation reference/采用的 reviewIds 与 applied/reverted。更细作者、验证、审核归因通过该版本的 target references 和既有详情读取；集合摘要不可省略任何 Proposal。manifest digest 用原内部算法，不直接对包含 TypeID/contentDigest 的新 wire view 求 hash。
++
++RollbackProductionRequest 的 expectedVersion/setDigest 是目标 release attribution 中的版本/集合；expectedHead 必须 present 且与路径 releaseId/current head 一致。只有 latest 可回滚。原发布的全部作者/审核者 SoD、当前回滚权限、完整 before 可复核性和恢复后依赖闭合在同一事务核实。after manifest 精确等于目标 before manifest，包括首次创建对象的 absence；不存在的 pin 从 published view 消失，但身份/历史不删除。不可用 inverse patch、任意最近旧 revision 或草稿基线冒充 before。
++
++回滚新 release 同时保存本次回滚的 before（回滚前 head），因此可按相同规则再次回滚。governed registry 的写 counter 可以大于恢复的 published objectVersion；后续 update 比较 published base 内容和内部 registryWriteVersion 两个独立条件，从当前 counter 分配新版本，不要求两者数字相等。缺失可信 before 的 legacy release 在生产 rollback 端点拒绝，既有普通 rollback 按原契约不变。
++
++每个生产 release 的 protection 固定 rootReleaseId 与 rollbackDepth=0；每个 rollback 后继保留 root、rollbackParentReleaseId 并将 depth 加一。旧 `/governance/releases/{releaseId}/rollback`、旧 service 以及 repository 方法对所有带 protection 的根/任意后继统一 409 PRODUCTION_SET_REQUIRED，不能因 singular origin 为 null、manifest 为空或已回滚一次而豁免。新 endpoint 是唯一受权回滚命令；所有后继继续携带完整原成员/采用的 validation/Review 归因并复核 R/SoD/exact-before。DB 在 legacy insert 试图回滚 protected parent 时要求匹配继承的保护字段，并在 commit 强制核对新命令、完整 manifest/归因；不能只依赖路由 guard。回滚复核历史验证关联的真实性及恢复后依赖，不要求把历史 source 当当前新输入重新批准。
++
++服务端恢复顺序：按同幂等 key重放确定性命令或 GET operation；本地完全失忆时按 source/candidate/createdBy 列表定位；读取当前 version、member Proposal、validation/review、generationRunIds 和 releaseId；仅对明确未 commit 的操作重发，不根据空 localStorage 猜测创建。`outcome_unknown` 模型先恢复 run，不能自动把失败重试转换成第二次付费调用。
++
++## 7. AI 与人工纠正
++
++首次生产可创建来自真实候选的未决 draft（definition/scope=null），这只是稳定身份和待审声明，不要求用户先造资产/release。generation 读取该操作固定来源、候选、可读 evidence、target skeleton 和模型配置；一个 run 可返回整套最多 32 targets 的建议。运行成本与 token ceiling 是现有授权/配置之内的更小限制，body 中大数不构成费用授权。无可验证预算、配置或 source/evidence 权限时不排队模型。
++
++现有 AgentRun/Step 记录 model/config revision/input hash/output hash/耗时/可用成本；运行在事务外。结果提交前重新检查发起主体及 agent 的当前授权、source/version/input digest、模型配置修订与 output schema/总 changes/大小；失配以明确失败结束 run，不自动将结果应用到新版本。providerMode 由服务端执行环境派生，只能 protocol_stub 或 actual_model，客户端不能把 stub 标成实际模型。
++
++GenerationResult.output 为持久化的 `{schemaVersion:"semlia.production-suggestions/v1",targets:[...]}` 原始结构化建议，不是仅保留 hash。成功结果必须正文和 outputDigest 同时非空；非成功状态两者均为 null，不自动 submit/publish/覆盖 draft。schema-gated 正文、canonical byte count、digest 与 AgentRun/Step 成功状态在同一事务保存于 production_generation_outputs；进程在生成成功后、人工应用前重启仍可通过 GET 恢复原正文。读时核对摘要，不用重新调用模型补缺失内容。原 prompt/raw provider envelope/失败无效输出/hidden reasoning 不持久化，成功正文至少保留至其全部历史依赖的保留期，无自动 TTL。
++
++人工确认/纠正用 PUT + suggestionRunId + expectedVersion：必须引用同 operation 的真实已保存成功 run，且 run.inputVersion=expectedVersion=当前 draft version；服务器保存原 output digest、应用后 immutable version/content digest、真实 actor 与有界结构化 delta/digest。GET operation 指定 version 的 generationApplications 仅返回产生该版本的至多一个关联；其 sourceVersion/sourceOutputDigest 可定位原正文，appliedVersion 定位人工版本，不无界内联所有旧差异。完整存储/FK、最大 256 delta items 和 1 MiB delta、目标增删 `$target` 归因约定见 data-model §8.1。原文与人工版分开且 immutable；空 delta 不声称人工纠错。应用后的后续人工编辑使用普通 PUT 留版本/贡献者历史，不隐式把旧 run 应用于新输入。原 run 不含供应商费用时返回 null，而不是虚构 0 元。
++
++现有 AgentRun status 的 running/succeeded/failed/cancelled 保留。wire queued 来自 queued job；outcome_unknown 是 failed run 的明确 errorCode + 调用结果不确定标记，不新增审批状态。单 operation 最多 256 generation runs，达到限制返回 LIMIT_EXCEEDED，历史不覆盖；显式新 run 需要新 key 及再次费用授权，重放原 key 永不重新调用 provider。
++
++来源文本、代码注释、dbt 描述及用户 instruction 都是不可信数据；不解释为 publish/tool/SQL 执行许可。不把客户行数据、凭据、隐藏推理写进记录；首个样例是披露的合成订单/客户。实际模型验收另行授权配置和费用，stub/人工/实际模型三个证据类别独立。
++
++## 8. 错误与重试
++
++| HTTP | code | 客户端动作 |
++| --- | --- | --- |
++| 400 | INVALID_ARGUMENT、INVALID_CURSOR | 修正参数/游标；不自动重新创建 |
++| 401 | UNAUTHENTICATED | 重新登录后读取现有操作 |
++| 403 | FORBIDDEN、SOD_CONFLICT | 使用有权且职责独立的主体；不回显原缓存结果 |
++| 404 | NOT_FOUND | 无此可见对象或跨 workspace 引用；无旁路探测 |
++| 409 | IDEMPOTENCY_CONFLICT | 保留 key 与原请求，不能以自动换 key 掩盖冲突 |
++| 409 | ALREADY_PRODUCED、IDENTITY_CONFLICT | 读取已授权 operation 链接或明确匹配/纠正身份 |
++| 409 | VERSION_CONFLICT、BASELINE_CONFLICT、HEAD_CONFLICT、INPUT_STALE | 读取最新状态并显式建立新版本/后继；不能自动继承批准 |
++| 409 | PRODUCTION_SET_REQUIRED | 使用该 production operation 的集合命令 |
++| 413 | PAYLOAD_TOO_LARGE | 缩减内容，不能拆成绕过集合原子性的单项发布 |
++| 422 | LIMIT_EXCEEDED、CONTENT_MISMATCH、NO_SUBSTANTIVE_CHANGE | 修正有界输入或停止无意义 submit/publish |
++| 422 | INPUT_INCOMPLETE、HISTORY_UNVERIFIABLE、EVIDENCE_MISSING、DEPENDENCY_INVALID | 建立可信完整新证据或纠正引用；不可伪造历史 |
++| 422 | VALIDATION_REQUIRED、REVIEW_REQUIRED、PRIOR_STATE_UNKNOWN | 完成所需验证/审核或停止不可复核回滚 |
++| 422 | MODEL_NOT_CONFIGURED、MODEL_BUDGET_REQUIRED、MODEL_OUTPUT_INVALID | 修正授权配置/输出；自动重试禁用 |
++| 409 | MODEL_OUTCOME_UNKNOWN | GET 原 run，结果不明不自动再付费 |
++| 503 | FEATURE_UNAVAILABLE、INTERNAL_ERROR | 查询已有操作后用原 key 重试确定性命令；不自动重试模型网络 |
++
++ProductionError 的 message/traceId 可用于显示/排查，raw DB/provider/source diagnostics 和 secrets 不得返回。可见性检查前只给通用错误，operationId/currentVersion 仅在已授权时附带。确定性冲突 retryable=false；503 的 retryable 仅表示原 key 的安全命令重放，不表示模型调用已获新授权。
++
++## 9. 兼容与执行闸门
++
++生产契约只追加到后续正式 API/SDK，不在 SP-T001 改生成物。既有 source/discovery/candidate/proposal/release API 仍可读原普通对象；新 production 成员的旧单项 changes/submit/review/publish/convert 命令以及生产 release/任意回滚后继的旧 `/governance/releases/{releaseId}/rollback` 统一 fail closed，不选第一个成员或依赖 null singular origin 绕过。旧 release read 的 asset.read/binding.read 脱敏语义保持不变；有权需要完整生产归因的客户端使用新详情。`originProposalIds` 的正式附加读取若受限，明确 availability=forbidden，不泄露源/evidence。
++
++旧 release digest 与消费 pins 不重写；多提案的 singular origin 为 null，不能指派虚假唯一作者。MCP/CLI/SDK 的 release-only 消费仍只见已发布 pins，新建 draft 身份和被回滚缺席对象不进入 production fact。原 governance object 及目录详情只能从同一权威 release snapshot 解释发布事实，不把 mutable registry 当成已发布内容。
++
++expand-first、旧 NOT NULL/check 分支、旧二进制 fence、旧 schema readiness 和拒绝有损 down 的精确矩阵见 data-model §4、§7。启用前必须停止/隔离全部旧 writer，不能假设未经更新的旧二进制会遵守新 route guard 或 min schema 字段。down 不得清表装成功，新增权威历史存在时保持 schema/data 原样拒绝。
++
++本任务的 GREEN 只代表静态契约可解析且断言通过。真实事务原子性、跨 scope 授权、幂等竞争、模型异常、发布缺席回滚、旧客户端与数据库迁移仍分别由 SP-T002 至 SP-T007 实现和验证。UI 仅 1440x900、1024x768，保持键盘、焦点、reduced motion、mock 披露，不扩移动端或外部接入范围。
+
+diff --git a/tests/contracts/semantic_production_contract_test.go b/tests/contracts/semantic_production_contract_test.go
+new file mode 100644
+index 0000000..42d8689
+--- /dev/null
++++ b/tests/contracts/semantic_production_contract_test.go
+@@ -0,0 +1,411 @@
++package contracts_test
++
++import (
++	"context"
++	"encoding/json"
++	"fmt"
++	"os"
++	"path/filepath"
++	"reflect"
++	"strings"
++	"testing"
++
++	"github.com/getkin/kin-openapi/openapi3"
++)
++
++// This validates a planned contract, not a running API or database invariant.
++func TestSemanticProductionContract(t *testing.T) {
++	base := filepath.Join(root, "docs", "specs", "semantic-production")
++	loader := openapi3.NewLoader()
++	doc, err := loader.LoadFromFile(filepath.Join(base, "contracts", "production.openapi.yaml"))
++	if err != nil {
++		t.Fatalf("load planned semantic production contract: %v", err)
++	}
++	if err := doc.Validate(context.Background()); err != nil {
++		t.Fatalf("validate planned semantic production OpenAPI: %v", err)
++	}
++	for _, path := range []string{"data-model.md", "contracts/production.md"} {
++		content, err := os.ReadFile(filepath.Join(base, path))
++		if err != nil || len(content) < 1000 {
++			t.Errorf("detailed companion %s is missing or incomplete: %v", path, err)
++		}
++	}
++	if doc.OpenAPI != "3.0.3" || doc.Extensions["x-semlia-status"] != "planned" {
++		t.Fatal("production design must remain an explicitly planned OpenAPI 3.0.3 contract")
++	}
++
++	t.Run("operations_and_authority", func(t *testing.T) {
++		prefix := "/api/v1/workspaces/{workspaceId}"
++		paths := map[string][]string{
++			"/sources/{sourceId}/snapshots":                           {"GET"},
++			"/sources/{sourceId}/snapshots/{snapshotId}":              {"GET"},
++			"/sources/{sourceId}/snapshots/{snapshotId}/members":      {"GET"},
++			"/sources/{sourceId}/snapshots/{snapshotId}/diagnostics":  {"GET"},
++			"/production-operations":                                  {"GET", "POST"},
++			"/production-operations/{operationId}":                    {"GET", "PUT"},
++			"/production-operations/{operationId}/submit":             {"POST"},
++			"/production-operations/{operationId}/validations":        {"GET", "POST"},
++			"/production-operations/{operationId}/reviews":            {"POST"},
++			"/production-operations/{operationId}/publish":            {"POST"},
++			"/production-operations/{operationId}/generation":         {"POST"},
++			"/production-operations/{operationId}/generation/{runId}": {"GET"},
++			"/production-releases/{releaseId}":                        {"GET"},
++			"/production-releases/{releaseId}/rollback":               {"POST"},
++		}
++		seen := map[string]bool{}
++		for path, methods := range paths {
++			item := doc.Paths.Value(prefix + path)
++			if item == nil {
++				t.Errorf("missing path %s", path)
++				continue
++			}
++			for _, method := range methods {
++				op := item.GetOperation(method)
++				if op == nil {
++					t.Errorf("missing %s %s", method, path)
++					continue
++				}
++				if op.OperationID == "" || seen[op.OperationID] {
++					t.Errorf("missing or duplicate operation ID: %s", op.OperationID)
++				}
++				seen[op.OperationID] = true
++				var actions []string
++				productionDecode(t, op.Extensions["x-semlia-actions"], &actions)
++				if len(actions) == 0 || op.Extensions["x-semlia-reauthorize"] != true {
++					t.Errorf("%s lacks current scoped authorization", op.OperationID)
++				}
++				if len(doc.Security) == 0 && (op.Security == nil || len(*op.Security) == 0) {
++					t.Errorf("%s lacks security", op.OperationID)
++				}
++				for _, status := range []string{"401", "403", "404"} {
++					if op.Responses.Value(status) == nil {
++						t.Errorf("%s lacks %s response", op.OperationID, status)
++					}
++				}
++				if method != "GET" {
++					if op.RequestBody == nil || !op.RequestBody.Value.Required {
++						t.Errorf("%s requires a bounded request body", op.OperationID)
++					}
++					if !productionHasParameter(item.Parameters, op.Parameters, "header", "Idempotency-Key") {
++						t.Errorf("%s lacks server idempotency key", op.OperationID)
++					}
++					for _, status := range []string{"409", "413", "422"} {
++						if op.Responses.Value(status) == nil {
++							t.Errorf("%s lacks %s response", op.OperationID, status)
++						}
++					}
++				}
++			}
++		}
++		if len(doc.Paths.Map()) != len(paths) {
++			t.Errorf("unexpected path expansion: got %d, want %d", len(doc.Paths.Map()), len(paths))
++		}
++		for _, path := range []string{"/production-operations/{operationId}/publish", "/production-releases/{releaseId}/rollback"} {
++			item := doc.Paths.Value(prefix + path)
++			if item != nil && item.Post != nil && item.Post.Extensions["x-semlia-human-required"] != true {
++				t.Errorf("%s must preserve the human-only release duty", path)
++			}
++		}
++	})
++
++	t.Run("structured_invariants", func(t *testing.T) {
++		want := map[string]any{
++			"maxTargets": 32, "maxChangesPerTarget": 100, "maxTotalChanges": 256,
++			"maxBodyBytes": 1048576, "maxModelOutputBytes": 1048576,
++			"snapshotMembership": "immutable_exact", "unchangedRevision": "reuse",
++			"partialCoverage": "explicit_no_deletion_inference", "legacyHistory": "unverifiable",
++			"createBaseline": "absent", "updateBaseline": "exact_published_pin",
++			"idempotencyScope":    []string{"workspace", "principal", "command", "key"},
++			"replayAuthorization": "current", "recoveryAuthority": "server",
++			"approvalAuthority": "proposal_validation_review", "publishAtomicity": "all_members_one_transaction",
++			"publishRecheck":      []string{"authorization", "sod", "set_digest", "input_freshness", "baseline", "dependency_closure", "validations", "reviews"},
++			"legacyMemberPublish": "reject", "rollback": "exact_before_manifest_including_absence",
++			"releaseAttribution": "all_proposals", "legacyDigest": "unchanged",
++			"migration": "expand_first", "lossyDown": "reject", "oldBinaryAfterActivation": "unsupported_fenced",
++			"modelNetwork": "outside_transaction", "modelRetry": "explicit_no_automatic_paid_replay",
++			"machineAllowlistAdditions": []string{}, "desktopViewports": []string{"1440x900", "1024x768"},
++			"legacyProductionRollback":   "reject_including_descendants",
++			"validationAttemptSelection": "one_complete_latest_attempt",
++			"reviewValidationBinding":    "exact_attempt_digest_reapprove_after_revalidation",
++			"modelOutputPersistence":     "immutable_schema_gated_body",
++			"identityReintroduction":     "create_with_trusted_absence",
++		}
++		var got map[string]any
++		productionDecode(t, doc.Extensions["x-semlia-invariants"], &got)
++		var normalized map[string]any
++		productionDecode(t, want, &normalized)
++		if !reflect.DeepEqual(got, normalized) {
++			t.Errorf("normative invariants differ\ngot: %#v\nwant: %#v", got, normalized)
++		}
++	})
++
++	t.Run("create_and_update_are_disjoint", func(t *testing.T) {
++		create := productionCreateTarget()
++		productionAccepts(t, doc, "ProductionTarget", create, true)
++		for _, key := range []string{"targetId", "baseRevisionId", "baseObjectVersion"} {
++			bad := productionClone(create)
++			bad[key] = productionID("ast")
++			productionAccepts(t, doc, "ProductionTarget", bad, false)
++		}
++		update := productionClone(create)
++		update["intent"] = "update"
++		delete(update, "identityKey")
++		update["targetId"] = productionID("ast")
++		update["baseRevisionId"] = productionID("rev")
++		productionAccepts(t, doc, "ProductionTarget", update, true)
++		delete(update, "baseRevisionId")
++		productionAccepts(t, doc, "ProductionTarget", update, false)
++		update["baseObjectVersion"] = 1
++		productionAccepts(t, doc, "ProductionTarget", update, false)
++		update["kind"] = "entity_key"
++		update["content"] = map[string]any{"asset": map[string]any{"localKey": "orders"}, "fields": []any{productionPhysicalRef("field")}, "uniqueness": "exact"}
++		productionAccepts(t, doc, "ProductionTarget", update, true)
++		update["baseRevisionId"] = productionID("rev")
++		productionAccepts(t, doc, "ProductionTarget", update, false)
++	})
++
++	t.Run("bounded_requests_and_pages", func(t *testing.T) {
++		s := productionSchema(t, doc, "CreateProductionRequest")
++		targets := s.Properties["targets"].Value
++		if targets.MinItems != 1 || targets.MaxItems == nil || *targets.MaxItems != 32 {
++			t.Fatal("targets must be bounded to 1..32")
++		}
++		request := map[string]any{"input": productionInput(), "targets": []any{productionCreateTarget()}}
++		productionAccepts(t, doc, "CreateProductionRequest", request, true)
++		for _, field := range []string{"workspaceId", "createdBy", "approved", "publishedBy"} {
++			forged := productionClone(request)
++			forged[field] = productionID("prn")
++			productionAccepts(t, doc, "CreateProductionRequest", forged, false)
++		}
++		for _, name := range []string{"CreateProductionRequest", "ReplaceProductionRequest"} {
++			var total int
++			productionDecode(t, productionSchema(t, doc, name).Extensions["x-semlia-max-total-changes"], &total)
++			if total != 256 {
++				t.Errorf("%s must declare the server-enforced aggregate change limit", name)
++			}
++		}
++		tooMany := make([]any, 33)
++		for i := range tooMany {
++			tooMany[i] = productionCreateTarget()
++		}
++		request["targets"] = tooMany
++		productionAccepts(t, doc, "CreateProductionRequest", request, false)
++		changes := productionSchema(t, doc, "ChangeList")
++		if changes.MaxItems == nil || *changes.MaxItems != 100 {
++			t.Fatal("per-target change count must not exceed 100")
++		}
++		for _, name := range []string{"SnapshotPage", "SnapshotMemberPage", "DiagnosticPage", "ProductionOperationPage", "ValidationAttemptPage"} {
++			page := productionSchema(t, doc, name)
++			items := page.Properties["items"].Value
++			if items.MaxItems == nil || *items.MaxItems != 200 || page.Properties["nextCursor"] == nil {
++				t.Errorf("%s must expose bounded cursor pagination", name)
++			}
++		}
++	})
++
++	t.Run("exact_snapshot_membership", func(t *testing.T) {
++		member := map[string]any{"kind": "dataset", "objectId": productionID("pds"), "revisionId": productionID("pdr"), "name": "public.orders", "locator": "public.orders", "contentDigest": productionDigest(), "coverageKey": "public"}
++		productionAccepts(t, doc, "SnapshotMember", member, true)
++		for _, field := range []string{"revisionId", "name", "coverageKey", "contentDigest"} {
++			bad := productionClone(member)
++			delete(bad, field)
++			productionAccepts(t, doc, "SnapshotMember", bad, false)
++		}
++		coverage := map[string]any{"key": "public", "status": "partial", "enumerationComplete": false, "diagnosticCodes": []any{"SOURCE_TIMEOUT"}}
++		productionAccepts(t, doc, "CoverageUnit", coverage, true)
++		delete(coverage, "enumerationComplete")
++		productionAccepts(t, doc, "CoverageUnit", coverage, false)
++	})
++
++	t.Run("frozen_governance_and_absence", func(t *testing.T) {
++		for _, name := range []string{"SubmitProductionRequest", "ValidateProductionRequest", "ReviewProductionRequest", "PublishProductionRequest", "RollbackProductionRequest"} {
++			s := productionSchema(t, doc, name)
++			if !productionRequired(s, "expectedVersion") || !productionRequired(s, "setDigest") {
++				t.Errorf("%s does not bind exact production version and set", name)
++			}
++		}
++		attribution := productionSchema(t, doc, "ReleaseAttribution")
++		if !productionRequired(attribution, "proposalIds") || !productionRequired(attribution, "operationId") || !productionRequired(attribution, "setDigest") {
++			t.Fatal("release attribution must identify the complete production set")
++		}
++		absent := map[string]any{"kind": "semantic_asset", "targetId": productionID("ast"), "presence": "absent"}
++		productionAccepts(t, doc, "BeforePin", absent, true)
++		absent["revisionId"] = productionID("rev")
++		productionAccepts(t, doc, "BeforePin", absent, false)
++		local := map[string]any{"localKey": "orders"}
++		productionAccepts(t, doc, "SemanticReference", local, true)
++		local["targetId"] = productionID("ast")
++		productionAccepts(t, doc, "SemanticReference", local, false)
++		head := map[string]any{"presence": "absent"}
++		productionAccepts(t, doc, "HeadReference", head, true)
++		head["releaseId"] = productionID("rls")
++		productionAccepts(t, doc, "HeadReference", head, false)
++		for _, name := range []string{"PublishProductionRequest", "RollbackProductionRequest"} {
++			if !productionRequired(productionSchema(t, doc, name), "expectedHead") {
++				t.Errorf("%s must compare the actual workspace head", name)
++			}
++		}
++		candidate := map[string]any{"candidateId": productionID("scd"), "digest": productionDigest(), "snapshotId": productionID("ssnp"), "targetKeys": []any{"orders"}, "primaryTargetKey": "orders"}
++		productionAccepts(t, doc, "CandidateSelection", candidate, true)
++		delete(candidate, "primaryTargetKey")
++		productionAccepts(t, doc, "CandidateSelection", candidate, false)
++		decision := map[string]any{"expectedVersion": 1, "setDigest": productionDigest(), "validation": map[string]any{"attemptNo": 1, "validationDigest": productionDigest()}, "proposalIds": []any{productionID("prp")}, "decision": "approve", "note": "Checked source evidence"}
++		productionAccepts(t, doc, "ReviewProductionRequest", decision, true)
++		decision["decision"] = "auto_publish"
++		productionAccepts(t, doc, "ReviewProductionRequest", decision, false)
++	})
++
++	t.Run("legacy_rollback_protection_inherits", func(t *testing.T) {
++		if !productionRequired(productionSchema(t, doc, "ProductionRelease"), "protection") {
++			t.Error("every production release must carry inherited rollback protection")
++		}
++		root := map[string]any{"rootReleaseId": productionID("rls"), "rollbackDepth": 0}
++		productionAccepts(t, doc, "ProductionReleaseProtection", root, true)
++		child := map[string]any{"rootReleaseId": productionID("rls"), "rollbackDepth": 1, "rollbackParentReleaseId": productionID("rls")}
++		productionAccepts(t, doc, "ProductionReleaseProtection", child, true)
++		delete(child, "rollbackParentReleaseId")
++		productionAccepts(t, doc, "ProductionReleaseProtection", child, false)
++	})
++
++	t.Run("complete_validation_attempt_binding", func(t *testing.T) {
++		for _, name := range []string{"ReviewProductionRequest", "PublishProductionRequest"} {
++			if !productionRequired(productionSchema(t, doc, name), "validation") {
++				t.Errorf("%s must select one exact complete validation attempt", name)
++			}
++		}
++		if !productionRequired(productionSchema(t, doc, "ValidateProductionRequest"), "previousAttemptNo") {
++			t.Error("revalidation must CAS the latest attempt, not race another enqueue")
++		}
++		selection := map[string]any{"attemptNo": 1, "validationDigest": productionDigest()}
++		productionAccepts(t, doc, "ValidationReference", selection, true)
++		selection["runIds"] = []any{productionID("val")}
++		productionAccepts(t, doc, "ValidationReference", selection, false)
++		check := map[string]any{"runId": productionID("val"), "proposalId": productionID("prp"), "validatorId": "schema", "validatorVersion": "1.0.0", "status": "succeeded", "results": []any{map[string]any{"severity": "info", "code": "VALIDATOR_COMPLETED", "message": "Complete", "inputDigest": productionDigest(), "details": map[string]any{}}}}
++		attempt := map[string]any{"attemptNo": 1, "status": "succeeded", "setDigest": productionDigest(), "freshnessDigest": productionDigest(), "requiredChecksDigest": productionDigest(), "validationDigest": productionDigest(), "runIds": []any{productionID("val")}, "checks": []any{check}, "completedAt": "2026-09-09T05:00:00Z"}
++		productionAccepts(t, doc, "ValidationAttemptResult", attempt, true)
++		attempt["validationDigest"] = nil
++		productionAccepts(t, doc, "ValidationAttemptResult", attempt, false)
++		attempt["status"] = "running"
++		attempt["completedAt"] = nil
++		productionAccepts(t, doc, "ValidationAttemptResult", attempt, true)
++		attempt["validationDigest"] = productionDigest()
++		productionAccepts(t, doc, "ValidationAttemptResult", attempt, false)
++	})
++
++	t.Run("durable_structured_generation_output", func(t *testing.T) {
++		output := map[string]any{"schemaVersion": "semlia.production-suggestions/v1", "targets": []any{productionCreateTarget()}}
++		productionAccepts(t, doc, "StructuredGenerationOutput", output, true)
++		for _, field := range []string{"prompt", "hiddenReasoning", "providerResponse"} {
++			bad := productionClone(output)
++			bad[field] = "must not persist"
++			productionAccepts(t, doc, "StructuredGenerationOutput", bad, false)
++		}
++		result := map[string]any{"runId": productionID("agr"), "operationId": productionID("prodop"), "inputVersion": 1, "inputDigest": productionDigest(), "status": "succeeded", "providerMode": "protocol_stub", "model": "stub", "modelConfigRevision": "1", "replayed": false, "outputDigest": productionDigest(), "output": output, "errorCode": nil, "costMicros": nil, "durationMs": 1}
++		productionAccepts(t, doc, "GenerationResult", result, true)
++		result["output"] = nil
++		productionAccepts(t, doc, "GenerationResult", result, false)
++		result["status"] = "failed"
++		result["outputDigest"] = nil
++		result["errorCode"] = "MODEL_OUTPUT_INVALID"
++		productionAccepts(t, doc, "GenerationResult", result, true)
++		result["output"] = output
++		productionAccepts(t, doc, "GenerationResult", result, false)
++		application := map[string]any{"runId": productionID("agr"), "sourceVersion": 1, "sourceOutputDigest": productionDigest(), "appliedVersion": 2, "appliedContentDigest": productionDigest(), "actorPrincipalId": productionID("prn"), "deltaDigest": productionDigest(), "delta": []any{map[string]any{"localKey": "orders", "change": map[string]any{"fieldPath": "definition", "op": "update", "beforeValue": "One accepted order", "afterValue": "One paid order"}}}}
++		productionAccepts(t, doc, "GenerationApplication", application, true)
++		delete(application, "actorPrincipalId")
++		productionAccepts(t, doc, "GenerationApplication", application, false)
++	})
++
++	t.Run("reintroduce_absent_identity_without_fake_base", func(t *testing.T) {
++		create := productionCreateTarget()
++		create["reuseIdentity"] = map[string]any{"targetId": productionID("ast"), "creationOperationId": productionID("prodop"), "creationReleaseId": productionID("rls"), "absenceReleaseId": productionID("rls"), "expectedHead": map[string]any{"presence": "present", "releaseId": productionID("rls"), "manifestDigest": productionDigest()}}
++		productionAccepts(t, doc, "ProductionTarget", create, true)
++		create["baseRevisionId"] = productionID("rev")
++		productionAccepts(t, doc, "ProductionTarget", create, false)
++		delete(create, "baseRevisionId")
++		create["reuseIdentity"].(map[string]any)["expectedHead"] = map[string]any{"presence": "absent"}
++		productionAccepts(t, doc, "ProductionTarget", create, false)
++		create["intent"] = "restore"
++		productionAccepts(t, doc, "ProductionTarget", create, false)
++	})
++}
++
++func productionSchema(t *testing.T, doc *openapi3.T, name string) *openapi3.Schema {
++	t.Helper()
++	ref := doc.Components.Schemas[name]
++	if ref == nil || ref.Value == nil {
++		t.Fatalf("missing schema %s", name)
++	}
++	return ref.Value
++}
++
++func productionAccepts(t *testing.T, doc *openapi3.T, name string, value any, want bool) {
++	t.Helper()
++	var normalized any
++	productionDecode(t, value, &normalized)
++	err := productionSchema(t, doc, name).VisitJSON(normalized)
++	if (err == nil) != want {
++		t.Errorf("%s accepts=%t, want %t: %v; value=%v", name, err == nil, want, err, value)
++	}
++}
++
++func productionDecode(t *testing.T, value, target any) {
++	t.Helper()
++	encoded, err := json.Marshal(value)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if err := json.Unmarshal(encoded, target); err != nil {
++		t.Fatal(err)
++	}
++}
++
++func productionRequired(s *openapi3.Schema, name string) bool {
++	for _, required := range s.Required {
++		if required == name {
++			return true
++		}
++	}
++	return false
++}
++
++func productionHasParameter(path, operation openapi3.Parameters, in, name string) bool {
++	for _, set := range []openapi3.Parameters{path, operation} {
++		for _, ref := range set {
++			if ref.Value.In == in && ref.Value.Name == name && ref.Value.Required {
++				return true
++			}
++		}
++	}
++	return false
++}
++
++func productionClone(value map[string]any) map[string]any {
++	clone := make(map[string]any, len(value))
++	for key, item := range value {
++		clone[key] = item
++	}
++	return clone
++}
++
++func productionID(prefix string) string { return fmt.Sprintf("%s_01arz3ndektsv4rrffq69g5fav", prefix) }
++func productionDigest() string          { return "sha256:" + strings.Repeat("a", 64) }
++
++func productionPhysicalRef(kind string) map[string]any {
++	return map[string]any{"snapshotId": productionID("ssnp"), "kind": kind, "objectId": productionID("pds"), "revisionId": productionID("pdr")}
++}
++
++func productionInput() map[string]any {
++	return map[string]any{
++		"snapshots":  []any{map[string]any{"sourceId": productionID("src"), "snapshotId": productionID("ssnp"), "digest": productionDigest(), "coverageKeys": []any{"public"}}},
++		"candidates": []any{}, "evidence": []any{}, "dependencies": []any{},
++	}
++}
++
++func productionCreateTarget() map[string]any {
++	return map[string]any{
++		"intent": "create", "kind": "semantic_asset", "localKey": "orders", "identityKey": "sales.orders", "title": "Orders",
++		"content": map[string]any{"address": "sales.orders", "assetType": "entity", "displayName": "Orders", "definition": "One accepted order", "scope": "Synthetic orders", "ownerPrincipalId": productionID("prn")},
++		"changes": []any{}, "evidenceIds": []any{},
++	}
++}

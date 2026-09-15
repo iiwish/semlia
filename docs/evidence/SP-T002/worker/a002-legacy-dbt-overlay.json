@@ -1,0 +1,10 @@
+{
+  "Replace": {
+    "/workspace/internal/adapters/discovery/dbt/adapter.go": "/workspace/.semlia/evidence-work/SP-T002-baseline/internal/adapters/discovery/dbt/adapter.go",
+    "/workspace/internal/adapters/discovery/dbt/adapter_test.go": "/workspace/docs/evidence/SP-T002/worker/a002-legacy-dbt-probe_test.go.txt",
+    "/workspace/internal/domain/discovery/model.go": "/workspace/.semlia/evidence-work/SP-T002-baseline/internal/domain/discovery/model.go",
+    "/workspace/internal/domain/discovery/source.go": "/workspace/.semlia/evidence-work/SP-T002-baseline/internal/domain/discovery/source.go",
+    "/workspace/internal/domain/discovery/snapshot.go": "",
+    "/workspace/internal/domain/discovery/snapshot_test.go": ""
+  }
+}

@@ -1,0 +1,35 @@
+package discovery_test
+
+import (
+	"context"
+	"testing"
+	"time"
+
+	"github.com/iiwish/semlia/internal/adapters/discovery/postgresql"
+	domain "github.com/iiwish/semlia/internal/domain/discovery"
+)
+
+func TestPMUnresolvedLineageCannotBeComplete(t *testing.T) {
+	pool, store := newStore(t)
+	resetData(t, pool)
+	workspace, source := createSource(t, pool, store, "pm-unresolved-lineage")
+	ctx := context.Background()
+	content := []byte("CREATE TABLE public.t(id bigint); CREATE VIEW public.v(id) AS SELECT id FROM public.missing;")
+	snapshot, err := (postgresql.Adapter{}).Discover(ctx, domain.Input{Locator: "git://schema", ObservedAt: time.Now().UTC(), Files: map[string][]byte{"schema.sql": content}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.PersistDiscoverySnapshot(ctx, workspace, source, snapshot); err != nil {
+		t.Fatal(err)
+	}
+	var quality, coverage, scope, severity string
+	var lineage, effective int
+	err = pool.QueryRow(ctx, `SELECT s.history_quality,s.coverage_status,u.status,d.severity,(SELECT count(*) FROM source_snapshot_members WHERE kind='lineage'),(SELECT count(*) FROM source_effective_snapshots) FROM source_snapshots s JOIN source_snapshot_scope u ON u.snapshot_id=s.id JOIN source_snapshot_diagnostics d ON d.snapshot_id=s.id WHERE d.code='UNRESOLVED_LINEAGE'`).Scan(&quality, &coverage, &scope, &severity, &lineage, &effective)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("quality=%s coverage=%s scope=%s diagnostic=%s lineageMembers=%d effectiveHeads=%d", quality, coverage, scope, severity, lineage, effective)
+	if coverage == "complete" || scope == "complete" || severity != "error" || effective != 0 {
+		t.Fatal("unresolved lineage was declared complete or advanced an effective head")
+	}
+}

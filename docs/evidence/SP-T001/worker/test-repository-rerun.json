@@ -1,0 +1,14 @@
+{
+  "command": "make test-repository",
+  "start": {
+    "current_time": "2026-09-09 04:50:07 UTC"
+  },
+  "end": {
+    "current_time": "2026-09-09 04:50:13 UTC"
+  },
+  "chunk_id": "19cd68",
+  "wall_time_seconds": 5.899477459,
+  "exit_code": 0,
+  "original_token_count": 21,
+  "output": "go test ./tests/repository\nok  \tgithub.com/iiwish/semlia/tests/repository\t5.636s\n"
+}

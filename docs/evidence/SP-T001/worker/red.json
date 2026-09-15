@@ -1,0 +1,14 @@
+{
+  "command": "go test -count=1 ./tests/contracts -run '^TestSemanticProductionContract$'",
+  "start": {
+    "current_time": "2026-09-09 04:25:07 UTC"
+  },
+  "end": {
+    "current_time": "2026-09-09 04:25:15 UTC"
+  },
+  "chunk_id": "59877a",
+  "wall_time_seconds": 7.891062917,
+  "exit_code": 1,
+  "original_token_count": 81,
+  "output": "--- FAIL: TestSemanticProductionContract (0.00s)\n    semantic_production_contract_test.go:22: load planned semantic production contract: open /workspace/docs/specs/semantic-production/contracts/production.openapi.yaml: no such file or directory\nFAIL\nFAIL\tgithub.com/iiwish/semlia/tests/contracts\t1.805s\nFAIL\n"
+}

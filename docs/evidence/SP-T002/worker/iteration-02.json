@@ -1,0 +1,23 @@
+{
+  "command": [
+    "go",
+    "test",
+    "-count=1",
+    "./internal/platform/http",
+    "./internal/domain/discovery",
+    "./internal/application/discovery",
+    "./internal/adapters/discovery/..."
+  ],
+  "clearedEnvironment": [
+    "SEMLIA_INGESTION_TEST_DATABASE_URL",
+    "SEMLIA_EXECUTION_CRASH_HELPER",
+    "SEMLIA_EXECUTION_TEST_DB",
+    "SEMLIA_DATABASE_URL"
+  ],
+  "start": "2026-09-09T05:57:58.129Z",
+  "end": "2026-09-09T05:58:03.556Z",
+  "exitStatus": 0,
+  "signal": null,
+  "stdout": "ok  \tgithub.com/iiwish/semlia/internal/platform/http\t1.755s\nok  \tgithub.com/iiwish/semlia/internal/domain/discovery\t1.678s\nok  \tgithub.com/iiwish/semlia/internal/application/discovery\t2.077s\nok  \tgithub.com/iiwish/semlia/internal/adapters/discovery/catalog\t2.509s\nok  \tgithub.com/iiwish/semlia/internal/adapters/discovery/dbt\t3.997s\nok  \tgithub.com/iiwish/semlia/internal/adapters/discovery/files\t2.942s\n?   \tgithub.com/iiwish/semlia/internal/adapters/discovery/postgreslive\t[no test files]\nok  \tgithub.com/iiwish/semlia/internal/adapters/discovery/postgresql\t3.928s\n",
+  "stderr": ""
+}

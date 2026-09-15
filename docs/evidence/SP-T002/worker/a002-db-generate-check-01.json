@@ -1,0 +1,18 @@
+{
+  "command": [
+    "make",
+    "db-generate-check"
+  ],
+  "clearedEnvironment": [
+    "SEMLIA_INGESTION_TEST_DATABASE_URL",
+    "SEMLIA_EXECUTION_CRASH_HELPER",
+    "SEMLIA_EXECUTION_TEST_DB",
+    "SEMLIA_DATABASE_URL"
+  ],
+  "start": "2026-09-09T08:09:40.629Z",
+  "end": "2026-09-09T08:10:22.743Z",
+  "exitStatus": 0,
+  "signal": null,
+  "stdout": "",
+  "stderr": "go: downloading github.com/go-sql-driver/mysql v1.9.3\ngo: downloading google.golang.org/grpc v1.83.1\ngo: downloading cel.dev/expr v0.25.2\ngo: downloading google.golang.org/genproto/googleapis/api v0.0.0-20260526163538-3dc84a4a5aaa\ngo: downloading golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f\ngo: downloading go.uber.org/zap v1.27.0\ngo: downloading google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa\ngo: downloading filippo.io/edwards25519 v1.1.1\n"
+}

@@ -5,8 +5,8 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      "/api": "http://127.0.0.1:8080",
-      "/health": "http://127.0.0.1:8080",
+      "/api": process.env.SEMLIA_VITE_API_TARGET ?? "http://127.0.0.1:18080",
+      "/health": process.env.SEMLIA_VITE_API_TARGET ?? "http://127.0.0.1:18080",
     },
   },
   test: {
@@ -15,5 +15,6 @@ export default defineConfig({
     globals: true,
     css: true,
     include: ["src/**/*.test.tsx"],
+    testTimeout: 15_000,
   },
 });

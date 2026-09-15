@@ -48,7 +48,7 @@ const (
 	acceptanceHostLock            = "/tmp/semlia-t008-acceptance.lock"
 	composeServiceContainerLimit  = 4 // compose.yaml defines postgres, migrate, server, and worker.
 	composeNetworkLimit           = 1 // compose.yaml defines the backend network.
-	composeVolumeLimit            = 2 // compose.yaml defines postgres-data and git-content volumes.
+	composeVolumeLimit            = 3 // compose.yaml defines postgres-data, git-content, and artifact-data volumes.
 	toolContainerLimit            = 3 // Two security scans plus one release SBOM invocation.
 	testcontainersContainerLimit  = 3 // Two integration PostgreSQL containers plus one shared Ryuk container.
 	testcontainersNetworkLimit    = 1 // No current journey network; one failure-probe network is bounded and owned.
@@ -5660,27 +5660,6 @@ func filteredEnvironment(environment []string, remove ...string) []string {
 		}
 	}
 	return filtered
-}
-
-func environmentValue(environment []string, name string) string {
-	prefix := name + "="
-	for _, entry := range environment {
-		if strings.HasPrefix(entry, prefix) {
-			return strings.TrimPrefix(entry, prefix)
-		}
-	}
-	return ""
-}
-
-func environmentValues(environment []string, name string) []string {
-	prefix := name + "="
-	var values []string
-	for _, entry := range environment {
-		if strings.HasPrefix(entry, prefix) {
-			values = append(values, strings.TrimPrefix(entry, prefix))
-		}
-	}
-	return values
 }
 
 func reserveLocalPorts(t *testing.T) (int, int) {

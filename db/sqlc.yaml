@@ -6,6 +6,31 @@ sql:
       - ../migrations/000002_foundation_uuidv7.up.sql
       - ../migrations/000003_semantic_registry_foundation.up.sql
       - ../migrations/000004_usage_events.up.sql
+      - ../migrations/000005_m2_authorization_foundation.up.sql
+      - ../migrations/000006_m2_governed_authoring.up.sql
+      - ../migrations/000007_m2_governance_objects.up.sql
+      - ../migrations/000008_m2_policy_rules.up.sql
+      - ../migrations/000009_m2_review_batches.up.sql
+      - ../migrations/000010_m2_release_publishing.up.sql
+      - ../migrations/000011_m2_model_config.up.sql
+      - ../migrations/000012_m2_local_uat_reviewer.up.sql
+      - ../migrations/000013_alpha_identity_sessions.up.sql
+      - ../migrations/000014_alpha_source_discovery.up.sql
+      - ../migrations/000015_alpha_semantic_distribution.up.sql
+      - ../migrations/000016_fmb_authorization_admin.up.sql
+      - ../migrations/000017_fmb_operations_runtime.up.sql
+      - ../migrations/000018_fmb_file_ingestion_schedules.up.sql
+      - ../migrations/000019_fmb_embedding_index.up.sql
+      - ../migrations/000020_fmb_distribution_interfaces.up.sql
+      - ../migrations/000021_fmb_query_execution.up.sql
+      - ../migrations/000022_semantic_production_sources.up.sql
+      - ../migrations/000023_semantic_production_authoring.up.sql
+      - ../migrations/000024_semantic_production_publishing.up.sql
+      - ../migrations/000025_semantic_production_authoring_integrity.up.sql
+      - ../migrations/000026_semantic_production_release_integrity.up.sql
+      - ../migrations/000027_semantic_production_generation.up.sql
+      - ../migrations/000028_production_business_rules.up.sql
+      - ../migrations/000029_local_password_auth.up.sql
     queries:
       - queries
     gen:

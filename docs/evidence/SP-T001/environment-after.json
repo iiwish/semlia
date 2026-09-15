@@ -1,0 +1,16 @@
+{
+  "capturedAt": "2026-09-09T04:24:57.642Z",
+  "topLevelCounts": {
+    "unit": {
+      "pass": 117,
+      "fail": 0,
+      "skip": 0
+    },
+    "integration": {
+      "pass": 81,
+      "fail": 0,
+      "skip": 1
+    }
+  },
+  "privacy": "Machine-wide inventories are excluded from published evidence."
+}

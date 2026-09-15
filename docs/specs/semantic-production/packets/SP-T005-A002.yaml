@@ -1,0 +1,71 @@
+schema_version: 1
+packet_id: SP-T005-A002
+task_id: SP-T005
+feature_id: semantic-production
+mode: execute_one_task
+adapter: codex
+status: Needs_Review
+governance_inputs:
+  approval: 2026-09-11 用户明确批准可信业务规则确认记录、接口、增量迁移、API/SDK 及验证发布复核的受限扩展。
+  contract: docs/specs/semantic-production/contracts/business-rule-confirmation.md
+  product: docs/specs/semantic-production/product-design.md
+  tasks: docs/specs/semantic-production/tasks.md
+work_unit:
+  objective: 修复非空业务定义在无可信确认时通过验证的 P1；不推进 T006。
+  dependencies: [SP-T004 Accepted]
+  parallel: false
+codebase_context:
+  baseline: .semlia/evidence-work/SP-T005-A002-baseline.tar
+  ownership: 保留既有脏工作区，以 A002 前像识别本次改动。
+execution_constraints:
+  mode: Direct Execute；当前没有用户委派授权，不使用子代理。
+  allowed_files:
+    - internal/domain/governance/production_business_rule.go
+    - internal/application/governance/production_business_rule*.go
+    - internal/application/governance/production_validation*.go
+    - internal/adapters/postgres/production_business_rule*.go
+    - internal/adapters/postgres/production_validation*.go
+    - internal/platform/http/production_business_rule*.go
+    - internal/platform/http/semantic_production.go
+    - internal/platform/http/catalog.go
+    - migrations/000028_production_business_rules.*.sql
+    - cmd/semlia/readiness*.go
+    - tests/integration/governance/production*test.go
+    - tests/integration/db/*test.go
+    - tests/contracts/*test.go
+    - internal/adapters/postgres/sqlc/*.go
+    - db/sqlc.yaml
+    - api/openapi/semlia.v1.yaml
+    - api/gen/go/types.gen.go
+    - sdk/typescript/src/schema.gen.ts
+    - sdk/typescript/src/client.ts
+    - sdk/typescript/src/client.test.ts
+    - sdk/typescript/src/index.ts
+    - api/README.md
+    - docs/specs/semantic-production/**
+    - docs/evidence/SP-T005/**
+  forbidden: 不改迁移 1-27，不部署、不付费调用、不提交推送、不扩展前端。
+tdd_plan:
+  red: 将 review 的无证据 metric 反例加入正式测试并确认失败。
+  green: 服务端追加确认事件，锁内鉴权、版本和证据绑定，worker 与发布门禁共享新鲜度见证；声明路径原子生成真实人类证据，不依赖手工数据库预填。
+  refactor: 限定可信确认与复核代码，不重构无关模块。
+validation_loop:
+  commands:
+    - go test -count=1 ./internal/application/governance ./internal/platform/http ./cmd/semlia
+    - go test -count=1 -p=1 -timeout=20m ./tests/integration/governance
+    - go test -count=1 -p=1 -timeout=10m ./tests/integration/db
+    - make db-generate-check
+    - make contracts-check
+    - make test-contracts
+    - make test-repository
+  retry_budget: 修复真实失败后复验，不降低断言。
+evidence_contract:
+  path: docs/evidence/SP-T005/A002
+  required: [RED/GREEN, confirmation and revocation, replay authorization, version and content binding, SoD, worker and publish freshness, migration, scope delta]
+review_contract:
+  order: [spec compliance, code and security review, QA]
+handoff:
+  final_status: Needs_Review
+  acceptance: 本轮不标记 Accepted，不自动开始 T006。
+stop_conditions:
+  - 超过已批准范围或发现不能闭合的安全边界。

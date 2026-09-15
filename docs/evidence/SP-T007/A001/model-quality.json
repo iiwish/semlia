@@ -1,0 +1,33 @@
+{
+  "method": "Fixed synthetic gold comparison, not model self-evaluation; corrected score uses server-read declarations, not the submitted request.",
+  "raw": {
+    "checks": {
+      "completeTenTargets": true,
+      "conservedIdentity": true,
+      "conservedPhysicalPins": true,
+      "structuralEntities": true,
+      "exactEntityKeys": true,
+      "exactGrainAndJoin": true,
+      "paidOnlyRevenueDefinition": false,
+      "paidOnlyExecutableTransform": false
+    },
+    "passed": 6,
+    "total": 8
+  },
+  "humanCorrected": {
+    "checks": {
+      "completeTenTargets": true,
+      "conservedIdentity": true,
+      "conservedPhysicalPins": true,
+      "structuralEntities": true,
+      "exactEntityKeys": true,
+      "exactGrainAndJoin": true,
+      "paidOnlyRevenueDefinition": true,
+      "paidOnlyExecutableTransform": true
+    },
+    "passed": 8,
+    "total": 8
+  },
+  "publishedBusinessMatchesGold": true,
+  "rawMissingPolicyExplicitlyNull": false
+}
