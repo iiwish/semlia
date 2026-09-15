@@ -15,7 +15,7 @@ x-app: &app
     SEMLIA_SOURCE_ARTIFACT_ROOT: /var/lib/semlia/content
     SEMLIA_HTTP_ADDR: 0.0.0.0:8080
     SEMLIA_MIGRATIONS_PATH: /app/migrations
-  networks: [app, shared]
+  networks: [app, 1panel-network]
   read_only: true
   init: true
   tmpfs: [/tmp:size=128m,mode=1777]
@@ -83,6 +83,6 @@ services:
 
 networks:
   app:
-  shared:
+  1panel-network:
     external: true
     name: 1panel-network
