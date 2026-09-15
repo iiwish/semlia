@@ -1,0 +1,87 @@
+name: semlia-test
+
+x-app: &app
+  image: ${SEMLIA_IMAGE:?immutable image is required}
+  env_file: /opt/maco-ops/secrets/semlia/test/runtime.env
+  environment: &env
+    SEMLIA_ENV: development
+    SEMLIA_AUTH_MODE: password
+    SEMLIA_BUILD_VERSION: ${SEMLIA_BUILD_VERSION:?}
+    SEMLIA_ALLOWED_ORIGINS: ${SEMLIA_ALLOWED_ORIGINS:?}
+    SEMLIA_LOG_FORMAT: json
+    SEMLIA_ARTIFACT_STORE: local
+    SEMLIA_ARTIFACT_ROOT: /var/lib/semlia/artifacts
+    SEMLIA_SOURCE_ARTIFACT_ROOT: /var/lib/semlia/content
+    SEMLIA_HTTP_ADDR: 0.0.0.0:8080
+    SEMLIA_MIGRATIONS_PATH: /app/migrations
+  networks: [app, shared]
+  read_only: true
+  init: true
+  tmpfs: [/tmp:size=128m,mode=1777]
+  cpus: 1
+  mem_limit: 512m
+  logging:
+    driver: json-file
+    options: {max-size: 10m, max-file: "3"}
+  restart: unless-stopped
+  stop_grace_period: 20s
+
+services:
+  migrate:
+    <<: *app
+    env_file: /opt/maco-ops/secrets/semlia/test/migration.env
+    command: [migrate, up]
+    restart: "no"
+  server:
+    <<: *app
+    command: [server]
+    environment:
+      <<: *env
+      SEMLIA_WORKER_CONFIGURED: "true"
+    ports:
+      - target: 8080
+        published: ${SEMLIA_PORT:?}
+        host_ip: 127.0.0.1
+        protocol: tcp
+    healthcheck:
+      test: [CMD, /app/semlia, healthcheck, ready]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    volumes:
+      - type: bind
+        source: /opt/maco-apps/semlia/test/data/artifacts
+        target: /var/lib/semlia/artifacts
+        bind: {create_host_path: false}
+      - type: bind
+        source: /opt/maco-apps/semlia/test/data/content
+        target: /var/lib/semlia/content
+        read_only: true
+        bind: {create_host_path: false}
+  worker:
+    <<: *app
+    command: [worker]
+    environment:
+      <<: *env
+      SEMLIA_GIT_REPOSITORY: /var/lib/semlia/content
+    healthcheck:
+      test: [CMD, /app/semlia, check-schema]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    volumes:
+      - type: bind
+        source: /opt/maco-apps/semlia/test/data/artifacts
+        target: /var/lib/semlia/artifacts
+        bind: {create_host_path: false}
+      - type: bind
+        source: /opt/maco-apps/semlia/test/data/content
+        target: /var/lib/semlia/content
+        bind: {create_host_path: false}
+
+networks:
+  app:
+  shared:
+    external: true
+    name: 1panel-network

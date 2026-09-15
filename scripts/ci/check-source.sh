@@ -19,6 +19,7 @@ run_gate format "${MAKE_COMMAND}" --no-print-directory format-check
 run_gate lint "${MAKE_COMMAND}" --no-print-directory lint
 run_gate typecheck "${MAKE_COMMAND}" --no-print-directory typecheck
 run_gate tests "${MAKE_COMMAND}" --no-print-directory test
+run_gate release-proof node --test scripts/release/proof.test.mjs
 run_gate contract-drift "${MAKE_COMMAND}" --no-print-directory contracts-check
 run_gate migration-drift "${MAKE_COMMAND}" --no-print-directory db-generate-check
 run_gate web-embed-drift "${MAKE_COMMAND}" --no-print-directory web-embed-check
