@@ -1,0 +1,19 @@
+{
+  "command": [
+    "docker",
+    "pull",
+    "postgres:18-alpine"
+  ],
+  "clearedEnvironment": [
+    "SEMLIA_INGESTION_TEST_DATABASE_URL",
+    "SEMLIA_EXECUTION_CRASH_HELPER",
+    "SEMLIA_EXECUTION_TEST_DB",
+    "SEMLIA_DATABASE_URL"
+  ],
+  "start": "2026-09-09T07:49:59.505Z",
+  "end": "2026-09-09T07:59:01.445Z",
+  "exitStatus": 0,
+  "signal": null,
+  "stdout": "18-alpine: Pulling from library/postgres\n37f0ed82bbe9: Pulling fs layer\na081ec5f06bf: Pulling fs layer\n437763f56024: Pulling fs layer\n0769e0b36484: Pulling fs layer\na2737cba7329: Pulling fs layer\ne5f6e7e7b437: Pulling fs layer\n7ad41a3a3aad: Pulling fs layer\nec7fb8701279: Pulling fs layer\nd57319144865: Download complete\n37f0ed82bbe9: Download complete\n437763f56024: Download complete\n437763f56024: Pull complete\n0769e0b36484: Download complete\na2737cba7329: Download complete\n7ad41a3a3aad: Download complete\nec7fb8701279: Download complete\n36abbad8337d: Download complete\ne5f6e7e7b437: Download complete\n7ad41a3a3aad: Pull complete\ne5f6e7e7b437: Pull complete\na081ec5f06bf: Download complete\n37f0ed82bbe9: Pull complete\n0769e0b36484: Pull complete\na2737cba7329: Pull complete\nec7fb8701279: Pull complete\na081ec5f06bf: Pull complete\nDigest: sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2\nStatus: Downloaded newer image for postgres:18-alpine\ndocker.io/library/postgres:18-alpine\n",
+  "stderr": ""
+}

@@ -8,7 +8,7 @@
 
 | 目标 | 从这里开始 | 接下来阅读 |
 | --- | --- | --- |
-| 了解产品 | [中文 README](../README.zh-CN.md) | [SSOT](SSOT.md)、[知识治理架构](architecture/knowledge-governance.html) |
+| 了解产品方向 | [SSOT](SSOT.md) | [语义生产闭环重构](specs/semantic-production/product-design.md)、[知识治理底座](architecture/knowledge-governance.html) |
 | 运行项目 | [Quickstart](quickstart.md) | [本地开发](operations/local-development.md)、[故障排查](operations/troubleshooting.md) |
 | 开始后端开发 | [M1 TDR](adr/0002-m1-product-and-semantic-execution.md) | [SSOT 系统架构](SSOT.md#10-系统架构)、相关 `specs/` 与 OpenAPI 契约 |
 | 参与项目 | [贡献指南](CONTRIBUTING.md) | [行为准则](CODE_OF_CONDUCT.md)、[安全政策](SECURITY.md) |
@@ -17,11 +17,17 @@
 
 | 文档 | 作用 | 状态 |
 | --- | --- | --- |
-| [项目 SSOT](SSOT.md) | 产品宪法、范围、领域模型、架构、安全、质量标准和路线图 | Confirmed |
+| [项目 SSOT](SSOT.md) | AI 语义基础设施定位、生产优先路线、语义资产与治理、后续消费边界 | Confirmed |
+| [语义生产闭环重构](specs/semantic-production/product-design.md) | 当前主线：来源与证据、候选到新资产、验证审核、发布、增量与恢复的连续验收 | Confirmed |
+| [语义生产重构计划](specs/semantic-production/plan.md) | 复用边界、八项技术决策、依赖与工期区间 | Confirmed |
+| [语义生产重构任务图](specs/semantic-production/tasks.md) | 七个串行任务、文件范围、TDD 与验收要求；T001 已接受，授权串行完成 T002/T003 | Confirmed |
 | [知识治理架构](architecture/knowledge-governance.html) | 五层知识链路、可信解析、风险分流与反馈闭环 | Current |
 | [语义资产设计](specs/semantic-assets/semantic-asset-design.md) | 核心资产类型、详情信息架构与发布消费契约 | Confirmed |
-| [产品导航设计](specs/product-prototype/navigation-design.md) | 一级责任域、二级入口、深链与返回规则 | Confirmed |
-| [产品原型设计契约](specs/product-prototype/product-design.md) | 桌面原型旅程、状态、视觉约束与验收边界 | Confirmed |
+| [产品导航设计](specs/product-prototype/navigation-design.md) | 已批准原型范围的责任域、二级入口、深链与返回规则 | Confirmed（该原型范围） |
+| [产品原型设计契约](specs/product-prototype/product-design.md) | 已批准原型范围的桌面旅程、状态、视觉约束与验收 | Confirmed（该原型范围） |
+| [外部 AI 接入与调研验证](specs/data-finding-workflow/product-design.md) | 后续需求：三类接入能力、同契约参考客户端和预算/实际验证场景 | Confirmed；排期 Deferred |
+| [外部 AI 接入技术计划](specs/data-finding-workflow/plan.md) | 后续公开消费基线、参考客户端和只读探索契约；恢复时重新核对 | Ready_For_User_Review；排期 Deferred |
+| [外部 AI 接入任务图](specs/data-finding-workflow/tasks.md) | EAI-T001 至 EAI-T003 不在当前执行队列 | Ready_For_User_Review；排期 Deferred |
 | [访问控制设计](specs/access-control/product-design.md) | 身份、角色、权限、策略与职责分离体验 | Current |
 | [M0 TDR](adr/0001-m0-technical-foundation.md) | 工程基础的技术选择、取舍与质量门禁 | Confirmed |
 | [M1 TDR](adr/0002-m1-product-and-semantic-execution.md) | 生产 Web、来源发现、物理图谱和可选执行适配器边界 | Confirmed |
@@ -41,9 +47,11 @@
 
 ## 交付与证据
 
-`specs/` 保存经确认的产品规格、计划、任务、检查清单和执行包；`evidence/` 保存相应实现、测试、评审与视觉验收证据。
+`specs/` 保存产品规格、计划、任务、检查清单和执行包，各文档通过元数据标明审核状态，待审文件不作为实施授权；`evidence/` 保存相应实现、测试、评审与视觉验收证据。
 
-M0 的计划、工作图、需求检查、分析和发布报告位于 [`specs/m0-foundation/`](specs/m0-foundation/)。产品原型与访问控制的当前设计记录分别位于 [`specs/product-prototype/`](specs/product-prototype/) 和 [`specs/access-control/`](specs/access-control/)。
+当前主线是 [`specs/semantic-production/`](specs/semantic-production/) 的语义生产闭环重构：利用现有输入能力与本地样例，先完成冷启动生产、治理发布和变更恢复。新来源连接器、外部接入与消费扩展后置，不要求配置消费者才能验收生产。
+
+M0 的计划、工作图、需求检查、分析和发布报告位于 [`specs/m0-foundation/`](specs/m0-foundation/)。已批准原型与访问控制的范围记录分别位于 [`specs/product-prototype/`](specs/product-prototype/) 和 [`specs/access-control/`](specs/access-control/)。[`specs/data-finding-workflow/`](specs/data-finding-workflow/) 是排期 Deferred 的外部 AI 接入与调研验证需求；生产验收后需用户另行确认恢复，不自动执行其任务。它不定义 Semlia 业务任务中心或全站前端重构。A1/A2/A3 是接入方的分级评测场景；第一方测试客户端与内部 AI 语义工程分开，停用前者不影响核心生产。待审文件不代表已批准实施或已经实现。
 
 证据是对特定提交和验收范围的记录，不替代 SSOT、ADR 或当前运行手册。
 

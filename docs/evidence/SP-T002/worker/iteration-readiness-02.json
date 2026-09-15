@@ -1,0 +1,25 @@
+{
+  "command": [
+    "go",
+    "test",
+    "./cmd/semlia",
+    "-run",
+    "TestSourceSnapshotReadiness|TestReadinessRequiresSource",
+    "-count=1",
+    "-v",
+    "-timeout",
+    "5m"
+  ],
+  "clearedEnvironment": [
+    "SEMLIA_INGESTION_TEST_DATABASE_URL",
+    "SEMLIA_EXECUTION_CRASH_HELPER",
+    "SEMLIA_EXECUTION_TEST_DB",
+    "SEMLIA_DATABASE_URL"
+  ],
+  "start": "2026-09-09T06:58:53.371Z",
+  "end": "2026-09-09T06:59:10.391Z",
+  "exitStatus": 0,
+  "signal": null,
+  "stdout": "=== RUN   TestReadinessRequiresSourceSnapshotMigration\n--- PASS: TestReadinessRequiresSourceSnapshotMigration (0.00s)\n=== RUN   TestSourceSnapshotReadinessRejectsSchemaDrift\n2026/09/09 14:59:00 github.com/testcontainers/testcontainers-go - Connected to docker: \n  Server Version: 29.4.0\n  API Version: 1.54\n  Operating System: OrbStack\n  Total Memory: 16040 MB\n  Testcontainers for Go Version: v0.44.0\n  Resolved Docker Host: unix:///var/run/docker.sock\n  Resolved Docker Socket Path: /var/run/docker.sock\n  Test SessionID: 05d059871ec8bbb7d8dc78bd091f721efc0526dcba2b233145cf209b231d0ce9\n  Test ProcessID: 3c0ed1df-199c-4800-89ee-be5817667da2\n2026/09/09 14:59:00 🐳 Creating container for image postgres:18-alpine\n2026/09/09 14:59:00 🐳 Creating container for image testcontainers/ryuk:0.14.0\n2026/09/09 14:59:01 ✅ Container created: 3c4068944e94\n2026/09/09 14:59:01 🐳 Starting container: 3c4068944e94\n2026/09/09 14:59:01 ✅ Container started: 3c4068944e94\n2026/09/09 14:59:01 ⏳ Waiting for container id 3c4068944e94 image: testcontainers/ryuk:0.14.0. Waiting for: all of: [log message \"Started\", port 8080/tcp to be listening]\n2026/09/09 14:59:01 Shell not found in container\n2026/09/09 14:59:01 🔔 Container is ready: 3c4068944e94\n2026/09/09 14:59:01 ✅ Container created: 07daca53b0b4\n2026/09/09 14:59:01 🐳 Starting container: 07daca53b0b4\n2026/09/09 14:59:01 ✅ Container started: 07daca53b0b4\n2026/09/09 14:59:01 ⏳ Waiting for container id 07daca53b0b4 image: postgres:18-alpine. Waiting for: all of: [log message \"database system is ready to accept connections\" (occurrence: 2), port 5432/tcp to be listening]\n2026/09/09 14:59:07 🔔 Container is ready: 07daca53b0b4\n=== RUN   TestSourceSnapshotReadinessRejectsSchemaDrift/old_version\n=== RUN   TestSourceSnapshotReadinessRejectsSchemaDrift/dirty_version\n=== RUN   TestSourceSnapshotReadinessRejectsSchemaDrift/missing_table\n=== RUN   TestSourceSnapshotReadinessRejectsSchemaDrift/missing_code_bytes\n=== RUN   TestSourceSnapshotReadinessRejectsSchemaDrift/disabled_immutable_trigger\n=== RUN   TestSourceSnapshotReadinessRejectsSchemaDrift/missing_tenant_foreign_key\n2026/09/09 14:59:09 🐳 Stopping container: 07daca53b0b4\n2026/09/09 14:59:09 ✅ Container stopped: 07daca53b0b4\n2026/09/09 14:59:09 🐳 Terminating container: 07daca53b0b4\n2026/09/09 14:59:10 🚫 Container terminated: 07daca53b0b4\n--- PASS: TestSourceSnapshotReadinessRejectsSchemaDrift (9.94s)\n    --- PASS: TestSourceSnapshotReadinessRejectsSchemaDrift/old_version (0.00s)\n    --- PASS: TestSourceSnapshotReadinessRejectsSchemaDrift/dirty_version (0.00s)\n    --- PASS: TestSourceSnapshotReadinessRejectsSchemaDrift/missing_table (0.01s)\n    --- PASS: TestSourceSnapshotReadinessRejectsSchemaDrift/missing_code_bytes (0.01s)\n    --- PASS: TestSourceSnapshotReadinessRejectsSchemaDrift/disabled_immutable_trigger (0.01s)\n    --- PASS: TestSourceSnapshotReadinessRejectsSchemaDrift/missing_tenant_foreign_key (0.01s)\nPASS\nok  \tgithub.com/iiwish/semlia/cmd/semlia\t12.030s\n",
+  "stderr": ""
+}

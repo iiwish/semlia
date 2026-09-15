@@ -1,13 +1,13 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 
-import { authorizationBindings, authorizationPrincipals, authorizationRoles, authorizationSession } from "./data";
 import type {
   AuthorizationBinding,
   AuthorizationDecision,
   AuthorizationResource,
   AuthorizationRole,
   AuthorizationScope,
+  AuthorizationPrincipal,
   CapabilitySession,
   PermissionAction,
   SeparationOfDutyConflict,
@@ -23,7 +23,7 @@ interface DecisionInput {
   principalId: string;
   action: PermissionAction;
   resource?: AuthorizationResource;
-  principals?: typeof authorizationPrincipals;
+  principals?: AuthorizationPrincipal[];
   roles?: AuthorizationRole[];
   bindings?: AuthorizationBinding[];
   authorizationVersion?: string;
@@ -51,10 +51,10 @@ export function evaluateAuthorization({
   principalId,
   action,
   resource,
-  principals = authorizationPrincipals,
-  roles = authorizationRoles,
-  bindings = authorizationBindings,
-  authorizationVersion = authorizationSession.version,
+  principals = [],
+  roles = [],
+  bindings = [],
+  authorizationVersion = "",
 }: DecisionInput): AuthorizationDecision {
   const principal = principals.find((item) => item.id === principalId);
   if (!principal || principal.status !== "active") {
@@ -102,8 +102,8 @@ export function findSeparationOfDutyConflicts({
   principalId,
   roleId,
   scope,
-  roles = authorizationRoles,
-  bindings = authorizationBindings,
+  roles = [],
+  bindings = [],
 }: SeparationOfDutyInput): SeparationOfDutyConflict[] {
   if (!scope.protected) return [];
   const role = roles.find((item) => item.id === roleId);
@@ -126,24 +126,23 @@ export function findSeparationOfDutyConflicts({
   ];
 }
 
-export function CapabilityProvider({ children, session = authorizationSession }: { children: ReactNode; session?: CapabilitySession }) {
+const unauthenticatedSession: CapabilitySession = { principalId: "", version: "", capabilities: [] };
+
+export function CapabilityProvider({ children, session = unauthenticatedSession }: { children: ReactNode; session?: CapabilitySession }) {
   const value = useMemo<CapabilityContextValue>(
     () => ({
       session,
       can: (action) => session.capabilities.includes(action),
-      decide: (action, resource) => {
-        if (!resource) {
-          const allowed = session.capabilities.includes(action);
-          return {
-            allowed,
-            action,
-            principalId: session.principalId,
-            reasonCode: allowed ? "SESSION_CAPABILITY" : "NO_MATCHING_GRANT",
-            explanation: allowed ? `当前会话包含 ${action} 能力。` : `当前会话不包含 ${action} 能力。`,
-            authorizationVersion: session.version,
-          };
-        }
-        return evaluateAuthorization({ principalId: session.principalId, action, resource, authorizationVersion: session.version });
+      decide: (action) => {
+        const allowed = session.capabilities.includes(action);
+        return {
+          allowed,
+          action,
+          principalId: session.principalId,
+          reasonCode: allowed ? "SESSION_CAPABILITY" : "NO_MATCHING_GRANT",
+          explanation: allowed ? `当前会话包含 ${action} 能力；具体资源仍由服务端复核。` : `当前会话不包含 ${action} 能力。`,
+          authorizationVersion: session.version,
+        };
       },
     }),
     [session],

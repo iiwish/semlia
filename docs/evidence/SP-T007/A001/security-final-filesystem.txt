@@ -1,0 +1,23 @@
+2026-09-11T10:39:35Z	INFO	[vuln] Vulnerability scanning is enabled
+2026-09-11T10:39:35Z	INFO	[secret] Secret scanning is enabled
+2026-09-11T10:39:35Z	INFO	[secret] If your scanning is slow, please try '--scanners vuln' to disable secret scanning
+2026-09-11T10:39:35Z	INFO	[secret] Please see https://trivy.dev/docs/v0.73/guide/scanner/secret#recommendation for faster secret detection
+2026-09-11T10:39:39Z	INFO	[pnpm] Run "pnpm install" to collect the license information of packages	dir="node_modules"
+2026-09-11T10:39:39Z	INFO	Number of language-specific files	num=2
+2026-09-11T10:39:39Z	INFO	[gomod] Detecting vulnerabilities...
+2026-09-11T10:39:39Z	INFO	[pnpm] Detecting vulnerabilities...
+2026-09-11T10:39:39Z	WARN	Using severities from other vendors for some vulnerabilities. Read https://trivy.dev/docs/v0.73/guide/scanner/vulnerability#severity-selection for details.
+
+Report Summary
+
+┌────────────────┬───────┬─────────────────┬─────────┐
+│     Target     │ Type  │ Vulnerabilities │ Secrets │
+├────────────────┼───────┼─────────────────┼─────────┤
+│ go.mod         │ gomod │        0        │    -    │
+├────────────────┼───────┼─────────────────┼─────────┤
+│ pnpm-lock.yaml │ pnpm  │        0        │    -    │
+└────────────────┴───────┴─────────────────┴─────────┘
+Legend:
+- '-': Not scanned
+- '0': Clean (no security findings detected)
+

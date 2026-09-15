@@ -142,7 +142,7 @@ T009 preserves T008's real backend capabilities while replacing its duplicate fr
 
 ### T009 Single production frontend convergence
 
-Status: Needs_Review
+Status: Accepted
 Depends on: T007, founder product direction on 2026-09-02
 Blocks: first user-visible M1 milestone acceptance
 
@@ -162,4 +162,8 @@ package and obsolete run targets are removed, while `/status` remains available.
 end-to-end and supported desktop visual gates pass. Evidence:
 `docs/evidence/M1-T009/summary.md`.
 
-Acceptance: ready for founder review as the first visible frontend convergence milestone.
+Acceptance: founder explicitly accepted T009 on 2026-09-02 after live browser acceptance at
+`http://127.0.0.1:18081`: real asset creation (`POST /api/v1/.../catalog/assets` returned 201),
+server-side search, immutable detail with revisions, evidence and production-readiness gates, zero
+console errors, no storage UUID exposure, and passing 1440x900 / 1024x768 visual QA. This closes the
+first user-visible M1 milestone acceptance.

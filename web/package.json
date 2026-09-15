@@ -10,7 +10,10 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:e2e": "playwright test"
+    "test:e2e": "bash ../scripts/dev/browser-acceptance.sh",
+    "test:e2e:auth": "playwright test --config playwright.auth.config.ts",
+    "test:e2e:live": "playwright test --config playwright.live.config.ts",
+    "test:e2e:production": "playwright test --config playwright.production.config.ts"
   },
   "dependencies": {
     "@semlia/sdk-typescript": "workspace:*",
@@ -19,6 +22,7 @@
     "react-dom": "19.2.8"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@eslint/js": "10.0.1",
     "@playwright/test": "1.62.1",
     "@testing-library/jest-dom": "7.0.0",

@@ -1,0 +1,29 @@
+{
+  "command": "go test -json -count=1 ./tests/contracts/... ./tests/repository",
+  "start": "2026-09-09T04:53:47.745Z",
+  "end": "2026-09-09T04:53:54.072Z",
+  "elapsedSeconds": 6.327,
+  "exitCode": 0,
+  "signal": null,
+  "packages": [
+    {
+      "Time": "2026-09-09T12:53:50.359873+08:00",
+      "Action": "pass",
+      "Package": "github.com/iiwish/semlia/tests/contracts",
+      "Elapsed": 2.018
+    },
+    {
+      "Time": "2026-09-09T12:53:54.053504+08:00",
+      "Action": "pass",
+      "Package": "github.com/iiwish/semlia/tests/repository",
+      "Elapsed": 5.711
+    }
+  ],
+  "counts": {
+    "pass": 91,
+    "fail": 0,
+    "skip": 0
+  },
+  "failures": [],
+  "skips": []
+}

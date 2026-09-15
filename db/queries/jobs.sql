@@ -10,7 +10,10 @@ ON CONFLICT (workspace_id, idempotency_key) DO UPDATE
 SET idempotency_key = EXCLUDED.idempotency_key
 RETURNING *;
 
--- name: ReapExpiredJobs :execrows
+-- name: GetJobByID :one
+SELECT * FROM jobs WHERE id = sqlc.arg(id);
+
+-- name: ReapExpiredJobs :many
 UPDATE jobs
 SET status = CASE WHEN attempt >= max_attempts THEN 'dead_letter' ELSE 'retryable' END,
     available_at = sqlc.arg(expired_at),
@@ -20,7 +23,8 @@ SET status = CASE WHEN attempt >= max_attempts THEN 'dead_letter' ELSE 'retryabl
     updated_at = sqlc.arg(expired_at),
     completed_at = CASE WHEN attempt >= max_attempts THEN sqlc.arg(expired_at) ELSE NULL END
 WHERE status = 'running'
-  AND leased_until <= sqlc.arg(expired_at);
+  AND leased_until <= sqlc.arg(expired_at)
+RETURNING *;
 
 -- name: ClaimJob :one
 WITH candidate AS (
@@ -43,6 +47,15 @@ FROM candidate
 WHERE jobs.id = candidate.id
 RETURNING jobs.*;
 
+-- name: ExtendJobLease :execrows
+UPDATE jobs
+SET leased_until = sqlc.arg(leased_until),
+    updated_at = sqlc.arg(renewed_at)
+WHERE id = sqlc.arg(id)
+  AND status = 'running'
+  AND lease_owner = sqlc.arg(lease_owner)
+  AND leased_until > sqlc.arg(renewed_at);
+
 -- name: MarkJobSucceeded :execrows
 UPDATE jobs
 SET status = 'succeeded',
@@ -53,20 +66,22 @@ SET status = 'succeeded',
     completed_at = sqlc.arg(completed_at)
 WHERE id = sqlc.arg(id)
   AND status = 'running'
-  AND lease_owner = sqlc.arg(lease_owner);
+  AND lease_owner = sqlc.arg(lease_owner)
+  AND leased_until > sqlc.arg(completed_at);
 
 -- name: MarkJobFailed :execrows
 UPDATE jobs
-SET status = CASE WHEN attempt >= max_attempts THEN 'dead_letter' ELSE 'retryable' END,
+SET status = CASE WHEN sqlc.arg(permanent)::boolean OR attempt >= max_attempts THEN 'dead_letter' ELSE 'retryable' END,
     available_at = sqlc.arg(available_at),
     leased_until = NULL,
     lease_owner = NULL,
     last_error_code = sqlc.arg(error_code),
     updated_at = sqlc.arg(failed_at),
     completed_at = CASE
-        WHEN attempt >= max_attempts THEN sqlc.arg(failed_at)::timestamptz
+        WHEN sqlc.arg(permanent)::boolean OR attempt >= max_attempts THEN sqlc.arg(failed_at)::timestamptz
         ELSE NULL::timestamptz
     END
 WHERE id = sqlc.arg(id)
   AND status = 'running'
-  AND lease_owner = sqlc.arg(lease_owner);
+  AND lease_owner = sqlc.arg(lease_owner)
+  AND leased_until > sqlc.arg(failed_at);

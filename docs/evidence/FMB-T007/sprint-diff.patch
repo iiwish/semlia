@@ -1,0 +1,1862 @@
+--- a/db/queries/execution.sql
++++ b/db/queries/execution.sql
+@@ -0,0 +1,8 @@
++-- name: ListReleaseExecutionRelations :many
++SELECT payload FROM release_execution_relations WHERE workspace_id=$1 AND release_id=$2 ORDER BY dataset_id;
++
++-- name: GetExecutionRun :one
++SELECT * FROM query_execution_runs WHERE workspace_id=$1 AND id=$2;
++
++-- name: GetExecutionRunByKey :one
++SELECT * FROM query_execution_runs WHERE workspace_id=$1 AND principal_id=$2 AND idempotency_key=$3;
+--- a/db/sqlc.yaml
++++ b/db/sqlc.yaml
+@@ -22,6 +22,7 @@
+       - ../migrations/000018_fmb_file_ingestion_schedules.up.sql
+       - ../migrations/000019_fmb_embedding_index.up.sql
+       - ../migrations/000020_fmb_distribution_interfaces.up.sql
++      - ../migrations/000021_fmb_query_execution.up.sql
+     queries:
+       - queries
+     gen:
+--- a/docs/specs/full-menu-beta/release-report.md
++++ b/docs/specs/full-menu-beta/release-report.md
+@@ -0,0 +1,52 @@
++# Full-Menu Beta 0.2.0 Release Report
++
++Status: Incomplete. Not release-ready and not Accepted.
++Assessment date: 2026-09-05.
++
++## Delivery Position
++
++FMB-T001 through FMB-T006 have local implementation/review evidence and remain
++Needs_Review for founder acceptance. FMB-T007 is an incomplete integration task.
++The third three-hour sprint produced an unconnected execution core, not a usable
++end-to-end read-only query feature. Existing local preview health does not prove T007.
++
++The current T007 source includes a typed aggregate compiler, plan provenance/digest
++extensions, application/repository/adapter skeletons, credential opt-in and migration21.
++Only narrow compiler/unit and compilation checks are established. Execution application
++and adapter packages have no dedicated tests. The implementation worker stopped after
++an execution-quota error and supplied a frozen handoff in the final verification window.
++
++## Release Blockers
++
++1. Normal governed publication must compose a usable release from immutable published
++   pins without copying mutable drafts or backfilling historical physical provenance.
++2. Formal JoinContract references must drive validated typed joins; current joins fail
++   closed and the supported multi-relation journey is incomplete.
++3. REST, MCP, CLI, TypeScript SDK, Ask, configuration and the application composition
++   root must connect to the same bounded execution service.
++4. Real PostgreSQL tests must prove least privilege, source identity, current authority,
++   limits, cancellation, concurrency, process loss and no retained sensitive results.
++5. Populated migration21 lifecycle, readiness21, full regression and desktop journeys
++   must pass against the integrated candidate.
++6. Production builds must exclude UAT identities. Release provenance and SBOM must bind
++   the actual source and both Go and embedded-Web dependencies.
++7. Hosted HTTPS/OIDC/provider/source/webhook/OTel/recovery proof requires an approved
++   environment. Local fixtures cannot substitute for these gates.
++
++## Runtime And Handoff
++
++The existing local development preview remains healthy at `http://127.0.0.1:18081`.
++It is the earlier migration20 preview, not a deployment of this T007 source. Do not
++rebuild or upgrade it as a Beta candidate until migration/readiness integration passes.
++No commit, push, external deployment or destructive volume operation is performed.
++
++Current evidence:
++
++- `docs/evidence/FMB-T007/implementation-handoff.md`: exact source ownership and gaps.
++- `docs/evidence/FMB-T007/review.md`: independent findings and closure status.
++- `docs/evidence/FMB-T007/test-results.md`: authoritative final command outcomes.
++- `docs/evidence/FMB-T007/hosted-matrix.md`: external acceptance gaps.
++- `docs/evidence/FMB-T007/menu-truthfulness.md`: production/local-fixture boundaries.
++
++Full-Menu Beta and the three-hour implementation objective are not reported complete.
++Further implementation needs a resumed execution window; founder acceptance is separate.
+--- a/internal/adapters/execution/postgres.go
++++ b/internal/adapters/execution/postgres.go
+@@ -0,0 +1,201 @@
++package execution
++
++import (
++	"bytes"
++	"context"
++	"encoding/json"
++	"errors"
++	"net"
++	"os"
++	"regexp"
++	"strconv"
++	"strings"
++	"time"
++
++	d "github.com/iiwish/semlia/internal/domain/execution"
++	"github.com/iiwish/semlia/pkg/identity"
++	"github.com/jackc/pgx/v5"
++)
++
++// Deployment references are separate from discovery credentials. No DSN is
++// loaded from a source catalog row or accepted by an execution request.
++type SourceReference struct {
++	WorkspaceID string `json:"workspaceId"`
++	SourceID    string `json:"sourceId"`
++	DSNEnv      string `json:"dsnEnv"`
++}
++type Postgres struct {
++	references map[string]string
++	lookup     func(string) (string, bool)
++}
++
++func NewPostgres(config string) (*Postgres, error) {
++	return NewPostgresWithLookup(config, os.LookupEnv)
++}
++func NewPostgresWithLookup(config string, lookup func(string) (string, bool)) (*Postgres, error) {
++	refs := []SourceReference{}
++	if strings.TrimSpace(config) != "" {
++		dec := json.NewDecoder(strings.NewReader(config))
++		dec.DisallowUnknownFields()
++		if dec.Decode(&refs) != nil {
++			return nil, d.ErrNotConfigured
++		}
++	}
++	p := &Postgres{references: map[string]string{}, lookup: lookup}
++	for _, ref := range refs {
++		w, err := identity.ParseWorkspaceID(ref.WorkspaceID)
++		if err != nil {
++			return nil, d.ErrNotConfigured
++		}
++		src, err := identity.ParseSourceConnectionID(ref.SourceID)
++		if err != nil || !regexp.MustCompile(`^SEMLIA_EXECUTION_DSN_[A-Z0-9_]+$`).MatchString(ref.DSNEnv) {
++			return nil, d.ErrNotConfigured
++		}
++		key := w.String() + "/" + src.UUID()
++		if p.references[key] != "" {
++			return nil, d.ErrNotConfigured
++		}
++		p.references[key] = ref.DSNEnv
++	}
++	return p, nil
++}
++func (p *Postgres) Execute(parent context.Context, w identity.WorkspaceID, q d.Compiled, l d.Limits) d.Output {
++	fail := func(code string) d.Output { return d.Output{ErrorCode: code} }
++	if !l.Valid() {
++		return fail("EXECUTION_LIMITS_INVALID")
++	}
++	env := p.references[w.String()+"/"+q.SourceID]
++	if env == "" {
++		return fail("EXECUTION_NOT_CONFIGURED")
++	}
++	dsn, ok := p.lookup(env)
++	if !ok || dsn == "" {
++		return fail("EXECUTION_NOT_CONFIGURED")
++	}
++	cfg, err := pgx.ParseConfig(dsn)
++	if err != nil {
++		return fail("EXECUTION_CREDENTIAL_INVALID")
++	}
++	locator := net.JoinHostPort(strings.Trim(cfg.Host, "[]"), strconv.Itoa(int(cfg.Port))) + "/" + cfg.Database
++	if locator != q.SourceLocator || cfg.User == "" || strings.HasPrefix(cfg.Host, "/") || len(cfg.Fallbacks) > 0 && cfg.TLSConfig == nil {
++		return fail("EXECUTION_SOURCE_MISMATCH")
++	}
++	// A DSN must not install SQL tracing or change the compiler's search path.
++	cfg.Tracer = nil
++	cfg.RuntimeParams = map[string]string{"application_name": "semlia-execution", "default_transaction_read_only": "on", "search_path": "pg_catalog", "statement_timeout": strconv.FormatInt(l.Timeout.Milliseconds(), 10), "lock_timeout": strconv.FormatInt(l.Timeout.Milliseconds(), 10)}
++	cfg.ConnectTimeout = l.Timeout
++	ctx, cancel := context.WithTimeout(parent, l.Timeout)
++	defer cancel()
++	conn, err := pgx.ConnectConfig(ctx, cfg)
++	if err != nil {
++		return fail(classify(parent, ctx, err))
++	}
++	defer func() {
++		closeCtx, c := context.WithTimeout(context.Background(), time.Second)
++		defer c()
++		_ = conn.Close(closeCtx)
++	}()
++	tx, err := conn.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly})
++	if err != nil {
++		return fail(classify(parent, ctx, err))
++	}
++	defer func() {
++		rollbackCtx, c := context.WithTimeout(context.Background(), time.Second)
++		defer c()
++		_ = tx.Rollback(rollbackCtx)
++	}()
++	if err := verifyReadOnlyRole(ctx, tx); err != nil {
++		return fail("EXECUTION_ROLE_NOT_READ_ONLY")
++	}
++	// Only ordinary PostgreSQL tables can enter this compiler contract.
++	for _, r := range q.Relations {
++		var kind string
++		err := tx.QueryRow(ctx, `SELECT c.relkind::text FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=$1 AND c.relname=$2 AND pg_catalog.has_table_privilege(current_user,c.oid,'SELECT')`, r[0], r[1]).Scan(&kind)
++		if err != nil || (kind != "r" && kind != "p") {
++			return fail("EXECUTION_RELATION_UNSAFE")
++		}
++	}
++	rows, err := tx.Query(ctx, q.SQL, q.Args...)
++	if err != nil {
++		return fail(classify(parent, ctx, err))
++	}
++	defer rows.Close()
++	output := d.Output{Columns: q.Columns, Rows: [][]any{}}
++	columns, _ := json.Marshal(q.Columns)
++	used := len(columns) + len(`{"columns":,"rows":[]}`)
++	for rows.Next() {
++		if len(output.Rows) >= l.MaxRows {
++			return fail("EXECUTION_ROW_LIMIT")
++		}
++		for _, raw := range rows.RawValues() {
++			if len(raw) > l.MaxBytes-used {
++				return fail("EXECUTION_BYTE_LIMIT")
++			}
++		}
++		values, err := rows.Values()
++		if err != nil {
++			return fail("EXECUTION_RESULT_INVALID")
++		}
++		encoded, err := json.Marshal(values)
++		if err != nil {
++			return fail("EXECUTION_RESULT_INVALID")
++		}
++		used += len(encoded)
++		if len(output.Rows) > 0 {
++			used++
++		}
++		if used > l.MaxBytes {
++			return fail("EXECUTION_BYTE_LIMIT")
++		}
++		var normalized []any
++		decoder := json.NewDecoder(bytes.NewReader(encoded))
++		decoder.UseNumber()
++		if decoder.Decode(&normalized) != nil {
++			return fail("EXECUTION_RESULT_INVALID")
++		}
++		output.Rows = append(output.Rows, normalized)
++	}
++	if err := rows.Err(); err != nil {
++		return fail(classify(parent, ctx, err))
++	}
++	if err := tx.Commit(ctx); err != nil {
++		return fail(classify(parent, ctx, err))
++	}
++	output.RowCount = len(output.Rows)
++	output.ByteCount = used
++	output.Digest = d.Digest(struct {
++		Columns []string `json:"columns"`
++		Rows    [][]any  `json:"rows"`
++	}{output.Columns, output.Rows})
++	return output
++}
++func classify(parent, ctx context.Context, err error) string {
++	if errors.Is(parent.Err(), context.Canceled) {
++		return "EXECUTION_CANCELLED"
++	}
++	if ctx.Err() != nil || errors.Is(err, context.DeadlineExceeded) {
++		return "EXECUTION_TIMEOUT"
++	}
++	return "EXECUTION_SOURCE_FAILED"
++}
++func verifyReadOnlyRole(ctx context.Context, tx pgx.Tx) error {
++	var unsafe bool
++	err := tx.QueryRow(ctx, `
++SELECT EXISTS(SELECT 1 FROM pg_catalog.pg_roles r WHERE pg_catalog.pg_has_role(current_user,r.oid,'MEMBER') AND (r.rolsuper OR r.rolcreatedb OR r.rolcreaterole OR r.rolreplication OR r.rolbypassrls))
++ OR pg_catalog.has_database_privilege(current_user,current_database(),'CREATE')
++ OR pg_catalog.has_database_privilege(current_user,current_database(),'TEMP')
++ OR EXISTS(SELECT 1 FROM pg_catalog.pg_namespace n WHERE pg_catalog.has_schema_privilege(current_user,n.oid,'CREATE'))
++ OR EXISTS(SELECT 1 FROM pg_catalog.pg_class c WHERE c.relkind IN ('r','p','v','m','f') AND
++   (pg_catalog.has_table_privilege(current_user,c.oid,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
++    OR pg_catalog.has_any_column_privilege(current_user,c.oid,'INSERT,UPDATE,REFERENCES')))
++ OR EXISTS(SELECT 1 FROM pg_catalog.pg_class c WHERE c.relkind='S' AND pg_catalog.has_sequence_privilege(current_user,c.oid,'USAGE,UPDATE'))
++ OR current_setting('transaction_read_only')<>'on'
++ OR current_setting('log_statement')<>'none'
++ OR current_setting('log_min_duration_statement')<>'-1'
++ OR current_setting('log_min_duration_sample')<>'-1'
++ OR current_setting('log_parameter_max_length_on_error')<>'0'`).Scan(&unsafe)
++	if err != nil || unsafe {
++		return errors.New("EXECUTION_ROLE_NOT_READ_ONLY")
++	}
++	return nil
++}
+--- a/internal/adapters/postgres/distribution.go
++++ b/internal/adapters/postgres/distribution.go
+@@ -255,7 +255,40 @@
+ 		if err := appendReleasedObject(&snapshot, row); err != nil {
+ 			return domain.ReleaseSnapshot{}, err
+ 		}
++	}
++	physicalRows, err := store.queries.ListReleaseExecutionRelations(ctx, dbgen.ListReleaseExecutionRelationsParams{WorkspaceID: header.workspaceID, ReleaseID: header.id})
++	if err != nil {
++		return domain.ReleaseSnapshot{}, distributionRepositoryError("load execution provenance", err)
+ 	}
++	if len(physicalRows) > 0 {
++		snapshot.Execution = &domain.ExecutionProvenance{CompilerVersion: "postgres-aggregate/v1"}
++		for _, payload := range physicalRows {
++			var relation domain.ExecutionRelation
++			if json.Unmarshal(payload, &relation) != nil {
++				return domain.ReleaseSnapshot{}, domain.ErrInvariant
++			}
++			snapshot.Execution.Relations = append(snapshot.Execution.Relations, relation)
++		}
++		for _, row := range objectRows {
++			if row.ObjectType == "join_contract" {
++				var payload struct {
++					Content struct {
++						Execution struct {
++							FieldPairs []domain.ExecutionFieldPair `json:"fieldPairs"`
++						} `json:"execution"`
++					} `json:"content"`
++				}
++				if json.Unmarshal(row.Payload, &payload) != nil {
++					return domain.ReleaseSnapshot{}, domain.ErrInvariant
++				}
++				for _, j := range snapshot.Joins {
++					if j.ID.UUID() == row.ObjectID.String() {
++						snapshot.Execution.Joins = append(snapshot.Execution.Joins, domain.ExecutionJoin{ID: j.ID.String(), Version: j.Version, LeftDatasetID: j.LeftDatasetID.UUID(), RightDatasetID: j.RightDatasetID.UUID(), JoinType: string(j.JoinType), Cardinality: string(j.Cardinality), FieldPairs: payload.Content.Execution.FieldPairs})
++					}
++				}
++			}
++		}
++	}
+ 	return snapshot, nil
+ }
+ 
+@@ -651,6 +684,8 @@
+ 		_ = json.Unmarshal(raw["dataset_id"], &payload.DatasetID)
+ 		_ = json.Unmarshal(raw["field_id"], &payload.FieldID)
+ 		_ = json.Unmarshal(raw["retired_at"], &payload.RetiredAt)
++		var transform string
++		_ = json.Unmarshal(raw["transform"], &transform)
+ 		id, err := typedPhysicalBinding(payload.ID)
+ 		if err != nil {
+ 			return err
+@@ -672,7 +707,7 @@
+ 			fieldID = &value
+ 		}
+ 		snapshot.Bindings = append(snapshot.Bindings, domain.ReleasedPhysicalBinding{ID: id, Version: int(row.Version),
+-			AssetID: assetID, DatasetID: datasetID, FieldID: fieldID, Retired: payload.RetiredAt != nil})
++			AssetID: assetID, DatasetID: datasetID, FieldID: fieldID, Retired: payload.RetiredAt != nil, Transform: transform})
+ 	case string(governance.TargetModelGrain):
+ 		var payload struct {
+ 			ID              string `json:"id"`
+--- a/internal/adapters/postgres/execution.go
++++ b/internal/adapters/postgres/execution.go
+@@ -0,0 +1,197 @@
++package postgres
++
++import (
++	"context"
++	"errors"
++	"reflect"
++	"strings"
++	"time"
++
++	dbgen "github.com/iiwish/semlia/internal/adapters/postgres/sqlc"
++	authapp "github.com/iiwish/semlia/internal/application/authorization"
++	executionapp "github.com/iiwish/semlia/internal/application/execution"
++	dist "github.com/iiwish/semlia/internal/domain/distribution"
++	d "github.com/iiwish/semlia/internal/domain/execution"
++	"github.com/iiwish/semlia/pkg/identity"
++	"github.com/jackc/pgx/v5"
++	"github.com/jackc/pgx/v5/pgtype"
++)
++
++var _ executionapp.Repository = (*Store)(nil)
++var errExecutionStore = errors.New("EXECUTION_STORE_UNAVAILABLE")
++
++func (store *Store) CheckExecutionCredential(ctx context.Context, c authapp.CredentialLimit) error {
++	credential, err := store.LoadClientCredential(ctx, c.CredentialID)
++	if err != nil || credential.RevokedAt != nil || !credential.ExpiresAt.After(time.Now()) || credential.WorkspaceID != c.WorkspaceID || credential.PrincipalID != c.PrincipalID || credential.ConsumerID != c.ConsumerID || credential.BindingID != c.BindingID || credential.ScopeType != c.ScopeType || credential.ScopeID != c.ScopeID || !reflect.DeepEqual(credential.AllowedActions, c.Actions) {
++		return d.ErrInvalidPlan
++	}
++	return nil
++}
++func (store *Store) CheckExecutionSource(ctx context.Context, w identity.WorkspaceID, p *dist.ExecutionProvenance) error {
++	if p == nil || len(p.Relations) == 0 {
++		return d.ErrInvalidPlan
++	}
++	for _, r := range p.Relations {
++		var active bool
++		err := store.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM source_connections s
++    JOIN physical_datasets d ON d.workspace_id=s.workspace_id AND d.source_connection_id=s.id
++    JOIN physical_dataset_revisions dr ON dr.workspace_id=d.workspace_id AND dr.physical_dataset_id=d.id AND dr.id=d.current_revision_id
++    WHERE s.workspace_id=$1 AND s.id=$2 AND s.status='active' AND s.adapter_kind='postgresql_catalog'
++      AND s.normalized_locator=$3 AND d.id=$4 AND dr.id=$5 AND dr.source_revision_id=$6)`, w.UUID(), r.SourceID, r.SourceLocator, r.DatasetID, r.DatasetRevisionID, r.SourceRevisionID).Scan(&active)
++		if err != nil {
++			return errExecutionStore
++		}
++		if !active {
++			return d.ErrInvalidPlan
++		}
++	}
++	return nil
++}
++
++func executionUUID(s string) any {
++	if s == "" {
++		return nil
++	}
++	id, err := identity.ParseAny(s)
++	if err == nil {
++		return id.UUID()
++	}
++	return s
++}
++func (store *Store) ClaimExecution(ctx context.Context, run d.Run, limit int, version int64) (d.Run, bool, error) {
++	tx, err := store.pool.BeginTx(ctx, pgx.TxOptions{})
++	if err != nil {
++		return d.Run{}, false, errExecutionStore
++	}
++	defer func() { _ = tx.Rollback(ctx) }()
++	var current int64
++	if tx.QueryRow(ctx, `SELECT authorization_version FROM workspaces WHERE id=$1 FOR UPDATE`, executionUUID(run.WorkspaceID)).Scan(&current) != nil {
++		return d.Run{}, false, errExecutionStore
++	}
++	if current != version {
++		return d.Run{}, false, d.ErrConflict
++	}
++	if err := expireExecutionClaims(ctx, tx, executionUUID(run.WorkspaceID)); err != nil {
++		return d.Run{}, false, err
++	}
++	queries := dbgen.New(tx)
++	w, _ := uuidFromString(executionUUID(run.WorkspaceID).(string))
++	principal, _ := uuidFromString(executionUUID(run.PrincipalID).(string))
++	old, err := queries.GetExecutionRunByKey(ctx, dbgen.GetExecutionRunByKeyParams{WorkspaceID: w, PrincipalID: principal, IdempotencyKey: run.IdempotencyKey})
++	if err == nil {
++		prior := executionRunFromRow(old)
++		if prior.PlanID != run.PlanID || prior.PlanDigest != run.PlanDigest || prior.CredentialID != run.CredentialID || prior.ConsumerID != run.ConsumerID {
++			return d.Run{}, false, d.ErrConflict
++		}
++		if tx.Commit(ctx) != nil {
++			return d.Run{}, false, errExecutionStore
++		}
++		return prior, false, nil
++	}
++	if !errors.Is(err, pgx.ErrNoRows) {
++		return d.Run{}, false, errExecutionStore
++	}
++	var count int
++	if tx.QueryRow(ctx, `SELECT count(*) FROM query_execution_runs WHERE workspace_id=$1 AND state='running'`, w).Scan(&count) != nil {
++		return d.Run{}, false, errExecutionStore
++	}
++	if count >= limit {
++		return d.Run{}, false, d.ErrBusy
++	}
++	_, err = tx.Exec(ctx, `INSERT INTO runtime_runs(id,workspace_id,kind,source_type,source_id,source_version_digest,trace_id,idempotency_key,requested_by_principal_id,state,phase,attempt,max_attempts,started_at,created_at,updated_at)
++ VALUES($1,$2,'query_execution','query_execution',$3,$4,$5,$6,$7,'running','executing',1,1,$8,$8,$8)`, executionUUID(run.ID), w, run.ID, strings.TrimPrefix(run.PlanDigest, "sha256:"), run.TraceID, "execution:"+run.ID, principal, run.StartedAt)
++	if err != nil {
++		return d.Run{}, false, errExecutionStore
++	}
++	_, err = tx.Exec(ctx, `INSERT INTO query_execution_runs(id,workspace_id,runtime_run_id,semantic_query_id,resolved_plan_id,plan_digest,principal_id,consumer_id,credential_id,channel,source_connection_id,source_revision_id,adapter_version,idempotency_key,state,trace_id,started_at,deadline_at)
++ VALUES($1,$2,$1,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'running',$14,$15,$16)`, executionUUID(run.ID), w, executionUUID(run.QueryID), executionUUID(run.PlanID), run.PlanDigest, principal, executionUUID(run.ConsumerID), executionUUID(run.CredentialID), run.Channel, run.SourceID, run.SourceRevisionID, run.AdapterVersion, run.IdempotencyKey, run.TraceID, run.StartedAt, run.Deadline)
++	if err != nil {
++		return d.Run{}, false, errExecutionStore
++	}
++	if tx.Commit(ctx) != nil {
++		return d.Run{}, false, errExecutionStore
++	}
++	return run, true, nil
++}
++func expireExecutionClaims(ctx context.Context, tx pgx.Tx, w any) error {
++	_, err := tx.Exec(ctx, `WITH lost AS (
++ UPDATE query_execution_runs SET state='unknown',error_code='EXECUTION_OUTCOME_UNKNOWN',finished_at=CURRENT_TIMESTAMP
++ WHERE workspace_id=$1 AND state='running' AND deadline_at<CURRENT_TIMESTAMP RETURNING runtime_run_id
++ ) UPDATE runtime_runs SET state='failed',phase='outcome_unknown',error_code='EXECUTION_OUTCOME_UNKNOWN',error_summary='Outcome unavailable; this run is never automatically retried',finished_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE id IN(SELECT runtime_run_id FROM lost)`, w)
++	if err != nil {
++		return errExecutionStore
++	}
++	return nil
++}
++func (store *Store) FinishExecution(ctx context.Context, run d.Run) error {
++	tx, err := store.pool.BeginTx(ctx, pgx.TxOptions{})
++	if err != nil {
++		return errExecutionStore
++	}
++	defer func() { _ = tx.Rollback(ctx) }()
++	tag, err := tx.Exec(ctx, `UPDATE query_execution_runs SET state=$3,error_code=NULLIF($4,''),row_count=$5,byte_count=$6,result_digest=NULLIF($7,''),finished_at=$8 WHERE workspace_id=$1 AND id=$2 AND state='running'`, executionUUID(run.WorkspaceID), executionUUID(run.ID), run.State, run.ErrorCode, run.RowCount, run.ByteCount, run.ResultDigest, run.FinishedAt)
++	if err != nil || tag.RowsAffected() != 1 {
++		return errExecutionStore
++	}
++	runtimeCode := ""
++	if run.State == "failed" {
++		runtimeCode = run.ErrorCode
++	}
++	_, err = tx.Exec(ctx, `UPDATE runtime_runs SET state=$3,phase='completed',error_code=NULLIF($4,''),finished_at=$5,updated_at=$5,version=version+1 WHERE workspace_id=$1 AND id=$2`, executionUUID(run.WorkspaceID), executionUUID(run.ID), run.State, runtimeCode, run.FinishedAt)
++	if err != nil {
++		return errExecutionStore
++	}
++	audit, _ := identity.NewEventID()
++	// Fixed-shape audit metadata excludes SQL, values, rows and driver diagnostics.
++	_, err = tx.Exec(ctx, `INSERT INTO audit_events(id,workspace_id,event_type,actor_id,payload,trace_id,created_at)
++ VALUES($1,$2,'semantic.query.executed',$3,jsonb_build_object('runId',$4::text,'planId',$5::text,'planDigest',$6::text,'state',$7::text,'rowCount',$8::integer,'byteCount',$9::integer,'resultDigest',$10::text,'errorCode',$11::text),$12,$13)`, audit.UUID(), executionUUID(run.WorkspaceID), run.PrincipalID, run.ID, run.PlanID, run.PlanDigest, run.State, run.RowCount, run.ByteCount, run.ResultDigest, run.ErrorCode, run.TraceID, run.FinishedAt)
++	if err != nil {
++		return errExecutionStore
++	}
++	if tx.Commit(ctx) != nil {
++		return errExecutionStore
++	}
++	return nil
++}
++func (store *Store) GetExecution(ctx context.Context, w identity.WorkspaceID, id string) (d.Run, error) {
++	parsed, err := identity.ParseRunID(id)
++	if err != nil {
++		return d.Run{}, d.ErrNotFound
++	}
++	tx, err := store.pool.BeginTx(ctx, pgx.TxOptions{})
++	if err != nil {
++		return d.Run{}, errExecutionStore
++	}
++	defer func() { _ = tx.Rollback(ctx) }()
++	if err := expireExecutionClaims(ctx, tx, w.UUID()); err != nil {
++		return d.Run{}, err
++	}
++	wid, _ := uuidValue(w)
++	rid, _ := uuidValue(parsed)
++	row, err := dbgen.New(tx).GetExecutionRun(ctx, dbgen.GetExecutionRunParams{WorkspaceID: wid, ID: rid})
++	if errors.Is(err, pgx.ErrNoRows) {
++		return d.Run{}, d.ErrNotFound
++	}
++	if err != nil {
++		return d.Run{}, errExecutionStore
++	}
++	if tx.Commit(ctx) != nil {
++		return d.Run{}, errExecutionStore
++	}
++	return executionRunFromRow(row), nil
++}
++func executionRunFromRow(r dbgen.QueryExecutionRun) d.Run {
++	typed := func(prefix identity.Prefix, id pgtype.UUID) string {
++		if !id.Valid {
++			return ""
++		}
++		v, _ := identity.FromUUIDBytes(prefix, id.Bytes)
++		return v.String()
++	}
++	run := d.Run{ID: typed(identity.Run, r.ID), WorkspaceID: typed(identity.Workspace, r.WorkspaceID), QueryID: typed(identity.SemanticQuery, r.SemanticQueryID), PlanID: typed(identity.ResolvedSemanticPlan, r.ResolvedPlanID), PlanDigest: r.PlanDigest, PrincipalID: typed(identity.Principal, r.PrincipalID), ConsumerID: typed(identity.Consumer, r.ConsumerID), CredentialID: typed(identity.ClientCredential, r.CredentialID), Channel: r.Channel, SourceID: r.SourceConnectionID.String(), SourceRevisionID: r.SourceRevisionID.String(), AdapterVersion: r.AdapterVersion, IdempotencyKey: r.IdempotencyKey, State: r.State, ErrorCode: r.ErrorCode.String, RowCount: int(r.RowCount), ByteCount: int(r.ByteCount), ResultDigest: r.ResultDigest.String, TraceID: r.TraceID, StartedAt: r.StartedAt.Time, Deadline: r.DeadlineAt.Time}
++	if r.FinishedAt.Valid {
++		t := r.FinishedAt.Time
++		run.FinishedAt = &t
++	}
++	return run
++}
+--- a/internal/adapters/postgres/sqlc/execution.sql.go
++++ b/internal/adapters/postgres/sqlc/execution.sql.go
+@@ -0,0 +1,122 @@
++// Code generated by sqlc. DO NOT EDIT.
++// versions:
++//   sqlc v1.31.1
++// source: execution.sql
++
++package dbgen
++
++import (
++	"context"
++
++	"github.com/jackc/pgx/v5/pgtype"
++)
++
++const getExecutionRun = `-- name: GetExecutionRun :one
++SELECT id, workspace_id, runtime_run_id, semantic_query_id, resolved_plan_id, plan_digest, principal_id, consumer_id, credential_id, channel, source_connection_id, source_revision_id, adapter_version, idempotency_key, state, error_code, row_count, byte_count, result_digest, trace_id, started_at, deadline_at, finished_at FROM query_execution_runs WHERE workspace_id=$1 AND id=$2
++`
++
++type GetExecutionRunParams struct {
++	WorkspaceID pgtype.UUID `json:"workspace_id"`
++	ID          pgtype.UUID `json:"id"`
++}
++
++func (q *Queries) GetExecutionRun(ctx context.Context, arg GetExecutionRunParams) (QueryExecutionRun, error) {
++	row := q.db.QueryRow(ctx, getExecutionRun, arg.WorkspaceID, arg.ID)
++	var i QueryExecutionRun
++	err := row.Scan(
++		&i.ID,
++		&i.WorkspaceID,
++		&i.RuntimeRunID,
++		&i.SemanticQueryID,
++		&i.ResolvedPlanID,
++		&i.PlanDigest,
++		&i.PrincipalID,
++		&i.ConsumerID,
++		&i.CredentialID,
++		&i.Channel,
++		&i.SourceConnectionID,
++		&i.SourceRevisionID,
++		&i.AdapterVersion,
++		&i.IdempotencyKey,
++		&i.State,
++		&i.ErrorCode,
++		&i.RowCount,
++		&i.ByteCount,
++		&i.ResultDigest,
++		&i.TraceID,
++		&i.StartedAt,
++		&i.DeadlineAt,
++		&i.FinishedAt,
++	)
++	return i, err
++}
++
++const getExecutionRunByKey = `-- name: GetExecutionRunByKey :one
++SELECT id, workspace_id, runtime_run_id, semantic_query_id, resolved_plan_id, plan_digest, principal_id, consumer_id, credential_id, channel, source_connection_id, source_revision_id, adapter_version, idempotency_key, state, error_code, row_count, byte_count, result_digest, trace_id, started_at, deadline_at, finished_at FROM query_execution_runs WHERE workspace_id=$1 AND principal_id=$2 AND idempotency_key=$3
++`
++
++type GetExecutionRunByKeyParams struct {
++	WorkspaceID    pgtype.UUID `json:"workspace_id"`
++	PrincipalID    pgtype.UUID `json:"principal_id"`
++	IdempotencyKey string      `json:"idempotency_key"`
++}
++
++func (q *Queries) GetExecutionRunByKey(ctx context.Context, arg GetExecutionRunByKeyParams) (QueryExecutionRun, error) {
++	row := q.db.QueryRow(ctx, getExecutionRunByKey, arg.WorkspaceID, arg.PrincipalID, arg.IdempotencyKey)
++	var i QueryExecutionRun
++	err := row.Scan(
++		&i.ID,
++		&i.WorkspaceID,
++		&i.RuntimeRunID,
++		&i.SemanticQueryID,
++		&i.ResolvedPlanID,
++		&i.PlanDigest,
++		&i.PrincipalID,
++		&i.ConsumerID,
++		&i.CredentialID,
++		&i.Channel,
++		&i.SourceConnectionID,
++		&i.SourceRevisionID,
++		&i.AdapterVersion,
++		&i.IdempotencyKey,
++		&i.State,
++		&i.ErrorCode,
++		&i.RowCount,
++		&i.ByteCount,
++		&i.ResultDigest,
++		&i.TraceID,
++		&i.StartedAt,
++		&i.DeadlineAt,
++		&i.FinishedAt,
++	)
++	return i, err
++}
++
++const listReleaseExecutionRelations = `-- name: ListReleaseExecutionRelations :many
++SELECT payload FROM release_execution_relations WHERE workspace_id=$1 AND release_id=$2 ORDER BY dataset_id
++`
++
++type ListReleaseExecutionRelationsParams struct {
++	WorkspaceID pgtype.UUID `json:"workspace_id"`
++	ReleaseID   pgtype.UUID `json:"release_id"`
++}
++
++func (q *Queries) ListReleaseExecutionRelations(ctx context.Context, arg ListReleaseExecutionRelationsParams) ([][]byte, error) {
++	rows, err := q.db.Query(ctx, listReleaseExecutionRelations, arg.WorkspaceID, arg.ReleaseID)
++	if err != nil {
++		return nil, err
++	}
++	defer rows.Close()
++	items := [][]byte{}
++	for rows.Next() {
++		var payload []byte
++		if err := rows.Scan(&payload); err != nil {
++			return nil, err
++		}
++		items = append(items, payload)
++	}
++	if err := rows.Err(); err != nil {
++		return nil, err
++	}
++	return items, nil
++}
+--- a/internal/adapters/postgres/sqlc/models.go
++++ b/internal/adapters/postgres/sqlc/models.go
+@@ -656,6 +656,32 @@
+ 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+ }
+ 
++type QueryExecutionRun struct {
++	ID                 pgtype.UUID        `json:"id"`
++	WorkspaceID        pgtype.UUID        `json:"workspace_id"`
++	RuntimeRunID       pgtype.UUID        `json:"runtime_run_id"`
++	SemanticQueryID    pgtype.UUID        `json:"semantic_query_id"`
++	ResolvedPlanID     pgtype.UUID        `json:"resolved_plan_id"`
++	PlanDigest         string             `json:"plan_digest"`
++	PrincipalID        pgtype.UUID        `json:"principal_id"`
++	ConsumerID         pgtype.UUID        `json:"consumer_id"`
++	CredentialID       pgtype.UUID        `json:"credential_id"`
++	Channel            string             `json:"channel"`
++	SourceConnectionID pgtype.UUID        `json:"source_connection_id"`
++	SourceRevisionID   pgtype.UUID        `json:"source_revision_id"`
++	AdapterVersion     string             `json:"adapter_version"`
++	IdempotencyKey     string             `json:"idempotency_key"`
++	State              string             `json:"state"`
++	ErrorCode          pgtype.Text        `json:"error_code"`
++	RowCount           int32              `json:"row_count"`
++	ByteCount          int32              `json:"byte_count"`
++	ResultDigest       pgtype.Text        `json:"result_digest"`
++	TraceID            string             `json:"trace_id"`
++	StartedAt          pgtype.Timestamptz `json:"started_at"`
++	DeadlineAt         pgtype.Timestamptz `json:"deadline_at"`
++	FinishedAt         pgtype.Timestamptz `json:"finished_at"`
++}
++
+ type QueryValidationResult struct {
+ 	ValidationRunID pgtype.UUID `json:"validation_run_id"`
+ 	Position        int32       `json:"position"`
+@@ -712,6 +738,13 @@
+ 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+ }
+ 
++type ReleaseExecutionRelation struct {
++	WorkspaceID pgtype.UUID `json:"workspace_id"`
++	ReleaseID   pgtype.UUID `json:"release_id"`
++	DatasetID   pgtype.UUID `json:"dataset_id"`
++	Payload     []byte      `json:"payload"`
++}
++
+ type ReleaseObject struct {
+ 	WorkspaceID pgtype.UUID        `json:"workspace_id"`
+ 	ReleaseID   pgtype.UUID        `json:"release_id"`
+--- a/internal/application/authorization/credential.go
++++ b/internal/application/authorization/credential.go
+@@ -46,11 +46,16 @@
+ 	}
+ 	// Resolve is a request gate. Its selected release and every returned asset
+ 	// are separately checked by the canonical distribution service.
+-	if request.Action == domain.ActionSemanticResolve && request.Resource.Type == domain.ScopeWorkspace {
++	if (request.Action == domain.ActionSemanticResolve || request.Action == domain.ActionSemanticExecute) && request.Resource.Type == domain.ScopeWorkspace {
+ 		return true
+ 	}
++	// The execution service checks every selected asset and the exact release
++	// separately; source access still requires a current principal grant.
++	if request.Action == domain.ActionSemanticExecute && request.Resource.Type == domain.ScopeSource {
++		return true
++	}
+ 	if limit.ScopeType == domain.ScopeRelease {
+-		return request.Action == domain.ActionAssetRead
++		return request.Action == domain.ActionAssetRead || request.Action == domain.ActionSemanticExecute
+ 	}
+ 	parsed, err := identity.ParseAny(limit.ScopeID)
+ 	return err == nil && request.Resource.Type == limit.ScopeType && request.Resource.ID == parsed.UUID()
+--- a/internal/application/distribution/execution.go
++++ b/internal/application/distribution/execution.go
+@@ -0,0 +1,70 @@
++package distribution
++
++import (
++	"context"
++	"encoding/json"
++
++	"github.com/iiwish/semlia/internal/domain/authorization"
++	domain "github.com/iiwish/semlia/internal/domain/distribution"
++	"github.com/iiwish/semlia/pkg/identity"
++)
++
++// ExecutionPlan repeats current access and freshness checks; persisted plans
++// and idempotency keys never act as an authorization cache.
++func (s *Service) ExecutionPlan(ctx context.Context, w identity.WorkspaceID, id identity.ResolvedSemanticPlanID, principal, trace string) (ResolutionResult, error) {
++	if _, err := s.authorize(ctx, w, authorization.ActionSemanticExecute, authorization.Resource{Type: authorization.ScopeWorkspace, ID: w.UUID()}, principal, trace); err != nil {
++		return ResolutionResult{}, err
++	}
++	plan, err := s.repository.GetResolvedSemanticPlan(ctx, w, id)
++	if err != nil {
++		return ResolutionResult{}, err
++	}
++	result, err := s.repository.GetSemanticQuery(ctx, w, plan.QueryID)
++	if err != nil {
++		return ResolutionResult{}, err
++	}
++	if result.Plan == nil || result.Plan.ID != id || result.Plan.PlanDigest != plan.PlanDigest || result.Validation.Status != "passed" || result.Validation.InputDigest != plan.PlanDigest {
++		return ResolutionResult{}, domain.ErrInvariant
++	}
++	if err := s.checkStoredAccess(ctx, w, result, principal, trace); err != nil {
++		return ResolutionResult{}, err
++	}
++	var query domain.SemanticQueryInput
++	if json.Unmarshal(result.Query.CanonicalRequest, &query) != nil {
++		return ResolutionResult{}, domain.ErrInvariant
++	}
++	decision, err := s.authorize(ctx, w, authorization.ActionSemanticExecute, authorization.Resource{Type: authorization.ScopeWorkspace, ID: w.UUID()}, principal, trace)
++	if err != nil {
++		return ResolutionResult{}, err
++	}
++	snapshot, _, _, refusal, err := s.selectSnapshot(ctx, ResolveRequest{WorkspaceID: w, PrincipalRef: principal, TraceID: trace, Input: query}, decision, s.clock.Now())
++	if err != nil {
++		return ResolutionResult{}, err
++	}
++	if refusal != nil || snapshot.ReleaseID != plan.ReleaseID {
++		return ResolutionResult{}, domain.ErrConflict
++	}
++	for _, asset := range plan.Assets {
++		if _, err := s.authorize(ctx, w, authorization.ActionSemanticExecute, authorization.Resource{Type: authorization.ScopeAsset, ID: asset.AssetID.UUID()}, principal, trace); err != nil {
++			return ResolutionResult{}, err
++		}
++	}
++	// Rebuild from the exact frozen release to reject a tampered canonical plan,
++	// even if an attacker also replaced its stored digest.
++	selected := []domain.ReleasedAsset{}
++	for _, asset := range plan.Assets {
++		for _, released := range snapshot.Assets {
++			if released.AssetID == asset.AssetID && released.RevisionID == asset.RevisionID {
++				selected = append(selected, released)
++			}
++		}
++	}
++	rebuilt, refusal, err := domain.BuildPlan(query, snapshot, plan.QueryID, plan.ID, selected, plan.CreatedAt)
++	if err != nil {
++		return ResolutionResult{}, err
++	}
++	if refusal != nil || plan.Execution == nil || domain.PlanDigest(plan) != plan.PlanDigest || rebuilt.PlanDigest != plan.PlanDigest {
++		return ResolutionResult{}, domain.ErrInvariant
++	}
++	return result, nil
++}
+--- a/internal/application/execution/service.go
++++ b/internal/application/execution/service.go
+@@ -0,0 +1,211 @@
++package execution
++
++import (
++	"context"
++	"errors"
++	"strings"
++	"time"
++
++	authapp "github.com/iiwish/semlia/internal/application/authorization"
++	distapp "github.com/iiwish/semlia/internal/application/distribution"
++	auth "github.com/iiwish/semlia/internal/domain/authorization"
++	dist "github.com/iiwish/semlia/internal/domain/distribution"
++	d "github.com/iiwish/semlia/internal/domain/execution"
++	"github.com/iiwish/semlia/pkg/identity"
++)
++
++type Request struct {
++	WorkspaceID    identity.WorkspaceID            `json:"-"`
++	PlanID         identity.ResolvedSemanticPlanID `json:"planId"`
++	PlanDigest     string                          `json:"planDigest"`
++	IdempotencyKey string                          `json:"idempotencyKey"`
++	Channel        string                          `json:"channel,omitempty"`
++	PrincipalRef   string                          `json:"-"`
++	TraceID        string                          `json:"-"`
++}
++type Plans interface {
++	ExecutionPlan(context.Context, identity.WorkspaceID, identity.ResolvedSemanticPlanID, string, string) (distapp.ResolutionResult, error)
++}
++type Repository interface {
++	CheckExecutionSource(context.Context, identity.WorkspaceID, *dist.ExecutionProvenance) error
++	CheckExecutionCredential(context.Context, authapp.CredentialLimit) error
++	ClaimExecution(context.Context, d.Run, int, int64) (d.Run, bool, error)
++	FinishExecution(context.Context, d.Run) error
++	GetExecution(context.Context, identity.WorkspaceID, string) (d.Run, error)
++}
++type Adapter interface {
++	Execute(context.Context, identity.WorkspaceID, d.Compiled, d.Limits) d.Output
++}
++type Service struct {
++	repo       Repository
++	plans      Plans
++	authorizer authapp.Evaluator
++	adapter    Adapter
++	limits     d.Limits
++	now        func() time.Time
++}
++
++func NewService(repo Repository, plans Plans, authorizer authapp.Evaluator, adapter Adapter, limits d.Limits) *Service {
++	if repo == nil || plans == nil || authorizer == nil || adapter == nil || !limits.Valid() {
++		panic("execution requires repository, plans, authorizer, adapter and bounded limits")
++	}
++	return &Service{repo: repo, plans: plans, authorizer: authorizer, adapter: adapter, limits: limits, now: time.Now}
++}
++func (s *Service) validate(ctx context.Context, r Request) (distapp.ResolutionResult, auth.Decision, error) {
++	if c, ok := authapp.CredentialFromContext(ctx); ok {
++		if !c.Allows(authapp.EvaluationRequest{WorkspaceID: r.WorkspaceID, PrincipalRef: r.PrincipalRef, Action: auth.ActionSemanticExecute, Resource: auth.Resource{Type: auth.ScopeWorkspace, ID: r.WorkspaceID.UUID()}}) {
++			return distapp.ResolutionResult{}, auth.Decision{}, denied()
++		}
++		if err := s.repo.CheckExecutionCredential(ctx, c); err != nil {
++			return distapp.ResolutionResult{}, auth.Decision{}, denied()
++		}
++	}
++	decision, err := s.authorizer.Evaluate(ctx, authapp.EvaluationRequest{WorkspaceID: r.WorkspaceID, PrincipalRef: r.PrincipalRef, TraceID: r.TraceID, Action: auth.ActionSemanticExecute, Resource: auth.Resource{Type: auth.ScopeWorkspace, ID: r.WorkspaceID.UUID()}})
++	if err != nil {
++		return distapp.ResolutionResult{}, decision, err
++	}
++	if !decision.Allowed {
++		return distapp.ResolutionResult{}, decision, denied()
++	}
++	result, err := s.plans.ExecutionPlan(ctx, r.WorkspaceID, r.PlanID, r.PrincipalRef, r.TraceID)
++	if err != nil {
++		return result, decision, err
++	}
++	if result.Plan == nil || result.Plan.Execution == nil || result.Plan.PlanDigest != r.PlanDigest {
++		return result, decision, d.ErrInvalidPlan
++	}
++	if c, ok := authapp.CredentialFromContext(ctx); ok && c.ScopeType == auth.ScopeRelease && c.ScopeID != result.Plan.ReleaseID.String() {
++		return result, decision, denied()
++	}
++	seen := map[string]bool{}
++	for _, rel := range result.Plan.Execution.Relations {
++		if seen[rel.SourceID] {
++			continue
++		}
++		seen[rel.SourceID] = true
++		source, err := identity.FromUUID(identity.SourceConnection, rel.SourceID)
++		if err != nil {
++			return result, decision, d.ErrInvalidPlan
++		}
++		a, err := s.authorizer.Evaluate(ctx, authapp.EvaluationRequest{WorkspaceID: r.WorkspaceID, PrincipalRef: r.PrincipalRef, TraceID: r.TraceID, Action: auth.ActionSemanticExecute, Resource: auth.Resource{Type: auth.ScopeSource, ID: source.UUID()}})
++		if err != nil {
++			return result, decision, err
++		}
++		if !a.Allowed {
++			return result, decision, denied()
++		}
++	}
++	if err := s.repo.CheckExecutionSource(ctx, r.WorkspaceID, result.Plan.Execution); err != nil {
++		return result, decision, err
++	}
++	return result, decision, nil
++}
++func (s *Service) Execute(ctx context.Context, r Request) (d.Result, error) {
++	if r.WorkspaceID.IsZero() || r.PlanID.IsZero() || len(r.PlanDigest) != 71 || len(r.IdempotencyKey) < 1 || len(r.IdempotencyKey) > 128 || strings.TrimSpace(r.IdempotencyKey) != r.IdempotencyKey {
++		return d.Result{}, dist.ErrInvalidArgument
++	}
++	if r.Channel == "" {
++		r.Channel = "api"
++	}
++	switch r.Channel {
++	case "api", "mcp", "cli", "sdk", "web":
++	default:
++		return d.Result{}, dist.ErrInvalidArgument
++	}
++	resolved, decision, err := s.validate(ctx, r)
++	if err != nil {
++		return d.Result{}, err
++	}
++	query, err := d.Compile(*resolved.Plan)
++	if err != nil {
++		return d.Result{}, err
++	}
++	id, err := identity.NewRunID()
++	if err != nil {
++		return d.Result{}, err
++	}
++	now := s.now().UTC()
++	run := d.Run{ID: id.String(), WorkspaceID: r.WorkspaceID.String(), QueryID: resolved.Query.ID.String(), PlanID: r.PlanID.String(), PlanDigest: r.PlanDigest, PrincipalID: decision.PrincipalID.String(), Channel: r.Channel, SourceID: query.SourceID, SourceRevisionID: query.SourceRevisionID, AdapterVersion: d.CompilerVersion, IdempotencyKey: r.IdempotencyKey, State: "running", StartedAt: now, Deadline: now.Add(s.limits.Timeout + 5*time.Second), TraceID: r.TraceID}
++	if resolved.Query.ConsumerID != nil {
++		run.ConsumerID = resolved.Query.ConsumerID.String()
++	}
++	if c, ok := authapp.CredentialFromContext(ctx); ok {
++		run.CredentialID = c.CredentialID.String()
++	}
++	run, owner, err := s.repo.ClaimExecution(ctx, run, s.limits.MaxConcurrent, decision.AuthorizationVersion)
++	if err != nil {
++		return d.Result{}, err
++	}
++	if !owner {
++		return d.Result{Run: run, Replay: true, Availability: "metadata_only"}, nil
++	}
++	// A claim is durable before any source connection. Failed/unknown claims are
++	// never reclaimed; the caller must intentionally use a new key for a new run.
++	output := d.Output{}
++	if _, _, err = s.validate(ctx, r); err != nil {
++		output.ErrorCode = "EXECUTION_AUTHORIZATION_CHANGED"
++	} else {
++		limits := s.limits
++		if resolved.Plan.Limit > 0 && resolved.Plan.Limit < limits.MaxRows {
++			limits.MaxRows = resolved.Plan.Limit
++		}
++		output = s.adapter.Execute(ctx, r.WorkspaceID, query, limits)
++	}
++	finished := s.now().UTC()
++	run.FinishedAt = &finished
++	run.State = "succeeded"
++	run.RowCount = output.RowCount
++	run.ByteCount = output.ByteCount
++	run.ResultDigest = output.Digest
++	if output.ErrorCode != "" {
++		run.State = "failed"
++		run.ErrorCode = output.ErrorCode
++		run.ResultDigest = ""
++		if output.ErrorCode == "EXECUTION_CANCELLED" {
++			run.State = "cancelled"
++		}
++	}
++	persistCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
++	defer cancel()
++	if err := s.repo.FinishExecution(persistCtx, run); err != nil {
++		return d.Result{}, errors.New("EXECUTION_OUTCOME_UNKNOWN")
++	}
++	result := d.Result{Run: run, Availability: "unavailable"}
++	if run.State == "succeeded" {
++		result.Availability = "ephemeral"
++		result.Columns = output.Columns
++		result.Rows = output.Rows
++	}
++	return result, nil
++}
++func (s *Service) Get(ctx context.Context, w identity.WorkspaceID, id, principal, trace string) (d.Result, error) {
++	// Do not expose even metadata before the workspace capability check.
++	decision, err := s.authorizer.Evaluate(ctx, authapp.EvaluationRequest{WorkspaceID: w, PrincipalRef: principal, TraceID: trace, Action: auth.ActionSemanticExecute, Resource: auth.Resource{Type: auth.ScopeWorkspace, ID: w.UUID()}})
++	if err != nil {
++		return d.Result{}, err
++	}
++	if !decision.Allowed {
++		return d.Result{}, denied()
++	}
++	run, err := s.repo.GetExecution(ctx, w, id)
++	if err != nil {
++		return d.Result{}, err
++	}
++	plan, err := identity.ParseResolvedSemanticPlanID(run.PlanID)
++	if err != nil {
++		return d.Result{}, d.ErrInvalidPlan
++	}
++	if _, _, err := s.validate(ctx, Request{WorkspaceID: w, PlanID: plan, PlanDigest: run.PlanDigest, PrincipalRef: principal, TraceID: trace}); err != nil {
++		return d.Result{}, err
++	}
++	if run.PrincipalID != decision.PrincipalID.String() {
++		return d.Result{}, denied()
++	}
++	if c, ok := authapp.CredentialFromContext(ctx); ok && run.CredentialID != c.CredentialID.String() {
++		return d.Result{}, denied()
++	}
++	return d.Result{Run: run, Availability: "metadata_only", Replay: true}, nil
++}
++func denied() error {
++	return &auth.DenialError{Decision: auth.Decision{ReasonCode: auth.ReasonNoMatchingGrant}}
++}
+--- a/internal/application/identity/machine.go
++++ b/internal/application/identity/machine.go
+@@ -158,15 +158,17 @@
+ }
+ 
+ func validCredentialActions(actions []auth.Action) bool {
+-	if len(actions) < 1 || len(actions) > 2 {
++	if len(actions) < 1 || len(actions) > 3 {
+ 		return false
+ 	}
+ 	for i, action := range actions {
+-		if action != auth.ActionSemanticResolve && action != auth.ActionAssetRead {
++		if action != auth.ActionSemanticResolve && action != auth.ActionAssetRead && action != auth.ActionSemanticExecute {
+ 			return false
+ 		}
+-		if i > 0 && action == actions[0] {
+-			return false
++		for _, prior := range actions[:i] {
++			if action == prior {
++				return false
++			}
+ 		}
+ 	}
+ 	return true
+--- a/internal/application/identity/machine_test.go
++++ b/internal/application/identity/machine_test.go
+@@ -37,7 +37,8 @@
+ 		{"resolve", []auth.Action{auth.ActionSemanticResolve}, true}, {"both", []auth.Action{auth.ActionSemanticResolve, auth.ActionAssetRead}, true},
+ 		{"duplicate", []auth.Action{auth.ActionAssetRead, auth.ActionAssetRead}, false},
+ 		{"over-contract-limit", []auth.Action{auth.ActionAssetRead, auth.ActionSemanticResolve, auth.ActionAssetRead}, false},
+-		{"execute", []auth.Action{auth.ActionSemanticExecute}, false},
++		{"execute-explicit-opt-in", []auth.Action{auth.ActionSemanticExecute}, true},
++		{"all-three", []auth.Action{auth.ActionSemanticExecute, auth.ActionSemanticResolve, auth.ActionAssetRead}, true},
+ 	} {
+ 		t.Run(test.name, func(t *testing.T) {
+ 			if validCredentialActions(test.actions) != test.want {
+--- a/internal/domain/distribution/execution.go
++++ b/internal/domain/distribution/execution.go
+@@ -0,0 +1,49 @@
++package distribution
++
++// ExecutionProvenance contains only immutable release facts, never credentials.
++// Expressions are a closed aggregation enum over an explicitly bound field.
++type ExecutionProvenance struct {
++	CompilerVersion string               `json:"compilerVersion"`
++	Bindings        []ExecutionBinding   `json:"bindings"`
++	Relations       []ExecutionRelation  `json:"relations"`
++	Joins           []ExecutionJoin      `json:"joins,omitempty"`
++	Grains          []ReleasedModelGrain `json:"grains,omitempty"`
++}
++type ExecutionBinding struct {
++	AssetID     string `json:"assetId"`
++	DatasetID   string `json:"datasetId"`
++	FieldID     string `json:"fieldId"`
++	Aggregation string `json:"aggregation,omitempty"`
++	Expression  string `json:"expression,omitempty"`
++}
++type ExecutionRelation struct {
++	DatasetID         string           `json:"datasetId"`
++	DatasetRevisionID string           `json:"datasetRevisionId"`
++	SourceID          string           `json:"sourceId"`
++	SourceRevisionID  string           `json:"sourceRevisionId"`
++	SourceLocator     string           `json:"sourceLocator"`
++	AdapterKind       string           `json:"adapterKind"`
++	Schema            string           `json:"schema"`
++	Relation          string           `json:"relation"`
++	Fields            []ExecutionField `json:"fields"`
++}
++type ExecutionField struct {
++	FieldID    string `json:"fieldId"`
++	RevisionID string `json:"revisionId"`
++	Name       string `json:"name"`
++	DataType   string `json:"dataType"`
++}
++type ExecutionJoin struct {
++	Expression     string               `json:"expression"`
++	ID             string               `json:"id"`
++	Version        int                  `json:"version"`
++	LeftDatasetID  string               `json:"leftDatasetId"`
++	RightDatasetID string               `json:"rightDatasetId"`
++	JoinType       string               `json:"joinType"`
++	Cardinality    string               `json:"cardinality"`
++	FieldPairs     []ExecutionFieldPair `json:"fieldPairs"`
++}
++type ExecutionFieldPair struct {
++	LeftFieldID  string `json:"leftFieldId"`
++	RightFieldID string `json:"rightFieldId"`
++}
+--- a/internal/domain/distribution/model.go
++++ b/internal/domain/distribution/model.go
+@@ -1,6 +1,7 @@
+ package distribution
+ 
+ import (
++	"bytes"
+ 	"crypto/sha256"
+ 	"encoding/hex"
+ 	"encoding/json"
+@@ -322,6 +323,7 @@
+ }
+ 
+ type ReleasedPhysicalBinding struct {
++	Transform string
+ 	ID        identity.PhysicalBindingID
+ 	Version   int
+ 	AssetID   identity.AssetID
+@@ -354,6 +356,7 @@
+ }
+ 
+ type ReleaseSnapshot struct {
++	Execution      *ExecutionProvenance
+ 	ReleaseID      identity.ReleaseID
+ 	WorkspaceID    identity.WorkspaceID
+ 	Sequence       int64
+@@ -399,6 +402,7 @@
+ }
+ 
+ type ResolvedSemanticPlan struct {
++	Execution       *ExecutionProvenance            `json:"execution,omitempty"`
+ 	ID              identity.ResolvedSemanticPlanID `json:"id"`
+ 	QueryID         identity.SemanticQueryID        `json:"queryId"`
+ 	ReleaseID       identity.ReleaseID              `json:"releaseId"`
+@@ -448,7 +452,9 @@
+ 
+ func canonicalJSON(input []byte) ([]byte, error) {
+ 	var decoded any
+-	if err := json.Unmarshal(input, &decoded); err != nil {
++	decoder := json.NewDecoder(bytes.NewReader(input))
++	decoder.UseNumber()
++	if err := decoder.Decode(&decoded); err != nil {
+ 		return nil, err
+ 	}
+ 	return json.Marshal(decoded)
+--- a/internal/domain/distribution/resolver.go
++++ b/internal/domain/distribution/resolver.go
+@@ -1,6 +1,7 @@
+ package distribution
+ 
+ import (
++	"encoding/json"
+ 	"math"
+ 	"sort"
+ 	"strings"
+@@ -124,11 +125,100 @@
+ 		}
+ 	}
+ 	objects = sortedResolvedObjects(objects)
++	var execution *ExecutionProvenance
++	if snapshot.Execution != nil && query.Intent != IntentDescribe {
++		execution = &ExecutionProvenance{CompilerVersion: snapshot.Execution.CompilerVersion}
++		for _, r := range snapshot.Execution.Relations {
++			if !datasets[r.DatasetID].IsZero() {
++				execution.Relations = append(execution.Relations, r)
++			} else {
++				for _, id := range datasets {
++					if id.UUID() == r.DatasetID {
++						execution.Relations = append(execution.Relations, r)
++						break
++					}
++				}
++			}
++		}
++		for _, a := range resolvedAssets {
++			b, ok := bindingFor(snapshot.Bindings, a.AssetID)
++			if !ok || b.FieldID == nil {
++				execution = nil
++				break
++			}
++			binding := ExecutionBinding{AssetID: a.AssetID.String(), DatasetID: b.DatasetID.UUID(), FieldID: b.FieldID.UUID(), Expression: b.Transform}
++			for _, asset := range selected {
++				if asset.AssetID == a.AssetID {
++					var content struct {
++						Execution struct {
++							Aggregation string `json:"aggregation"`
++							Expression  string `json:"expression"`
++						} `json:"execution"`
++					}
++					_ = json.Unmarshal(asset.Content, &content)
++					binding.Aggregation = content.Execution.Aggregation
++					if content.Execution.Expression != "" {
++						binding.Expression = content.Execution.Expression
++					}
++					break
++				}
++			}
++			execution.Bindings = append(execution.Bindings, binding)
++		}
++		if execution != nil {
++			for _, j := range snapshot.Execution.Joins {
++				for _, o := range objects {
++					if o.ObjectType == "join_contract" && o.ObjectID == j.ID && o.Version == j.Version {
++						execution.Joins = append(execution.Joins, j)
++					}
++				}
++			}
++			for _, g := range snapshot.Grains {
++				if assetSeen[g.AssetID.String()] {
++					execution.Grains = append(execution.Grains, g)
++				}
++			}
++			// Freeze the exact selector result; execution never repeats fuzzy matching.
++			canonical := func(s Selector) Selector {
++				m, r := MatchSelector(s, "any", selected)
++				if r != nil {
++					return s
++				}
++				id := m.Asset.AssetID
++				return Selector{AssetID: &id}
++			}
++			query.Measures = append([]Selector(nil), query.Measures...)
++			for i := range query.Measures {
++				query.Measures[i] = canonical(query.Measures[i])
++			}
++			query.Dimensions = append([]Selector(nil), query.Dimensions...)
++			for i := range query.Dimensions {
++				query.Dimensions[i] = canonical(query.Dimensions[i])
++			}
++			query.Filters = append([]Filter(nil), query.Filters...)
++			for i := range query.Filters {
++				query.Filters[i].Selector = canonical(query.Filters[i].Selector)
++			}
++			query.Order = append([]Order(nil), query.Order...)
++			for i := range query.Order {
++				query.Order[i].Selector = canonical(query.Order[i].Selector)
++			}
++			if query.TimeRange != nil {
++				tr := *query.TimeRange
++				tr.Selector = canonical(tr.Selector)
++				query.TimeRange = &tr
++			}
++		}
++	}
+ 	plan := ResolvedSemanticPlan{ID: planID, QueryID: queryID, ReleaseID: snapshot.ReleaseID,
+ 		ResolverVersion: ResolverVersion, Intent: query.Intent, Assets: resolvedAssets, Objects: objects,
+ 		Measures: query.Measures, Filters: query.Filters, Grouping: query.Dimensions, TimeRange: query.TimeRange,
+ 		Order: query.Order, Limit: query.Limit,
+ 		ExecutionStatus: "not_configured", CreatedAt: now.UTC()}
++	plan.Execution = execution
++	if execution != nil {
++		plan.ExecutionStatus = "requires_execution_validation"
++	}
+ 	digestShape := struct {
+ 		ReleaseID       string           `json:"releaseId"`
+ 		ResolverVersion string           `json:"resolverVersion"`
+@@ -149,9 +239,23 @@
+ 		return ResolvedSemanticPlan{}, nil, invalidPlan(err.Error())
+ 	}
+ 	plan.PlanDigest = digest
++	if execution != nil {
++		plan.PlanDigest = PlanDigest(plan)
++	}
+ 	return plan, nil, nil
+ }
+ 
++// PlanDigest excludes generated identities and time while including all
++// release-pinned physical facts and typed execution semantics.
++func PlanDigest(plan ResolvedSemanticPlan) string {
++	plan.ID = identity.ResolvedSemanticPlanID{}
++	plan.QueryID = identity.SemanticQueryID{}
++	plan.CreatedAt = time.Time{}
++	plan.PlanDigest = ""
++	_, digest, _ := stableDigest(plan)
++	return digest
++}
++
+ func allowedType(assetType semantic.AssetType, expected string) bool {
+ 	if expected == "measure" {
+ 		return assetType == semantic.Measure || assetType == semantic.Metric
+--- a/internal/domain/execution/compiler.go
++++ b/internal/domain/execution/compiler.go
+@@ -0,0 +1,286 @@
++package execution
++
++import (
++	"bytes"
++	"encoding/json"
++	"fmt"
++	"strings"
++
++	d "github.com/iiwish/semlia/internal/domain/distribution"
++	"github.com/jackc/pgx/v5"
++)
++
++type boundField struct{ sql, typ, dataset, aggregate string }
++
++// Compile accepts server-owned plans only. No expression string is SQL.
++func Compile(p d.ResolvedSemanticPlan) (Compiled, error) {
++	if p.Execution == nil || p.Execution.CompilerVersion != CompilerVersion || len(p.Measures) == 0 || p.Intent == d.IntentDescribe || p.Limit < 0 || p.Limit > 10000 {
++		return Compiled{}, ErrInvalidPlan
++	}
++	ir := p.Execution
++	if len(ir.Relations) == 0 || len(ir.Relations) > 16 || len(ir.Bindings) > 96 {
++		return Compiled{}, ErrInvalidPlan
++	}
++	q := Compiled{}
++	relations := map[string]d.ExecutionRelation{}
++	aliases := map[string]string{}
++	for i, r := range ir.Relations {
++		if r.DatasetID == "" || r.SourceID == "" || r.SourceRevisionID == "" || r.AdapterKind != "postgresql_catalog" || !identifier(r.Schema) || !identifier(r.Relation) || relations[r.DatasetID].DatasetID != "" {
++			return q, ErrInvalidPlan
++		}
++		if i == 0 {
++			q.SourceID = r.SourceID
++			q.SourceRevisionID = r.SourceRevisionID
++			q.SourceLocator = r.SourceLocator
++		} else if q.SourceID != r.SourceID || q.SourceRevisionID != r.SourceRevisionID || q.SourceLocator != r.SourceLocator {
++			return q, ErrInvalidPlan
++		}
++		relations[r.DatasetID] = r
++		aliases[r.DatasetID] = fmt.Sprintf("t%d", i)
++		q.Relations = append(q.Relations, [2]string{r.Schema, r.Relation})
++	}
++	fieldSQL := func(dataset, field string) (boundField, bool) {
++		r, ok := relations[dataset]
++		if !ok {
++			return boundField{}, false
++		}
++		for _, f := range r.Fields {
++			if f.FieldID == field && identifier(f.Name) {
++				typ := fieldType(f.DataType)
++				return boundField{sql: pgx.Identifier{aliases[dataset], f.Name}.Sanitize(), typ: typ, dataset: dataset}, typ != ""
++			}
++		}
++		return boundField{}, false
++	}
++	fields := map[string]boundField{}
++	for _, b := range ir.Bindings {
++		if b.Expression != "" || fields[b.AssetID].sql != "" {
++			return q, ErrInvalidPlan
++		}
++		f, ok := fieldSQL(b.DatasetID, b.FieldID)
++		if !ok {
++			return q, ErrInvalidPlan
++		}
++		f.aggregate = b.Aggregation
++		switch b.Aggregation {
++		case "":
++		case "sum", "avg":
++			if f.typ != "numeric" && f.typ != "bigint" && f.typ != "double precision" {
++				return q, ErrInvalidPlan
++			}
++			f.sql = strings.ToUpper(b.Aggregation) + "(" + f.sql + ")"
++			f.typ = "numeric"
++		case "count", "count_distinct":
++			if b.Aggregation == "count_distinct" {
++				f.sql = "COUNT(DISTINCT " + f.sql + ")"
++			} else {
++				f.sql = "COUNT(" + f.sql + ")"
++			}
++			f.typ = "bigint"
++		case "min", "max":
++			if f.typ == "boolean" {
++				return q, ErrInvalidPlan
++			}
++			f.sql = strings.ToUpper(b.Aggregation) + "(" + f.sql + ")"
++		default:
++			return q, ErrInvalidPlan
++		}
++		fields[b.AssetID] = f
++	}
++	lookup := func(s d.Selector) (boundField, string, bool) {
++		for _, a := range p.Assets {
++			if (s.AssetID != nil && *s.AssetID == a.AssetID) || (s.Address != "" && strings.EqualFold(s.Address, a.Address)) {
++				f, ok := fields[a.AssetID.String()]
++				return f, a.Address, ok
++			}
++		}
++		return boundField{}, "", false
++	}
++	selectSQL, groupSQL := []string{}, []string{}
++	selected := map[string]bool{}
++	root := ""
++	for _, s := range p.Measures {
++		f, name, ok := lookup(s)
++		if !ok || f.aggregate == "" {
++			return q, ErrInvalidPlan
++		}
++		if root == "" {
++			root = f.dataset
++		} else if root != f.dataset {
++			return q, ErrInvalidPlan
++		}
++		selectSQL = append(selectSQL, f.sql+" AS "+pgx.Identifier{name}.Sanitize())
++		q.Columns = append(q.Columns, name)
++		selected[f.sql] = true
++	}
++	for _, s := range p.Grouping {
++		f, name, ok := lookup(s)
++		if !ok || f.aggregate != "" {
++			return q, ErrInvalidPlan
++		}
++		selectSQL = append(selectSQL, f.sql+" AS "+pgx.Identifier{name}.Sanitize())
++		groupSQL = append(groupSQL, f.sql)
++		q.Columns = append(q.Columns, name)
++		selected[f.sql] = true
++	}
++	relationSQL := func(id string) string {
++		r := relations[id]
++		return pgx.Identifier{r.Schema, r.Relation}.Sanitize() + " AS " + pgx.Identifier{aliases[id]}.Sanitize()
++	}
++	from := relationSQL(root)
++	connected := map[string]bool{root: true}
++	// v1 only executes one-to-one inner/left joins; other cardinalities cannot
++	// prove aggregate grain safety and remain explicitly unsupported.
++	for len(connected) < len(relations) {
++		advanced := false
++		for _, j := range ir.Joins {
++			if !connected[j.LeftDatasetID] || connected[j.RightDatasetID] {
++				continue
++			}
++			if j.Expression != "field_pairs_equal/v1" || j.Cardinality != "one_to_one" || (j.JoinType != "inner" && j.JoinType != "left") || len(j.FieldPairs) == 0 || len(j.FieldPairs) > 8 || relations[j.RightDatasetID].DatasetID == "" {
++				return q, ErrInvalidPlan
++			}
++			on := []string{}
++			for _, pair := range j.FieldPairs {
++				l, lok := fieldSQL(j.LeftDatasetID, pair.LeftFieldID)
++				r, rok := fieldSQL(j.RightDatasetID, pair.RightFieldID)
++				if !lok || !rok || l.typ != r.typ {
++					return q, ErrInvalidPlan
++				}
++				on = append(on, l.sql+" = "+r.sql)
++			}
++			from += " " + strings.ToUpper(j.JoinType) + " JOIN " + relationSQL(j.RightDatasetID) + " ON " + strings.Join(on, " AND ")
++			connected[j.RightDatasetID] = true
++			advanced = true
++		}
++		if !advanced {
++			return q, ErrInvalidPlan
++		}
++	}
++	bind := func(v any, typ string) string {
++		q.Args = append(q.Args, v)
++		return fmt.Sprintf("$%d::%s", len(q.Args), typ)
++	}
++	where, having := []string{}, []string{}
++	for _, filter := range p.Filters {
++		f, _, ok := lookup(filter.Selector)
++		if !ok {
++			return q, ErrInvalidPlan
++		}
++		dec := json.NewDecoder(bytes.NewReader(filter.Value))
++		dec.UseNumber()
++		var v any
++		if dec.Decode(&v) != nil {
++			return q, ErrInvalidPlan
++		}
++		op := map[string]string{"eq": "=", "neq": "<>", "gt": ">", "gte": ">=", "lt": "<", "lte": "<=", "contains": "LIKE", "in": "IN", "not_in": "NOT IN"}[filter.Operator]
++		if op == "" {
++			return q, ErrInvalidPlan
++		}
++		var clause string
++		if filter.Operator == "in" || filter.Operator == "not_in" {
++			values, ok := v.([]any)
++			if !ok || len(values) == 0 || len(values) > 100 {
++				return q, ErrInvalidPlan
++			}
++			params := []string{}
++			for _, item := range values {
++				value, ok := typedValue(item, f.typ)
++				if !ok {
++					return q, ErrInvalidPlan
++				}
++				params = append(params, bind(value, f.typ))
++			}
++			clause = f.sql + " " + op + " (" + strings.Join(params, ", ") + ")"
++		} else {
++			value, ok := typedValue(v, f.typ)
++			if !ok {
++				return q, ErrInvalidPlan
++			}
++			if filter.Operator == "contains" {
++				if f.typ != "text" {
++					return q, ErrInvalidPlan
++				}
++				value = "%" + strings.NewReplacer("\\", "\\\\", "%", "\\%", "_", "\\_").Replace(value.(string)) + "%"
++			}
++			clause = f.sql + " " + op + " " + bind(value, f.typ)
++		}
++		if f.aggregate != "" {
++			having = append(having, clause)
++		} else {
++			where = append(where, clause)
++		}
++	}
++	if p.TimeRange != nil {
++		f, _, ok := lookup(p.TimeRange.Selector)
++		if !ok || f.aggregate != "" || (f.typ != "date" && f.typ != "timestamp" && f.typ != "timestamptz") || p.TimeRange.Granularity != "" || !p.TimeRange.From.Before(p.TimeRange.To) {
++			return q, ErrInvalidPlan
++		}
++		where = append(where, f.sql+" >= "+bind(p.TimeRange.From, f.typ), f.sql+" < "+bind(p.TimeRange.To, f.typ))
++	}
++	q.SQL = "SELECT " + strings.Join(selectSQL, ", ") + " FROM " + from
++	if len(where) > 0 {
++		q.SQL += " WHERE " + strings.Join(where, " AND ")
++	}
++	if len(groupSQL) > 0 {
++		q.SQL += " GROUP BY " + strings.Join(groupSQL, ", ")
++	}
++	if len(having) > 0 {
++		q.SQL += " HAVING " + strings.Join(having, " AND ")
++	}
++	ordering := []string{}
++	for _, o := range p.Order {
++		f, _, ok := lookup(o.Selector)
++		if !ok || !selected[f.sql] || (o.Direction != "asc" && o.Direction != "desc") {
++			return q, ErrInvalidPlan
++		}
++		ordering = append(ordering, f.sql+" "+strings.ToUpper(o.Direction))
++	}
++	if len(ordering) > 0 {
++		q.SQL += " ORDER BY " + strings.Join(ordering, ", ")
++	}
++	// Fetch one extra row to detect overflow. The adapter imposes its own cap.
++	limit := p.Limit
++	if limit == 0 {
++		limit = 1000
++	}
++	q.SQL += fmt.Sprintf(" LIMIT %d", limit+1)
++	return q, nil
++}
++func identifier(s string) bool { return s != "" && len(s) <= 63 && !strings.ContainsRune(s, 0) }
++func fieldType(s string) string {
++	switch strings.ToLower(s) {
++	case "smallint", "integer", "bigint", "int2", "int4", "int8":
++		return "bigint"
++	case "numeric", "decimal":
++		return "numeric"
++	case "real", "double precision", "float4", "float8":
++		return "double precision"
++	case "text", "varchar", "character varying", "char", "character", "name":
++		return "text"
++	case "boolean", "bool":
++		return "boolean"
++	case "date":
++		return "date"
++	case "timestamp", "timestamp without time zone":
++		return "timestamp"
++	case "timestamptz", "timestamp with time zone":
++		return "timestamptz"
++	case "uuid":
++		return "uuid"
++	}
++	return ""
++}
++func typedValue(v any, typ string) (any, bool) {
++	switch typ {
++	case "bigint", "numeric", "double precision":
++		n, ok := v.(json.Number)
++		return n.String(), ok
++	case "boolean":
++		b, ok := v.(bool)
++		return b, ok
++	default:
++		s, ok := v.(string)
++		return s, ok && len(s) <= 4096
++	}
++}
+--- a/internal/domain/execution/compiler_test.go
++++ b/internal/domain/execution/compiler_test.go
+@@ -0,0 +1,56 @@
++package execution_test
++
++import (
++	"encoding/json"
++	"strings"
++	"testing"
++
++	d "github.com/iiwish/semlia/internal/domain/distribution"
++	e "github.com/iiwish/semlia/internal/domain/execution"
++	"github.com/iiwish/semlia/pkg/identity"
++)
++
++func executablePlan(t *testing.T) d.ResolvedSemanticPlan {
++	t.Helper()
++	asset, _ := identity.NewAssetID()
++	revision, _ := identity.NewRevisionID()
++	release, _ := identity.NewReleaseID()
++	return d.ResolvedSemanticPlan{ReleaseID: release, Intent: d.IntentAggregate,
++		Assets:   []d.ResolvedAsset{{AssetID: asset, RevisionID: revision, Address: "sales.total"}},
++		Measures: []d.Selector{{AssetID: &asset}}, Limit: 10,
++		Execution: &d.ExecutionProvenance{CompilerVersion: e.CompilerVersion, Bindings: []d.ExecutionBinding{{AssetID: asset.String(), DatasetID: "dataset", FieldID: "field", Aggregation: "sum"}},
++			Relations: []d.ExecutionRelation{{DatasetID: "dataset", SourceID: "source", SourceRevisionID: "revision", AdapterKind: "postgresql_catalog", Schema: "public", Relation: "sales", Fields: []d.ExecutionField{{FieldID: "field", Name: "amount", DataType: "numeric"}}}}}}
++}
++
++func TestCompilerParameterizedAndLegacyClosed(t *testing.T) {
++	p := executablePlan(t)
++	p.Filters = []d.Filter{{Selector: p.Measures[0], Operator: "gte", Value: json.RawMessage(`100`)}}
++	q, err := e.Compile(p)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if strings.Contains(q.SQL, "100") || !strings.Contains(q.SQL, "$1") || len(q.Args) != 1 {
++		t.Fatalf("not parameterized: %#v", q)
++	}
++	p.Execution = nil
++	if _, err := e.Compile(p); err == nil {
++		t.Fatal("legacy plan executed without frozen provenance")
++	}
++}
++
++func TestCompilerRejectsUnsupportedContracts(t *testing.T) {
++	for _, mutate := range []func(*d.ResolvedSemanticPlan){
++		func(p *d.ResolvedSemanticPlan) {
++			p.Execution.Bindings[0].Aggregation = "sum(amount); DELETE FROM sales"
++		},
++		func(p *d.ResolvedSemanticPlan) { p.Execution.Relations[0].Fields[0].DataType = "custom_udt" },
++		func(p *d.ResolvedSemanticPlan) { p.Execution.Relations[0].SourceRevisionID = "" },
++		func(p *d.ResolvedSemanticPlan) { p.Execution.Bindings[0].Expression = "amount * 2" },
++	} {
++		p := executablePlan(t)
++		mutate(&p)
++		if _, err := e.Compile(p); err == nil {
++			t.Fatal("unsafe contract accepted")
++		}
++	}
++}
+--- a/internal/domain/execution/model.go
++++ b/internal/domain/execution/model.go
+@@ -0,0 +1,88 @@
++package execution
++
++import (
++	"crypto/sha256"
++	"encoding/hex"
++	"encoding/json"
++	"errors"
++	"time"
++)
++
++const CompilerVersion = "postgres-aggregate/v1"
++
++var ErrInvalidPlan = errors.New("EXECUTION_PLAN_UNSUPPORTED")
++var ErrNotConfigured = errors.New("EXECUTION_NOT_CONFIGURED")
++var ErrConflict = errors.New("EXECUTION_IDEMPOTENCY_CONFLICT")
++var ErrBusy = errors.New("EXECUTION_CONCURRENCY_LIMIT")
++var ErrNotFound = errors.New("EXECUTION_NOT_FOUND")
++
++type Limits struct {
++	Timeout       time.Duration
++	MaxRows       int
++	MaxBytes      int
++	MaxConcurrent int
++}
++
++func DefaultLimits() Limits {
++	return Limits{Timeout: 10 * time.Second, MaxRows: 1000, MaxBytes: 1024 * 1024, MaxConcurrent: 2}
++}
++func (l Limits) Valid() bool {
++	return l.Timeout > 0 && l.Timeout <= 30*time.Second && l.MaxRows > 0 && l.MaxRows <= 10000 && l.MaxBytes > 0 && l.MaxBytes <= 8*1024*1024 && l.MaxConcurrent > 0 && l.MaxConcurrent <= 8
++}
++
++type Compiled struct {
++	SQL              string
++	Args             []any
++	Columns          []string
++	SourceID         string
++	SourceRevisionID string
++	SourceLocator    string
++	Relations        [][2]string
++}
++type Run struct {
++	ID               string     `json:"id"`
++	WorkspaceID      string     `json:"workspaceId"`
++	QueryID          string     `json:"queryId"`
++	PlanID           string     `json:"planId"`
++	PlanDigest       string     `json:"planDigest"`
++	PrincipalID      string     `json:"principalId"`
++	ConsumerID       string     `json:"consumerId,omitempty"`
++	CredentialID     string     `json:"credentialId,omitempty"`
++	Channel          string     `json:"channel"`
++	SourceID         string     `json:"sourceId"`
++	SourceRevisionID string     `json:"sourceRevisionId"`
++	AdapterVersion   string     `json:"adapterVersion"`
++	State            string     `json:"state"`
++	ErrorCode        string     `json:"errorCode,omitempty"`
++	RowCount         int        `json:"rowCount"`
++	ByteCount        int        `json:"byteCount"`
++	ResultDigest     string     `json:"resultDigest,omitempty"`
++	StartedAt        time.Time  `json:"startedAt"`
++	FinishedAt       *time.Time `json:"finishedAt,omitempty"`
++	TraceID          string     `json:"traceId"`
++	IdempotencyKey   string     `json:"-"`
++	Deadline         time.Time  `json:"-"`
++}
++
++// Rows are ephemeral and deliberately separate from the persistence contract.
++type Result struct {
++	Run          Run      `json:"run"`
++	Availability string   `json:"availability"`
++	Columns      []string `json:"columns,omitempty"`
++	Rows         [][]any  `json:"rows,omitempty"`
++	Replay       bool     `json:"replay"`
++}
++type Output struct {
++	Columns   []string
++	Rows      [][]any
++	RowCount  int
++	ByteCount int
++	Digest    string
++	ErrorCode string
++}
++
++func Digest(v any) string {
++	b, _ := json.Marshal(v)
++	h := sha256.Sum256(b)
++	return "sha256:" + hex.EncodeToString(h[:])
++}
+--- a/migrations/000021_fmb_query_execution.down.sql
++++ b/migrations/000021_fmb_query_execution.down.sql
+@@ -0,0 +1,15 @@
++BEGIN;
++-- Downgrade removes only the additive capability, never grants execution.
++UPDATE client_credentials SET allowed_actions=array_remove(allowed_actions,'semantic.execute')
++ WHERE 'semantic.execute'=ANY(allowed_actions) AND cardinality(allowed_actions)>1;
++UPDATE client_credentials SET allowed_actions=ARRAY['semantic.resolve'], revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP)
++ WHERE allowed_actions=ARRAY['semantic.execute'];
++ALTER TABLE client_credentials DROP CONSTRAINT client_credentials_allowed_actions_check;
++ALTER TABLE client_credentials ADD CONSTRAINT client_credentials_allowed_actions_check
++ CHECK (cardinality(allowed_actions)>0 AND allowed_actions <@ ARRAY['asset.read','semantic.resolve']::text[]);
++DROP TABLE query_execution_runs;
++DROP FUNCTION protect_query_execution_run();
++DROP TRIGGER release_object_snapshots_capture_execution ON release_object_snapshots;
++DROP FUNCTION capture_release_execution_relation();
++DROP TABLE release_execution_relations;
++COMMIT;
+--- a/migrations/000021_fmb_query_execution.up.sql
++++ b/migrations/000021_fmb_query_execution.up.sql
+@@ -0,0 +1,100 @@
++BEGIN;
++ALTER TABLE client_credentials DROP CONSTRAINT client_credentials_allowed_actions_check;
++ALTER TABLE client_credentials ADD CONSTRAINT client_credentials_allowed_actions_check
++ CHECK (cardinality(allowed_actions)>0 AND allowed_actions <@ ARRAY['asset.read','semantic.resolve','semantic.execute']::text[]);
++
++-- Capture only future publication facts. Legacy releases have no executable
++-- provenance and are intentionally not backfilled from mutable catalog rows.
++CREATE TABLE release_execution_relations (
++ workspace_id uuid NOT NULL,
++ release_id uuid NOT NULL,
++ dataset_id uuid NOT NULL,
++ payload jsonb NOT NULL CHECK (jsonb_typeof(payload) = 'object'),
++ PRIMARY KEY (release_id, dataset_id),
++ FOREIGN KEY (workspace_id, release_id) REFERENCES releases(workspace_id,id) ON DELETE RESTRICT
++);
++CREATE TRIGGER release_execution_relations_immutable BEFORE UPDATE OR DELETE ON release_execution_relations
++ FOR EACH ROW EXECUTE FUNCTION reject_immutable_registry_row();
++
++CREATE FUNCTION capture_release_execution_relation() RETURNS trigger LANGUAGE plpgsql AS $$
++DECLARE dataset uuid; frozen jsonb;
++BEGIN
++ IF NEW.object_type <> 'physical_binding' THEN RETURN NEW; END IF;
++ dataset := (NEW.payload->>'dataset_id')::uuid;
++ SELECT jsonb_build_object(
++   'datasetId', d.id::text, 'datasetRevisionId', dr.id::text,
++   'sourceId', s.id::text, 'sourceRevisionId', dr.source_revision_id::text,
++   'sourceLocator', s.normalized_locator, 'adapterKind', s.adapter_kind,
++   'schema', split_part(d.qualified_name,'.',1), 'relation', split_part(d.qualified_name,'.',2),
++   'fields', (SELECT COALESCE(jsonb_agg(jsonb_build_object(
++       'fieldId', f.id::text, 'revisionId', fr.id::text, 'name', f.name, 'dataType', fr.data_type
++     ) ORDER BY fr.ordinal),'[]'::jsonb)
++     FROM physical_fields f JOIN physical_field_revisions fr
++       ON fr.workspace_id=f.workspace_id AND fr.physical_field_id=f.id AND fr.id=f.current_revision_id
++     WHERE f.workspace_id=d.workspace_id AND f.physical_dataset_id=d.id AND fr.dataset_revision_id=dr.id)
++ ) INTO frozen
++ FROM physical_datasets d JOIN physical_dataset_revisions dr
++   ON dr.workspace_id=d.workspace_id AND dr.physical_dataset_id=d.id AND dr.id=d.current_revision_id
++ JOIN source_connections s ON s.workspace_id=d.workspace_id AND s.id=d.source_connection_id
++ JOIN source_revisions sr ON sr.workspace_id=s.workspace_id AND sr.source_connection_id=s.id AND sr.id=dr.source_revision_id
++ WHERE d.workspace_id=NEW.workspace_id AND d.id=dataset AND s.adapter_kind='postgresql_catalog'
++   AND dr.dataset_kind='table' AND d.qualified_name ~ '^[A-Za-z_][A-Za-z0-9_$]*\.[A-Za-z_][A-Za-z0-9_$]*$';
++ IF frozen IS NOT NULL THEN
++  INSERT INTO release_execution_relations(workspace_id,release_id,dataset_id,payload)
++  VALUES(NEW.workspace_id,NEW.release_id,dataset,frozen) ON CONFLICT DO NOTHING;
++ END IF;
++ RETURN NEW;
++END $$;
++CREATE TRIGGER release_object_snapshots_capture_execution AFTER INSERT ON release_object_snapshots
++ FOR EACH ROW EXECUTE FUNCTION capture_release_execution_relation();
++
++CREATE TABLE query_execution_runs (
++ id uuid PRIMARY KEY CHECK (substring(id::text,15,1)='7'),
++ workspace_id uuid NOT NULL,
++ runtime_run_id uuid NOT NULL,
++ semantic_query_id uuid NOT NULL,
++ resolved_plan_id uuid NOT NULL,
++ plan_digest text NOT NULL CHECK (plan_digest ~ '^sha256:[0-9a-f]{64}$'),
++ principal_id uuid NOT NULL,
++ consumer_id uuid,
++ credential_id uuid,
++ channel text NOT NULL CHECK (channel IN ('api','mcp','cli','sdk','web')),
++ source_connection_id uuid NOT NULL,
++ source_revision_id uuid NOT NULL,
++ adapter_version text NOT NULL,
++ idempotency_key text NOT NULL CHECK (length(idempotency_key) BETWEEN 1 AND 128),
++ state text NOT NULL CHECK (state IN ('running','succeeded','failed','cancelled','unknown')),
++ error_code text CHECK (error_code ~ '^[A-Z][A-Z0-9_]{2,63}$'),
++ row_count integer NOT NULL DEFAULT 0 CHECK (row_count>=0),
++ byte_count integer NOT NULL DEFAULT 0 CHECK (byte_count>=0),
++ result_digest text CHECK (result_digest ~ '^sha256:[0-9a-f]{64}$'),
++ trace_id text NOT NULL CHECK (trace_id ~ '^[0-9a-f]{32}$'),
++ started_at timestamptz NOT NULL,
++ deadline_at timestamptz NOT NULL,
++ finished_at timestamptz,
++ UNIQUE(workspace_id,id),
++ UNIQUE(workspace_id,principal_id,idempotency_key),
++ FOREIGN KEY (workspace_id,runtime_run_id) REFERENCES runtime_runs(workspace_id,id) ON DELETE RESTRICT,
++ FOREIGN KEY (workspace_id,semantic_query_id) REFERENCES semantic_queries(workspace_id,id) ON DELETE RESTRICT,
++ FOREIGN KEY (workspace_id,resolved_plan_id) REFERENCES resolved_semantic_plans(workspace_id,id) ON DELETE RESTRICT,
++ FOREIGN KEY (workspace_id,principal_id) REFERENCES principals(workspace_id,id) ON DELETE RESTRICT,
++ FOREIGN KEY (workspace_id,consumer_id) REFERENCES consumers(workspace_id,id) ON DELETE RESTRICT,
++ FOREIGN KEY (workspace_id,credential_id) REFERENCES client_credentials(workspace_id,id) ON DELETE RESTRICT,
++ FOREIGN KEY (workspace_id,source_connection_id,source_revision_id) REFERENCES source_revisions(workspace_id,source_connection_id,id) ON DELETE RESTRICT,
++ CHECK ((state='running' AND finished_at IS NULL) OR (state<>'running' AND finished_at IS NOT NULL)),
++ CHECK ((state='succeeded' AND result_digest IS NOT NULL AND error_code IS NULL) OR (state<>'succeeded' AND result_digest IS NULL))
++);
++CREATE INDEX query_execution_runs_workspace_state ON query_execution_runs(workspace_id,state,deadline_at);
++
++CREATE FUNCTION protect_query_execution_run() RETURNS trigger LANGUAGE plpgsql AS $$
++BEGIN
++ IF TG_OP='DELETE' OR OLD.state<>'running' THEN RAISE EXCEPTION 'execution metadata is immutable' USING ERRCODE='55000'; END IF;
++ IF (to_jsonb(NEW)-ARRAY['state','error_code','row_count','byte_count','result_digest','finished_at']) IS DISTINCT FROM
++    (to_jsonb(OLD)-ARRAY['state','error_code','row_count','byte_count','result_digest','finished_at']) THEN
++  RAISE EXCEPTION 'execution provenance is immutable' USING ERRCODE='55000';
++ END IF;
++ RETURN NEW;
++END $$;
++CREATE TRIGGER query_execution_runs_protect BEFORE UPDATE OR DELETE ON query_execution_runs
++ FOR EACH ROW EXECUTE FUNCTION protect_query_execution_run();
++COMMIT;
+--- a/tests/integration/operations/operations_test.go
++++ b/tests/integration/operations/operations_test.go
+@@ -214,7 +214,7 @@
+ 			leased_until, lease_owner, idempotency_key, trace_id, created_at, updated_at
+ 		) VALUES ($1, $2, 'source.discover', '{}'::jsonb, 'running', 1, 2, $3,
+ 			$4, 'discovery-worker', 'atomic-discovery-job', $5, $3, $3)`,
+-		discoveryJobID.UUID(), workspaceID.UUID(), now, now.Add(time.Minute), run.TraceID); err != nil {
++		discoveryJobID.UUID(), workspaceID.UUID(), now, time.Now().Add(time.Minute), run.TraceID); err != nil {
+ 		t.Fatal(err)
+ 	}
+ 	if _, err := pool.Exec(ctx, `

@@ -1,0 +1,24 @@
+{
+  "command": [
+    "go",
+    "test",
+    "-p=1",
+    "-count=1",
+    "-timeout=15m",
+    "./tests/integration/db",
+    "-run",
+    "^TestSemanticProductionMigrationCoverageAttemptBlocksDowngrade$"
+  ],
+  "clearedEnvironment": [
+    "SEMLIA_INGESTION_TEST_DATABASE_URL",
+    "SEMLIA_EXECUTION_CRASH_HELPER",
+    "SEMLIA_EXECUTION_TEST_DB",
+    "SEMLIA_DATABASE_URL"
+  ],
+  "start": "2026-09-09T08:00:05.479Z",
+  "end": "2026-09-09T08:00:36.121Z",
+  "exitStatus": 1,
+  "signal": null,
+  "stdout": "2026/09/09 16:00:13 github.com/testcontainers/testcontainers-go - Connected to docker: \n  Server Version: 29.4.0\n  API Version: 1.54\n  Operating System: OrbStack\n  Total Memory: 16040 MB\n  Testcontainers for Go Version: v0.44.0\n  Resolved Docker Host: unix:///var/run/docker.sock\n  Resolved Docker Socket Path: /var/run/docker.sock\n  Test SessionID: 09843205a1111169b6271704c15618894ab473ddf5b3cca585790b507dd5b990\n  Test ProcessID: 5b02423f-9dfa-4d08-95b9-23231a67a68f\n2026/09/09 16:00:13 🐳 Creating container for image postgres:18-alpine\n2026/09/09 16:00:13 No image auth found for https://index.docker.io/v1/. Setting empty credentials for the image: testcontainers/ryuk:0.14.0. This is expected for public images. Details: credentials not found in native keychain\n2026/09/09 16:00:29 🐳 Creating container for image testcontainers/ryuk:0.14.0\n2026/09/09 16:00:29 ✅ Container created: 6a4d34f1c6c4\n2026/09/09 16:00:29 🐳 Starting container: 6a4d34f1c6c4\n2026/09/09 16:00:30 ✅ Container started: 6a4d34f1c6c4\n2026/09/09 16:00:30 ⏳ Waiting for container id 6a4d34f1c6c4 image: testcontainers/ryuk:0.14.0. Waiting for: all of: [log message \"Started\", port 8080/tcp to be listening]\n2026/09/09 16:00:30 Shell not found in container\n2026/09/09 16:00:30 🔔 Container is ready: 6a4d34f1c6c4\n2026/09/09 16:00:30 ✅ Container created: 9775d2ae1cbd\n2026/09/09 16:00:30 🐳 Starting container: 9775d2ae1cbd\n2026/09/09 16:00:30 ✅ Container started: 9775d2ae1cbd\n2026/09/09 16:00:30 ⏳ Waiting for container id 9775d2ae1cbd image: postgres:18-alpine. Waiting for: all of: [log message \"database system is ready to accept connections\" (occurrence: 2), port 5432/tcp to be listening]\n2026/09/09 16:00:34 🔔 Container is ready: 9775d2ae1cbd\n--- FAIL: TestSemanticProductionMigrationCoverageAttemptBlocksDowngrade (1.56s)\n    semantic_production_migrations_test.go:155: authoritative attempt downgrade was not refused: <nil>\nFAIL\n2026/09/09 16:00:35 🐳 Stopping container: 9775d2ae1cbd\n2026/09/09 16:00:35 ✅ Container stopped: 9775d2ae1cbd\n2026/09/09 16:00:35 🐳 Terminating container: 9775d2ae1cbd\n2026/09/09 16:00:36 🚫 Container terminated: 9775d2ae1cbd\nFAIL\tgithub.com/iiwish/semlia/tests/integration/db\t24.067s\nFAIL\n",
+  "stderr": ""
+}

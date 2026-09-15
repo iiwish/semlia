@@ -1,0 +1,10 @@
+{
+  "web/src/styles.css": {
+    "before": "61992fc29f0e0887f8a21115fd98a6203d909e754005ac528e22205c1c5b7894",
+    "after": "9e8a0f6be7c83975bc1096c5ae196f24397e71cc0b25e61dcbca826f20c1c17b"
+  },
+  "web/e2e-auth/session-membership.spec.ts": {
+    "before": "fefa50fb4a0386facc3f2a397fda8badc570df537a30cc15b53930e84b854738",
+    "after": "cc6007ca05a68ec9277a455135b78a05311957b6fcc1182381efad7c3825e126"
+  }
+}

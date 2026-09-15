@@ -1,0 +1,100 @@
+schema_version: 1
+packet_id: SP-T006-A001
+task_id: SP-T006
+feature_id: semantic-production
+mode: execute_one_task
+adapter: codex
+status: Accepted
+acceptance_review:
+  approval: 2026-09-11 用户授权复核 T006 并修复发现的问题，通过后继续 T007。
+  evidence: docs/evidence/SP-T006/acceptance-review
+  baseline: .semlia/evidence-work/SP-T006-acceptance-before.tar
+governance_inputs:
+  product: docs/specs/semantic-production/product-design.md
+  plan: docs/specs/semantic-production/plan.md
+  tasks: docs/specs/semantic-production/tasks.md
+  contract: docs/specs/semantic-production/contracts/production.md
+  schema: api/openapi/semlia.v1.yaml
+  checklist: docs/specs/semantic-production/checklists/requirements.md
+  analysis: docs/specs/semantic-production/analysis.md
+  approval: 2026-09-11 用户授权验收 T005 后完成 T006，批准两个 Go 测试支持文件、回滚投影修复与回归测试两文件扩围，以及 catalog.go 字段标识读取兼容的单文件扩围。
+work_unit:
+  objective: 从真实来源候选新建或匹配语义对象，连续完成结构化建模、AI 建议与纠正、规则确认、冻结验证、集合审核发布和回滚，刷新与缓存丢失后从服务器恢复。
+  dependencies: [SP-T005 Accepted]
+  requirements: [SP-AC-001, SP-AC-003, SP-AC-004, SP-AC-005, SP-AC-006, SP-AC-007, SP-AC-008, SP-AC-009, SP-AC-011]
+  parallel: false
+  conflicts: 来源、知识、治理视图与嵌入资源；不并行编辑。
+codebase_context:
+  baseline: .semlia/evidence-work/SP-T006-A001-baseline.tar
+  ownership: 当前广泛脏工作区为既有工作，保留；按执行前像识别增量，不使用 HEAD 归属新任务。
+  absent_at_baseline: [web/e2e-production, web/playwright.production.config.ts, compose.production-acceptance.yaml, internal/testsupport/productionacceptance]
+  client: web/src/apiClient.ts 提供共享 cookie、CSRF、授权失效事件；使用生成 API 契约，不新增独立凭据或 fixture 回退。
+  recovery: ProductionOperation 的服务端分页列表、candidateId/sourceId 过滤、精确版本和 generationRunIds 为恢复权威；URL 只记录定位标识。
+  legacy: 来源旧本地恢复记录只作提示与旧提案链接，不再协调新写入；旧单项治理入口保留。
+  testing: 真实 PostgreSQL、应用服务、worker 与 HTTP；只有模型 Complete 采用显式 protocol_stub，语义资产仅经正常生产 API 创建。
+execution_constraints:
+  mode: Direct Execute；用户未授权子代理委派。
+  allowed_files:
+    - web/src/LiveSourcesView.tsx
+    - web/src/LiveSourcesView.test.tsx
+    - web/src/candidateRecovery.ts
+    - web/src/candidateRecovery.test.tsx
+    - web/src/semanticProduction.ts
+    - web/src/semanticProductionRuntime.tsx
+    - web/src/semanticProductionRuntime.test.tsx
+    - web/src/SemanticProductionPanel.tsx
+    - web/src/SemanticProductionPanel.test.tsx
+    - web/src/KnowledgeViews.tsx
+    - web/src/KnowledgeViews.test.tsx
+    - web/src/CatalogControls.tsx
+    - web/src/governance.ts
+    - web/src/governanceRuntime.tsx
+    - web/src/governance.test.tsx
+    - web/src/ProductApp.tsx
+    - web/src/ProductApp.test.tsx
+    - web/src/styles.css
+    - web/src/ingestion-workspace.css
+    - internal/platform/web/static/**
+    - web/e2e-production/production.spec.ts
+    - web/e2e-production/fixtures.ts
+    - web/playwright.production.config.ts
+    - web/package.json
+    - scripts/dev/production-acceptance.sh
+    - compose.production-acceptance.yaml
+    - internal/testsupport/productionacceptance/main.go
+    - internal/testsupport/productionacceptance/main_test.go
+    - internal/adapters/postgres/production_release_persistence.go
+    - internal/adapters/postgres/catalog.go
+    - tests/integration/governance/production_projection_test.go
+  orchestrator_files: [docs/specs/semantic-production/tasks.md, docs/specs/semantic-production/analysis.md, docs/specs/semantic-production/checklists/requirements.md, docs/specs/semantic-production/packets/SP-T006.yaml, docs/evidence/SP-T006/**]
+  forbidden: 不修改正式启动入口、数据库迁移、SDK 或除回滚事件动作及获批目录字段标识读取兼容外的后端业务逻辑；不调用付费模型、不部署、不提交或推送；不操作默认 Compose 栈或共享资源。
+  infrastructure: 新 Compose 独立项目，独立受检查端口与卷，标记随机 owner；启动拒绝已有未归属资源，清理仅本次资源。脚本实现经静态检查和保护单测后才执行。
+tdd_plan:
+  red: 冷启动请求、服务端恢复与错误不降级、竞态/权限切换、关联对象审查、未决规则、失效审核、测试启动器环境保护。
+  green: 共享类型化 API、状态恢复 hook、结构化编辑与确认、真实命令和分页列表、桌面实际路径。
+  refactor: 移除被替代的候选本地写入协调，不改无关目录或业务流程。
+validation_loop:
+  commands:
+    - pnpm --filter @semlia/web test
+    - pnpm --filter @semlia/web typecheck
+    - pnpm --filter @semlia/web lint
+    - pnpm --filter @semlia/web build
+    - go test ./internal/testsupport/productionacceptance
+    - go test -count=1 -p=1 -timeout=20m ./tests/integration/governance
+    - ./scripts/dev/production-acceptance.sh --suite desktop
+    - make web-embed
+    - make web-embed-check
+  retry_budget: 基于实际失败修复并复验，不删除关键断言、不以 mock 后台替代真实验收。
+evidence_contract:
+  path: docs/evidence/SP-T006/A001
+  required: [RED/GREEN, source delta, actual network and object references, desktop screenshots, keyboard focus and refresh recovery, isolated resource ownership and cleanup, visual review, residual risks]
+review_contract:
+  order: [spec compliance, engineering risks, desktop QA]
+  checks: 精确版本与摘要、无静默重复付费生成、非空无确认仍阻断、错误与未知结果、权限变化和请求逆序、无本地缓存权威、正常旧单项路径不回归。
+handoff:
+  final_status: Needs_Review
+  next_gate: 用户验收 T006 后方可开放 T007，不自动启动。
+stop_conditions:
+  - 需要修改允许范围之外的产品代码或安全边界。
+  - 无法确认隔离项目、端口或卷归属。
+  - 需要实际模型调用授权或降低验收标准。

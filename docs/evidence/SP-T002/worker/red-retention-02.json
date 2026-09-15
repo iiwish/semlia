@@ -1,0 +1,24 @@
+{
+  "command": [
+    "go",
+    "test",
+    "-count=1",
+    "-timeout=10m",
+    "./tests/integration/ingestion",
+    "-run",
+    "^TestSourceSnapshot",
+    "-v"
+  ],
+  "clearedEnvironment": [
+    "SEMLIA_INGESTION_TEST_DATABASE_URL",
+    "SEMLIA_EXECUTION_CRASH_HELPER",
+    "SEMLIA_EXECUTION_TEST_DB",
+    "SEMLIA_DATABASE_URL"
+  ],
+  "start": "2026-09-09T06:02:59.108Z",
+  "end": "2026-09-09T06:03:05.795Z",
+  "exitStatus": 1,
+  "signal": null,
+  "stdout": "2026/09/09 14:03:03 github.com/testcontainers/testcontainers-go - Connected to docker: \n  Server Version: 29.4.0\n  API Version: 1.54\n  Operating System: OrbStack\n  Total Memory: 16040 MB\n  Testcontainers for Go Version: v0.44.0\n  Resolved Docker Host: unix:///var/run/docker.sock\n  Resolved Docker Socket Path: /var/run/docker.sock\n  Test SessionID: 2839eea2554303e35b3974e6e456ed271d8df16ea5905c1026a9e6760123ea71\n  Test ProcessID: a917a816-eb2c-4b2f-820d-1576e04c6a32\n2026/09/09 14:03:03 🐳 Creating container for image postgres:18-alpine\n2026/09/09 14:03:03 🐳 Creating container for image testcontainers/ryuk:0.14.0\n2026/09/09 14:03:03 ✅ Container created: c8de6df661ff\n2026/09/09 14:03:03 🐳 Starting container: c8de6df661ff\n2026/09/09 14:03:03 ✅ Container started: c8de6df661ff\n2026/09/09 14:03:03 ⏳ Waiting for container id c8de6df661ff image: testcontainers/ryuk:0.14.0. Waiting for: all of: [log message \"Started\", port 8080/tcp to be listening]\n2026/09/09 14:03:03 Shell not found in container\n2026/09/09 14:03:03 🔔 Container is ready: c8de6df661ff\n2026/09/09 14:03:03 ✅ Container created: 931245ea5989\n2026/09/09 14:03:03 🐳 Starting container: 931245ea5989\n2026/09/09 14:03:03 ✅ Container started: 931245ea5989\n2026/09/09 14:03:03 ⏳ Waiting for container id 931245ea5989 image: postgres:18-alpine. Waiting for: all of: [log message \"database system is ready to accept connections\" (occurrence: 2), port 5432/tcp to be listening]\n2026/09/09 14:03:05 🔔 Container is ready: 931245ea5989\n=== RUN   TestSourceSnapshotPinsHistoricalArtifactBytesDuringCleanup\n    source_snapshot_retention_test.go:38: cleanup deleted=[sha256:0ab21ce20936002346b174b92f1c7d3ae78c65507b5b0f8861cfc762af65e15e sha256:b42de110e6849750493de9701806c4105fe680399ed7051ce601528ec9a83030], must delete only unreferenced object\n--- FAIL: TestSourceSnapshotPinsHistoricalArtifactBytesDuringCleanup (0.13s)\nFAIL\n2026/09/09 14:03:05 🐳 Stopping container: 931245ea5989\n2026/09/09 14:03:05 ✅ Container stopped: 931245ea5989\n2026/09/09 14:03:05 🐳 Terminating container: 931245ea5989\n2026/09/09 14:03:05 🚫 Container terminated: 931245ea5989\nFAIL\tgithub.com/iiwish/semlia/tests/integration/ingestion\t5.056s\nFAIL\n",
+  "stderr": ""
+}

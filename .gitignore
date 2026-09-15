@@ -30,3 +30,11 @@ build/
 data/
 logs/
 *.log
+
+# Local agent state and standalone build output
+.omo/run-continuation/
+/semlia
+
+# Browser traces contain request/session data; keep curated evidence only
+docs/evidence/**/trace.zip
+docs/evidence/**/.last-run.json

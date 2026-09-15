@@ -1,0 +1,34 @@
+# FMB-T003 scoped diff receipt
+#
+# The shared worktree already contained approved Alpha/M3 and reviewed FMB-T001 changes. A raw
+# repository-wide patch would misattribute those edits, so this file records the reviewed T003
+# ownership boundary. Tests, generated-drift checks and independent review validate the exact local
+# content at the recorded execution.
+
+api/openapi/semlia.v1.yaml
+api/gen/go/types.gen.go
+sdk/typescript/src/{client.ts,client.test.ts,index.ts,schema.gen.ts}
+migrations/000017_fmb_operations_runtime.{up,down}.sql
+db/sqlc.yaml
+db/queries/{audit,jobs,operations}.sql
+internal/domain/operations/**
+internal/application/operations/**
+internal/application/jobs/**
+internal/adapters/postgres/operations.go
+internal/adapters/postgres/{store,discovery,source_discovery,governance,distribution}.go
+internal/adapters/postgres/sqlc/**
+internal/platform/config/**
+internal/platform/http/{handler,operations,catalog,governance}.go
+internal/platform/http/*_test.go
+cmd/semlia/{main,readiness}.go
+cmd/semlia/*_test.go
+compose.yaml
+pkg/identity/id.go
+web/src/{AuditRuntimeView,operations,operationsRuntime,ProductApp}*.tsx
+web/src/operations*.ts
+web/src/styles.css
+web/e2e/product-journey.spec.ts
+tests/contracts/**
+tests/integration/{operations,worker,db,discovery,governance}/**
+internal/platform/web/static/**
+docs/evidence/FMB-T003/**

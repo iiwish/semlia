@@ -1,0 +1,296 @@
+[
+  {
+    "path": ".env.example",
+    "status": "modified",
+    "before_sha256": "36cf01cdd041bdb3264e71fa5af3b6453400051c7e973292234ca07e9968bff5",
+    "after_sha256": "b86b5346822ed8b3fcbf932812edf56d6851f08175c8e03c53f8a04e93799ac6"
+  },
+  {
+    "path": "api/README.md",
+    "status": "modified",
+    "before_sha256": "500e3aa6bd87c37860251b2c15b8d83ec5ad482ec5a5b24b076e988ffab5498e",
+    "after_sha256": "f966109166f078537e85a8feb877f92879c6264689c98b9037c323fcc51fa6c5"
+  },
+  {
+    "path": "api/gen/go/types.gen.go",
+    "status": "modified",
+    "before_sha256": "e0833176c426295a8257ef00696ec8d02425da6303d6152d992c7320bb577ba4",
+    "after_sha256": "78036e0949f1536afa6060f368bbb5e28e17cf9b05877edeb093ae21ac992da0"
+  },
+  {
+    "path": "api/openapi/semlia.v1.yaml",
+    "status": "modified",
+    "before_sha256": "158aa3615188c912574b545de6fdbd6abff89a185437c5ebe92d77a8434d2c49",
+    "after_sha256": "ff493b04252fcd1804aaed3dabb494a58d1e5b2d265bb6e814637e1f4efc8b40"
+  },
+  {
+    "path": "cmd/semlia/main.go",
+    "status": "modified",
+    "before_sha256": "f91f699ecbd604470523c6cf509907148bdc6ca9c33ec099cf9068025aa5df74",
+    "after_sha256": "cfbd6d37e2bbbe6a736d6b0a3cee734de0c4041bec5502a85e745a3b6e0f37a0"
+  },
+  {
+    "path": "cmd/semlia/readiness.go",
+    "status": "modified",
+    "before_sha256": "e6b5247ae2164e3991a18a2fe29c97214f98def3208483b3929dc8ec82221144",
+    "after_sha256": "fc5e7955693a9aca850393b8daf2b700d2fe51f526294888a3db6535616c6813"
+  },
+  {
+    "path": "cmd/semlia/readiness_test.go",
+    "status": "modified",
+    "before_sha256": "e4eb9b8ccc920d94bcca41a3892a004a67c6ef32ea0037ff740238a7402eae15",
+    "after_sha256": "cb009f9f7bc44cb151b60e81c8b4954c179b7c309036f8284b2ff07c67e144b4"
+  },
+  {
+    "path": "db/sqlc.yaml",
+    "status": "modified",
+    "before_sha256": "044c26acad748cc88fe3fc4d9ecae22abb012bf7e495c8c6a4f6e648b9db30ed",
+    "after_sha256": "48a37b004b01df81091133ec5d1f97b7e92953641e9b2d240b28a760a97ed10c"
+  },
+  {
+    "path": "docs/specs/semantic-production/analysis.md",
+    "status": "modified",
+    "before_sha256": "ebf53e23abd5376321917a0364b77670275802b1254c77d99802debd2c392deb",
+    "after_sha256": "ed69e68aa6515df248519fcbc08b04de2d53eb57479aaf1e8e739901b8c5a057"
+  },
+  {
+    "path": "docs/specs/semantic-production/checklists/requirements.md",
+    "status": "modified",
+    "before_sha256": "dbcfa4972c131b5b8641a618b1b57925ebb3f919549b64317f3cc9a3a13aa99f",
+    "after_sha256": "bfe0656036330d13fac406f677a739432d1f7ea9744dd6db87bfbe15287de908"
+  },
+  {
+    "path": "docs/specs/semantic-production/packets/SP-T005.yaml",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "d51c61a423add33ae965895f1bd1c4cbe502195fc3724937008f92af9e0c7e22"
+  },
+  {
+    "path": "docs/specs/semantic-production/tasks.md",
+    "status": "modified",
+    "before_sha256": "0a316c5c434825733fd05620ed04d84fdffd0f1bb6d3a80a1f6b24624323fa85",
+    "after_sha256": "b9e550a74839e44d0dafdee8525f641f8b44764646b73c1bb20e058f2a3a462c"
+  },
+  {
+    "path": "internal/adapters/postgres/production_generation.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "e743b5bee60438da830953263f152b6ff986bf8608bba3e35db2b4b7f0518b1f"
+  },
+  {
+    "path": "internal/adapters/postgres/production_generation_application.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "95ef46e1b28c3c9869a395cc726b828582b70f19d77ce71e77a796918da88ccf"
+  },
+  {
+    "path": "internal/adapters/postgres/production_generation_input.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "d8cfd098ad89ba01ca2e77f1228521578f78a058ed62fa31de976b2a9655aaad"
+  },
+  {
+    "path": "internal/adapters/postgres/production_generation_worker.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "bab673bd0befec7fdd982c2cb20c5dc5116b36bf83e4e0c4793d6aef78cca76b"
+  },
+  {
+    "path": "internal/adapters/postgres/semantic_production.go",
+    "status": "modified",
+    "before_sha256": "b4f83f6846ece860f5879bb2c4ecd9c88a2f3abedc89a77ab56ee4fbe68951ad",
+    "after_sha256": "a9bd1efc76ec92a56ff51a15641825ecae7690f6d3eac2d7315bac74d32bffee"
+  },
+  {
+    "path": "internal/adapters/postgres/sqlc/models.go",
+    "status": "modified",
+    "before_sha256": "aedf867f7470f016e3af515e8bb3387b5c92fc58307b66c75535140644d6d5b8",
+    "after_sha256": "e716d9161e97c22c2f818c2d5adbb0f465e3faeedbd782813dcf36bcdabf7682"
+  },
+  {
+    "path": "internal/application/governance/production.go",
+    "status": "modified",
+    "before_sha256": "007fe41a86804124fc1d4c3d011c887914be4ad503c0ed365a5746cc9b330df7",
+    "after_sha256": "bdeafc54a903614b35a1e1e21fba2bbb45997deb00ae11d0a50d97b644e4e979"
+  },
+  {
+    "path": "internal/application/governance/production_generation.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "569ac0f449570a1f7aded657e9205a4deda4a758fc3a627a88c51b72af23a970"
+  },
+  {
+    "path": "internal/application/governance/production_generation_application.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "8e3c1a43830f1bd89af302863e1da30534f9ece80cba129f461864f8ebdc19eb"
+  },
+  {
+    "path": "internal/application/governance/production_generation_gate.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "f82416a5121270181b7eab6d59a1fe5364d44ec9341b75f1ea80059d9aab3ed4"
+  },
+  {
+    "path": "internal/application/governance/production_generation_identity.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "b35d87d6553e6d1f8c945dd8cf52608e8ec1d3d6f4b034a9913a9d79b6c0b3b3"
+  },
+  {
+    "path": "internal/application/governance/production_generation_test.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "b588a454a37367269749dea11745a7d1593c8123faf307ab9c057736cada767e"
+  },
+  {
+    "path": "internal/application/governance/production_output.v1.schema.json",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "a1fcecbf2575d4ba28e0ba79756d14d964276620890fa73e48f0a1d6e6f9e8ba"
+  },
+  {
+    "path": "internal/application/governance/production_validation_worker.go",
+    "status": "modified",
+    "before_sha256": "6ada6f473f63d17e7ff7cca57aa1d6c898ac8c6b7fe283f0eb5030ee70c5a816",
+    "after_sha256": "8e8687088962c937c5b572f21c6c0da643db1cd6665e2d4bb4eff20587b60830"
+  },
+  {
+    "path": "internal/domain/governance/production_generation.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "0ba12092d6a7caefc48c1523ce595d7cfb4989fad35e38db9414cf899324b04f"
+  },
+  {
+    "path": "internal/platform/config/config.go",
+    "status": "modified",
+    "before_sha256": "45761b97734967793a90b9f09061c2d7a0bb50363c295baa32d27e48c0549a1b",
+    "after_sha256": "a63cc26ac84a19d7793e520245c7cf5fc3ff114db878efcc5c4eabce24f67c22"
+  },
+  {
+    "path": "internal/platform/config/config_test.go",
+    "status": "modified",
+    "before_sha256": "e607735bc3a65114a5ed63652e8a3a4b856675a2c53a67661a1d5fe52630fc0d",
+    "after_sha256": "13032cf25995f0159f4fee0d3cfd480b8dfd618c78a5e8d92f67d9bd76bacf69"
+  },
+  {
+    "path": "internal/platform/http/catalog.go",
+    "status": "modified",
+    "before_sha256": "d88b213cbbe55aae75370daba70ccbe794c2a83227c59b6e8466ba3e7a639f18",
+    "after_sha256": "4c2ad3b2bf0eba039307a1ed67a726ae07f7524db4c3f578fcacccae487364cc"
+  },
+  {
+    "path": "internal/platform/http/handler.go",
+    "status": "modified",
+    "before_sha256": "c59799a019305883d9bec2b5588b9e49fa3c4b72109ee43f4b66cf9abda12e1a",
+    "after_sha256": "f66218e5bea3509b508e618ff7c9ea32d2098bba886bc333d891fa71759b66f2"
+  },
+  {
+    "path": "internal/platform/http/modelconfig.go",
+    "status": "modified",
+    "before_sha256": "3dc3dffcdf82071c2ab27bd724182810d8ac9ed7b759de7f1f023e9e4be917f8",
+    "after_sha256": "ff17f7df706dcb6183aaf5cf717be216c3b5f45911b6f5529fdd6eb4eae5c7f7"
+  },
+  {
+    "path": "internal/platform/http/production_generation.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "19b543979e02f98bb633c805e398559e5b7e576512709565c213fe3e6177455b"
+  },
+  {
+    "path": "internal/platform/http/semantic_production.go",
+    "status": "modified",
+    "before_sha256": "1391b316d969f9fb534198f929ea09f70ac0bb8f564384d7429bc6fd814007e8",
+    "after_sha256": "21a02c537ccd9670a31f61505cc04ca4162acf5e0a1669eb1a7319da624e6ccf"
+  },
+  {
+    "path": "migrations/000027_semantic_production_generation.down.sql",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "67b09adbbf217e807b083235b77e1d81614c4edd88df54b08b9df4855584160a"
+  },
+  {
+    "path": "migrations/000027_semantic_production_generation.up.sql",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "c8882ac0f1f658c62384cd6430f97e435e0dccce5b2f08ffe1a08fd47c72c8d0"
+  },
+  {
+    "path": "sdk/typescript/src/client.test.ts",
+    "status": "modified",
+    "before_sha256": "a399aae32cff76bc06979dd3cef9fa3f796f71771ca519038d82e25b1b582775",
+    "after_sha256": "e56a2fa3ecef97b9644bc293b5d828507f11a3ddc43844259da9e6c8dbcb7677"
+  },
+  {
+    "path": "sdk/typescript/src/client.ts",
+    "status": "modified",
+    "before_sha256": "6b482361733d5e35de1f6aa02fc1a60c9e8322d00d2f1993beb5e4b75dd9ec0e",
+    "after_sha256": "7ce93a4bb8afda9044d056bc0e02b372be85d38ab3404b70a1104b14c75aa330"
+  },
+  {
+    "path": "sdk/typescript/src/schema.gen.ts",
+    "status": "modified",
+    "before_sha256": "2d40a769ae015c106abcdb931fe45eb2b2ec0e037a0694423d8db9daac887396",
+    "after_sha256": "b6f08e8077a6e4e240f186efe3e2ca10dd03f8bf9f3e8f751383ba35325d78c2"
+  },
+  {
+    "path": "tests/contracts/contract_test.go",
+    "status": "modified",
+    "before_sha256": "ba8db8a31eb421b0e6692872bbdb5f06b4c4350ae5f4a1fe4897f6606bba5503",
+    "after_sha256": "025b15507fc4becd3cac92761f602ce873a7a40fda72c88117c6fc1c1c2918fb"
+  },
+  {
+    "path": "tests/integration/db/database_test.go",
+    "status": "modified",
+    "before_sha256": "db1cb36939f4e7450ced39d187d261a90bcc117c36cea1c23bf8da4c497753df",
+    "after_sha256": "f0915574f02545e090091e2c5c5e2e3d0fbd1fed1e3abcbbbcf838ebcc52a941"
+  },
+  {
+    "path": "tests/integration/db/semantic_production_migrations_test.go",
+    "status": "modified",
+    "before_sha256": "4ca4fb34f6c63c19408c60471a7c58a4cda212f0c2c7332fe9324e2a1a6ca629",
+    "after_sha256": "36e33082c0ed2f232158baded0d2f7be3e086a21fc44a5b14b0b8c9f9ddf8200"
+  },
+  {
+    "path": "tests/integration/governance/production_authoring_fixture_test.go",
+    "status": "modified",
+    "before_sha256": "739ea71d876b17126331e3024f69278834748fdd5667e1bf51d640ec59c32105",
+    "after_sha256": "a5216c63f8fa82cdecedce4db697f67a2e869df623521fe25c19570bb8de1ced"
+  },
+  {
+    "path": "tests/integration/governance/production_generation_atomic_test.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "acf1ecf36dc648de6ffa864c3fa1a0db2fbd0f418c9efcc31a7894cb88415a45"
+  },
+  {
+    "path": "tests/integration/governance/production_generation_freshness_test.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "328867df544087f2545bc8359117262ceda82ec868dfc26abe380609f743f375"
+  },
+  {
+    "path": "tests/integration/governance/production_generation_relationships_test.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "52e34162a075307964437f6d293e37f90be6869c679ae5f3d74a0d5d7b9cf894"
+  },
+  {
+    "path": "tests/integration/governance/production_generation_security_test.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "dc8dcdc888cfa4fa38f515e58456030b67c0b6ba6ac6a6eb5f49faa954db4ea9"
+  },
+  {
+    "path": "tests/integration/governance/production_generation_test.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "4cd6d4f7860e24c1cedb960dfb8f0788b37efc4be2d7745ce70fc5d0b6092df0"
+  },
+  {
+    "path": "tests/integration/governance/production_generation_validation_test.go",
+    "status": "added",
+    "before_sha256": null,
+    "after_sha256": "8c83d4d5017a814f9cf042b39b21fc62c1d35d0625155d9cc5d5e15c4462e262"
+  }
+]

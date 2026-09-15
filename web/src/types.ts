@@ -1,18 +1,23 @@
+import type { components } from "@semlia/sdk-typescript";
+
 export type ViewId = "ask" | "sources" | "overview" | "assets" | "releases" | "settings";
 export type NavigateToView = (view: ViewId, contextIndex?: number) => void;
 
 export type AssetType = "业务概念" | "业务实体" | "语义模型" | "维度" | "度量" | "指标" | "分群";
-export type AssetStatus = "已发布" | "需关注" | "草稿";
+export type AssetStatus = "已发布" | "需关注" | "草稿" | "待确认";
 export type ReadinessState = "passed" | "warning" | "not_applicable";
 export type EvidenceAuthority = "DECLARED" | "CONSTRAINED" | "DERIVED" | "OBSERVED" | "INFERRED";
 
 export type AssetLifecycleState = "active" | "deprecated" | "retired" | "draft" | "archived";
-export type AssetWorkflowState = "draft" | "proposed" | "in_review" | "released";
-export type DeploymentState = "unreleased" | "staging" | "production";
+export type AssetWorkflowState = "draft" | "proposed" | "in_review" | "released" | "unknown";
+export type DeploymentState = "unreleased" | "staging" | "production" | "unknown";
 export type AssetHealthState = "healthy" | "warning" | "blocked";
 export type CompatibilityState = "compatible" | "conditional" | "breaking" | "not_evaluated";
 export type OntologyRelationPlane = "taxonomy" | "semantic" | "dependency";
 export type OntologyAssertionState = "asserted" | "inferred" | "candidate" | "deprecated";
+export type AssetAuthorityAvailability = components["schemas"]["CatalogAuthorityAvailability"];
+export type AssetAuthoritySection = components["schemas"]["CatalogAuthoritySection"];
+export type AssetAuthoritySectionKind = AssetAuthoritySection["kind"];
 
 export interface SemanticAssetIdentity {
   workspaceId: string;
@@ -34,14 +39,14 @@ interface BaseAssetTypeSpec {
 
 export interface MetricSpec extends BaseAssetTypeSpec {
   kind: "metric";
-  metricKind: "simple" | "ratio" | "derived" | "cumulative" | "conversion";
+  metricKind: "simple" | "ratio" | "derived" | "cumulative" | "conversion" | "undeclared";
   allowedDimensions: string[];
   comparisonSemantics: string;
 }
 
 export interface MeasureSpec extends BaseAssetTypeSpec {
   kind: "measure";
-  additivity: "additive" | "semi_additive" | "non_additive";
+  additivity: "additive" | "semi_additive" | "non_additive" | "undeclared";
   nullHandling: string;
 }
 
@@ -100,7 +105,7 @@ export interface AssetRevisionRecord {
 }
 
 export interface EnvironmentDeployment {
-  environment: "production" | "staging";
+  environment: "production" | "staging" | "unknown";
   state: DeploymentState;
   releaseId?: string;
   revisionId?: string;
@@ -281,6 +286,7 @@ export interface Asset {
   // deployment and quality records remain independently addressable.
   id: string;
   detailLoaded?: boolean;
+  authoritySections?: AssetAuthoritySection[];
   revision: string;
   namespace: string;
   key: string;
@@ -341,7 +347,7 @@ export interface Proposal {
   assetId: string;
   author: string;
   createdAt: string;
-  risk: "低风险" | "中风险" | "高风险";
+  risk: "低风险" | "中风险" | "高风险" | "待评估";
   summary: string;
   changes: Array<{
     field: string;
@@ -405,6 +411,7 @@ export interface AuthorizationScope {
   type: AuthorizationScopeType;
   id: string;
   label: string;
+  domainId?: string;
   protected?: boolean;
 }
 
@@ -430,19 +437,29 @@ export interface AuthorizationRole {
   description: string;
   category: "system" | "custom";
   permissions: PermissionAction[];
+  version?: number;
+  workspaceId?: string;
+  createdAt?: string;
   baseRoleId?: string;
   incompatibleRoleIds?: string[];
 }
 
 export interface AuthorizationBinding {
   id: string;
+  workspaceId?: string;
   principalId: string;
   roleId: string;
+  roleVersion?: number;
   scope: AuthorizationScope;
   assignedBy: string;
   assignedAt: string;
   expiresAt?: string;
+  expiredAt?: string;
+  revokedAt?: string;
+  revokedBy?: string;
+  revocationReason?: string;
   status: "active" | "expired" | "revoked";
+  version?: number;
 }
 
 export interface CapabilitySession {

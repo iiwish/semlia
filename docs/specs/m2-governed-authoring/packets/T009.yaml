@@ -1,0 +1,76 @@
+schema_version: 1
+packet_id: M2-T009-A001
+task_id: T009
+feature_id: m2-governed-authoring
+mode: execute_one_task
+status: Ready
+
+goal: >-
+  Persist LLM/Embedding provider and model settings honoring the ModelConfigurationView contract,
+  generate live schema-valid proposals through the configured provider with full SSOT §8.6 run
+  recording, keeping the governed loop provable on seeded agent-attributed proposals.
+
+dependencies:
+  - T003 Accepted (2026-09-02)
+  - T006 Accepted (2026-09-02)
+  - T007 Accepted (2026-09-02)
+  - founder continuous M2 execution authorization, T009 parallelized (2026-09-02)
+  - docs/SSOT.md §8.6 (agent run recording), §12 S-002 (secrets never in DB plaintext)
+  - docs/specs/m2-governed-authoring/analysis.md decision D1 (provider API with persisted
+    model-config backend)
+
+allowed_files:
+  - internal/**
+  - api/openapi/**
+  - db/**
+  - migrations/**
+  - sdk/typescript/**
+  - tests/**
+  - docs/specs/m2-governed-authoring/**
+  - docs/evidence/M2-T009/**
+  - cmd/**
+
+forbidden_changes:
+  - Do not store provider credentials in the database or return them from any API; store only
+    non-secret metadata plus a credential revision digest (S-002).
+  - Do not bypass the T003 AI structured-output schema gate for live generations.
+  - Do not let live LLM failure break the seeded proposal path; the governed loop stays provable
+    without a provider (AC-M2-010 fallback).
+  - Do not implement embedding rebuild execution; embedding configuration persists, the rebuild
+    run stays session-only until its milestone.
+  - Do not weaken §8.6 run recording, the strict outbox envelope or any existing test.
+
+tdd:
+  red:
+    - Config: provider/model settings endpoints do not exist until this task; created settings
+      persist with workspace scoping; credential material is rejected from persistence and never
+      echoed back.
+    - Generation: a generation request against an unreachable provider records a failed agent run
+      (final state, duration, error digest) and creates no proposal.
+    - Live generation: against a simulated OpenAI-compatible provider, a generation request
+      records a complete agent run (model, config revision, input hash, steps, output digest,
+      cost, duration) and produces a schema-valid agent-attributed proposal through the T003
+      gate.
+    - Authorization: generation requires asset.propose server-side; runs and settings reads are
+      capability-checked.
+  green:
+    - End-to-end against real PostgreSQL and an httptest OpenAI-compatible server: configure →
+      generate → agent run recorded → proposal created and submittable.
+  refactor:
+    - Share one provider-client interface so additional provider protocols are additive adapters.
+
+validation:
+  - go test ./...
+  - go vet ./...
+  - make contracts-check
+  - make check-source
+  - git diff --check
+
+acceptance:
+  - Provider and model settings persist per the ModelConfigurationView contract and never expose
+    credentials.
+  - Live generation produces schema-valid agent-attributed proposals with complete §8.6 run
+    recording.
+  - Provider unavailability degrades to a recorded failed run; the seeded loop is unaffected.
+  - The OpenAI-compatible protocol is implemented; other providers return explicit unsupported
+    errors until their adapters land.

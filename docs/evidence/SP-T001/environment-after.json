@@ -1,0 +1,120 @@
+{
+  "capturedAt": "2026-09-09T04:24:57.642Z",
+  "existingContainers": [
+    {
+      "id": "c730f3eb928e",
+      "name": "semlia-local-server-1",
+      "sameIDRunning": true,
+      "image": "semlia:local"
+    },
+    {
+      "id": "b271bdc288e7",
+      "name": "semlia-local-worker-1",
+      "sameIDRunning": true,
+      "image": "semlia:local"
+    },
+    {
+      "id": "cd0dac4bcf38",
+      "name": "semlia-local-postgres-1",
+      "sameIDRunning": true,
+      "image": "semlia-postgres18-vector:uat-20260906"
+    },
+    {
+      "id": "ded81cc1e370",
+      "name": "deploy-app-1",
+      "sameIDRunning": true,
+      "image": "deploy-app"
+    },
+    {
+      "id": "99f657eaa22b",
+      "name": "deploy-database-1",
+      "sameIDRunning": true,
+      "image": "postgres:17-alpine"
+    },
+    {
+      "id": "ff9f611b6d62",
+      "name": "verrail-g2-closure-postgres-1",
+      "sameIDRunning": true,
+      "image": "postgres:17-alpine"
+    },
+    {
+      "id": "bcd4bc880b09",
+      "name": "verrail-g2-closure-temporal-1",
+      "sameIDRunning": true,
+      "image": "temporalio/temporal:1.8.2"
+    },
+    {
+      "id": "884ecd392d8f",
+      "name": "voimory-postgres-1",
+      "sameIDRunning": true,
+      "image": "postgres:17.6-alpine"
+    },
+    {
+      "id": "bf45bacfe452",
+      "name": "voimory-minio-1",
+      "sameIDRunning": true,
+      "image": "minio/minio:RELEASE.2025-09-07T16-13-09Z"
+    },
+    {
+      "id": "b66f3f979841",
+      "name": "extrio-worker-1",
+      "sameIDRunning": true,
+      "image": "extrio/backend:local"
+    },
+    {
+      "id": "9d3b9e17faf8",
+      "name": "extrio-web-1",
+      "sameIDRunning": true,
+      "image": "extrio/web:local"
+    },
+    {
+      "id": "1f4cd4bf1f79",
+      "name": "extrio-api-1",
+      "sameIDRunning": true,
+      "image": "extrio/backend:local"
+    },
+    {
+      "id": "cd05bc10283e",
+      "name": "verrail-preview-server-1",
+      "sameIDRunning": true,
+      "image": "verrail-preview-server"
+    },
+    {
+      "id": "39dacdf84e70",
+      "name": "verrail-preview-postgres-1",
+      "sameIDRunning": true,
+      "image": "postgres:17-alpine"
+    },
+    {
+      "id": "21447ead792a",
+      "name": "verrail-current-server-1",
+      "sameIDRunning": true,
+      "image": "verrail-current-server"
+    },
+    {
+      "id": "60eb0ed4affa",
+      "name": "verrail-current-postgres-1",
+      "sameIDRunning": true,
+      "image": "742f40ea20b9"
+    },
+    {
+      "id": "2ea5705adf50",
+      "name": "pgsql",
+      "sameIDRunning": true,
+      "image": "postgres:latest"
+    }
+  ],
+  "additionalContainers": [],
+  "topLevelCounts": {
+    "unit": {
+      "pass": 117,
+      "fail": 0,
+      "skip": 0
+    },
+    "integration": {
+      "pass": 81,
+      "fail": 0,
+      "skip": 1
+    }
+  }
+}

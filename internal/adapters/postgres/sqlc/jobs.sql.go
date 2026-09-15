@@ -124,24 +124,86 @@ func (q *Queries) EnqueueJob(ctx context.Context, arg EnqueueJobParams) (Job, er
 	return i, err
 }
 
+const extendJobLease = `-- name: ExtendJobLease :execrows
+UPDATE jobs
+SET leased_until = $1,
+    updated_at = $2
+WHERE id = $3
+  AND status = 'running'
+  AND lease_owner = $4
+  AND leased_until > $2
+`
+
+type ExtendJobLeaseParams struct {
+	LeasedUntil pgtype.Timestamptz `json:"leased_until"`
+	RenewedAt   pgtype.Timestamptz `json:"renewed_at"`
+	ID          pgtype.UUID        `json:"id"`
+	LeaseOwner  pgtype.Text        `json:"lease_owner"`
+}
+
+func (q *Queries) ExtendJobLease(ctx context.Context, arg ExtendJobLeaseParams) (int64, error) {
+	result, err := q.db.Exec(ctx, extendJobLease,
+		arg.LeasedUntil,
+		arg.RenewedAt,
+		arg.ID,
+		arg.LeaseOwner,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const getJobByID = `-- name: GetJobByID :one
+SELECT legacy_id, legacy_workspace_id, job_type, payload, status, attempt, max_attempts, available_at, leased_until, lease_owner, idempotency_key, last_error_code, trace_id, created_at, updated_at, completed_at, id, workspace_id FROM jobs WHERE id = $1
+`
+
+func (q *Queries) GetJobByID(ctx context.Context, id pgtype.UUID) (Job, error) {
+	row := q.db.QueryRow(ctx, getJobByID, id)
+	var i Job
+	err := row.Scan(
+		&i.LegacyID,
+		&i.LegacyWorkspaceID,
+		&i.JobType,
+		&i.Payload,
+		&i.Status,
+		&i.Attempt,
+		&i.MaxAttempts,
+		&i.AvailableAt,
+		&i.LeasedUntil,
+		&i.LeaseOwner,
+		&i.IdempotencyKey,
+		&i.LastErrorCode,
+		&i.TraceID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CompletedAt,
+		&i.ID,
+		&i.WorkspaceID,
+	)
+	return i, err
+}
+
 const markJobFailed = `-- name: MarkJobFailed :execrows
 UPDATE jobs
-SET status = CASE WHEN attempt >= max_attempts THEN 'dead_letter' ELSE 'retryable' END,
-    available_at = $1,
+SET status = CASE WHEN $1::boolean OR attempt >= max_attempts THEN 'dead_letter' ELSE 'retryable' END,
+    available_at = $2,
     leased_until = NULL,
     lease_owner = NULL,
-    last_error_code = $2,
-    updated_at = $3,
+    last_error_code = $3,
+    updated_at = $4,
     completed_at = CASE
-        WHEN attempt >= max_attempts THEN $3::timestamptz
+        WHEN $1::boolean OR attempt >= max_attempts THEN $4::timestamptz
         ELSE NULL::timestamptz
     END
-WHERE id = $4
+WHERE id = $5
   AND status = 'running'
-  AND lease_owner = $5
+  AND lease_owner = $6
+  AND leased_until > $4
 `
 
 type MarkJobFailedParams struct {
+	Permanent   bool               `json:"permanent"`
 	AvailableAt pgtype.Timestamptz `json:"available_at"`
 	ErrorCode   pgtype.Text        `json:"error_code"`
 	FailedAt    pgtype.Timestamptz `json:"failed_at"`
@@ -151,6 +213,7 @@ type MarkJobFailedParams struct {
 
 func (q *Queries) MarkJobFailed(ctx context.Context, arg MarkJobFailedParams) (int64, error) {
 	result, err := q.db.Exec(ctx, markJobFailed,
+		arg.Permanent,
 		arg.AvailableAt,
 		arg.ErrorCode,
 		arg.FailedAt,
@@ -174,6 +237,7 @@ SET status = 'succeeded',
 WHERE id = $2
   AND status = 'running'
   AND lease_owner = $3
+  AND leased_until > $1
 `
 
 type MarkJobSucceededParams struct {
@@ -190,7 +254,7 @@ func (q *Queries) MarkJobSucceeded(ctx context.Context, arg MarkJobSucceededPara
 	return result.RowsAffected(), nil
 }
 
-const reapExpiredJobs = `-- name: ReapExpiredJobs :execrows
+const reapExpiredJobs = `-- name: ReapExpiredJobs :many
 UPDATE jobs
 SET status = CASE WHEN attempt >= max_attempts THEN 'dead_letter' ELSE 'retryable' END,
     available_at = $1,
@@ -201,12 +265,44 @@ SET status = CASE WHEN attempt >= max_attempts THEN 'dead_letter' ELSE 'retryabl
     completed_at = CASE WHEN attempt >= max_attempts THEN $1 ELSE NULL END
 WHERE status = 'running'
   AND leased_until <= $1
+RETURNING legacy_id, legacy_workspace_id, job_type, payload, status, attempt, max_attempts, available_at, leased_until, lease_owner, idempotency_key, last_error_code, trace_id, created_at, updated_at, completed_at, id, workspace_id
 `
 
-func (q *Queries) ReapExpiredJobs(ctx context.Context, expiredAt pgtype.Timestamptz) (int64, error) {
-	result, err := q.db.Exec(ctx, reapExpiredJobs, expiredAt)
+func (q *Queries) ReapExpiredJobs(ctx context.Context, expiredAt pgtype.Timestamptz) ([]Job, error) {
+	rows, err := q.db.Query(ctx, reapExpiredJobs, expiredAt)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return result.RowsAffected(), nil
+	defer rows.Close()
+	items := []Job{}
+	for rows.Next() {
+		var i Job
+		if err := rows.Scan(
+			&i.LegacyID,
+			&i.LegacyWorkspaceID,
+			&i.JobType,
+			&i.Payload,
+			&i.Status,
+			&i.Attempt,
+			&i.MaxAttempts,
+			&i.AvailableAt,
+			&i.LeasedUntil,
+			&i.LeaseOwner,
+			&i.IdempotencyKey,
+			&i.LastErrorCode,
+			&i.TraceID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.CompletedAt,
+			&i.ID,
+			&i.WorkspaceID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

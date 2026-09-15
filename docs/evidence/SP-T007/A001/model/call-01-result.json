@@ -1,0 +1,71 @@
+{
+  "runId": "agr_01m27sz208fjdv798mm4q2qzgc",
+  "operationId": "prodop_01m27sz1sffjbvxbe1zjdxmd6n",
+  "inputVersion": 1,
+  "inputDigest": "sha256:87479572372de715bc9dd77d0bdbd6ffec5ecadab32a89752ecccc845fffa918",
+  "status": "succeeded",
+  "providerMode": "actual_model",
+  "model": "deepseek-v4-flash",
+  "modelConfigRevision": "sha256:ee0f8d52f8f942619f1d1b8318bab43af4eb9fc54900668d063031d84ced15f6",
+  "replayed": false,
+  "outputDigest": "sha256:7c5abb01e87b15b8abb50731f246faf7c22822f951dd4562b58b703b6995a844",
+  "output": {
+    "schemaVersion": "semlia.production-suggestions/v1",
+    "targets": [
+      {
+        "changes": [],
+        "content": {
+          "address": "commerce.customers",
+          "assetType": "entity",
+          "definition": "Represents a customer. Contains customer identifier and name from the warehouse.customers table.",
+          "displayName": "customers",
+          "ownerPrincipalId": "prn_01m27sz1g6fjbspd1tft2m0x35",
+          "scope": "Commerce"
+        },
+        "evidenceIds": [],
+        "identityKey": "commerce.customers",
+        "intent": "create",
+        "kind": "semantic_asset",
+        "localKey": "customers",
+        "title": "customers"
+      },
+      {
+        "changes": [],
+        "content": {
+          "address": "commerce.orders",
+          "assetType": "entity",
+          "definition": "Represents an order. Contains order identifier, customer reference, amount, and status from the warehouse.orders table.",
+          "displayName": "orders",
+          "ownerPrincipalId": "prn_01m27sz1g6fjbspd1tft2m0x35",
+          "scope": "Commerce"
+        },
+        "evidenceIds": [],
+        "identityKey": "commerce.orders",
+        "intent": "create",
+        "kind": "semantic_asset",
+        "localKey": "orders",
+        "title": "orders"
+      },
+      {
+        "changes": [],
+        "content": {
+          "address": "commerce.revenue",
+          "assetType": "metric",
+          "definition": null,
+          "displayName": "revenue",
+          "ownerPrincipalId": "prn_01m27sz1g6fjbspd1tft2m0x35",
+          "scope": null
+        },
+        "evidenceIds": [],
+        "identityKey": "commerce.revenue",
+        "intent": "create",
+        "kind": "semantic_asset",
+        "localKey": "revenue",
+        "title": "revenue"
+      }
+    ]
+  },
+  "errorCode": null,
+  "costMicros": null,
+  "durationMs": 18745
+}

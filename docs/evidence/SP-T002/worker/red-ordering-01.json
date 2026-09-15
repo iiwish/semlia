@@ -1,0 +1,24 @@
+{
+  "command": [
+    "go",
+    "test",
+    "-count=1",
+    "-timeout=10m",
+    "./tests/integration/discovery",
+    "-run",
+    "^TestSourceSnapshotOutOfOrder",
+    "-v"
+  ],
+  "clearedEnvironment": [
+    "SEMLIA_INGESTION_TEST_DATABASE_URL",
+    "SEMLIA_EXECUTION_CRASH_HELPER",
+    "SEMLIA_EXECUTION_TEST_DB",
+    "SEMLIA_DATABASE_URL"
+  ],
+  "start": "2026-09-09T06:23:20.088Z",
+  "end": "2026-09-09T06:23:26.710Z",
+  "exitStatus": 1,
+  "signal": null,
+  "stdout": "2026/09/09 14:23:23 github.com/testcontainers/testcontainers-go - Connected to docker: \n  Server Version: 29.4.0\n  API Version: 1.54\n  Operating System: OrbStack\n  Total Memory: 16040 MB\n  Testcontainers for Go Version: v0.44.0\n  Resolved Docker Host: unix:///var/run/docker.sock\n  Resolved Docker Socket Path: /var/run/docker.sock\n  Test SessionID: f5c36e4ece22642d7831d40b43d8160eabf108fb9832b82e44d8568e3117cb54\n  Test ProcessID: 096c9c64-0416-4f7a-a5e1-e3f6bf8d3cf1\n2026/09/09 14:23:23 🐳 Creating container for image postgres:18-alpine\n2026/09/09 14:23:24 🐳 Creating container for image testcontainers/ryuk:0.14.0\n2026/09/09 14:23:24 ✅ Container created: f70de71aec79\n2026/09/09 14:23:24 🐳 Starting container: f70de71aec79\n2026/09/09 14:23:24 ✅ Container started: f70de71aec79\n2026/09/09 14:23:24 ⏳ Waiting for container id f70de71aec79 image: testcontainers/ryuk:0.14.0. Waiting for: all of: [log message \"Started\", port 8080/tcp to be listening]\n2026/09/09 14:23:24 Shell not found in container\n2026/09/09 14:23:24 🔔 Container is ready: f70de71aec79\n2026/09/09 14:23:24 ✅ Container created: 09ddead1ca4a\n2026/09/09 14:23:24 🐳 Starting container: 09ddead1ca4a\n2026/09/09 14:23:24 ✅ Container started: 09ddead1ca4a\n2026/09/09 14:23:24 ⏳ Waiting for container id 09ddead1ca4a image: postgres:18-alpine. Waiting for: all of: [log message \"database system is ready to accept connections\" (occurrence: 2), port 5432/tcp to be listening]\n2026/09/09 14:23:25 🔔 Container is ready: 09ddead1ca4a\n=== RUN   TestSourceSnapshotOutOfOrderDoesNotRegressCurrent\n    source_snapshot_test.go:184: older failed rewrote current: run=01a084d5-e8ea-76fa-ab5c-71686224a238 status=complete name=historical_orders\n--- FAIL: TestSourceSnapshotOutOfOrderDoesNotRegressCurrent (0.13s)\nFAIL\n2026/09/09 14:23:26 🐳 Stopping container: 09ddead1ca4a\n2026/09/09 14:23:26 ✅ Container stopped: 09ddead1ca4a\n2026/09/09 14:23:26 🐳 Terminating container: 09ddead1ca4a\n2026/09/09 14:23:26 🚫 Container terminated: 09ddead1ca4a\nFAIL\tgithub.com/iiwish/semlia/tests/integration/discovery\t4.324s\nFAIL\n",
+  "stderr": ""
+}

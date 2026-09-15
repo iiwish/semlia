@@ -17,6 +17,7 @@ RUN pnpm --filter @semlia/web build
 FROM golang:1.26.6-alpine AS go-builder
 
 WORKDIR /src
+RUN apk add --no-cache build-base
 COPY go.mod go.sum ./
 COPY . .
 RUN chmod -R a+rX /src/migrations
@@ -24,8 +25,9 @@ RUN rm -rf internal/platform/web/static
 COPY --from=web-builder /src/web/dist internal/platform/web/static
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/semlia ./cmd/semlia
-RUN mkdir -p /out/git-content
+    CGO_ENABLED=1 GOOS=linux go build -trimpath -tags netgo \
+    -ldflags="-s -w -linkmode external -extldflags -static" -o /out/semlia ./cmd/semlia
+RUN mkdir -p /out/git-content/sql /out/artifacts
 
 FROM gcr.io/distroless/base-debian12:nonroot
 
@@ -33,6 +35,7 @@ WORKDIR /app
 COPY --from=go-builder /out/semlia /app/semlia
 COPY --from=go-builder /src/migrations /app/migrations
 COPY --from=go-builder --chown=nonroot:nonroot /out/git-content /var/lib/semlia/content
+COPY --from=go-builder --chown=nonroot:nonroot /out/artifacts /var/lib/semlia/artifacts
 USER nonroot:nonroot
 EXPOSE 8080
 ENTRYPOINT ["/app/semlia"]

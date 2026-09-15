@@ -1,0 +1,28 @@
+schema_version: 1
+packet_id: DEMO-T001-A001
+task_id: DEMO-T001
+feature_id: resume-demo
+mode: direct_execute
+status: Needs_Review
+governance_inputs: [plan.md, checklist.md, analysis.md]
+work_unit: 合成零售演示数据和正常服务治理闭环
+codebase_context: 冻结基线 511dc74；复用 cmd/semlia 正常服务及本地账号 CLI，API 契约以 api/openapi/semlia.v1.yaml 为准；productionacceptance 仅供阅读，不作为演示服务。
+execution_constraints:
+  allowed: [examples/resume-demo, scripts/demo, tests/acceptance/resume_demo*, web/e2e-demo, web/playwright.demo.config.ts, docs/specs/resume-demo, docs/evidence/DEMO-T001, docs/operations/resume-demo.md]
+  excluded: 正常领域实现、历史迁移、既有开发数据、部署、推送、付费模型、子代理
+  ownership: 独立目录、独立数据库和专用角色；不重用开发应用配置，不修改共享角色。
+  approved_catalog_fix: 用户于 2026-09-14 明确批准目录字段兼容修复；允许 db/queries/catalog.sql、sqlc 生成文件、web/src/catalogRuntime.tsx、web/src/Catalog.test.tsx、tests/integration/catalog/catalog_test.go。以正常浏览器失败和新增回归测试为 RED，不修改业务发布历史。
+tdd_plan:
+  red: Node 单测先验证缺失生成器及初始化所有权/重入保护。
+  green: 实现确定性生成器、专用环境及真实 HTTP 初始化。
+  refactor: 仅在全绿后整理本任务模块。
+validation_loop:
+  - node --test examples/resume-demo/*.test.mjs scripts/demo/*.test.mjs
+  - node scripts/demo/cli.mjs verify
+  - node scripts/demo/recovery.mjs
+  - pnpm --dir web exec playwright test --config playwright.demo.config.ts
+  - GOFLAGS=-p=1 VITEST_MAX_WORKERS=2 make check-source
+evidence_contract: docs/evidence/DEMO-T001；记录 RED/GREEN、重复和中断恢复、拒绝行为、两尺寸截图、真实对象引用，排除凭据。
+review_contract: 先审查计划符合性，再查幂等/授权/所有权/数据正确性；未通过不标完成。
+handoff: 本地可访问实例、两工作区和使用说明；Needs_Review，不自动 Accepted。
+stop_conditions: 归属不明、需要产品领域修复、无数据库创建权限、需要付费模型或既有数据写入时停止申请明确范围。

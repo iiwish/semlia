@@ -1,0 +1,22 @@
+{
+  "command": [
+    "go",
+    "test",
+    "./tests/contracts",
+    "-run",
+    "TestGeneratedArtifactsArePortable",
+    "-count=1"
+  ],
+  "clearedEnvironment": [
+    "SEMLIA_INGESTION_TEST_DATABASE_URL",
+    "SEMLIA_EXECUTION_CRASH_HELPER",
+    "SEMLIA_EXECUTION_TEST_DB",
+    "SEMLIA_DATABASE_URL"
+  ],
+  "start": "2026-09-09T07:15:34.108Z",
+  "end": "2026-09-09T07:15:35.633Z",
+  "exitStatus": 1,
+  "signal": null,
+  "stdout": "--- FAIL: TestGeneratedArtifactsArePortable (0.00s)\n    contract_test.go:475: api/gen/go/types.gen.go missing \"\\n\\tDiagnostic OperationsRuntimeRunEventEventType\"\nFAIL\nFAIL\tgithub.com/iiwish/semlia/tests/contracts\t1.162s\nFAIL\n",
+  "stderr": ""
+}

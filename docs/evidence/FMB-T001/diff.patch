@@ -1,0 +1,51 @@
+# FMB-T001 scoped diff receipt
+#
+# The repository had an approved dirty Alpha/M3 baseline before this task. A repository-wide raw
+# `git diff` would misattribute that work to FMB-T001, so this receipt records the reviewed ownership
+# boundary instead. The exact working-tree content at review time is validated by the command record
+# in test-results.md and by the independent A003 review.
+
+api/openapi/semlia.v1.yaml
+api/gen/go/types.gen.go
+sdk/typescript/src/client.ts
+sdk/typescript/src/client.test.ts
+sdk/typescript/src/index.ts
+sdk/typescript/src/schema.gen.ts
+db/sqlc.yaml
+db/queries/authorization.sql
+db/queries/identity.sql
+migrations/000016_fmb_authorization_admin.up.sql
+migrations/000016_fmb_authorization_admin.down.sql
+internal/domain/authorization/**
+internal/application/authorization/**
+internal/application/identity/**
+internal/adapters/postgres/authorization.go
+internal/adapters/postgres/identity.go
+internal/adapters/postgres/sqlc/authorization.sql.go
+internal/adapters/postgres/sqlc/identity.sql.go
+internal/platform/http/handler.go
+internal/platform/http/authorization_test.go
+internal/platform/http/identity.go
+internal/platform/http/identity_test.go
+cmd/semlia/main.go
+cmd/semlia/readiness.go
+cmd/semlia/readiness_test.go
+web/src/AccessControlView.tsx
+web/src/AccessControlView.test.tsx
+web/src/authorizationAdmin.ts
+web/src/authorizationAdmin.test.tsx
+web/src/authorizationAdminRuntime.tsx
+web/src/authorizationAdminRuntime.test.tsx
+web/src/sessionRuntime.tsx
+web/src/sessionRuntime.test.tsx
+web/src/ProductApp.tsx
+web/src/ProductApp.test.tsx
+web/src/types.ts
+web/src/styles.css
+internal/platform/web/static/**
+tests/contracts/**
+tests/integration/authorization/**
+tests/integration/db/**
+tests/integration/identity/**
+docs/evidence/ALPHA-T006/route-disclosure-inventory.md
+docs/evidence/FMB-T001/**

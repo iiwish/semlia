@@ -1,0 +1,1443 @@
+openapi: 3.0.3
+info:
+  title: Semlia Semantic Production Planned Contract
+  version: 0.1.0
+  description: >-
+    Planned SP-T001 design, not a deployed API or the canonical public bundle.
+    production.md and ../data-model.md specify transactional and migration rules
+    that OpenAPI cannot enforce. Existing REST/MCP/CLI/SDK consumption is unchanged.
+x-semlia-status: planned
+x-semlia-invariants:
+  maxTargets: 32
+  maxChangesPerTarget: 100
+  maxTotalChanges: 256
+  maxBodyBytes: 1048576
+  maxModelOutputBytes: 1048576
+  snapshotMembership: immutable_exact
+  unchangedRevision: reuse
+  partialCoverage: explicit_no_deletion_inference
+  legacyHistory: unverifiable
+  createBaseline: absent
+  updateBaseline: exact_published_pin
+  idempotencyScope: [workspace, principal, command, key]
+  replayAuthorization: current
+  recoveryAuthority: server
+  approvalAuthority: proposal_validation_review
+  publishAtomicity: all_members_one_transaction
+  publishRecheck: [authorization, sod, set_digest, input_freshness, baseline, dependency_closure, validations, reviews]
+  legacyMemberPublish: reject
+  rollback: exact_before_manifest_including_absence
+  releaseAttribution: all_proposals
+  legacyDigest: unchanged
+  migration: expand_first
+  lossyDown: reject
+  oldBinaryAfterActivation: unsupported_fenced
+  modelNetwork: outside_transaction
+  modelRetry: explicit_no_automatic_paid_replay
+  machineAllowlistAdditions: []
+  desktopViewports: [1440x900, 1024x768]
+  legacyProductionRollback: reject_including_descendants
+  validationAttemptSelection: one_complete_latest_attempt
+  reviewValidationBinding: exact_attempt_digest_reapprove_after_revalidation
+  modelOutputPersistence: immutable_schema_gated_body
+  identityReintroduction: create_with_trusted_absence
+security:
+  - SessionCookie: []
+paths:
+  /api/v1/workspaces/{workspaceId}/sources/{sourceId}/snapshots:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+      - $ref: '#/components/parameters/SourceId'
+    get:
+      operationId: listProductionSourceSnapshots
+      summary: List immutable projections, newest first
+      x-semlia-actions: [source.read]
+      x-semlia-reauthorize: true
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Authorized snapshot page including partial and unverifiable records
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SnapshotPage' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/v1/workspaces/{workspaceId}/sources/{sourceId}/snapshots/{snapshotId}:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+      - $ref: '#/components/parameters/SourceId'
+      - $ref: '#/components/parameters/SnapshotId'
+    get:
+      operationId: getProductionSourceSnapshot
+      summary: Read immutable scope, coverage and digest without joining current names
+      x-semlia-actions: [source.read]
+      x-semlia-reauthorize: true
+      responses:
+        '200':
+          description: Exact snapshot metadata; members and diagnostics have separate pages
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SourceSnapshot' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/v1/workspaces/{workspaceId}/sources/{sourceId}/snapshots/{snapshotId}/members:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+      - $ref: '#/components/parameters/SourceId'
+      - $ref: '#/components/parameters/SnapshotId'
+    get:
+      operationId: listProductionSnapshotMembers
+      summary: Read exact observed members including unchanged revisions
+      x-semlia-actions: [source.read]
+      x-semlia-reauthorize: true
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - name: kind
+          in: query
+          schema: { $ref: '#/components/schemas/MemberKind' }
+      responses:
+        '200':
+          description: Page fixed to snapshot ID and history quality
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SnapshotMemberPage' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/v1/workspaces/{workspaceId}/sources/{sourceId}/snapshots/{snapshotId}/diagnostics:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+      - $ref: '#/components/parameters/SourceId'
+      - $ref: '#/components/parameters/SnapshotId'
+    get:
+      operationId: listProductionSnapshotDiagnostics
+      summary: Read bounded sanitized coverage diagnostics
+      x-semlia-actions: [source.read]
+      x-semlia-reauthorize: true
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Diagnostics page ordered by ordinal
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DiagnosticPage' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/v1/workspaces/{workspaceId}/production-operations:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+    get:
+      operationId: listProductionOperations
+      summary: Recover authorized operations without browser state
+      x-semlia-actions: [asset.read, source.read, evidence.read, binding.read]
+      x-semlia-reauthorize: true
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - name: sourceId
+          in: query
+          schema: { $ref: '#/components/schemas/ResourceId' }
+        - name: candidateId
+          in: query
+          schema: { $ref: '#/components/schemas/ResourceId' }
+        - name: createdBy
+          in: query
+          schema: { $ref: '#/components/schemas/ResourceId' }
+      responses:
+        '200':
+          description: Scope-filtered summaries, not all-workspace counts or full target content
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductionOperationPage' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+    post:
+      operationId: createProductionOperation
+      summary: Atomically reserve identities and create linked draft proposals
+      x-semlia-actions: [asset.propose, source.read, evidence.read, binding.read]
+      x-semlia-conditional-actions: [binding.manage]
+      x-semlia-reauthorize: true
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateProductionRequest' }
+      responses: &operationWriteResponses
+        '200':
+          description: Committed result, including replay or a no_change operation
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductionCommandResult' }
+        '201':
+          description: Newly committed operation; Location points to the operation GET
+          headers:
+            Location:
+              schema: { type: string, maxLength: 2048 }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductionCommandResult' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '413': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /api/v1/workspaces/{workspaceId}/production-operations/{operationId}:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+      - $ref: '#/components/parameters/OperationId'
+    get:
+      operationId: getProductionOperation
+      summary: Read server-authoritative input, targets, links and derived progress
+      x-semlia-actions: [asset.read, source.read, evidence.read, binding.read]
+      x-semlia-reauthorize: true
+      parameters:
+        - name: version
+          in: query
+          description: Exact immutable version; omitted selects current, never rewrites history
+          schema: { type: integer, minimum: 1, maximum: 2147483647 }
+      responses:
+        '200':
+          description: Authorized operation version with exact governance references
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductionOperation' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+    put:
+      operationId: replaceProductionDraft
+      summary: Replace the entire draft with a CAS-protected new immutable version
+      x-semlia-actions: [asset.propose, source.read, evidence.read, binding.read]
+      x-semlia-conditional-actions: [binding.manage]
+      x-semlia-reauthorize: true
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReplaceProductionRequest' }
+      responses: *operationWriteResponses
+  /api/v1/workspaces/{workspaceId}/production-operations/{operationId}/submit:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+      - $ref: '#/components/parameters/OperationId'
+    post:
+      operationId: submitProductionOperation
+      summary: Freeze all members, submit existing proposals and enqueue initial validation atomically
+      x-semlia-actions: [asset.propose, validation.run, source.read, evidence.read, binding.read]
+      x-semlia-reauthorize: true
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SubmitProductionRequest' }
+      responses: &asyncResponses
+        '200':
+          description: Replayed committed command or completed result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductionCommandResult' }
+        '202':
+          description: Durable validation job references committed; poll the operation
+          headers:
+            Location:
+              schema: { type: string, maxLength: 2048 }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductionCommandResult' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '413': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /api/v1/workspaces/{workspaceId}/production-operations/{operationId}/validations:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+      - $ref: '#/components/parameters/OperationId'
+    get:
+      operationId: listProductionValidationAttempts
+      summary: Read complete immutable validation attempt groups without mixing their runs
+      x-semlia-actions: [asset.read, source.read, evidence.read, binding.read]
+      x-semlia-reauthorize: true
+      parameters:
+        - name: version
+          in: query
+          required: true
+          schema: { $ref: '#/components/schemas/Version' }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Attempt-number descending page fixed to one operation version; no implicit active-attempt fallback
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ValidationAttemptPage' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+    post:
+      operationId: validateProductionOperation
+      summary: Queue a fresh validation attempt for the identical frozen set
+      x-semlia-actions: [validation.run, source.read, evidence.read, asset.read, binding.read]
+      x-semlia-reauthorize: true
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ValidateProductionRequest' }
+      responses: *asyncResponses
+  /api/v1/workspaces/{workspaceId}/production-operations/{operationId}/reviews:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+      - $ref: '#/components/parameters/OperationId'
+    post:
+      operationId: reviewProductionOperation
+      summary: Add existing Review facts to selected members of one exact frozen set
+      x-semlia-actions: [proposal.review, asset.read, source.read, evidence.read, binding.read]
+      x-semlia-reauthorize: true
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReviewProductionRequest' }
+      responses: *operationWriteResponses
+  /api/v1/workspaces/{workspaceId}/production-operations/{operationId}/publish:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+      - $ref: '#/components/parameters/OperationId'
+    post:
+      operationId: publishProductionOperation
+      summary: Publish all proposals and complete manifest in one transaction
+      x-semlia-actions: [release.publish, asset.read, source.read, evidence.read, binding.read]
+      x-semlia-reauthorize: true
+      x-semlia-human-required: true
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PublishProductionRequest' }
+      responses: &releaseWriteResponses
+        '200':
+          description: Authorized replay of the committed release
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReleaseCommandResult' }
+        '201':
+          description: All members committed as one immutable release
+          headers:
+            Location:
+              schema: { type: string, maxLength: 2048 }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReleaseCommandResult' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '413': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /api/v1/workspaces/{workspaceId}/production-operations/{operationId}/business-rule-confirmations:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+      - $ref: '#/components/parameters/OperationId'
+    post:
+      operationId: recordProductionBusinessRule
+      summary: Confirm or revoke exact business definitions as a human contributor
+      x-semlia-actions: [asset.read, asset.propose, evidence.read, source.read]
+      x-semlia-reauthorize: true
+      x-semlia-human-required: true
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProductionBusinessRuleRequest' }
+      responses:
+        '201':
+          description: Immutable event committed; old validation requires rerun
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductionBusinessRuleEvent' }
+        '200':
+          description: Original event replay, not a renewed confirmation
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductionBusinessRuleEvent' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '413': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+    get:
+      operationId: listProductionBusinessRules
+      summary: Latest event per target and current validity for an exact version
+      x-semlia-actions: [asset.read, evidence.read, source.read]
+      x-semlia-reauthorize: true
+      parameters:
+        - name: version
+          in: query
+          required: true
+          schema: { $ref: '#/components/schemas/Version' }
+      responses:
+        '200':
+          description: Latest events ordered by target key
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    maxItems: 32
+                    items: { $ref: '#/components/schemas/ProductionBusinessRuleWitness' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/v1/workspaces/{workspaceId}/production-operations/{operationId}/generation:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+      - $ref: '#/components/parameters/OperationId'
+    post:
+      operationId: generateProductionSuggestions
+      summary: Queue an explicitly authorized model run against a draft input version
+      x-semlia-actions: [asset.propose, source.read, evidence.read, binding.read]
+      x-semlia-reauthorize: true
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GenerateProductionRequest' }
+      responses:
+        '200':
+          description: Replayed run; never triggers another model call
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GenerationResult' }
+        '202':
+          description: Existing AgentRun/job persisted; Location is the run recovery URL
+          headers:
+            Location:
+              schema: { type: string, maxLength: 2048 }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GenerationResult' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '413': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /api/v1/workspaces/{workspaceId}/production-operations/{operationId}/generation/{runId}:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+      - $ref: '#/components/parameters/OperationId'
+      - $ref: '#/components/parameters/RunId'
+    get:
+      operationId: getProductionGeneration
+      summary: Recover exact model provenance and structured suggestions without resending
+      x-semlia-actions: [asset.read, source.read, evidence.read, binding.read]
+      x-semlia-reauthorize: true
+      responses:
+        '200':
+          description: Existing AgentRun-derived status, sanitized error and bounded output
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GenerationResult' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/v1/workspaces/{workspaceId}/production-releases/{releaseId}:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+      - $ref: '#/components/parameters/ReleaseId'
+    get:
+      operationId: getProductionRelease
+      summary: Read complete production attribution and exact before/after pins
+      x-semlia-actions: [asset.read, source.read, evidence.read, binding.read]
+      x-semlia-reauthorize: true
+      responses:
+        '200':
+          description: Complete production detail, not a second release authority
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductionRelease' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+  /api/v1/workspaces/{workspaceId}/production-releases/{releaseId}/rollback:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+      - $ref: '#/components/parameters/ReleaseId'
+    post:
+      operationId: rollbackProductionRelease
+      summary: Create a latest-only release restoring the exact before manifest including absence
+      x-semlia-actions: [release.rollback, asset.read, source.read, evidence.read, binding.read]
+      x-semlia-reauthorize: true
+      x-semlia-human-required: true
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RollbackProductionRequest' }
+      responses: *releaseWriteResponses
+components:
+  securitySchemes:
+    SessionCookie:
+      type: apiKey
+      in: cookie
+      name: __Host-semlia_session
+      description: Existing authenticated management session; development cookie remains semlia_session_dev. Existing CSRF/origin checks apply. No machine bearer expansion.
+  parameters:
+    WorkspaceId:
+      name: workspaceId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/ResourceId' }
+    SourceId:
+      name: sourceId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/ResourceId' }
+    SnapshotId:
+      name: snapshotId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/ResourceId' }
+    OperationId:
+      name: operationId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/ResourceId' }
+    ReleaseId:
+      name: releaseId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/ResourceId' }
+    RunId:
+      name: runId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/ResourceId' }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Workspace/principal/command scoped, no automatic expiry while authoritative records remain
+      schema: { type: string, minLength: 8, maxLength: 128, pattern: '^[A-Za-z0-9._:-]+$' }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+    Cursor:
+      name: cursor
+      in: query
+      description: Opaque authenticated keyset token bound to workspace, resource, filter and upper watermark; not an offset
+      schema: { type: string, maxLength: 2048 }
+  responses:
+    Error:
+      description: Stable sanitized error; status/code/recovery semantics are defined in production.md
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ProductionError' }
+  schemas:
+    ResourceId:
+      type: string
+      pattern: '^[a-z][a-z0-9_]{1,31}_[0-7][0-9a-hjkmnp-tv-z]{25}$'
+      maxLength: 59
+      description: TypeID shape only; server must enforce each domain prefix, UUIDv7, existence, ownership and workspace. ssnp and prodop are planned prefixes.
+    Digest:
+      type: string
+      pattern: '^sha256:[0-9a-f]{64}$'
+      minLength: 71
+      maxLength: 71
+    Timestamp: { type: string, format: date-time }
+    Version: { type: integer, minimum: 1, maximum: 2147483647 }
+    LocalKey: { type: string, pattern: '^[a-z][a-z0-9_]{0,63}$', maxLength: 64 }
+    TargetKind:
+      type: string
+      enum: [semantic_asset, physical_binding, model_grain, entity_key, join_contract]
+    ObjectKind:
+      type: string
+      enum: [physical_binding, model_grain, entity_key, join_contract]
+    MemberKind: { type: string, enum: [dataset, field, code, lineage] }
+    HistoryQuality: { type: string, enum: [verified, unverifiable] }
+    SourceSnapshot:
+      type: object
+      additionalProperties: false
+      required: [id, sourceId, sourceRevisionId, adapterVersion, scopeDigest, contentDigest, historyQuality, coverageStatus, coverage, memberCount, diagnosticCount, createdAt]
+      properties:
+        id: { $ref: '#/components/schemas/ResourceId' }
+        sourceId: { $ref: '#/components/schemas/ResourceId' }
+        sourceRevisionId: { $ref: '#/components/schemas/ResourceId' }
+        adapterVersion: { type: string, minLength: 1, maxLength: 128 }
+        scopeDigest: { $ref: '#/components/schemas/Digest' }
+        contentDigest: { $ref: '#/components/schemas/Digest' }
+        historyQuality: { $ref: '#/components/schemas/HistoryQuality' }
+        coverageStatus: { type: string, enum: [complete, partial, failed] }
+        coverage:
+          type: array
+          minItems: 1
+          maxItems: 256
+          items: { $ref: '#/components/schemas/CoverageUnit' }
+        memberCount: { type: integer, minimum: 0, maximum: 2147483647 }
+        diagnosticCount: { type: integer, minimum: 0, maximum: 2147483647 }
+        createdAt: { $ref: '#/components/schemas/Timestamp' }
+    CoverageUnit:
+      type: object
+      additionalProperties: false
+      required: [key, status, enumerationComplete, diagnosticCodes]
+      properties:
+        key: { type: string, minLength: 1, maxLength: 256 }
+        selector: { type: string, maxLength: 1024 }
+        status: { type: string, enum: [complete, partial, failed] }
+        enumerationComplete: { type: boolean }
+        diagnosticCodes:
+          type: array
+          maxItems: 64
+          uniqueItems: true
+          items: { type: string, pattern: '^[A-Z][A-Z0-9_]{2,63}$', maxLength: 64 }
+    SnapshotMember:
+      type: object
+      additionalProperties: false
+      required: [kind, objectId, revisionId, name, locator, contentDigest, coverageKey]
+      properties:
+        kind: { $ref: '#/components/schemas/MemberKind' }
+        objectId: { $ref: '#/components/schemas/ResourceId' }
+        revisionId: { $ref: '#/components/schemas/ResourceId' }
+        name: { type: string, minLength: 1, maxLength: 1024 }
+        locator: { type: string, minLength: 1, maxLength: 2048 }
+        contentDigest: { $ref: '#/components/schemas/Digest' }
+        coverageKey: { type: string, minLength: 1, maxLength: 256 }
+        parentObjectId: { $ref: '#/components/schemas/ResourceId' }
+        parentRevisionId: { $ref: '#/components/schemas/ResourceId' }
+    Diagnostic:
+      type: object
+      additionalProperties: false
+      required: [ordinal, code, severity, coverageKey, message]
+      properties:
+        ordinal: { type: integer, minimum: 1, maximum: 2147483647 }
+        code: { type: string, pattern: '^[A-Z][A-Z0-9_]{2,63}$', maxLength: 64 }
+        severity: { type: string, enum: [info, warning, blocker] }
+        coverageKey: { type: string, minLength: 1, maxLength: 256 }
+        locator: { type: string, maxLength: 2048 }
+        message: { type: string, maxLength: 2048 }
+    SnapshotPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items: { type: array, maxItems: 200, items: { $ref: '#/components/schemas/SourceSnapshot' } }
+        nextCursor: { type: string, maxLength: 2048, nullable: true }
+    SnapshotMemberPage:
+      type: object
+      additionalProperties: false
+      required: [snapshotId, historyQuality, items, nextCursor]
+      properties:
+        snapshotId: { $ref: '#/components/schemas/ResourceId' }
+        historyQuality: { $ref: '#/components/schemas/HistoryQuality' }
+        items: { type: array, maxItems: 200, items: { $ref: '#/components/schemas/SnapshotMember' } }
+        nextCursor: { type: string, maxLength: 2048, nullable: true }
+    DiagnosticPage:
+      type: object
+      additionalProperties: false
+      required: [snapshotId, items, nextCursor]
+      properties:
+        snapshotId: { $ref: '#/components/schemas/ResourceId' }
+        items: { type: array, maxItems: 200, items: { $ref: '#/components/schemas/Diagnostic' } }
+        nextCursor: { type: string, maxLength: 2048, nullable: true }
+    SnapshotSelection:
+      type: object
+      additionalProperties: false
+      required: [sourceId, snapshotId, digest, coverageKeys]
+      properties:
+        sourceId: { $ref: '#/components/schemas/ResourceId' }
+        snapshotId: { $ref: '#/components/schemas/ResourceId' }
+        digest: { $ref: '#/components/schemas/Digest' }
+        coverageKeys:
+          type: array
+          minItems: 1
+          maxItems: 256
+          uniqueItems: true
+          items: { type: string, minLength: 1, maxLength: 256 }
+    CandidateSelection:
+      type: object
+      additionalProperties: false
+      required: [candidateId, digest, snapshotId, targetKeys, primaryTargetKey]
+      properties:
+        candidateId: { $ref: '#/components/schemas/ResourceId' }
+        digest: { $ref: '#/components/schemas/Digest' }
+        snapshotId: { $ref: '#/components/schemas/ResourceId' }
+        targetKeys: { type: array, minItems: 1, maxItems: 32, uniqueItems: true, items: { $ref: '#/components/schemas/LocalKey' } }
+        primaryTargetKey: { $ref: '#/components/schemas/LocalKey' }
+      description: Explicit primary must be a targetKeys member with a real proposal; it supplies the legacy singular candidate proposalId. All associations remain authoritative, not just primary.
+    EvidenceSelection:
+      type: object
+      additionalProperties: false
+      required: [evidenceId, digest]
+      properties:
+        evidenceId: { $ref: '#/components/schemas/ResourceId' }
+        digest: { $ref: '#/components/schemas/Digest' }
+        snapshotId: { $ref: '#/components/schemas/ResourceId' }
+      description: Declared rule evidence may be independent of a source; server checks immutable artifact and business attestation, never trusts model assertion as approval.
+    ProductionInput:
+      type: object
+      additionalProperties: false
+      required: [snapshots, candidates, evidence, dependencies]
+      properties:
+        snapshots: { type: array, minItems: 1, maxItems: 32, items: { $ref: '#/components/schemas/SnapshotSelection' } }
+        candidates: { type: array, maxItems: 256, items: { $ref: '#/components/schemas/CandidateSelection' } }
+        evidence: { type: array, maxItems: 256, items: { $ref: '#/components/schemas/EvidenceSelection' } }
+        dependencies: { type: array, maxItems: 256, items: { $ref: '#/components/schemas/PublishedReference' } }
+    PhysicalReference:
+      type: object
+      additionalProperties: false
+      required: [snapshotId, kind, objectId, revisionId]
+      properties:
+        snapshotId: { $ref: '#/components/schemas/ResourceId' }
+        kind: { type: string, enum: [dataset, field] }
+        objectId: { $ref: '#/components/schemas/ResourceId' }
+        revisionId: { $ref: '#/components/schemas/ResourceId' }
+    SemanticReference:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [localKey]
+          properties:
+            localKey: { $ref: '#/components/schemas/LocalKey' }
+        - $ref: '#/components/schemas/PublishedReference'
+    PublishedReference:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [kind, targetId, releaseId, revisionId]
+          properties:
+            kind: { type: string, enum: [semantic_asset] }
+            targetId: { $ref: '#/components/schemas/ResourceId' }
+            releaseId: { $ref: '#/components/schemas/ResourceId' }
+            revisionId: { $ref: '#/components/schemas/ResourceId' }
+        - type: object
+          additionalProperties: false
+          required: [kind, targetId, releaseId, objectVersion, contentDigest]
+          properties:
+            kind: { $ref: '#/components/schemas/ObjectKind' }
+            targetId: { $ref: '#/components/schemas/ResourceId' }
+            releaseId: { $ref: '#/components/schemas/ResourceId' }
+            objectVersion: { $ref: '#/components/schemas/Version' }
+            contentDigest: { $ref: '#/components/schemas/Digest' }
+    AssetContent:
+      type: object
+      additionalProperties: false
+      required: [address, assetType, displayName, definition, scope, ownerPrincipalId]
+      properties:
+        address: { type: string, pattern: '^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$', maxLength: 512 }
+        assetType: { type: string, enum: [concept, entity, semantic_model, dimension, measure, metric, segment] }
+        displayName: { type: string, minLength: 1, maxLength: 256 }
+        definition: { type: string, minLength: 1, maxLength: 16384, nullable: true }
+        scope: { type: string, minLength: 1, maxLength: 4096, nullable: true }
+        ownerPrincipalId: { $ref: '#/components/schemas/ResourceId' }
+      description: Null definition/scope explicitly means unresolved draft, blocked at validation; physical bindings are separate governed targets, not embedded copies.
+    BindingContent:
+      type: object
+      additionalProperties: false
+      required: [asset, dataset]
+      properties:
+        asset: { $ref: '#/components/schemas/SemanticReference' }
+        dataset: { $ref: '#/components/schemas/PhysicalReference' }
+        field: { $ref: '#/components/schemas/PhysicalReference' }
+        transform: { type: string, minLength: 1, maxLength: 4096 }
+    GrainContent:
+      type: object
+      additionalProperties: false
+      required: [asset, expression, fields]
+      properties:
+        asset: { $ref: '#/components/schemas/SemanticReference' }
+        expression: { type: string, minLength: 1, maxLength: 4096 }
+        fields: { $ref: '#/components/schemas/FieldReferences' }
+    EntityKeyContent:
+      type: object
+      additionalProperties: false
+      required: [asset, fields, uniqueness]
+      properties:
+        asset: { $ref: '#/components/schemas/SemanticReference' }
+        fields: { $ref: '#/components/schemas/FieldReferences' }
+        uniqueness: { type: string, enum: [exact, deduplicated] }
+    FieldReferences:
+      type: array
+      minItems: 1
+      maxItems: 64
+      uniqueItems: true
+      items: { $ref: '#/components/schemas/PhysicalReference' }
+    JoinContent:
+      type: object
+      additionalProperties: false
+      required: [leftDataset, rightDataset, pairs, joinType, cardinality, expression]
+      properties:
+        leftDataset: { $ref: '#/components/schemas/PhysicalReference' }
+        rightDataset: { $ref: '#/components/schemas/PhysicalReference' }
+        pairs:
+          type: array
+          minItems: 1
+          maxItems: 64
+          uniqueItems: true
+          items:
+            type: object
+            additionalProperties: false
+            required: [left, right]
+            properties:
+              left: { $ref: '#/components/schemas/PhysicalReference' }
+              right: { $ref: '#/components/schemas/PhysicalReference' }
+        joinType: { type: string, enum: [inner, left, right, full] }
+        cardinality: { type: string, enum: [one_to_one, one_to_many, many_to_one, many_to_many] }
+        expression: { type: string, minLength: 1, maxLength: 4096 }
+        notes: { type: string, maxLength: 4096 }
+    TargetKindContent:
+      oneOf:
+        - properties:
+            kind: { type: string, enum: [semantic_asset] }
+            content: { $ref: '#/components/schemas/AssetContent' }
+        - properties:
+            kind: { type: string, enum: [physical_binding] }
+            content: { $ref: '#/components/schemas/BindingContent' }
+        - properties:
+            kind: { type: string, enum: [model_grain] }
+            content: { $ref: '#/components/schemas/GrainContent' }
+        - properties:
+            kind: { type: string, enum: [entity_key] }
+            content: { $ref: '#/components/schemas/EntityKeyContent' }
+        - properties:
+            kind: { type: string, enum: [join_contract] }
+            content: { $ref: '#/components/schemas/JoinContent' }
+    JSONValue:
+      nullable: true
+      description: Structured JSON value bounded by 1 MiB request and depth 32; null remains a real value, not absence. Unknown target content fields are separately forbidden.
+    ChangeList:
+      type: array
+      maxItems: 100
+      items: { $ref: '#/components/schemas/Change' }
+    Change:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [fieldPath, op, afterValue]
+          properties:
+            fieldPath: { type: string, minLength: 1, maxLength: 512 }
+            op: { type: string, enum: [add] }
+            afterValue: { $ref: '#/components/schemas/JSONValue' }
+        - type: object
+          additionalProperties: false
+          required: [fieldPath, op, beforeValue, afterValue]
+          properties:
+            fieldPath: { type: string, minLength: 1, maxLength: 512 }
+            op: { type: string, enum: [update] }
+            beforeValue: { $ref: '#/components/schemas/JSONValue' }
+            afterValue: { $ref: '#/components/schemas/JSONValue' }
+        - type: object
+          additionalProperties: false
+          required: [fieldPath, op, beforeValue]
+          properties:
+            fieldPath: { type: string, minLength: 1, maxLength: 512 }
+            op: { type: string, enum: [remove] }
+            beforeValue: { $ref: '#/components/schemas/JSONValue' }
+    ProductionTarget:
+      oneOf:
+        - $ref: '#/components/schemas/CreateTarget'
+        - $ref: '#/components/schemas/UpdateAssetTarget'
+        - $ref: '#/components/schemas/UpdateObjectTarget'
+      description: Update branch is further discriminated by target kind. Create has no baseline fields; no fake base revision is accepted.
+    CreateTarget:
+      type: object
+      additionalProperties: false
+      required: [intent, kind, localKey, identityKey, title, content, changes, evidenceIds]
+      allOf:
+        - $ref: '#/components/schemas/TargetKindContent'
+      properties:
+        intent: { type: string, enum: [create] }
+        kind: { $ref: '#/components/schemas/TargetKind' }
+        localKey: { $ref: '#/components/schemas/LocalKey' }
+        identityKey: { type: string, minLength: 1, maxLength: 512 }
+        reuseIdentity: { $ref: '#/components/schemas/ReintroductionIdentity' }
+        title: { type: string, minLength: 1, maxLength: 256 }
+        content: { type: object }
+        changes: { type: array, maxItems: 0, items: { $ref: '#/components/schemas/Change' } }
+        evidenceIds: { type: array, maxItems: 256, uniqueItems: true, items: { $ref: '#/components/schemas/ResourceId' } }
+      description: Omit reuseIdentity for a new identity. Supply it only to reintroduce a trusted production-created identity absent from the exact current published head; intent remains create and no baseline fields are allowed.
+    ReintroductionIdentity:
+      type: object
+      additionalProperties: false
+      required: [targetId, creationOperationId, creationReleaseId, absenceReleaseId, expectedHead]
+      properties:
+        targetId: { $ref: '#/components/schemas/ResourceId' }
+        creationOperationId: { $ref: '#/components/schemas/ResourceId' }
+        creationReleaseId: { $ref: '#/components/schemas/ResourceId' }
+        absenceReleaseId: { $ref: '#/components/schemas/ResourceId' }
+        expectedHead: { $ref: '#/components/schemas/PresentHeadReference' }
+      description: Server proves original reservation kind/identityKey/ownership, the protected rollback absence event and continued absence at current head. This is not a client assertion of a published base.
+    UpdateAssetTarget:
+      type: object
+      additionalProperties: false
+      required: [intent, kind, localKey, targetId, baseRevisionId, title, content, changes, evidenceIds]
+      properties:
+        intent: { type: string, enum: [update] }
+        kind: { type: string, enum: [semantic_asset] }
+        localKey: { $ref: '#/components/schemas/LocalKey' }
+        targetId: { $ref: '#/components/schemas/ResourceId' }
+        baseRevisionId: { $ref: '#/components/schemas/ResourceId' }
+        title: { type: string, minLength: 1, maxLength: 256 }
+        content: { $ref: '#/components/schemas/AssetContent' }
+        changes: { $ref: '#/components/schemas/ChangeList' }
+        evidenceIds: { type: array, maxItems: 256, uniqueItems: true, items: { $ref: '#/components/schemas/ResourceId' } }
+    UpdateObjectTarget:
+      type: object
+      additionalProperties: false
+      required: [intent, kind, localKey, targetId, baseObjectVersion, title, content, changes, evidenceIds]
+      allOf:
+        - $ref: '#/components/schemas/TargetKindContent'
+      properties:
+        intent: { type: string, enum: [update] }
+        kind: { $ref: '#/components/schemas/ObjectKind' }
+        localKey: { $ref: '#/components/schemas/LocalKey' }
+        targetId: { $ref: '#/components/schemas/ResourceId' }
+        baseObjectVersion: { $ref: '#/components/schemas/Version' }
+        title: { type: string, minLength: 1, maxLength: 256 }
+        content: { type: object }
+        changes: { $ref: '#/components/schemas/ChangeList' }
+        evidenceIds: { type: array, maxItems: 256, uniqueItems: true, items: { $ref: '#/components/schemas/ResourceId' } }
+    CreateProductionRequest:
+      type: object
+      additionalProperties: false
+      required: [input, targets]
+      properties:
+        input: { $ref: '#/components/schemas/ProductionInput' }
+        targets: { type: array, minItems: 1, maxItems: 32, items: { $ref: '#/components/schemas/ProductionTarget' } }
+        supersedesOperationId: { $ref: '#/components/schemas/ResourceId' }
+      x-semlia-max-total-changes: 256
+    ReplaceProductionRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion, input, targets]
+      properties:
+        expectedVersion: { $ref: '#/components/schemas/Version' }
+        input: { $ref: '#/components/schemas/ProductionInput' }
+        targets: { type: array, minItems: 1, maxItems: 32, items: { $ref: '#/components/schemas/ProductionTarget' } }
+        suggestionRunId: { $ref: '#/components/schemas/ResourceId' }
+      x-semlia-max-total-changes: 256
+    SubmitProductionRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion, setDigest]
+      properties:
+        expectedVersion: { $ref: '#/components/schemas/Version' }
+        setDigest: { $ref: '#/components/schemas/Digest' }
+    ValidateProductionRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion, setDigest, previousAttemptNo, reason]
+      properties:
+        expectedVersion: { $ref: '#/components/schemas/Version' }
+        setDigest: { $ref: '#/components/schemas/Digest' }
+        previousAttemptNo: { type: integer, minimum: 1, maximum: 256 }
+        reason: { type: string, minLength: 1, maxLength: 4096 }
+    ReviewProductionRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion, setDigest, validation, proposalIds, decision, note]
+      properties:
+        expectedVersion: { $ref: '#/components/schemas/Version' }
+        setDigest: { $ref: '#/components/schemas/Digest' }
+        validation: { $ref: '#/components/schemas/ValidationReference' }
+        proposalIds: { type: array, minItems: 1, maxItems: 32, uniqueItems: true, items: { $ref: '#/components/schemas/ResourceId' } }
+        decision: { type: string, enum: [approve, reject] }
+        note: { type: string, maxLength: 4096 }
+    HeadReference:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [presence]
+          properties:
+            presence: { type: string, enum: [absent] }
+        - $ref: '#/components/schemas/PresentHeadReference'
+    PresentHeadReference:
+      type: object
+      additionalProperties: false
+      required: [presence, releaseId, manifestDigest]
+      properties:
+        presence: { type: string, enum: [present] }
+        releaseId: { $ref: '#/components/schemas/ResourceId' }
+        manifestDigest: { $ref: '#/components/schemas/Digest' }
+    ValidationReference:
+      type: object
+      additionalProperties: false
+      required: [attemptNo, validationDigest]
+      properties:
+        attemptNo: { type: integer, minimum: 1, maximum: 256 }
+        validationDigest: { $ref: '#/components/schemas/Digest' }
+      description: One complete active attempt for this operation/version/set. Clients cannot choose individual run IDs or combine results from different attempts.
+    ValidationAttemptResult:
+      type: object
+      additionalProperties: false
+      required: [attemptNo, status, setDigest, freshnessDigest, requiredChecksDigest, validationDigest, runIds, checks, completedAt]
+      allOf:
+        - oneOf:
+            - properties:
+                status: { type: string, enum: [succeeded] }
+                validationDigest: { $ref: '#/components/schemas/Digest' }
+                runIds: { type: array, minItems: 1, maxItems: 256, uniqueItems: true, items: { $ref: '#/components/schemas/ResourceId' } }
+                completedAt: { $ref: '#/components/schemas/Timestamp' }
+            - properties:
+                status: { type: string, enum: [queued, running] }
+                validationDigest: { nullable: true, enum: [null] }
+                completedAt: { nullable: true, enum: [null] }
+            - properties:
+                status: { type: string, enum: [failed] }
+                validationDigest: { nullable: true, enum: [null] }
+                completedAt: { $ref: '#/components/schemas/Timestamp' }
+      properties:
+        attemptNo: { type: integer, minimum: 1, maximum: 256 }
+        status: { type: string, enum: [queued, running, succeeded, failed] }
+        setDigest: { $ref: '#/components/schemas/Digest' }
+        freshnessDigest: { $ref: '#/components/schemas/Digest' }
+        requiredChecksDigest: { $ref: '#/components/schemas/Digest' }
+        validationDigest: { type: string, nullable: true, maxLength: 71 }
+        runIds: { type: array, maxItems: 256, uniqueItems: true, items: { $ref: '#/components/schemas/ResourceId' } }
+        checks: { type: array, maxItems: 256, items: { $ref: '#/components/schemas/ValidationCheckResult' } }
+        completedAt: { type: string, format: date-time, nullable: true }
+      x-semlia-max-canonical-result-bytes: 1048576
+      description: Entire latest requested attempt; succeeded requires every declared proposal/validator/version check, current freshness, and no blocker. A failed/running latest attempt never falls back to an older success.
+    ValidationCheckResult:
+      type: object
+      additionalProperties: false
+      required: [runId, proposalId, validatorId, validatorVersion, status, results]
+      properties:
+        runId: { $ref: '#/components/schemas/ResourceId' }
+        proposalId: { $ref: '#/components/schemas/ResourceId' }
+        validatorId: { type: string, pattern: '^[a-z][a-z0-9_.]{1,63}$', maxLength: 64 }
+        validatorVersion: { type: string, minLength: 1, maxLength: 128 }
+        status: { type: string, enum: [running, succeeded, failed, cancelled] }
+        results:
+          type: array
+          maxItems: 256
+          items:
+            type: object
+            additionalProperties: false
+            required: [severity, code, message, inputDigest, details]
+            properties:
+              severity: { type: string, enum: [blocker, warning, info, not_applicable] }
+              code: { type: string, pattern: '^[A-Z][A-Z0-9_]{2,63}$', maxLength: 64 }
+              message: { type: string, maxLength: 2048 }
+              inputDigest: { $ref: '#/components/schemas/Digest' }
+              details: { type: object, maxProperties: 32, additionalProperties: { $ref: '#/components/schemas/JSONValue' } }
+      description: Projection of existing ValidationRun/Result facts for this exact attempt; no extra result authority. All checks together have a 1 MiB canonical-result budget and never truncate into a successful attempt.
+    ValidationStatus:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [status]
+          properties:
+            status: { type: string, enum: [not_requested] }
+        - $ref: '#/components/schemas/ValidationAttemptResult'
+    ValidationAttemptPage:
+      type: object
+      additionalProperties: false
+      required: [operationId, version, items, nextCursor]
+      properties:
+        operationId: { $ref: '#/components/schemas/ResourceId' }
+        version: { $ref: '#/components/schemas/Version' }
+        items: { type: array, maxItems: 200, items: { $ref: '#/components/schemas/ValidationAttemptResult' } }
+        nextCursor: { type: string, maxLength: 2048, nullable: true }
+    PublishProductionRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion, setDigest, validation, expectedHead]
+      properties:
+        expectedVersion: { $ref: '#/components/schemas/Version' }
+        setDigest: { $ref: '#/components/schemas/Digest' }
+        validation: { $ref: '#/components/schemas/ValidationReference' }
+        expectedHead: { $ref: '#/components/schemas/HeadReference' }
+    RollbackProductionRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion, setDigest, expectedHead, reason]
+      properties:
+        expectedVersion: { $ref: '#/components/schemas/Version' }
+        setDigest: { $ref: '#/components/schemas/Digest' }
+        expectedHead: { $ref: '#/components/schemas/HeadReference' }
+        reason: { type: string, minLength: 1, maxLength: 4096 }
+    ProductionBusinessRuleRequest:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [expectedVersion, setDigest, targetKey, action, evidenceId]
+          properties:
+            expectedVersion: { $ref: '#/components/schemas/Version' }
+            setDigest: { $ref: '#/components/schemas/Digest' }
+            targetKey: { type: string, minLength: 1, maxLength: 128 }
+            action: { type: string, enum: [confirm] }
+            evidenceId: { $ref: '#/components/schemas/ResourceId' }
+        - type: object
+          additionalProperties: false
+          required: [expectedVersion, setDigest, targetKey, action, declaration]
+          properties:
+            expectedVersion: { $ref: '#/components/schemas/Version' }
+            setDigest: { $ref: '#/components/schemas/Digest' }
+            targetKey: { type: string, minLength: 1, maxLength: 128 }
+            action: { type: string, enum: [confirm] }
+            declaration: { type: string, minLength: 1, maxLength: 8192 }
+        - type: object
+          additionalProperties: false
+          required: [expectedVersion, setDigest, targetKey, action]
+          properties:
+            expectedVersion: { $ref: '#/components/schemas/Version' }
+            setDigest: { $ref: '#/components/schemas/Digest' }
+            targetKey: { type: string, minLength: 1, maxLength: 128 }
+            action: { type: string, enum: [revoke] }
+    ProductionBusinessRuleEvent:
+      type: object
+      additionalProperties: false
+      required: [sequence, workspaceId, operationId, productionVersion, targetKey, action, setDigest, contentDigest, evidenceOrigin, principalId, authorizationVersion, createdAt, replayed]
+      properties:
+        sequence: { type: integer, format: int64, minimum: 1 }
+        workspaceId: { $ref: '#/components/schemas/ResourceId' }
+        operationId: { $ref: '#/components/schemas/ResourceId' }
+        productionVersion: { $ref: '#/components/schemas/Version' }
+        targetKey: { type: string, minLength: 1, maxLength: 128 }
+        action: { type: string, enum: [confirm, revoke] }
+        setDigest: { $ref: '#/components/schemas/Digest' }
+        contentDigest: { $ref: '#/components/schemas/Digest' }
+        evidenceId: { $ref: '#/components/schemas/ResourceId' }
+        evidenceDigest: { $ref: '#/components/schemas/Digest' }
+        evidenceOrigin: { type: string, enum: [selected_evidence, human_declaration, none] }
+        principalId: { $ref: '#/components/schemas/ResourceId' }
+        authorizationVersion: { type: integer, format: int64, minimum: 0 }
+        createdAt: { type: string, format: date-time }
+        replayed: { type: boolean }
+    ProductionBusinessRuleWitness:
+      type: object
+      additionalProperties: false
+      required: [event, valid]
+      properties:
+        event: { $ref: '#/components/schemas/ProductionBusinessRuleEvent' }
+        valid: { type: boolean }
+        declaration: { type: string, minLength: 1, maxLength: 8192 }
+    GenerateProductionRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion, inputDigest, modelSettingId, modelConfigRevision, instruction, maxOutputTokens, maxCostMicros]
+      properties:
+        expectedVersion: { $ref: '#/components/schemas/Version' }
+        inputDigest: { $ref: '#/components/schemas/Digest' }
+        modelSettingId: { $ref: '#/components/schemas/ResourceId' }
+        modelConfigRevision: { type: string, minLength: 1, maxLength: 128 }
+        instruction: { type: string, maxLength: 8192 }
+        maxOutputTokens: { type: integer, minimum: 1, maximum: 16384 }
+        maxCostMicros: { type: integer, format: int64, minimum: 0, maximum: 1000000000 }
+      description: Limits are ceilings subject to smaller server grants/config; request cannot authorize spend or elevate a model/tool. A run never publishes or automatically overwrites drafts.
+    ProposalState: { type: string, enum: [draft, proposed, validating, in_review, released, rejected] }
+    TargetResult:
+      type: object
+      additionalProperties: false
+      required: [localKey, targetId, declaration, outcome, contentDigest, proposalId, proposalState, validationRunIds, reviewIds]
+      properties:
+        localKey: { $ref: '#/components/schemas/LocalKey' }
+        targetId: { $ref: '#/components/schemas/ResourceId' }
+        declaration: { $ref: '#/components/schemas/ProductionTarget' }
+        outcome: { type: string, enum: [proposal, no_change] }
+        contentDigest: { $ref: '#/components/schemas/Digest' }
+        proposalId: { type: string, nullable: true, maxLength: 59 }
+        proposalState: { type: string, nullable: true, enum: [draft, proposed, validating, in_review, released, rejected, null] }
+        validationRunIds: { type: array, maxItems: 256, items: { $ref: '#/components/schemas/ResourceId' } }
+        reviewIds: { type: array, maxItems: 256, items: { $ref: '#/components/schemas/ResourceId' } }
+      description: Lists expose current effective attempts only; complete history remains on existing proposal validation/review pages. no_change requires null proposal fields and empty governance lists.
+    OperationSummary:
+      type: object
+      additionalProperties: false
+      required: [id, currentVersion, createdBy, createdAt, updatedAt, frozen, progress, targetCount, releaseId]
+      properties:
+        id: { $ref: '#/components/schemas/ResourceId' }
+        currentVersion: { $ref: '#/components/schemas/Version' }
+        createdBy: { $ref: '#/components/schemas/ResourceId' }
+        createdAt: { $ref: '#/components/schemas/Timestamp' }
+        updatedAt: { $ref: '#/components/schemas/Timestamp' }
+        frozen: { type: boolean }
+        progress: { type: string, enum: [draft, no_change, validating, needs_correction, in_review, ready_to_publish, released, rejected] }
+        targetCount: { type: integer, minimum: 1, maximum: 32 }
+        releaseId: { type: string, nullable: true, maxLength: 59 }
+      description: progress is a read-only derivation from existing Proposal/Validation/Review/Release, never a second approval state.
+    ProductionOperationPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items: { type: array, maxItems: 200, items: { $ref: '#/components/schemas/OperationSummary' } }
+        nextCursor: { type: string, maxLength: 2048, nullable: true }
+    ProductionOperation:
+      type: object
+      additionalProperties: false
+      required: [summary, version, input, inputDigest, setDigest, baselineHead, targets, activeValidation, generationRunIds, generationApplications, unresolvedCodes]
+      properties:
+        summary: { $ref: '#/components/schemas/OperationSummary' }
+        version: { $ref: '#/components/schemas/Version' }
+        input: { $ref: '#/components/schemas/ProductionInput' }
+        inputDigest: { $ref: '#/components/schemas/Digest' }
+        setDigest: { $ref: '#/components/schemas/Digest' }
+        baselineHead: { $ref: '#/components/schemas/HeadReference' }
+        targets: { type: array, minItems: 1, maxItems: 32, items: { $ref: '#/components/schemas/TargetResult' } }
+        activeValidation: { $ref: '#/components/schemas/ValidationStatus' }
+        generationRunIds: { type: array, maxItems: 256, items: { $ref: '#/components/schemas/ResourceId' } }
+        generationApplications: { type: array, maxItems: 1, items: { $ref: '#/components/schemas/GenerationApplication' } }
+        unresolvedCodes: { type: array, maxItems: 256, uniqueItems: true, items: { type: string, maxLength: 64 } }
+      description: Exact requested version; frozen versions immutable even if summary reports newer currentVersion. Generation references are bounded by per-operation 256 run ceiling.
+    ProductionCommandResult:
+      type: object
+      additionalProperties: false
+      required: [operationId, version, setDigest, replayed, outcome, proposalIds, validationAttemptNo, validationRunIds, reviewIds]
+      properties:
+        operationId: { $ref: '#/components/schemas/ResourceId' }
+        version: { $ref: '#/components/schemas/Version' }
+        setDigest: { $ref: '#/components/schemas/Digest' }
+        replayed: { type: boolean }
+        outcome: { type: string, enum: [created, updated, no_change, submitted, validation_queued, reviewed] }
+        proposalIds: { type: array, maxItems: 32, uniqueItems: true, items: { $ref: '#/components/schemas/ResourceId' } }
+        validationAttemptNo: { type: integer, minimum: 1, maximum: 256, nullable: true }
+        validationRunIds: { type: array, maxItems: 256, items: { $ref: '#/components/schemas/ResourceId' } }
+        reviewIds: { type: array, maxItems: 32, items: { $ref: '#/components/schemas/ResourceId' } }
+    StructuredGenerationOutput:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, targets]
+      properties:
+        schemaVersion: { type: string, enum: [semlia.production-suggestions/v1] }
+        targets: { type: array, minItems: 1, maxItems: 32, items: { $ref: '#/components/schemas/ProductionTarget' } }
+      x-semlia-max-total-changes: 256
+      x-semlia-max-canonical-bytes: 1048576
+      description: This schema-gated canonical body is persisted immutably with its digest. No original prompt, raw provider envelope, failed output or hidden reasoning is stored.
+    GenerationApplication:
+      type: object
+      additionalProperties: false
+      required: [runId, sourceVersion, sourceOutputDigest, appliedVersion, appliedContentDigest, actorPrincipalId, deltaDigest, delta]
+      properties:
+        runId: { $ref: '#/components/schemas/ResourceId' }
+        sourceVersion: { $ref: '#/components/schemas/Version' }
+        sourceOutputDigest: { $ref: '#/components/schemas/Digest' }
+        appliedVersion: { $ref: '#/components/schemas/Version' }
+        appliedContentDigest: { $ref: '#/components/schemas/Digest' }
+        actorPrincipalId: { $ref: '#/components/schemas/ResourceId' }
+        deltaDigest: { $ref: '#/components/schemas/Digest' }
+        delta:
+          type: array
+          maxItems: 256
+          items:
+            type: object
+            additionalProperties: false
+            required: [localKey, change]
+            properties:
+              localKey: { $ref: '#/components/schemas/LocalKey' }
+              change: { $ref: '#/components/schemas/Change' }
+      description: Immutable human application provenance. Delta is server-computed against stored structured output; both full versions remain retrievable. No client-authored actor or digest is trusted.
+    GenerationResult:
+      type: object
+      additionalProperties: false
+      required: [runId, operationId, inputVersion, inputDigest, status, providerMode, model, modelConfigRevision, replayed, outputDigest, output, errorCode, costMicros, durationMs]
+      allOf:
+        - oneOf:
+            - properties:
+                status: { type: string, enum: [succeeded] }
+                output: { $ref: '#/components/schemas/StructuredGenerationOutput' }
+                outputDigest: { $ref: '#/components/schemas/Digest' }
+                errorCode: { nullable: true, enum: [null] }
+            - properties:
+                status: { type: string, enum: [queued, running, failed, cancelled, outcome_unknown] }
+                output: { nullable: true, enum: [null] }
+                outputDigest: { nullable: true, enum: [null] }
+      properties:
+        runId: { $ref: '#/components/schemas/ResourceId' }
+        operationId: { $ref: '#/components/schemas/ResourceId' }
+        inputVersion: { $ref: '#/components/schemas/Version' }
+        inputDigest: { $ref: '#/components/schemas/Digest' }
+        status: { type: string, enum: [queued, running, succeeded, failed, cancelled, outcome_unknown] }
+        providerMode: { type: string, enum: [protocol_stub, actual_model] }
+        model: { type: string, maxLength: 128 }
+        modelConfigRevision: { type: string, maxLength: 128 }
+        replayed: { type: boolean }
+        outputDigest: { type: string, nullable: true, maxLength: 71 }
+        output: { nullable: true }
+        errorCode: { type: string, nullable: true, maxLength: 64 }
+        costMicros: { type: integer, format: int64, minimum: 0, nullable: true }
+        durationMs: { type: integer, format: int64, minimum: 0, nullable: true }
+      description: Only succeeded has a stored immutable schema-valid output body and matching digest; absent vendor cost is null. Original output survives restarts before human application. Explicit draft PUT records a GenerationApplication with suggestionRunId and CAS.
+    BeforePin:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [kind, targetId, presence]
+          properties:
+            kind: { $ref: '#/components/schemas/TargetKind' }
+            targetId: { $ref: '#/components/schemas/ResourceId' }
+            presence: { type: string, enum: [absent] }
+        - type: object
+          additionalProperties: false
+          required: [kind, targetId, presence, revisionId]
+          properties:
+            kind: { type: string, enum: [semantic_asset] }
+            targetId: { $ref: '#/components/schemas/ResourceId' }
+            presence: { type: string, enum: [present] }
+            revisionId: { $ref: '#/components/schemas/ResourceId' }
+        - type: object
+          additionalProperties: false
+          required: [kind, targetId, presence, objectVersion, contentDigest]
+          properties:
+            kind: { $ref: '#/components/schemas/ObjectKind' }
+            targetId: { $ref: '#/components/schemas/ResourceId' }
+            presence: { type: string, enum: [present] }
+            objectVersion: { $ref: '#/components/schemas/Version' }
+            contentDigest: { $ref: '#/components/schemas/Digest' }
+    Manifest:
+      type: object
+      additionalProperties: false
+      required: [assets, objects, digest]
+      properties:
+        assets:
+          type: array
+          maxItems: 1000
+          items:
+            type: object
+            additionalProperties: false
+            required: [assetId, revisionId, position, compatibility]
+            properties:
+              assetId: { $ref: '#/components/schemas/ResourceId' }
+              revisionId: { $ref: '#/components/schemas/ResourceId' }
+              position: { type: integer, minimum: 1, maximum: 1000 }
+              compatibility: { type: object, maxProperties: 64, additionalProperties: { $ref: '#/components/schemas/JSONValue' } }
+        objects:
+          type: array
+          maxItems: 1000
+          items:
+            type: object
+            additionalProperties: false
+            required: [kind, targetId, objectVersion, contentDigest, position]
+            properties:
+              kind: { $ref: '#/components/schemas/ObjectKind' }
+              targetId: { $ref: '#/components/schemas/ResourceId' }
+              objectVersion: { $ref: '#/components/schemas/Version' }
+              contentDigest: { $ref: '#/components/schemas/Digest' }
+              position: { type: integer, minimum: 1, maximum: 1000 }
+        digest: { $ref: '#/components/schemas/Digest' }
+      description: Full immutable manifest; digest uses the unchanged existing release algorithm, not a hash of this wire view (wire IDs and contentDigest fields differ).
+    ReleaseAttribution:
+      type: object
+      additionalProperties: false
+      required: [operationId, version, setDigest, validation, reviewIds, proposalIds, contributors, role]
+      properties:
+        operationId: { $ref: '#/components/schemas/ResourceId' }
+        version: { $ref: '#/components/schemas/Version' }
+        setDigest: { $ref: '#/components/schemas/Digest' }
+        validation: { $ref: '#/components/schemas/ValidationReference' }
+        reviewIds: { type: array, minItems: 1, maxItems: 256, uniqueItems: true, items: { $ref: '#/components/schemas/ResourceId' } }
+        proposalIds: { type: array, minItems: 1, maxItems: 32, uniqueItems: true, items: { $ref: '#/components/schemas/ResourceId' } }
+        contributors: { type: array, minItems: 1, maxItems: 256, uniqueItems: true, items: { $ref: '#/components/schemas/ResourceId' } }
+        role: { type: string, enum: [applied, reverted] }
+    ProductionReleaseProtection:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [rootReleaseId, rollbackDepth]
+          properties:
+            rootReleaseId: { $ref: '#/components/schemas/ResourceId' }
+            rollbackDepth: { type: integer, enum: [0] }
+        - type: object
+          additionalProperties: false
+          required: [rootReleaseId, rollbackDepth, rollbackParentReleaseId]
+          properties:
+            rootReleaseId: { $ref: '#/components/schemas/ResourceId' }
+            rollbackDepth: { type: integer, minimum: 1, maximum: 2147483647 }
+            rollbackParentReleaseId: { $ref: '#/components/schemas/ResourceId' }
+      description: Root marks every production release; each rollback descendant inherits root and increments depth. Legacy rollback rejects every marked target regardless of singular originProposalId or current pin count.
+    ProductionRelease:
+      type: object
+      additionalProperties: false
+      required: [id, sequence, publishedBy, publishedAt, attribution, protection, beforeHead, beforeManifest, afterManifest, beforePins, originProposalId, originProposalIds, rolledBackReleaseId, projectionStatus]
+      properties:
+        id: { $ref: '#/components/schemas/ResourceId' }
+        sequence: { type: integer, format: int64, minimum: 1 }
+        publishedBy: { $ref: '#/components/schemas/ResourceId' }
+        publishedAt: { $ref: '#/components/schemas/Timestamp' }
+        attribution: { $ref: '#/components/schemas/ReleaseAttribution' }
+        protection: { $ref: '#/components/schemas/ProductionReleaseProtection' }
+        beforeHead: { $ref: '#/components/schemas/HeadReference' }
+        beforeManifest: { $ref: '#/components/schemas/Manifest' }
+        afterManifest: { $ref: '#/components/schemas/Manifest' }
+        beforePins: { type: array, minItems: 1, maxItems: 32, items: { $ref: '#/components/schemas/BeforePin' } }
+        originProposalId: { type: string, nullable: true, maxLength: 59 }
+        originProposalIds: { type: array, minItems: 1, maxItems: 32, uniqueItems: true, items: { $ref: '#/components/schemas/ResourceId' } }
+        rolledBackReleaseId: { type: string, nullable: true, maxLength: 59 }
+        projectionStatus: { type: string, enum: [pending, ready, failed] }
+      description: Single provenance remains populated only for one applied proposal. Multi-proposal/rollback detail uses complete attribution; immutable history is not rewritten by projection status.
+    ReleaseCommandResult:
+      type: object
+      additionalProperties: false
+      required: [releaseId, operationId, replayed, manifestDigest]
+      properties:
+        releaseId: { $ref: '#/components/schemas/ResourceId' }
+        operationId: { $ref: '#/components/schemas/ResourceId' }
+        replayed: { type: boolean }
+        manifestDigest: { $ref: '#/components/schemas/Digest' }
+    ProductionError:
+      type: object
+      additionalProperties: false
+      required: [code, message, traceId, retryable]
+      properties:
+        code:
+          type: string
+          enum: [INVALID_ARGUMENT, UNAUTHENTICATED, FORBIDDEN, NOT_FOUND, INVALID_CURSOR, IDEMPOTENCY_CONFLICT, ALREADY_PRODUCED, IDENTITY_CONFLICT, VERSION_CONFLICT, BASELINE_CONFLICT, HEAD_CONFLICT, INPUT_STALE, INPUT_INCOMPLETE, HISTORY_UNVERIFIABLE, EVIDENCE_MISSING, DEPENDENCY_INVALID, CONTENT_MISMATCH, NO_SUBSTANTIVE_CHANGE, PRODUCTION_SET_REQUIRED, VALIDATION_REQUIRED, REVIEW_REQUIRED, SOD_CONFLICT, PRIOR_STATE_UNKNOWN, PAYLOAD_TOO_LARGE, LIMIT_EXCEEDED, MODEL_NOT_CONFIGURED, MODEL_BUDGET_REQUIRED, MODEL_OUTCOME_UNKNOWN, MODEL_OUTPUT_INVALID, FEATURE_UNAVAILABLE, INTERNAL_ERROR]
+        message: { type: string, maxLength: 2048 }
+        traceId: { type: string, maxLength: 128 }
+        retryable: { type: boolean }
+        operationId: { $ref: '#/components/schemas/ResourceId' }
+        currentVersion: { $ref: '#/components/schemas/Version' }
+        fieldPath: { type: string, maxLength: 512 }
+      description: Optional context only after authorization; no raw source, secret, provider diagnostic, foreign-workspace ID or hidden reasoning.

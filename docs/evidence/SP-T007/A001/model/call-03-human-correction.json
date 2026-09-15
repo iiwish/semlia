@@ -1,0 +1,276 @@
+{
+  "disclosure": "Synthetic human answer applied through the production API; not model output or human attestation.",
+  "payload": {
+    "expectedVersion": 1,
+    "input": {
+      "candidates": [],
+      "dependencies": [],
+      "evidence": [],
+      "snapshots": [
+        {
+          "coverageKeys": [
+            "catalog"
+          ],
+          "digest": "sha256:fec4cf86a1d9a5d5fd949950b6e5f4c0519acb72fc4406c748b0ddc328c742c8",
+          "snapshotId": "ssnp_01m27tdyfyfgkt03evzb1x6gp2",
+          "sourceId": "src_01m27tdyckfgkvgwjbbqy2vsg7"
+        }
+      ]
+    },
+    "suggestionRunId": "agr_01m27tdz5bfgsrw2nsf9g2fvp5",
+    "targets": [
+      {
+        "changes": [],
+        "content": {
+          "address": "commerce.customers",
+          "assetType": "entity",
+          "definition": "One customer per customer_id.",
+          "displayName": "customers",
+          "ownerPrincipalId": "prn_01m27tdybxfgkrxdqwagw77x4f",
+          "scope": "Customers referenced by sales orders."
+        },
+        "evidenceIds": [],
+        "identityKey": "commerce.customers",
+        "intent": "create",
+        "kind": "semantic_asset",
+        "localKey": "customers",
+        "title": "customers"
+      },
+      {
+        "changes": [],
+        "content": {
+          "asset": {
+            "localKey": "customers"
+          },
+          "dataset": {
+            "kind": "dataset",
+            "objectId": "pds_01m27tdydpfgks7nq2a3qkfh3n",
+            "revisionId": "pdr_01m27tdydzfgkvk3assq2ma1k1",
+            "snapshotId": "ssnp_01m27tdyfyfgkt03evzb1x6gp2"
+          }
+        },
+        "evidenceIds": [],
+        "identityKey": "commerce.customers_binding",
+        "intent": "create",
+        "kind": "physical_binding",
+        "localKey": "customers_binding",
+        "title": "customers_binding"
+      },
+      {
+        "changes": [],
+        "content": {
+          "asset": {
+            "localKey": "customers"
+          },
+          "fields": [
+            {
+              "kind": "field",
+              "objectId": "pfd_01m27tdye6fgkrgwqdgfcap48h",
+              "revisionId": "pfr_01m27tdyehfgkv11ak6hwfd4az",
+              "snapshotId": "ssnp_01m27tdyfyfgkt03evzb1x6gp2"
+            }
+          ],
+          "uniqueness": "exact"
+        },
+        "evidenceIds": [],
+        "identityKey": "commerce.customers_key",
+        "intent": "create",
+        "kind": "entity_key",
+        "localKey": "customers_key",
+        "title": "customers_key"
+      },
+      {
+        "changes": [],
+        "content": {
+          "address": "commerce.orders",
+          "assetType": "entity",
+          "definition": "One order per order_id.",
+          "displayName": "orders",
+          "ownerPrincipalId": "prn_01m27tdybxfgkrxdqwagw77x4f",
+          "scope": "Sales orders."
+        },
+        "evidenceIds": [],
+        "identityKey": "commerce.orders",
+        "intent": "create",
+        "kind": "semantic_asset",
+        "localKey": "orders",
+        "title": "orders"
+      },
+      {
+        "changes": [],
+        "content": {
+          "asset": {
+            "localKey": "orders"
+          },
+          "dataset": {
+            "kind": "dataset",
+            "objectId": "pds_01m27tdyeyfgkrxftaekpw3z9d",
+            "revisionId": "pdr_01m27tdyf0fgktagq4er57mprv",
+            "snapshotId": "ssnp_01m27tdyfyfgkt03evzb1x6gp2"
+          }
+        },
+        "evidenceIds": [],
+        "identityKey": "commerce.orders_binding",
+        "intent": "create",
+        "kind": "physical_binding",
+        "localKey": "orders_binding",
+        "title": "orders_binding"
+      },
+      {
+        "changes": [],
+        "content": {
+          "cardinality": "many_to_one",
+          "expression": "orders.customer_id = customers.customer_id",
+          "joinType": "inner",
+          "leftDataset": {
+            "kind": "dataset",
+            "objectId": "pds_01m27tdyeyfgkrxftaekpw3z9d",
+            "revisionId": "pdr_01m27tdyf0fgktagq4er57mprv",
+            "snapshotId": "ssnp_01m27tdyfyfgkt03evzb1x6gp2"
+          },
+          "notes": "Synthetic proposed relationship; requires validation and human review.",
+          "pairs": [
+            {
+              "left": {
+                "kind": "field",
+                "objectId": "pfd_01m27tdyf9fgksswyvxxxm2bsd",
+                "revisionId": "pfr_01m27tdyfcfgksd3eem6yz61yq",
+                "snapshotId": "ssnp_01m27tdyfyfgkt03evzb1x6gp2"
+              },
+              "right": {
+                "kind": "field",
+                "objectId": "pfd_01m27tdye6fgkrgwqdgfcap48h",
+                "revisionId": "pfr_01m27tdyehfgkv11ak6hwfd4az",
+                "snapshotId": "ssnp_01m27tdyfyfgkt03evzb1x6gp2"
+              }
+            }
+          ],
+          "rightDataset": {
+            "kind": "dataset",
+            "objectId": "pds_01m27tdydpfgks7nq2a3qkfh3n",
+            "revisionId": "pdr_01m27tdydzfgkvk3assq2ma1k1",
+            "snapshotId": "ssnp_01m27tdyfyfgkt03evzb1x6gp2"
+          }
+        },
+        "evidenceIds": [],
+        "identityKey": "commerce.orders_customers_join",
+        "intent": "create",
+        "kind": "join_contract",
+        "localKey": "orders_customers_join",
+        "title": "orders_customers_join"
+      },
+      {
+        "changes": [],
+        "content": {
+          "asset": {
+            "localKey": "orders"
+          },
+          "fields": [
+            {
+              "kind": "field",
+              "objectId": "pfd_01m27tdyf3fgkty2app7zwg9qy",
+              "revisionId": "pfr_01m27tdyf6fgktccdhhmrggga0",
+              "snapshotId": "ssnp_01m27tdyfyfgkt03evzb1x6gp2"
+            }
+          ],
+          "uniqueness": "exact"
+        },
+        "evidenceIds": [],
+        "identityKey": "commerce.orders_key",
+        "intent": "create",
+        "kind": "entity_key",
+        "localKey": "orders_key",
+        "title": "orders_key"
+      },
+      {
+        "changes": [],
+        "content": {
+          "address": "commerce.revenue",
+          "assetType": "metric",
+          "definition": "Sum of paid order amounts, excluding cancelled orders.",
+          "displayName": "revenue",
+          "ownerPrincipalId": "prn_01m27tdybxfgkrxdqwagw77x4f",
+          "scope": "Paid sales orders only; cancelled orders are excluded."
+        },
+        "evidenceIds": [],
+        "identityKey": "commerce.revenue",
+        "intent": "create",
+        "kind": "semantic_asset",
+        "localKey": "revenue",
+        "title": "revenue"
+      },
+      {
+        "changes": [],
+        "content": {
+          "asset": {
+            "localKey": "revenue"
+          },
+          "dataset": {
+            "kind": "dataset",
+            "objectId": "pds_01m27tdyeyfgkrxftaekpw3z9d",
+            "revisionId": "pdr_01m27tdyf0fgktagq4er57mprv",
+            "snapshotId": "ssnp_01m27tdyfyfgkt03evzb1x6gp2"
+          },
+          "field": {
+            "kind": "field",
+            "objectId": "pfd_01m27tdyfffgkv4f9mkr8w0e9t",
+            "revisionId": "pfr_01m27tdyfhfgkrj6revras12vy",
+            "snapshotId": "ssnp_01m27tdyfyfgkt03evzb1x6gp2"
+          },
+          "transform": "CASE WHEN status = 'paid' THEN amount ELSE 0 END"
+        },
+        "evidenceIds": [],
+        "identityKey": "commerce.revenue_binding",
+        "intent": "create",
+        "kind": "physical_binding",
+        "localKey": "revenue_binding",
+        "title": "revenue_binding"
+      },
+      {
+        "changes": [],
+        "content": {
+          "asset": {
+            "localKey": "revenue"
+          },
+          "expression": "one row per order_id",
+          "fields": [
+            {
+              "kind": "field",
+              "objectId": "pfd_01m27tdyf3fgkty2app7zwg9qy",
+              "revisionId": "pfr_01m27tdyf6fgktccdhhmrggga0",
+              "snapshotId": "ssnp_01m27tdyfyfgkt03evzb1x6gp2"
+            }
+          ]
+        },
+        "evidenceIds": [],
+        "identityKey": "commerce.revenue_grain",
+        "intent": "create",
+        "kind": "model_grain",
+        "localKey": "revenue_grain",
+        "title": "revenue_grain"
+      }
+    ]
+  },
+  "result": {
+    "operationId": "prodop_01m27tdynwfgkrxq81a5kwmrk7",
+    "outcome": "updated",
+    "proposalIds": [
+      "prp_01m27tf330fgtsgjdbqh1fvb99",
+      "prp_01m27tf330fgv918rvmmhzkq5m",
+      "prp_01m27tf330fgvrjq8xs1rcc424",
+      "prp_01m27tf330fgwa9dpsjzfkq01y",
+      "prp_01m27tf330fgwrawvjsexv7qh6",
+      "prp_01m27tf330fgxa9qeggjdvp3n8",
+      "prp_01m27tf330fgxtnfbzpb79f1r0",
+      "prp_01m27tf330fgy8g7evrb5qh2h1",
+      "prp_01m27tf330fgyvfx7dc2kmkqzv",
+      "prp_01m27tf330fgz825282vtf5hzh"
+    ],
+    "replayed": false,
+    "reviewIds": [],
+    "setDigest": "sha256:6831cd47143c5f7c947c536d3dc271dab29001cfa195793610abd9ad75c6cd0e",
+    "validationAttemptNo": null,
+    "validationRunIds": [],
+    "version": 2
+  }
+}

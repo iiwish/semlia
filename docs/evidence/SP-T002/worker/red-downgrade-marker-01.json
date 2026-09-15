@@ -1,0 +1,24 @@
+{
+  "command": [
+    "go",
+    "test",
+    "-p=1",
+    "-count=1",
+    "-timeout=15m",
+    "./tests/integration/db",
+    "-run",
+    "^TestSemanticProductionMigrationLegacyQualityAndAtomicRollbackRefusal$"
+  ],
+  "clearedEnvironment": [
+    "SEMLIA_INGESTION_TEST_DATABASE_URL",
+    "SEMLIA_EXECUTION_CRASH_HELPER",
+    "SEMLIA_EXECUTION_TEST_DB",
+    "SEMLIA_DATABASE_URL"
+  ],
+  "start": "2026-09-09T07:16:29.334Z",
+  "end": "2026-09-09T07:16:36.764Z",
+  "exitStatus": 1,
+  "signal": null,
+  "stdout": "2026/09/09 15:16:33 github.com/testcontainers/testcontainers-go - Connected to docker: \n  Server Version: 29.4.0\n  API Version: 1.54\n  Operating System: OrbStack\n  Total Memory: 16040 MB\n  Testcontainers for Go Version: v0.44.0\n  Resolved Docker Host: unix:///var/run/docker.sock\n  Resolved Docker Socket Path: /var/run/docker.sock\n  Test SessionID: 48cd73c0f14a42bc89e2d4d6446c99c3175259f125736a09e4b33e22a99a8fc9\n  Test ProcessID: 02f942cb-d676-4501-a59b-7c93cbf5c0c3\n2026/09/09 15:16:33 🐳 Creating container for image postgres:18-alpine\n2026/09/09 15:16:33 🐳 Creating container for image testcontainers/ryuk:0.14.0\n2026/09/09 15:16:33 ✅ Container created: 69d011b053be\n2026/09/09 15:16:33 🐳 Starting container: 69d011b053be\n2026/09/09 15:16:33 ✅ Container started: 69d011b053be\n2026/09/09 15:16:33 ⏳ Waiting for container id 69d011b053be image: testcontainers/ryuk:0.14.0. Waiting for: all of: [log message \"Started\", port 8080/tcp to be listening]\n2026/09/09 15:16:33 Shell not found in container\n2026/09/09 15:16:33 🔔 Container is ready: 69d011b053be\n2026/09/09 15:16:33 ✅ Container created: d660f1db8403\n2026/09/09 15:16:33 🐳 Starting container: d660f1db8403\n2026/09/09 15:16:33 ✅ Container started: d660f1db8403\n2026/09/09 15:16:33 ⏳ Waiting for container id d660f1db8403 image: postgres:18-alpine. Waiting for: all of: [log message \"database system is ready to accept connections\" (occurrence: 2), port 5432/tcp to be listening]\n2026/09/09 15:16:35 🔔 Container is ready: d660f1db8403\n--- FAIL: TestSemanticProductionMigrationLegacyQualityAndAtomicRollbackRefusal (0.64s)\n    semantic_production_migrations_test.go:106: unrepresentable history must return DOWN_MIGRATION_UNSAFE: apply -1 migration steps: migration failed in line 0: BEGIN;\n        DO $$ BEGIN\n            IF EXISTS(SELECT 1 FROM source_snapshots) OR EXISTS(SELECT 1 FROM source_code_revisions) OR EXISTS(SELECT 1 FROM source_lineage_revisions) THEN\n                RAISE EXCEPTION 'source history cannot be represented by schema 21; downgrade refused' USING ERRCODE='55000';\n            END IF;\n        END; $$;\n        DROP TRIGGER artifact_object_retention_source_history ON artifact_object_retention;\n        DROP TABLE source_coverage_heads,source_effective_snapshots,source_snapshot_diagnostics,source_snapshot_members,source_lineage_revisions,source_code_revisions,source_snapshot_scope,source_snapshot_runs,source_snapshots;\n        DROP FUNCTION reject_sealed_snapshot_insert(),validate_source_snapshot_head(),validate_source_snapshot_member(),validate_source_snapshot_seal(),protect_source_snapshot_artifact_bytes();\n        ALTER TABLE lineage_edges DROP CONSTRAINT lineage_edges_snapshot_identity_key;\n        ALTER TABLE code_artifacts DROP CONSTRAINT code_artifacts_snapshot_identity_key;\n        ALTER TABLE physical_field_revisions DROP CONSTRAINT physical_field_revisions_snapshot_identity_key;\n        ALTER TABLE physical_dataset_revisions DROP CONSTRAINT physical_dataset_revisions_snapshot_identity_key;\n        ALTER TABLE discovery_runs DROP CONSTRAINT discovery_runs_source_identity_key;\n        ALTER TABLE source_revisions DROP CONSTRAINT source_revisions_source_identity_key;\n        COMMIT;\n         (details: ERROR: source history cannot be represented by schema 21; downgrade refused (SQLSTATE 55000))\n        ERROR: current transaction is aborted, commands ignored until end of transaction block (SQLSTATE 25P02) in line 0: SELECT pg_advisory_unlock($1)\nFAIL\n2026/09/09 15:16:36 🐳 Stopping container: d660f1db8403\n2026/09/09 15:16:36 ✅ Container stopped: d660f1db8403\n2026/09/09 15:16:36 🐳 Terminating container: d660f1db8403\n2026/09/09 15:16:36 🚫 Container terminated: d660f1db8403\nFAIL\tgithub.com/iiwish/semlia/tests/integration/db\t4.870s\nFAIL\n",
+  "stderr": ""
+}

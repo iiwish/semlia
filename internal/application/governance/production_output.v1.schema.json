@@ -1,0 +1,781 @@
+{
+  "$defs": {
+    "AssetContent": {
+      "additionalProperties": false,
+      "properties": {
+        "address": {
+          "maxLength": 512,
+          "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+          "type": "string"
+        },
+        "assetType": {
+          "enum": [
+            "concept",
+            "entity",
+            "semantic_model",
+            "dimension",
+            "measure",
+            "metric",
+            "segment"
+          ],
+          "type": "string"
+        },
+        "definition": {
+          "maxLength": 16384,
+          "minLength": 1,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "displayName": {
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+        },
+        "ownerPrincipalId": {
+          "$ref": "#/$defs/ResourceId"
+        },
+        "scope": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "address",
+        "assetType",
+        "displayName",
+        "definition",
+        "scope",
+        "ownerPrincipalId"
+      ],
+      "type": "object"
+    },
+    "BindingContent": {
+      "additionalProperties": false,
+      "properties": {
+        "asset": {
+          "$ref": "#/$defs/SemanticReference"
+        },
+        "dataset": {
+          "$ref": "#/$defs/PhysicalReference"
+        },
+        "field": {
+          "$ref": "#/$defs/PhysicalReference"
+        },
+        "transform": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "asset",
+        "dataset"
+      ],
+      "type": "object"
+    },
+    "Change": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "afterValue": {
+              "$ref": "#/$defs/JSONValue"
+            },
+            "fieldPath": {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string"
+            },
+            "op": {
+              "enum": [
+                "add"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "fieldPath",
+            "op",
+            "afterValue"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "afterValue": {
+              "$ref": "#/$defs/JSONValue"
+            },
+            "beforeValue": {
+              "$ref": "#/$defs/JSONValue"
+            },
+            "fieldPath": {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string"
+            },
+            "op": {
+              "enum": [
+                "update"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "fieldPath",
+            "op",
+            "beforeValue",
+            "afterValue"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "beforeValue": {
+              "$ref": "#/$defs/JSONValue"
+            },
+            "fieldPath": {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string"
+            },
+            "op": {
+              "enum": [
+                "remove"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "fieldPath",
+            "op",
+            "beforeValue"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "ChangeList": {
+      "items": {
+        "$ref": "#/$defs/Change"
+      },
+      "maxItems": 100,
+      "type": "array"
+    },
+    "CreateTarget": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "$ref": "#/$defs/TargetKindContent"
+        }
+      ],
+      "properties": {
+        "changes": {
+          "items": {
+            "$ref": "#/$defs/Change"
+          },
+          "maxItems": 0,
+          "type": "array"
+        },
+        "content": {
+          "type": "object"
+        },
+        "evidenceIds": {
+          "items": {
+            "$ref": "#/$defs/ResourceId"
+          },
+          "maxItems": 256,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "identityKey": {
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string"
+        },
+        "intent": {
+          "enum": [
+            "create"
+          ],
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/TargetKind"
+        },
+        "localKey": {
+          "$ref": "#/$defs/LocalKey"
+        },
+        "reuseIdentity": {
+          "$ref": "#/$defs/ReintroductionIdentity"
+        },
+        "title": {
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "intent",
+        "kind",
+        "localKey",
+        "identityKey",
+        "title",
+        "content",
+        "changes",
+        "evidenceIds"
+      ],
+      "type": "object"
+    },
+    "Digest": {
+      "maxLength": 71,
+      "minLength": 71,
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "EntityKeyContent": {
+      "additionalProperties": false,
+      "properties": {
+        "asset": {
+          "$ref": "#/$defs/SemanticReference"
+        },
+        "fields": {
+          "$ref": "#/$defs/FieldReferences"
+        },
+        "uniqueness": {
+          "enum": [
+            "exact",
+            "deduplicated"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "asset",
+        "fields",
+        "uniqueness"
+      ],
+      "type": "object"
+    },
+    "FieldReferences": {
+      "items": {
+        "$ref": "#/$defs/PhysicalReference"
+      },
+      "maxItems": 64,
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "GrainContent": {
+      "additionalProperties": false,
+      "properties": {
+        "asset": {
+          "$ref": "#/$defs/SemanticReference"
+        },
+        "expression": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "type": "string"
+        },
+        "fields": {
+          "$ref": "#/$defs/FieldReferences"
+        }
+      },
+      "required": [
+        "asset",
+        "expression",
+        "fields"
+      ],
+      "type": "object"
+    },
+    "JSONValue": {},
+    "JoinContent": {
+      "additionalProperties": false,
+      "properties": {
+        "cardinality": {
+          "enum": [
+            "one_to_one",
+            "one_to_many",
+            "many_to_one",
+            "many_to_many"
+          ],
+          "type": "string"
+        },
+        "expression": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "type": "string"
+        },
+        "joinType": {
+          "enum": [
+            "inner",
+            "left",
+            "right",
+            "full"
+          ],
+          "type": "string"
+        },
+        "leftDataset": {
+          "$ref": "#/$defs/PhysicalReference"
+        },
+        "notes": {
+          "maxLength": 4096,
+          "type": "string"
+        },
+        "pairs": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "left": {
+                "$ref": "#/$defs/PhysicalReference"
+              },
+              "right": {
+                "$ref": "#/$defs/PhysicalReference"
+              }
+            },
+            "required": [
+              "left",
+              "right"
+            ],
+            "type": "object"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "rightDataset": {
+          "$ref": "#/$defs/PhysicalReference"
+        }
+      },
+      "required": [
+        "leftDataset",
+        "rightDataset",
+        "pairs",
+        "joinType",
+        "cardinality",
+        "expression"
+      ],
+      "type": "object"
+    },
+    "LocalKey": {
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_]{0,63}$",
+      "type": "string"
+    },
+    "ObjectKind": {
+      "enum": [
+        "physical_binding",
+        "model_grain",
+        "entity_key",
+        "join_contract"
+      ],
+      "type": "string"
+    },
+    "PhysicalReference": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "dataset",
+            "field"
+          ],
+          "type": "string"
+        },
+        "objectId": {
+          "$ref": "#/$defs/ResourceId"
+        },
+        "revisionId": {
+          "$ref": "#/$defs/ResourceId"
+        },
+        "snapshotId": {
+          "$ref": "#/$defs/ResourceId"
+        }
+      },
+      "required": [
+        "snapshotId",
+        "kind",
+        "objectId",
+        "revisionId"
+      ],
+      "type": "object"
+    },
+    "PresentHeadReference": {
+      "additionalProperties": false,
+      "properties": {
+        "manifestDigest": {
+          "$ref": "#/$defs/Digest"
+        },
+        "presence": {
+          "enum": [
+            "present"
+          ],
+          "type": "string"
+        },
+        "releaseId": {
+          "$ref": "#/$defs/ResourceId"
+        }
+      },
+      "required": [
+        "presence",
+        "releaseId",
+        "manifestDigest"
+      ],
+      "type": "object"
+    },
+    "ProductionTarget": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/CreateTarget"
+        },
+        {
+          "$ref": "#/$defs/UpdateAssetTarget"
+        },
+        {
+          "$ref": "#/$defs/UpdateObjectTarget"
+        }
+      ]
+    },
+    "PublishedReference": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "enum": [
+                "semantic_asset"
+              ],
+              "type": "string"
+            },
+            "releaseId": {
+              "$ref": "#/$defs/ResourceId"
+            },
+            "revisionId": {
+              "$ref": "#/$defs/ResourceId"
+            },
+            "targetId": {
+              "$ref": "#/$defs/ResourceId"
+            }
+          },
+          "required": [
+            "kind",
+            "targetId",
+            "releaseId",
+            "revisionId"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contentDigest": {
+              "$ref": "#/$defs/Digest"
+            },
+            "kind": {
+              "$ref": "#/$defs/ObjectKind"
+            },
+            "objectVersion": {
+              "$ref": "#/$defs/Version"
+            },
+            "releaseId": {
+              "$ref": "#/$defs/ResourceId"
+            },
+            "targetId": {
+              "$ref": "#/$defs/ResourceId"
+            }
+          },
+          "required": [
+            "kind",
+            "targetId",
+            "releaseId",
+            "objectVersion",
+            "contentDigest"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "ReintroductionIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "absenceReleaseId": {
+          "$ref": "#/$defs/ResourceId"
+        },
+        "creationOperationId": {
+          "$ref": "#/$defs/ResourceId"
+        },
+        "creationReleaseId": {
+          "$ref": "#/$defs/ResourceId"
+        },
+        "expectedHead": {
+          "$ref": "#/$defs/PresentHeadReference"
+        },
+        "targetId": {
+          "$ref": "#/$defs/ResourceId"
+        }
+      },
+      "required": [
+        "targetId",
+        "creationOperationId",
+        "creationReleaseId",
+        "absenceReleaseId",
+        "expectedHead"
+      ],
+      "type": "object"
+    },
+    "ResourceId": {
+      "maxLength": 59,
+      "pattern": "^[a-z][a-z0-9_]{1,31}_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+      "type": "string"
+    },
+    "SemanticReference": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "localKey": {
+              "$ref": "#/$defs/LocalKey"
+            }
+          },
+          "required": [
+            "localKey"
+          ],
+          "type": "object"
+        },
+        {
+          "$ref": "#/$defs/PublishedReference"
+        }
+      ]
+    },
+    "TargetKind": {
+      "enum": [
+        "semantic_asset",
+        "physical_binding",
+        "model_grain",
+        "entity_key",
+        "join_contract"
+      ],
+      "type": "string"
+    },
+    "TargetKindContent": {
+      "oneOf": [
+        {
+          "properties": {
+            "content": {
+              "$ref": "#/$defs/AssetContent"
+            },
+            "kind": {
+              "enum": [
+                "semantic_asset"
+              ],
+              "type": "string"
+            }
+          }
+        },
+        {
+          "properties": {
+            "content": {
+              "$ref": "#/$defs/BindingContent"
+            },
+            "kind": {
+              "enum": [
+                "physical_binding"
+              ],
+              "type": "string"
+            }
+          }
+        },
+        {
+          "properties": {
+            "content": {
+              "$ref": "#/$defs/GrainContent"
+            },
+            "kind": {
+              "enum": [
+                "model_grain"
+              ],
+              "type": "string"
+            }
+          }
+        },
+        {
+          "properties": {
+            "content": {
+              "$ref": "#/$defs/EntityKeyContent"
+            },
+            "kind": {
+              "enum": [
+                "entity_key"
+              ],
+              "type": "string"
+            }
+          }
+        },
+        {
+          "properties": {
+            "content": {
+              "$ref": "#/$defs/JoinContent"
+            },
+            "kind": {
+              "enum": [
+                "join_contract"
+              ],
+              "type": "string"
+            }
+          }
+        }
+      ]
+    },
+    "UpdateAssetTarget": {
+      "additionalProperties": false,
+      "properties": {
+        "baseRevisionId": {
+          "$ref": "#/$defs/ResourceId"
+        },
+        "changes": {
+          "$ref": "#/$defs/ChangeList"
+        },
+        "content": {
+          "$ref": "#/$defs/AssetContent"
+        },
+        "evidenceIds": {
+          "items": {
+            "$ref": "#/$defs/ResourceId"
+          },
+          "maxItems": 256,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "intent": {
+          "enum": [
+            "update"
+          ],
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "semantic_asset"
+          ],
+          "type": "string"
+        },
+        "localKey": {
+          "$ref": "#/$defs/LocalKey"
+        },
+        "targetId": {
+          "$ref": "#/$defs/ResourceId"
+        },
+        "title": {
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "intent",
+        "kind",
+        "localKey",
+        "targetId",
+        "baseRevisionId",
+        "title",
+        "content",
+        "changes",
+        "evidenceIds"
+      ],
+      "type": "object"
+    },
+    "UpdateObjectTarget": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "$ref": "#/$defs/TargetKindContent"
+        }
+      ],
+      "properties": {
+        "baseObjectVersion": {
+          "$ref": "#/$defs/Version"
+        },
+        "changes": {
+          "$ref": "#/$defs/ChangeList"
+        },
+        "content": {
+          "type": "object"
+        },
+        "evidenceIds": {
+          "items": {
+            "$ref": "#/$defs/ResourceId"
+          },
+          "maxItems": 256,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "intent": {
+          "enum": [
+            "update"
+          ],
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ObjectKind"
+        },
+        "localKey": {
+          "$ref": "#/$defs/LocalKey"
+        },
+        "targetId": {
+          "$ref": "#/$defs/ResourceId"
+        },
+        "title": {
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "intent",
+        "kind",
+        "localKey",
+        "targetId",
+        "baseObjectVersion",
+        "title",
+        "content",
+        "changes",
+        "evidenceIds"
+      ],
+      "type": "object"
+    },
+    "Version": {
+      "maximum": 2147483647,
+      "minimum": 1,
+      "type": "integer"
+    }
+  },
+  "$id": "semlia.production-suggestions/v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "enum": [
+        "semlia.production-suggestions/v1"
+      ],
+      "type": "string"
+    },
+    "targets": {
+      "items": {
+        "$ref": "#/$defs/ProductionTarget"
+      },
+      "maxItems": 32,
+      "minItems": 1,
+      "type": "array"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "targets"
+  ],
+  "type": "object"
+}

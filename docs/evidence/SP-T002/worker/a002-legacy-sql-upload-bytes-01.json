@@ -1,0 +1,23 @@
+{
+  "command": [
+    "go",
+    "test",
+    "-count=1",
+    "-overlay=docs/evidence/SP-T002/worker/a002-legacy-sql-overlay.json",
+    "./internal/adapters/discovery/postgresql",
+    "-run",
+    "^TestA002LegacySQLUploadBytes$"
+  ],
+  "clearedEnvironment": [
+    "SEMLIA_INGESTION_TEST_DATABASE_URL",
+    "SEMLIA_EXECUTION_CRASH_HELPER",
+    "SEMLIA_EXECUTION_TEST_DB",
+    "SEMLIA_DATABASE_URL"
+  ],
+  "start": "2026-09-09T08:01:40.361Z",
+  "end": "2026-09-09T08:01:44.840Z",
+  "exitStatus": 0,
+  "signal": null,
+  "stdout": "ok  \tgithub.com/iiwish/semlia/internal/adapters/discovery/postgresql\t3.054s\n",
+  "stderr": ""
+}

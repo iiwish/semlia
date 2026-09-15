@@ -1,0 +1,157 @@
+task_id: SP-T003
+attempt_id: SP-T003-A003
+status: Accepted
+attempt_status: Completed
+repair_checkpoint: docs/evidence/SP-T003/repair-20260910/report.md
+acceptance_review: docs/evidence/SP-T003/acceptance-A003/review.md
+mode: Direct Execute
+approval: 2026-09-10 用户要求修复 T003，并明确允许新增 migration 000025、生产模块同目录辅助文件及 T004 测试的来源/授权夹具适配；不修改 T004 业务逻辑。
+retry:
+  previous_attempt_status: Needs_Fix
+  review: docs/evidence/SP-T003/acceptance-20260910/review.md
+  baseline_archive: .semlia/evidence-work/SP-T003-A003-baseline.tar
+  evidence: docs/evidence/SP-T003/repair-20260910/
+  scope: Repair input authenticity, atomic draft replacement, freeze guards, original-command replay and historical recovery, plus required target mapping and safety constraints. Preserve existing T004 implementation and treat its unresolved findings separately.
+  execution_reason: One serial task in the existing dirty workspace; no new delegation requested. Use the authorized additive migration rather than rewriting migration 23.
+goal: 通过一个受权事务把固定候选/来源输入变成新资产草稿或已发布资产的变更提案，并提供有界、重新鉴权的服务端恢复和草稿替换；不发布。
+context:
+  root: .
+  root_resolution: Resolve all paths from git rev-parse --show-toplevel.
+  product: docs/specs/semantic-production/product-design.md
+  plan: docs/specs/semantic-production/plan.md
+  tasks: docs/specs/semantic-production/tasks.md
+  checklist: docs/specs/semantic-production/checklists/requirements.md
+  analysis: docs/specs/semantic-production/analysis.md
+  data_model: docs/specs/semantic-production/data-model.md
+  wire_semantics: docs/specs/semantic-production/contracts/production.md
+  wire_schema: docs/specs/semantic-production/contracts/production.openapi.yaml
+  input_handoff: docs/evidence/SP-T002/summary.md
+  checkout: docs/evidence/SP-T003/checkout.json
+  baseline_copy: .semlia/evidence-work/SP-T003-baseline
+requirements: [SP-FR-003, SP-FR-005, SP-FR-008, SP-FR-009, SP-AC-001-cold-start, SP-AC-003, SP-AC-009-server, SP-AC-010-concurrency-authorization, SP-TD-001, SP-TD-003, SP-TD-004, SP-TD-008]
+dependencies: [T002 implementation and tests complete, T002 independent technical review passed, explicit user batch authorization, migration 000023 unoccupied, local isolated PostgreSQL available]
+parallel: false
+conflicts: All candidate decisions, catalog identity creation, Proposal authoring, production commands, schema, API and generated files. No T004 through T007 implementation.
+allowed_files:
+  - migrations/000025_semantic_production_authoring_integrity.up.sql
+  - migrations/000025_semantic_production_authoring_integrity.down.sql
+  - internal/application/governance/production_*.go
+  - internal/domain/governance/production_*.go
+  - internal/adapters/postgres/production_*.go
+  - internal/platform/http/production_*.go
+  - tests/integration/governance/production_release_test.go
+  - tests/integration/governance/production_authoring_*.go
+  - docs/evidence/SP-T003/repair-20260910/
+  - migrations/000023_semantic_production_authoring.up.sql
+  - migrations/000023_semantic_production_authoring.down.sql
+  - db/sqlc.yaml
+  - db/queries/discovery.sql
+  - db/queries/registry.sql
+  - db/queries/catalog.sql
+  - db/queries/governance.sql
+  - db/queries/semantic_production.sql
+  - internal/adapters/postgres/sqlc/*.go
+  - internal/domain/governance/proposal.go
+  - internal/domain/governance/proposal_test.go
+  - internal/domain/governance/production.go
+  - internal/domain/governance/production_test.go
+  - internal/application/governance/production.go
+  - internal/application/governance/production_test.go
+  - internal/application/governance/authoring.go
+  - internal/application/governance/proposal.go
+  - internal/application/catalog/service.go
+  - internal/application/catalog/service_test.go
+  - internal/application/discovery/control.go
+  - internal/adapters/postgres/semantic_production.go
+  - internal/adapters/postgres/governance.go
+  - internal/adapters/postgres/catalog.go
+  - internal/adapters/postgres/source_discovery.go
+  - internal/platform/http/semantic_production.go
+  - internal/platform/http/semantic_production_test.go
+  - internal/platform/http/handler.go
+  - internal/platform/http/catalog.go
+  - internal/platform/http/governance.go
+  - internal/platform/config/config.go
+  - internal/platform/config/config_test.go
+  - cmd/semlia/main.go
+  - cmd/semlia/readiness.go
+  - cmd/semlia/readiness_test.go
+  - .env.example
+  - pkg/identity/id.go
+  - pkg/identity/id_test.go
+  - sdk/typescript/src/ids.ts
+  - sdk/typescript/src/ids.test.ts
+  - api/openapi/semlia.v1.yaml
+  - api/gen/go/types.gen.go
+  - sdk/typescript/src/schema.gen.ts
+  - sdk/typescript/src/client.ts
+  - sdk/typescript/src/client.test.ts
+  - sdk/typescript/src/index.ts
+  - api/README.md
+  - tests/contracts/contract_test.go
+  - tests/integration/governance/production_authoring_test.go
+  - tests/integration/db/semantic_production_migrations_test.go
+  - tests/integration/db/database_test.go
+  - docs/evidence/SP-T003/attempts/SP-T003-A001.md
+  - docs/evidence/SP-T003/worker/
+orchestrator_allowed_files:
+  - docs/evidence/SP-T003/
+  - docs/specs/semantic-production/packets/SP-T003.yaml
+  - docs/specs/semantic-production/tasks.md
+  - docs/specs/semantic-production/analysis.md
+  - docs/specs/semantic-production/checklists/requirements.md
+  - docs/specs/semantic-production/plan.md
+  - docs/specs/semantic-production/product-design.md
+  - docs/SSOT.md
+  - docs/README.md
+scope_rules:
+  - Allowed list is a maximum. Preserve the entire dirty checkout; compare against the task snapshot, not HEAD.
+  - Generate Go/sqlc/SDK only with existing generators. Preserve all existing public Go/SDK names and constants; avoid new generic-schema naming collisions using supported x-go-name when needed.
+  - Add only POST/GET collection and GET/PUT operation routes plus compatible optional Proposal fields. No submit, validate, review, publish, generation or rollback endpoints in this task.
+  - Config/main/readiness/env edits only supply an explicit default-off production feature fence and exact migration-23 readiness. Old-writer draining is a deployment prerequisite, not a claim that old binaries understand the flag.
+  - HTTP catalog.go is the existing shared route registry; governance.go is allowed only for production-member read/write guards and additive field projection. Machine bearer allowlist stays unchanged.
+  - Readiness and migration-inventory tests retain true old-stage checks. Do not weaken assertions or rewrite existing migrations.
+implementation_obligations:
+  - Implement the eleven production tables in data-model section 3, exact workspace FKs, immutable historical versions/targets/commands/claims/contributors, reservations and Proposal expand-first shape constraints. Provision generation link/output/application storage for T005; do not implement model jobs or invent successful runs.
+  - Creation starts with zero assets/releases and creates real draft identities with current_revision_id NULL, real draft Proposals with intent=create and NULL base, complete candidate links and command/audit/outbox records in one transaction. Other four governed-object create targets do not get incomplete formal registry rows.
+  - Support all five target kinds and create/update, finite local references, exact published dependency pins and physical snapshot members. Enforce role-specific dataset/field reference kinds and field parent revisions. Never treat mutable registry/current pointers as published or historical evidence.
+  - Validate actual input snapshot/digest/coverage selection and current per-unit head, candidate contents/evidence relation, evidence digest/readability, baseline head and target domain uniqueness. Failed/partial latest necessary units fail closed. An input cannot carry competing versions for the same source unit/object.
+  - Enforce full read scopes plus propose/manage scopes for all inputs/targets/dependencies. Derive actor from authenticated principal, require the authorizer, fence workspace authorization version inside every transaction and reauthorize replay/recovery. Cross-workspace unknown IDs are 404; known denied scopes 403; never leak existing operation identity before complete read authorization.
+  - Strict production-only JSON validation rejects unknown and duplicate keys, invalid UTF-8, trailing values, excessive depth/numbers and all aggregate limits. Keep numeric lexemes and business text intact. Do not change the global legacy CanonicalJSON/digest algorithm.
+  - Canonical input plus targets is at most 768 KiB, body at most the existing stricter cap up to 1 MiB, depth 32, targets 32, changes at most 100 per target and 256 total. Unordered sets sort deterministically and reject duplicates; change order is meaningful. Persist byte-precise canonical authority, not a jsonb reserialization that changes number literals.
+  - For update, require real current published asset/object baseline, replay legal dot-path changes against that content, compute server digests and match the complete desired result. Do not allow identity/address/type edits or fake client before values. Preserve ordinary legacy draft-base update behavior.
+  - Enforce explicit candidate primaryTargetKey mapped to an actual create/changed Proposal, immutable original decisions and complete per-target links. A no_change primary in a mixed request is CONTENT_MISMATCH; all no_change operations remain queryable without any Proposal or convert decision.
+  - Idempotency is workspace plus authenticated principal plus command kind plus key; request digest includes URI/resource/version/full business content. Commit the command result with all writes. Replays reauthorize, same-key changed body conflicts. A separate business claim prevents different-key/caller no-candidate duplicates without changing original authorship.
+  - Identity collisions serialize on natural domain identities and reservations. Authorized identical inputs return ALREADY_PRODUCED with existing operation; different content returns IDENTITY_CONFLICT. Never silently adopt an unrelated existing asset or overwrite a reservation target ID.
+  - PUT is full-set expectedVersion CAS while all members are draft, retains immutable earlier input/target content, rejects removed members through existing legal state transitions, preserves stable identities and records contributors. Supersede preserves original decisions/versions, transfers only authorized reservation ownership and does not reset terminal Proposals or inherit approval.
+  - reuseIdentity requires actual trusted creation/absence proof. Before T004 provides production release proof, unknown/unverifiable history must return PRIOR_STATE_UNKNOWN rather than manufacturing a baseline or releasing content. Keep the contract-compatible storage for later proof handling.
+  - suggestionRunId must reference a real same-operation successful persisted output for the exact source version, never a stub created to satisfy the request. Validate available output and record immutable server-computed application/delta if applied; absent generation capability does not authorize inventing data.
+  - GET latest or specified version is authoritative server recovery. Immutable old target content must not be rebuilt from current mutable Proposal changes. List summaries use created_at/id and fixed watermark, source/candidate/createdBy filters, signed resource/filter-bound cursor, limit 1..200 and full-item scope filtering; all responses stay within 4 MiB without truncating an object.
+  - Before T004, legacy changes/submit/review/publish/convert and catalog revision/status paths cannot advance or bypass a production reservation/member. Add storage/constraint defenses as well as HTTP/application guards, preserving ordinary legacy objects and existing release-only consumption.
+  - Migrations 23 and 24 remain unchanged. Migration 25 adds draft integrity and canonical history, preserving old rows as unverifiable rather than fabricating evidence; exact readiness and safe down cover the new version. No production or default-development database migrations during this repair.
+tdd:
+  red: Add discriminating runtime failures before implementing cold-start, transaction rollback/response-loss recovery, exact-input history, same/different-key and concurrent identity races, authorization revocation/cross-workspace reads, draft-version conflicts, strict parsing and old-write guards.
+  green: Use existing domain/service/store patterns and real isolated PostgreSQL. No nested self-committing repository methods inside production transaction ownership.
+  refactor: Only simplify touched production helpers when needed; no unrelated architecture or frontend rewrite.
+validation:
+  - go test -p=1 -count=1 ./pkg/identity ./internal/domain/governance ./internal/application/governance ./internal/application/catalog ./internal/application/discovery ./internal/platform/config ./internal/platform/http ./cmd/semlia
+  - env -u SEMLIA_INGESTION_TEST_DATABASE_URL -u SEMLIA_EXECUTION_CRASH_HELPER -u SEMLIA_EXECUTION_TEST_DB -u SEMLIA_DATABASE_URL go test -p=1 -count=1 -timeout=20m ./tests/integration/governance ./tests/integration/catalog ./tests/integration/discovery
+  - env -u SEMLIA_DATABASE_URL go test -p=1 -count=1 -timeout=15m ./tests/integration/db -run '^TestSemanticProductionMigration|^TestMigrationLifecycleAndTenantSchema$|^TestPostgres17MigrationLifecycle$'
+  - make db-generate-check
+  - make contracts-check
+  - make test-contracts
+  - make test-repository
+  - pnpm --filter @semlia/sdk-typescript test
+  - git diff --check
+environment:
+  database: New tests use owned local PostgreSQL 18-alpine testcontainers. Only the existing PostgreSQL 17 lifecycle compatibility test may use its owned PG17 container. Clear all external DB override variables; never connect to a default development database.
+  concurrency: Host storage is constrained. All DB/CLI readiness tests run serially with -p=1; do not start an extra DB test lane or prune shared Docker resources. Clean only test-owned exact resources if verified orphaned.
+  prohibited: No make check/dev/default Compose, deployment, existing DB migration, paid/live models, Git commit/push/reset, dependency changes, frontend build or live customer data.
+evidence:
+  output: Exact changed files and hash delta versus T003 checkout, actual RED/GREEN commands stdout/stderr/exit status and UTC times, zero-business-object starting counts, atomic commit/failure counts, authorization/concurrency and legacy compatibility results, unverified cases and residual risk.
+  file_policy: Use apply_patch for manual source/Markdown edits; structured file APIs may save generated raw logs/diffs/hashes without overwriting old evidence. SDK test is tsc --noEmit, not a runtime assertion.
+stop_conditions:
+  - Do not start while status is Draft, delegate further, mark Accepted, or implement T004/T005 behavior.
+  - If a required file is outside allowlist, request the exact ownership extension before writing. If contract meaning/security changes are needed, stop and report rather than silently reducing scope.
+  - Never revert user or other-agent work. Unexpected unrelated changes remain untouched; report only blocking conflicts.
+  - Failed/skipped safety checks and missing runtime proof are not passes. Do not lower limits/permissions/FKs/CAS checks or replace genuine PostgreSQL evidence with mocks.

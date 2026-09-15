@@ -1,0 +1,449 @@
+{
+  "activeValidation": {
+    "status": "not_requested"
+  },
+  "baselineHead": {
+    "presence": "absent"
+  },
+  "generationApplications": [
+    {
+      "actorPrincipalId": "prn_01m27vh20qf9ybxn59wvhxbmp2",
+      "appliedContentDigest": "sha256:b1129b47e0762657ab19e92ef49a2e27234bb4a5b30c2ffc923814f5f4af05d1",
+      "appliedVersion": 2,
+      "delta": [
+        {
+          "change": {
+            "afterValue": "One customer per customer_id.",
+            "beforeValue": "Entity representing customers with customer_id and name fields",
+            "fieldPath": "content.definition",
+            "op": "update"
+          },
+          "localKey": "customers"
+        },
+        {
+          "change": {
+            "afterValue": "Customers referenced by sales orders.",
+            "beforeValue": null,
+            "fieldPath": "content.scope",
+            "op": "update"
+          },
+          "localKey": "customers"
+        },
+        {
+          "change": {
+            "afterValue": "One order per order_id.",
+            "beforeValue": "Entity representing orders with order_id, customer_id, amount, and status fields",
+            "fieldPath": "content.definition",
+            "op": "update"
+          },
+          "localKey": "orders"
+        },
+        {
+          "change": {
+            "afterValue": "Sales orders.",
+            "beforeValue": null,
+            "fieldPath": "content.scope",
+            "op": "update"
+          },
+          "localKey": "orders"
+        },
+        {
+          "change": {
+            "afterValue": "Sum of paid order amounts, excluding cancelled orders.",
+            "beforeValue": "Revenue metric derived from order amounts",
+            "fieldPath": "content.definition",
+            "op": "update"
+          },
+          "localKey": "revenue"
+        },
+        {
+          "change": {
+            "afterValue": "Paid sales orders only; cancelled orders are excluded.",
+            "beforeValue": null,
+            "fieldPath": "content.scope",
+            "op": "update"
+          },
+          "localKey": "revenue"
+        },
+        {
+          "change": {
+            "afterValue": "CASE WHEN status = 'paid' THEN amount ELSE 0 END",
+            "beforeValue": "amount",
+            "fieldPath": "content.transform",
+            "op": "update"
+          },
+          "localKey": "revenue_binding"
+        }
+      ],
+      "deltaDigest": "sha256:c340bf241a28dc740d98dcd3893dfa5a30689c3647b0a1a8d7bc6970756cde2b",
+      "runId": "agr_01m27vh2tvfa4af1rbb1na9vev",
+      "sourceOutputDigest": "sha256:c590e6099c4f741b166e2ee1a357ef0d551ec62fc97cffaa9cd3924aba74f723",
+      "sourceVersion": 1
+    }
+  ],
+  "generationRunIds": [
+    "agr_01m27vh2tvfa4af1rbb1na9vev"
+  ],
+  "input": {
+    "candidates": [],
+    "dependencies": [],
+    "evidence": [],
+    "snapshots": [
+      {
+        "coverageKeys": [
+          "catalog"
+        ],
+        "digest": "sha256:ff5ccf1a8fcee0651038999c3a5fa6299982774a1562f5fc0da6ab850b5fce1e",
+        "snapshotId": "ssnp_01m27vh25qf9y89ctsfkdxqghc",
+        "sourceId": "src_01m27vh21ef9y80m5b437nks1m"
+      }
+    ]
+  },
+  "inputDigest": "sha256:7c863e178e27e688c40584eaf3f3c851f6892164b893bbae911a65dcb603a1fc",
+  "setDigest": "sha256:03f7447efa59a239ad49e27bb91b6a22d08e2e45f0f0560d7b61b63e0056c894",
+  "summary": {
+    "createdAt": "2026-09-11T09:07:10Z",
+    "createdBy": "prn_01m27vh20qf9ybxn59wvhxbmp2",
+    "currentVersion": 2,
+    "frozen": false,
+    "id": "prodop_01m27vh2ckf9y8zevrkazzhq4t",
+    "progress": "draft",
+    "releaseId": null,
+    "targetCount": 10,
+    "updatedAt": "2026-09-11T09:07:53Z"
+  },
+  "targets": [
+    {
+      "contentDigest": "sha256:0d323b91418e668765eba61ed900b843c33a5e6e4d985248f91b39f7229dce81",
+      "declaration": {
+        "changes": [],
+        "content": {
+          "address": "commerce.customers",
+          "assetType": "entity",
+          "definition": "One customer per customer_id.",
+          "displayName": "customers",
+          "ownerPrincipalId": "prn_01m27vh20qf9ybxn59wvhxbmp2",
+          "scope": "Customers referenced by sales orders."
+        },
+        "evidenceIds": [],
+        "identityKey": "commerce.customers",
+        "intent": "create",
+        "kind": "semantic_asset",
+        "localKey": "customers",
+        "title": "customers"
+      },
+      "localKey": "customers",
+      "outcome": "proposal",
+      "proposalId": "prp_01m27vjc67fa5970gkbd2ssfb3",
+      "proposalState": "draft",
+      "reviewIds": [],
+      "targetId": "ast_01m27vh2ckf9yr1f9r55qvnw6x",
+      "validationRunIds": []
+    },
+    {
+      "contentDigest": "sha256:0ab5c36d2821b7d4be1f273f9954bfc5a993142eed34de7053330c89262b5986",
+      "declaration": {
+        "changes": [],
+        "content": {
+          "asset": {
+            "localKey": "customers"
+          },
+          "dataset": {
+            "kind": "dataset",
+            "objectId": "pds_01m27vh22pf9y9wjtrdaz3y2nw",
+            "revisionId": "pdr_01m27vh22wf9y9nxax2kv8kgwm",
+            "snapshotId": "ssnp_01m27vh25qf9y89ctsfkdxqghc"
+          }
+        },
+        "evidenceIds": [],
+        "identityKey": "commerce.customers_binding",
+        "intent": "create",
+        "kind": "physical_binding",
+        "localKey": "customers_binding",
+        "title": "customers_binding"
+      },
+      "localKey": "customers_binding",
+      "outcome": "proposal",
+      "proposalId": "prp_01m27vjc67fa5tf5rhhyv3fdvx",
+      "proposalState": "draft",
+      "reviewIds": [],
+      "targetId": "phb_01m27vh2cpf9yveze2d6pakbtq",
+      "validationRunIds": []
+    },
+    {
+      "contentDigest": "sha256:e69d96816714a222b8331fce2da0c0b1808ac2ed180063765e6aeb9d24acef8e",
+      "declaration": {
+        "changes": [],
+        "content": {
+          "asset": {
+            "localKey": "customers"
+          },
+          "fields": [
+            {
+              "kind": "field",
+              "objectId": "pfd_01m27vh232f9y9jtttn3a7x4yd",
+              "revisionId": "pfr_01m27vh23ef9ya9sfg1gz21txa",
+              "snapshotId": "ssnp_01m27vh25qf9y89ctsfkdxqghc"
+            }
+          ],
+          "uniqueness": "exact"
+        },
+        "evidenceIds": [],
+        "identityKey": "commerce.customers_key",
+        "intent": "create",
+        "kind": "entity_key",
+        "localKey": "customers_key",
+        "title": "customers_key"
+      },
+      "localKey": "customers_key",
+      "outcome": "proposal",
+      "proposalId": "prp_01m27vjc67fa69dsp90bexmw5x",
+      "proposalState": "draft",
+      "reviewIds": [],
+      "targetId": "eky_01m27vh2cqf9ysxszpvw8xedpp",
+      "validationRunIds": []
+    },
+    {
+      "contentDigest": "sha256:9cf4c55b046be767056ea2f70b8ce51b7579eb92514989eeb639ebcee7909780",
+      "declaration": {
+        "changes": [],
+        "content": {
+          "address": "commerce.orders",
+          "assetType": "entity",
+          "definition": "One order per order_id.",
+          "displayName": "orders",
+          "ownerPrincipalId": "prn_01m27vh20qf9ybxn59wvhxbmp2",
+          "scope": "Sales orders."
+        },
+        "evidenceIds": [],
+        "identityKey": "commerce.orders",
+        "intent": "create",
+        "kind": "semantic_asset",
+        "localKey": "orders",
+        "title": "orders"
+      },
+      "localKey": "orders",
+      "outcome": "proposal",
+      "proposalId": "prp_01m27vjc67fa6r420rtdj15y8f",
+      "proposalState": "draft",
+      "reviewIds": [],
+      "targetId": "ast_01m27vh2crf9ythgzj4s7j5njy",
+      "validationRunIds": []
+    },
+    {
+      "contentDigest": "sha256:0d03a4cbcebd50953248d7a6d924e3547f3a4657c0b5e694d8f8695fc3eddf81",
+      "declaration": {
+        "changes": [],
+        "content": {
+          "asset": {
+            "localKey": "orders"
+          },
+          "dataset": {
+            "kind": "dataset",
+            "objectId": "pds_01m27vh241f9yb45wj6rsbychj",
+            "revisionId": "pdr_01m27vh243f9y931qdtecrtn2v",
+            "snapshotId": "ssnp_01m27vh25qf9y89ctsfkdxqghc"
+          }
+        },
+        "evidenceIds": [],
+        "identityKey": "commerce.orders_binding",
+        "intent": "create",
+        "kind": "physical_binding",
+        "localKey": "orders_binding",
+        "title": "orders_binding"
+      },
+      "localKey": "orders_binding",
+      "outcome": "proposal",
+      "proposalId": "prp_01m27vjc68fa6sdr1pcypa8csp",
+      "proposalState": "draft",
+      "reviewIds": [],
+      "targetId": "phb_01m27vh2csf9yswmseqtn4z7yw",
+      "validationRunIds": []
+    },
+    {
+      "contentDigest": "sha256:716fb611796ee9ecdf5c20241a6106e21ec4806284aade6f281b504060cb2008",
+      "declaration": {
+        "changes": [],
+        "content": {
+          "cardinality": "many_to_one",
+          "expression": "orders.customer_id = customers.customer_id",
+          "joinType": "inner",
+          "leftDataset": {
+            "kind": "dataset",
+            "objectId": "pds_01m27vh241f9yb45wj6rsbychj",
+            "revisionId": "pdr_01m27vh243f9y931qdtecrtn2v",
+            "snapshotId": "ssnp_01m27vh25qf9y89ctsfkdxqghc"
+          },
+          "notes": "Synthetic proposed relationship; requires validation and human review.",
+          "pairs": [
+            {
+              "left": {
+                "kind": "field",
+                "objectId": "pfd_01m27vh24gf9y8fdhh9zp8q8vh",
+                "revisionId": "pfr_01m27vh24jf9y87n2e0rnbe7ga",
+                "snapshotId": "ssnp_01m27vh25qf9y89ctsfkdxqghc"
+              },
+              "right": {
+                "kind": "field",
+                "objectId": "pfd_01m27vh232f9y9jtttn3a7x4yd",
+                "revisionId": "pfr_01m27vh23ef9ya9sfg1gz21txa",
+                "snapshotId": "ssnp_01m27vh25qf9y89ctsfkdxqghc"
+              }
+            }
+          ],
+          "rightDataset": {
+            "kind": "dataset",
+            "objectId": "pds_01m27vh22pf9y9wjtrdaz3y2nw",
+            "revisionId": "pdr_01m27vh22wf9y9nxax2kv8kgwm",
+            "snapshotId": "ssnp_01m27vh25qf9y89ctsfkdxqghc"
+          }
+        },
+        "evidenceIds": [],
+        "identityKey": "commerce.orders_customers_join",
+        "intent": "create",
+        "kind": "join_contract",
+        "localKey": "orders_customers_join",
+        "title": "orders_customers_join"
+      },
+      "localKey": "orders_customers_join",
+      "outcome": "proposal",
+      "proposalId": "prp_01m27vjc68fa780jqmdzxt479d",
+      "proposalState": "draft",
+      "reviewIds": [],
+      "targetId": "jct_01m27vh2csf9z90av7eck09a7y",
+      "validationRunIds": []
+    },
+    {
+      "contentDigest": "sha256:bb772d99d2d073a57faf77ebde752c1bf9fd7c0155761497040363d5b4cebe46",
+      "declaration": {
+        "changes": [],
+        "content": {
+          "asset": {
+            "localKey": "orders"
+          },
+          "fields": [
+            {
+              "kind": "field",
+              "objectId": "pfd_01m27vh246f9yaxfhhrc11aben",
+              "revisionId": "pfr_01m27vh24cf9y9jy9010daswkw",
+              "snapshotId": "ssnp_01m27vh25qf9y89ctsfkdxqghc"
+            }
+          ],
+          "uniqueness": "exact"
+        },
+        "evidenceIds": [],
+        "identityKey": "commerce.orders_key",
+        "intent": "create",
+        "kind": "entity_key",
+        "localKey": "orders_key",
+        "title": "orders_key"
+      },
+      "localKey": "orders_key",
+      "outcome": "proposal",
+      "proposalId": "prp_01m27vjc68fa7r13a1nj2zx0gp",
+      "proposalState": "draft",
+      "reviewIds": [],
+      "targetId": "eky_01m27vh2ctf9za9sc7ja28dx0a",
+      "validationRunIds": []
+    },
+    {
+      "contentDigest": "sha256:1b1d392b50ac1f0478a812c5d74bd15b81b73bb2ddded96cef64fb23db02f69c",
+      "declaration": {
+        "changes": [],
+        "content": {
+          "address": "commerce.revenue",
+          "assetType": "metric",
+          "definition": "Sum of paid order amounts, excluding cancelled orders.",
+          "displayName": "revenue",
+          "ownerPrincipalId": "prn_01m27vh20qf9ybxn59wvhxbmp2",
+          "scope": "Paid sales orders only; cancelled orders are excluded."
+        },
+        "evidenceIds": [],
+        "identityKey": "commerce.revenue",
+        "intent": "create",
+        "kind": "semantic_asset",
+        "localKey": "revenue",
+        "title": "revenue"
+      },
+      "localKey": "revenue",
+      "outcome": "proposal",
+      "proposalId": "prp_01m27vjc68fa8bpccn26793j1v",
+      "proposalState": "draft",
+      "reviewIds": [],
+      "targetId": "ast_01m27vh2cvf9z99mzd7s1h4tqd",
+      "validationRunIds": []
+    },
+    {
+      "contentDigest": "sha256:45f02a5fe615fff826ea34e80a8ea304f1e75af4ebf7b0d37c7c3917199678c8",
+      "declaration": {
+        "changes": [],
+        "content": {
+          "asset": {
+            "localKey": "revenue"
+          },
+          "dataset": {
+            "kind": "dataset",
+            "objectId": "pds_01m27vh241f9yb45wj6rsbychj",
+            "revisionId": "pdr_01m27vh243f9y931qdtecrtn2v",
+            "snapshotId": "ssnp_01m27vh25qf9y89ctsfkdxqghc"
+          },
+          "field": {
+            "kind": "field",
+            "objectId": "pfd_01m27vh24pf9y8fcv01g2gyw9z",
+            "revisionId": "pfr_01m27vh250f9y8m4shp4mcjssf",
+            "snapshotId": "ssnp_01m27vh25qf9y89ctsfkdxqghc"
+          },
+          "transform": "CASE WHEN status = 'paid' THEN amount ELSE 0 END"
+        },
+        "evidenceIds": [],
+        "identityKey": "commerce.revenue_binding",
+        "intent": "create",
+        "kind": "physical_binding",
+        "localKey": "revenue_binding",
+        "title": "revenue_binding"
+      },
+      "localKey": "revenue_binding",
+      "outcome": "proposal",
+      "proposalId": "prp_01m27vjc68fa8t2348537e0e46",
+      "proposalState": "draft",
+      "reviewIds": [],
+      "targetId": "phb_01m27vh2cwf9z8aydxz02sfzv7",
+      "validationRunIds": []
+    },
+    {
+      "contentDigest": "sha256:c9b8c2dbb60a2f1d61171ebcf49c68053392aba477bc3481ecab66e08889529a",
+      "declaration": {
+        "changes": [],
+        "content": {
+          "asset": {
+            "localKey": "revenue"
+          },
+          "expression": "one row per order_id",
+          "fields": [
+            {
+              "kind": "field",
+              "objectId": "pfd_01m27vh246f9yaxfhhrc11aben",
+              "revisionId": "pfr_01m27vh24cf9y9jy9010daswkw",
+              "snapshotId": "ssnp_01m27vh25qf9y89ctsfkdxqghc"
+            }
+          ]
+        },
+        "evidenceIds": [],
+        "identityKey": "commerce.revenue_grain",
+        "intent": "create",
+        "kind": "model_grain",
+        "localKey": "revenue_grain",
+        "title": "revenue_grain"
+      },
+      "localKey": "revenue_grain",
+      "outcome": "proposal",
+      "proposalId": "prp_01m27vjc68fa9ad258h1gqt1k9",
+      "proposalState": "draft",
+      "reviewIds": [],
+      "targetId": "mgn_01m27vh2cyf9zb12mvnwdkr225",
+      "validationRunIds": []
+    }
+  ],
+  "unresolvedCodes": [],
+  "version": 2
+}

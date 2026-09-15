@@ -1,0 +1,94 @@
+schema_version: 1
+packet_id: M2-T011-A001
+task_id: T011
+feature_id: m2-governed-authoring
+mode: execute_one_task
+status: Running
+
+goal: >-
+  Make the founder's local M2 acceptance journey exercise the real embedded Web application,
+  Go API, PostgreSQL state, worker validation, independent human review, publish and rollback.
+  The local acceptance identity mechanism must be explicit, development-only and visibly
+  disclosed; it must not be represented as production authentication.
+
+requirements:
+  - AC-M2-001 through AC-M2-009
+  - D7 option (b): seed independent reviewer and publisher principals without weakening FR-007
+  - T010 production failures never fall back to fixture data
+  - AGENTS.md desktop viewports: 1440x900 and 1024x768
+
+dependencies:
+  - T007 Accepted
+  - T010 Accepted
+  - founder authorization for the local acceptance hardening slice on 2026-09-04
+
+allowed_files:
+  - api/**
+  - cmd/semlia/**
+  - compose.yaml
+  - db/**
+  - deploy/local/**
+  - docs/specs/m2-governed-authoring/**
+  - docs/evidence/M2-T011/**
+  - internal/adapters/postgres/**
+  - internal/application/authorization/**
+  - internal/application/governance/**
+  - internal/platform/config/**
+  - internal/platform/http/**
+  - migrations/**
+  - scripts/**
+  - sdk/typescript/**
+  - tests/**
+  - web/**
+
+forbidden_changes:
+  - Do not claim that local acceptance identities are authentication or safe for external users.
+  - Do not weaken author-reviewer-publisher separation of duties.
+  - Do not enable local identity aliases outside the development environment.
+  - Do not replace real API failures with fixtures.
+  - Do not implement M3 Ask, MCP, SDK delivery or consumer-binding scope.
+  - Do not add mobile layouts or mobile acceptance targets.
+  - Do not touch unrelated untracked files.
+
+tdd:
+  red:
+    - Missing actor headers and the absence of independent reviewer and publisher principals prevent
+      the real browser journey from crossing the review and publish gates.
+    - Persisted reviews are not readable by the Web runtime after an actor switch or reload.
+    - The current Playwright suite proves the fixture contract only.
+  green:
+    - An explicit development-only author/reviewer/publisher selector sends actor headers on every
+      SDK request and reloads authoritative state after a switch.
+    - PostgreSQL seeds stable independent reviewer and publisher principals per workspace and the API
+      can read persisted review records.
+    - A separate real-stack Playwright journey creates isolated test data and completes submit,
+      validation, independent approval, publish and rollback against the embedded application.
+  refactor:
+    - Keep request identity plumbing in one SDK/client helper and keep fixture mode unchanged.
+
+validation:
+  - go test ./internal/application/authorization/... ./internal/application/governance/...
+  - go test ./tests/integration/governance/...
+  - make contracts-check
+  - pnpm --filter @semlia/web lint
+  - pnpm --filter @semlia/web typecheck
+  - pnpm --filter @semlia/web test
+  - pnpm --filter @semlia/web build
+  - pnpm --filter @semlia/web test:e2e
+  - make check-source
+  - make check-smoke
+  - git diff --check
+
+acceptance:
+  - The founder can switch among independent author, reviewer and publisher identities in the local
+    app; the UI labels the control as local acceptance and reloads persisted state.
+  - Refreshing or switching actors preserves the recorded review and exposes the publish action to
+    the authorized non-reviewing actor.
+  - The fixture suite remains green and a separately named real-stack suite proves the same core
+    journey without VITE_CATALOG_FIXTURE.
+  - T011 remains incomplete until live-provider evidence, security/release gates and external-user
+    authentication are separately satisfied.
+
+evidence:
+  summary: docs/evidence/M2-T011/summary.md
+  test_results: docs/evidence/M2-T011/test-results.md

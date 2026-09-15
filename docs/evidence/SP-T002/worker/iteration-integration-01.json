@@ -1,0 +1,23 @@
+{
+  "command": [
+    "go",
+    "test",
+    "-count=1",
+    "-timeout=20m",
+    "./tests/integration/discovery",
+    "./tests/integration/ingestion",
+    "./tests/integration/catalog"
+  ],
+  "clearedEnvironment": [
+    "SEMLIA_INGESTION_TEST_DATABASE_URL",
+    "SEMLIA_EXECUTION_CRASH_HELPER",
+    "SEMLIA_EXECUTION_TEST_DB",
+    "SEMLIA_DATABASE_URL"
+  ],
+  "start": "2026-09-09T05:58:24.276Z",
+  "end": "2026-09-09T05:58:32.740Z",
+  "exitStatus": 0,
+  "signal": null,
+  "stdout": "ok  \tgithub.com/iiwish/semlia/tests/integration/discovery\t6.455s\nok  \tgithub.com/iiwish/semlia/tests/integration/ingestion\t3.698s\nok  \tgithub.com/iiwish/semlia/tests/integration/catalog\t6.542s\n",
+  "stderr": ""
+}

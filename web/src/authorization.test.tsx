@@ -8,7 +8,7 @@ import {
   useCan,
   useResourceCan,
 } from "./authorization";
-import { authorizationBindings, authorizationPrincipals, authorizationRoles, authorizationSession } from "./data";
+import { authorizationBindings, authorizationPrincipals, authorizationRoles, authorizationSession } from "./testing/data";
 import type { CapabilitySession } from "./types";
 
 function CapabilityProbe() {
@@ -30,9 +30,15 @@ function CapabilityProbe() {
 }
 
 describe("authorization projection", () => {
+  it("does not grant capabilities without an explicit authenticated session", () => {
+    render(<CapabilityProvider><CapabilityProbe /></CapabilityProvider>);
+    expect(screen.getByText("不可查看角色")).toBeVisible();
+    expect(screen.queryByText("可发布")).not.toBeInTheDocument();
+    expect(evaluateAuthorization({ principalId: "EMP-10001", action: "role.assign" }).allowed).toBe(false);
+  });
   it("exposes action and resource decisions without checking role display names", () => {
     render(
-      <CapabilityProvider>
+      <CapabilityProvider session={authorizationSession}>
         <CapabilityProbe />
         <RequireCapability action="audit.read" fallback={<p>无审计权限</p>}>
           <p>审计记录</p>
@@ -68,11 +74,13 @@ describe("authorization projection", () => {
 
   it("returns explainable allow and deny decisions", () => {
     const allowed = evaluateAuthorization({
+      principals: authorizationPrincipals, roles: authorizationRoles, bindings: authorizationBindings, authorizationVersion: authorizationSession.version,
       principalId: authorizationSession.principalId,
       action: "role.assign",
       resource: { type: "workspace", id: "WS-SEMLIA" },
     });
     const denied = evaluateAuthorization({
+      principals: authorizationPrincipals, roles: authorizationRoles, bindings: authorizationBindings, authorizationVersion: authorizationSession.version,
       principalId: "USR-AUDITOR",
       action: "release.publish",
       resource: { type: "asset", id: "METRIC-NET-REVENUE", domainId: "commerce", protected: true },

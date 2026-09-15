@@ -11,7 +11,7 @@ import (
 func TestDoctorValidatesConfiguration(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	code := run(context.Background(), []string{"doctor"}, emptyEnvironment, &stdout, &stderr)
+	code := run(context.Background(), []string{"doctor"}, passwordTestEnvironment(nil), &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit = %d, stderr = %s", code, stderr.String())
 	}
@@ -56,7 +56,7 @@ func TestMigrateRequiresDatabaseConfiguration(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("exit = %d, stderr = %s", code, stderr.String())
 	}
-	if stderr.String() != "migration error: database is not configured\n" {
+	if !strings.Contains(stderr.String(), "SEMLIA_DATABASE_URL") {
 		t.Fatalf("stderr = %q", stderr.String())
 	}
 }
@@ -67,13 +67,13 @@ func TestWorkerRequiresDatabaseConfiguration(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("exit = %d, stderr = %s", code, stderr.String())
 	}
-	if stderr.String() != "worker error: database is not configured\n" {
+	if !strings.Contains(stderr.String(), "SEMLIA_DATABASE_URL") {
 		t.Fatalf("stderr = %q", stderr.String())
 	}
 }
 
 func TestWorkerJSONFailureLogIsStructuredAndSafe(t *testing.T) {
-	lookup := mapEnvironment(map[string]string{
+	lookup := passwordTestEnvironment(map[string]string{
 		"SEMLIA_DATABASE_URL": "://database-secret",
 		"SEMLIA_LOG_FORMAT":   "json",
 	})
@@ -108,6 +108,14 @@ func TestMigrateRejectsUnknownAction(t *testing.T) {
 
 func emptyEnvironment(string) (string, bool) {
 	return "", false
+}
+
+func passwordTestEnvironment(overrides map[string]string) func(string) (string, bool) {
+	values := map[string]string{"SEMLIA_DATABASE_URL": "postgres://localhost/semlia_test", "SEMLIA_SECRET_KEY": strings.Repeat("s", 64), "SEMLIA_ALLOWED_ORIGINS": "http://127.0.0.1:18081"}
+	for key, value := range overrides {
+		values[key] = value
+	}
+	return mapEnvironment(values)
 }
 
 type ioDiscard struct{}

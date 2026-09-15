@@ -1,0 +1,72 @@
+schema_version: 1
+packet_id: ALPHA-T007-A001
+task_id: T007
+feature_id: alpha-controlled-user
+mode: execute_one_task
+status: Completed
+
+goal: >-
+  Prove the complete Controlled-User Alpha 0.1.0 delivery with integrated identity, source,
+  governance, immutable release, SemanticQuery and Ask journeys; exercise recovery, migration,
+  performance, security, release and desktop accessibility gates; then prepare M2/T011 and the
+  Alpha for founder review without claiming milestone acceptance.
+
+requirements:
+  - AC-001 through AC-010 from the confirmed Alpha specification
+  - FR-001 through FR-012 and NFR-001 through NFR-005
+  - M2 AC-M2-001 through AC-M2-010 closeout evidence
+
+dependencies:
+  - T002 is Needs_Review with authenticated Web evidence
+  - T004 is Needs_Review with real Source Web evidence
+  - T006 is Needs_Review with real Ask and product-boundary evidence
+  - Controlled-User Alpha technical baseline 0.1.0 approved on 2026-09-04
+
+allowed_files:
+  - api/**
+  - cmd/**
+  - compose.yaml
+  - db/**
+  - deploy/**
+  - docs/**
+  - internal/**
+  - Makefile
+  - migrations/**
+  - pkg/**
+  - scripts/**
+  - sdk/typescript/**
+  - tests/**
+  - web/**
+
+forbidden_changes:
+  - Do not weaken authentication, authorization, CSRF, separation-of-duty or secret boundaries to make acceptance pass.
+  - Do not use fixture success as evidence for a real Alpha workflow.
+  - Do not retain or print OIDC secrets, session verifiers, source passwords, model credentials, raw questions or fact rows.
+  - Do not mark T001-T007, M2/T011 or Alpha 0.1.0 Accepted; founder acceptance remains explicit.
+  - Do not claim full M3, M4, M5, MCP, CLI, webhook, warehouse execution or public-production readiness.
+
+validation:
+  - complete local OIDC-to-source-to-governance-to-query and Ask journey
+  - logout, revocation, permission removal, provider/source failure and recovery cases
+  - populated migration up/down/up on supported PostgreSQL versions
+  - 10,000-asset resolver and session performance gates
+  - deterministic and live Playwright at 1440x900 and 1024x768 with axe and keyboard checks
+  - make check-source
+  - make check-smoke
+  - make security-check
+  - make release
+  - release checksum, SBOM, image digest and migration-version verification
+  - git diff --check
+
+acceptance:
+  - Every Alpha acceptance criterion has current, reproducible evidence or an explicit external-input caveat.
+  - The complete local standards-based journey passes without client principal authority or fixture fallback.
+  - Restart, retry, revocation and rollback preserve fail-closed behavior and immutable records.
+  - Release artifacts and security scans contain no unaccepted High or Critical finding.
+  - The recommendation clearly separates controlled-user readiness from founder acceptance and later milestones.
+
+evidence:
+  summary: docs/evidence/ALPHA-T007/summary.md
+  test_results: docs/evidence/ALPHA-T007/test-results.md
+  acceptance_matrix: docs/evidence/ALPHA-T007/acceptance-matrix.md
+  release_report: docs/evidence/ALPHA-T007/release-report.md

@@ -1,0 +1,14 @@
+{
+  "command": "make test-repository",
+  "start": {
+    "current_time": "2026-09-09 04:48:48 UTC"
+  },
+  "end": {
+    "current_time": "2026-09-09 04:48:54 UTC"
+  },
+  "chunk_id": "b9aa11",
+  "wall_time_seconds": 5.843990958,
+  "exit_code": 2,
+  "original_token_count": 85,
+  "output": "go test ./tests/repository\n--- FAIL: TestDocumentationContainsNoPersonalAbsolutePaths (0.05s)\n    repository_contract_test.go:477: documentation contains personal paths: docs/specs/semantic-production/packets/SP-T001.yaml: macOS user path\nFAIL\nFAIL\tgithub.com/iiwish/semlia/tests/repository\t5.616s\nFAIL\nmake: *** [test-repository] Error 1\n"
+}

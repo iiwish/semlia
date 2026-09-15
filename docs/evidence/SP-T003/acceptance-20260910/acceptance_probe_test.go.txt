@@ -1,0 +1,224 @@
+package governance_test
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log/slog"
+	"net/http"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/iiwish/semlia/internal/application"
+	authorizationapp "github.com/iiwish/semlia/internal/application/authorization"
+	governanceapp "github.com/iiwish/semlia/internal/application/governance"
+	"github.com/iiwish/semlia/internal/domain"
+	authz "github.com/iiwish/semlia/internal/domain/authorization"
+	httpapi "github.com/iiwish/semlia/internal/platform/http"
+	"github.com/iiwish/semlia/pkg/identity"
+	"go.opentelemetry.io/otel/sdk/trace"
+)
+
+// These acceptance probes run via Go's overlay, without changing product files.
+func acceptanceT003Setup(t *testing.T) (*fixture, http.Handler, identity.WorkspaceID, identity.PrincipalID) {
+	t.Helper()
+	f := newFixture(t)
+	w := createWorkspace(t, f.pool, "acceptance-t003")
+	p := acceptanceT003Principal(t, f, w, "Author")
+	a := authorizationapp.NewService(f.store, authorizationapp.ClockFunc(time.Now))
+	tp := trace.NewTracerProvider()
+	t.Cleanup(func() { _ = tp.Shutdown(context.Background()) })
+	h := httpapi.NewHandler(
+		application.NewSystemService(application.ReadinessProbeFunc(func(context.Context) error { return nil }), domain.SystemInfo{}),
+		slog.New(slog.NewTextHandler(io.Discard, nil)), tp.Tracer("acceptance-t003"),
+		httpapi.WithAuthorization(a), httpapi.WithProduction(governanceapp.NewProductionService(f.store)),
+	)
+	return f, h, w, p
+}
+
+func acceptanceT003Principal(t *testing.T, f *fixture, w identity.WorkspaceID, name string) identity.PrincipalID {
+	t.Helper()
+	p := mustID(t, identity.NewPrincipalID)
+	if _, err := f.store.CreatePrincipal(context.Background(), authz.Principal{
+		ID: p, WorkspaceID: w, Kind: authz.PrincipalHuman, DisplayName: name, Status: authz.PrincipalActive,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.CreateRoleBinding(context.Background(), authz.RoleBinding{
+		ID: mustID(t, identity.NewBindingID), PrincipalID: p, RoleID: "workspace_admin", ScopeType: authz.ScopeWorkspace, ScopeID: w.UUID(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+func acceptanceT003Body(input string) string {
+	return fmt.Sprintf(`{"input":%s,"targets":[{"intent":"create","kind":"semantic_asset","localKey":"revenue","identityKey":"finance.revenue","title":"Revenue","content":{"address":"finance.revenue","assetType":"metric","displayName":"Revenue","definition":"Net revenue"}}]}`, input)
+}
+
+func acceptanceT003Decode(t *testing.T, body []byte) map[string]any {
+	t.Helper()
+	var result map[string]any
+	if err := json.Unmarshal(body, &result); err != nil {
+		t.Fatal(err)
+	}
+	return result
+}
+
+func acceptanceT003Create(t *testing.T, h http.Handler, w identity.WorkspaceID, p identity.PrincipalID) (string, string, map[string]any) {
+	t.Helper()
+	path := fmt.Sprintf("/api/v1/workspaces/%s/production-operations", w)
+	body := acceptanceT003Body(`{}`)
+	r := sendProdRequest(h, http.MethodPost, path, p.String(), "acceptance-create", body)
+	if r.Code != http.StatusCreated {
+		t.Fatalf("setup create: %d %s", r.Code, r.Body.String())
+	}
+	return path, body, acceptanceT003Decode(t, r.Body.Bytes())
+}
+
+func TestAcceptanceT003UnknownInputMustNotCommit(t *testing.T) {
+	for _, kind := range []string{"candidate", "snapshot"} {
+		t.Run(kind, func(t *testing.T) {
+			f, h, w, p := acceptanceT003Setup(t)
+			var input string
+			if kind == "candidate" {
+				id := mustID(t, identity.NewSemanticCandidateID)
+				input = fmt.Sprintf(`{"candidates":[{"candidateId":%q,"digest":"sha256:%s","primaryTargetKey":"revenue","targetKeys":["revenue"]}]}`, id.String(), strings.Repeat("1", 64))
+			} else {
+				id := mustID(t, identity.NewSourceSnapshotID)
+				input = fmt.Sprintf(`{"snapshots":[{"snapshotId":%q,"digest":"sha256:%s","coverageKeys":["schema:public"]}]}`, id.String(), strings.Repeat("1", 64))
+			}
+			r := sendProdRequest(h, http.MethodPost, fmt.Sprintf("/api/v1/workspaces/%s/production-operations", w), p.String(), "acceptance-unknown", acceptanceT003Body(input))
+			if r.Code < 400 || r.Code >= 500 {
+				t.Errorf("unknown %s must fail closed with 4xx; got %d %s", kind, r.Code, r.Body.String())
+			}
+			var count int
+			if err := f.pool.QueryRow(context.Background(), "SELECT count(*) FROM production_operations WHERE workspace_id=$1", w.UUID()).Scan(&count); err != nil {
+				t.Fatal(err)
+			}
+			if count != 0 {
+				t.Errorf("unknown %s committed %d operation(s)", kind, count)
+			}
+		})
+	}
+}
+
+func TestAcceptanceT003ReplaceMustPersistProposalsCommandAndContributor(t *testing.T) {
+	f, h, w, p := acceptanceT003Setup(t)
+	path, body, created := acceptanceT003Create(t, h, w, p)
+	editor := acceptanceT003Principal(t, f, w, "Editor")
+	opID := created["operationId"].(string)
+	itemPath := path + "/" + opID
+	replacement := strings.Replace(body, `"input":`, `"expectedVersion":1,"input":`, 1)
+	r := sendProdRequest(h, http.MethodPut, itemPath, editor.String(), "acceptance-replace", replacement)
+	if r.Code != http.StatusOK {
+		t.Fatalf("replace: %d %s", r.Code, r.Body.String())
+	}
+	result := acceptanceT003Decode(t, r.Body.Bytes())
+	for _, raw := range result["proposalIds"].([]any) {
+		id := mustParseProposalID(t, raw.(string))
+		var count int
+		if err := f.pool.QueryRow(context.Background(), "SELECT count(*) FROM proposals WHERE workspace_id=$1 AND id=$2", w.UUID(), id.UUID()).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		if count != 1 {
+			t.Errorf("successful PUT returned nonexistent proposal %s", id)
+		}
+	}
+	for _, check := range []struct {
+		name, query string
+		args        []any
+	}{
+		{"idempotency command", "SELECT count(*) FROM production_commands WHERE workspace_id=$1 AND command_kind='replace_draft' AND idempotency_key='acceptance-replace'", []any{w.UUID()}},
+		{"editor contributor", "SELECT count(*) FROM production_contributors WHERE workspace_id=$1 AND operation_id=$2 AND principal_id=$3", []any{w.UUID(), mustParseProductionOperationID(t, opID).UUID(), editor.UUID()}},
+	} {
+		var count int
+		if err := f.pool.QueryRow(context.Background(), check.query, check.args...).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		if count != 1 {
+			t.Errorf("successful PUT did not persist %s (count=%d)", check.name, count)
+		}
+	}
+	replay := sendProdRequest(h, http.MethodPut, itemPath, editor.String(), "acceptance-replace", replacement)
+	if replay.Code != http.StatusOK {
+		t.Errorf("same-key PUT replay must succeed; got %d %s", replay.Code, replay.Body.String())
+	}
+}
+
+func TestAcceptanceT003HistoricalReadAndOriginalReplay(t *testing.T) {
+	_, h, w, p := acceptanceT003Setup(t)
+	path, body, created := acceptanceT003Create(t, h, w, p)
+	itemPath := path + "/" + created["operationId"].(string)
+	replacement := strings.Replace(body, `"input":`, `"expectedVersion":1,"input":`, 1)
+	r := sendProdRequest(h, http.MethodPut, itemPath, p.String(), "acceptance-replace", replacement)
+	if r.Code != http.StatusOK {
+		t.Fatalf("replace: %d %s", r.Code, r.Body.String())
+	}
+	history := sendProdRequest(h, http.MethodGet, itemPath+"?version=1", p.String(), "", "")
+	if history.Code != http.StatusOK {
+		t.Errorf("stored version 1 must remain readable; got %d %s", history.Code, history.Body.String())
+	}
+	replay := sendProdRequest(h, http.MethodPost, path, p.String(), "acceptance-create", body)
+	if replay.Code != http.StatusOK {
+		t.Fatalf("create replay: %d %s", replay.Code, replay.Body.String())
+	}
+	replayed := acceptanceT003Decode(t, replay.Body.Bytes())
+	if replayed["version"] != created["version"] || replayed["setDigest"] != created["setDigest"] {
+		t.Errorf("create replay returned current version/digest instead of original commit: original=%v/%v replay=%v/%v", created["version"], created["setDigest"], replayed["version"], replayed["setDigest"])
+	}
+}
+
+func TestAcceptanceT003FrozenDraftMustRejectReplacement(t *testing.T) {
+	f, h, w, p := acceptanceT003Setup(t)
+	path, body, created := acceptanceT003Create(t, h, w, p)
+	op := mustParseProductionOperationID(t, created["operationId"].(string))
+	// Establish a legal frozen version without depending on T004's validator.
+	if _, err := f.pool.Exec(context.Background(), "UPDATE production_versions SET frozen_at=NOW() WHERE workspace_id=$1 AND operation_id=$2", w.UUID(), op.UUID()); err != nil {
+		t.Fatal(err)
+	}
+	replacement := strings.Replace(body, `"input":`, `"expectedVersion":1,"input":`, 1)
+	r := sendProdRequest(h, http.MethodPut, path+"/"+op.String(), p.String(), "acceptance-replace", replacement)
+	if r.Code != http.StatusConflict {
+		t.Errorf("frozen operation must reject PUT with 409; got %d %s", r.Code, r.Body.String())
+	}
+}
+
+func TestAcceptanceT003AuthorizationControl(t *testing.T) {
+	f, h, w, _ := acceptanceT003Setup(t)
+	p := mustID(t, identity.NewPrincipalID)
+	if _, err := f.store.CreatePrincipal(context.Background(), authz.Principal{
+		ID: p, WorkspaceID: w, Kind: authz.PrincipalHuman, DisplayName: "No roles", Status: authz.PrincipalActive,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	r := sendProdRequest(h, http.MethodPost, fmt.Sprintf("/api/v1/workspaces/%s/production-operations", w), p.String(), "acceptance-no-role", acceptanceT003Body(`{}`))
+	if r.Code != http.StatusForbidden {
+		t.Fatalf("control: principal without roles must be denied; got %d %s", r.Code, r.Body.String())
+	}
+}
+
+func TestAcceptanceT003PublishedAssetTargetMustNotCauseServerError(t *testing.T) {
+	f, h, w, p := acceptanceT003Setup(t)
+	oldAuthor := createPrincipalWithRoles(t, f, w, "legacy-author", []string{"asset_owner"})
+	publisher := createPrincipalWithRoles(t, f, w, "legacy-publisher", []string{"publisher"})
+	reviewer := createReviewerPrincipal(t, f, w, "legacy-reviewer")
+	asset, base := f.createAsset(t, w)
+	_, _, proposalID := proposeToInReview(t, f, w, oldAuthor, asset, base)
+	approveProposal(t, f, w, reviewer, proposalID)
+	published := publishProposal(t, f, w, publisher, proposalID)
+	if published.Code != http.StatusCreated {
+		t.Fatalf("legacy baseline publish: %d %s", published.Code, published.Body.String())
+	}
+	release := acceptanceT003Decode(t, published.Body.Bytes())
+	pinned := release["manifest"].(map[string]any)["assets"].([]any)[0].(map[string]any)
+	// This reduced input may be rejected as incomplete, but its existing target
+	// must not be discarded and turned into an internal empty-UUID failure.
+	body := fmt.Sprintf(`{"input":{},"targets":[{"intent":"update","kind":"semantic_asset","localKey":"revenue","targetId":%q,"baseRevisionId":%q,"title":"Update revenue","content":{"address":"commerce.net_revenue","assetType":"metric","displayName":"Net revenue","definition":"Revised definition","scope":null,"ownerPrincipalId":%q},"changes":[{"fieldPath":"definition","op":"update","beforeValue":"Revenue after refunds and chargebacks","afterValue":"Revised definition"}],"evidenceIds":[]}]}`, asset.String(), pinned["revisionId"].(string), p.String())
+	r := sendProdRequest(h, http.MethodPost, fmt.Sprintf("/api/v1/workspaces/%s/production-operations", w), p.String(), "acceptance-update", body)
+	if r.Code >= http.StatusInternalServerError {
+		t.Errorf("known target update must either succeed or reject incomplete input with 4xx, not fail internally; got %d %s", r.Code, r.Body.String())
+	}
+}

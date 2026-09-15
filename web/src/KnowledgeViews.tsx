@@ -1,39 +1,31 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import {
   ArrowRight,
   BadgeCheck,
   ChevronRight,
   CircleAlert,
+  FileKey2,
   LoaderCircle,
   MessageSquareWarning,
   Send,
   ShieldCheck,
   Sparkles,
+  Waypoints,
 } from "lucide-react";
 
+import { AskApiError, askReleasedSemantics, type AskResponse } from "./ask";
+import { AskExecutionPanel } from "./AskExecutionPanel";
+
 interface AskViewProps {
-  conversationIndex: number;
-  activeRelease: string;
-  onOpenEvidence: () => void;
-  onStartRevision: (fieldPath: string, context: string) => void;
+  workspaceId: string;
+  onOpenEvidence: (assetId?: string) => void;
+  onStartRevision: (assetId: string | undefined, fieldPath: string, context: string) => void;
 }
 
 const suggestedQuestions = [
-  "华东区 8 月净收入为什么低于目标？",
+  "净收入的当前发布定义是什么？",
   "客单价当前采用什么退款口径？",
-  "哪些核心指标缺少负责人或证据？",
-];
-
-const savedQuestions: Record<number, string> = {
-  1: suggestedQuestions[0],
-  2: suggestedQuestions[1],
-  3: suggestedQuestions[2],
-};
-
-const knowledgeBlocks = [
-  { id: "KB-2048", title: "净收入确认口径", source: "财务规则 FY2026", kind: "业务定义", asset: "commerce.net_revenue" },
-  { id: "KB-1932", title: "业务区域映射", source: "dbt · dim_region", kind: "映射规则", asset: "commerce.business_region" },
-  { id: "KB-1887", title: "退款订单排除规则", source: "Cube · commerce.orders", kind: "计算约束", asset: "commerce.paid_order_count" },
+  "按业务区域拆解净收入需要哪些语义对象？",
 ];
 
 const answerIssueOptions = [
@@ -42,94 +34,127 @@ const answerIssueOptions = [
   { id: "disambiguation", label: "问法被错误理解", detail: "修订检索词、同名消歧或回答范围。", fieldPath: "wiki.disambiguation" },
 ] as const;
 
-function answerFor(question: string) {
-  if (question.includes("客单价") || question.includes("退款口径")) {
-    return {
-      lead: <>当前生效语义版本中的客单价为 <strong>¥286.4</strong>，口径是净收入除以支付成功且未完全退款的订单数。</>,
-      detail: "完全退款订单同时从净收入和订单分母中排除，部分退款只扣减净收入。该定义固定在当前 stable release，仍有一项西南区域回归差异等待负责人确认。",
-    };
-  }
-  if (question.includes("负责人") || question.includes("证据") || question.includes("覆盖")) {
-    return {
-      lead: <>当前有 <strong>11 个知识对象</strong>需要补充治理信息，其中 3 个会影响核心经营问答。</>,
-      detail: "业务区域维度缺少明确负责人，活跃客户的使用证据即将过期，旧区域别名还关联 3 个消费者。建议先审核高影响项，再生成新的生效语义版本。",
-    };
-  }
-  return {
-    lead: <>华东区 8 月净收入为 <strong>¥12.84M</strong>，较目标低 <strong>6.8%</strong>。主要差异来自企业渠道的已支付订单量下降，而不是退款率异常。</>,
-    detail: "按当前发布口径，净收入已扣除完全退款订单。企业渠道订单量同比下降 9.4%，贡献了约 71% 的目标缺口；华东其他渠道总体接近目标。",
-  };
+export function errorMessage(error: unknown): { code: string; title: string; detail: string } {
+  const code = error instanceof AskApiError ? error.code : error && typeof error === "object" && "code" in error && typeof error.code === "string" ? error.code : "REQUEST_FAILED";
+  if (code === "PROVIDER_UNAVAILABLE") return { code, title: "模型服务暂不可用", detail: "本次请求已记录为失败，没有回退到演示答案。请检查默认模型及凭证后重试。" };
+  if (code === "PROVIDER_UNSUPPORTED") return { code, title: "当前模型协议尚未接通", detail: "请选择已支持的 OpenAI 或 OpenAI-compatible 提供方。" };
+  if (code === "CONFLICT") return { code, title: "尚未配置可用的默认模型", detail: "请先在系统设置中启用模型提供方，并为当前工作区选择默认模型。" };
+  if (code === "AI_OUTPUT_INVALID") return { code, title: "模型没有返回合规的语义请求", detail: "输出已被结构化门禁拒绝，未进入语义解析，也没有生成查询结果。" };
+  if (code === "NO_MATCHING_GRANT" || code === "CAPABILITY_DENIED") return { code, title: "当前身份不能使用语义问答", detail: "需要 semantic.resolve 能力；权限变化后请刷新会话。" };
+  const detail = error instanceof Error ? error.message : error && typeof error === "object" && "message" in error && typeof error.message === "string" ? error.message : "请求失败，且没有使用演示数据替代。";
+  return { code, title: "语义问答未完成", detail };
 }
 
-export function AskView({ conversationIndex, activeRelease, onOpenEvidence, onStartRevision }: AskViewProps) {
+function AskResultView({ result, question, reportingIssue, selectedIssue, onOpenEvidence, onReportingIssue, onSelectIssue, onStartRevision }: {
+  result: AskResponse;
+  question: string;
+  reportingIssue: boolean;
+  selectedIssue: (typeof answerIssueOptions)[number]["id"];
+  onOpenEvidence: (assetId?: string) => void;
+  onReportingIssue: (open: boolean) => void;
+  onSelectIssue: (issue: (typeof answerIssueOptions)[number]["id"]) => void;
+  onStartRevision: (assetId: string | undefined, fieldPath: string, context: string) => void;
+}) {
+  const resolution = result.resolution;
+  const plan = resolution?.plan;
+  const refusal = resolution?.refusal;
+  const firstDefinition = result.definitions[0];
+  const releaseLabel = resolution?.releaseId ?? "尚未选择发布版本";
+
+  if (result.interpretation.outcome === "clarification") {
+    return <article className="assistant-answer ask-clarification">
+      <header><span className="assistant-mark"><MessageSquareWarning size={17} /></span><div><strong>需要补充信息</strong><small>模型解释已完成 · 尚未调用语义解析器</small></div><span className="grounded-badge ask-badge-neutral">未解析</span></header>
+      <div className="answer-copy"><p>{result.interpretation.clarification}</p><p>补充指标、维度、时间范围或比较对象后重新提问。</p></div>
+    </article>;
+  }
+
+  if (refusal) {
+    return <article className="assistant-answer ask-refusal">
+      <header><span className="assistant-mark ask-mark-warning"><CircleAlert size={17} /></span><div><strong>语义解析被拒绝</strong><small>Agent run {result.agentRun.id} · 没有生成执行计划</small></div><span className="grounded-badge ask-badge-warning">{refusal.code}</span></header>
+      <div className="answer-copy"><p><strong>{refusal.clarification}</strong></p><p>这是显式拒绝，不会被替换成猜测、样例值或未发布知识。</p></div>
+      {refusal.candidateIds.length > 0 && <div className="ask-candidates"><span>可消歧候选</span>{refusal.candidateIds.map((id) => <code key={id}>{id}</code>)}</div>}
+    </article>;
+  }
+
+  return <article className="assistant-answer">
+    <header><span className="assistant-mark"><Sparkles size={17} /></span><div><strong>Semlia</strong><small>基于 {releaseLabel} · {result.definitions.length} 个已发布定义 · Agent run {result.agentRun.id}</small></div><span className="grounded-badge"><BadgeCheck size={13} />计划已验证</span></header>
+    <div className="answer-copy">
+      {result.definitions.length > 0 ? result.definitions.map((definition) => <p key={definition.assetId}><strong>{definition.name || definition.address}</strong>：{definition.definition || "该发布修订没有可展示的文字定义。"}</p>) : <p>语义请求已解析，但所选发布修订没有可展示的文字定义。</p>}
+    </div>
+    {plan && <section className="ask-plan" aria-label="已解析语义计划">
+      <header><span><Waypoints size={15} />语义计划</span><code>{plan.planDigest}</code></header>
+      <dl>
+        <div><dt>意图</dt><dd>{plan.intent}</dd></div>
+        <div><dt>资产</dt><dd>{plan.assets.length}</dd></div>
+        <div><dt>受治理对象</dt><dd>{plan.objects.length}</dd></div>
+        <div><dt>执行</dt><dd>{plan.executionStatus === "requires_execution_validation" ? "待执行验证" : "不可执行计划"}</dd></div>
+      </dl>
+      {plan.executionStatus === "not_configured" && <p><FileKey2 size={14} /><span><strong>已完成语义解析，未执行数据查询</strong>此计划缺少完整的已发布执行依据，不能连接数据源或展示结果行。</span></p>}
+    </section>}
+    {result.definitions.length > 0 && <div className="answer-evidence">
+      <span className="content-label">已发布定义</span>
+      {result.definitions.map((definition) => <button type="button" key={definition.assetId} onClick={() => onOpenEvidence(definition.assetId)}><span><strong>{definition.name || definition.address}</strong><small>{definition.assetType} · {definition.revisionId} · {definition.address}</small></span><ChevronRight size={14} /></button>)}
+    </div>}
+    {reportingIssue && <section className="answer-issue-panel" aria-label="指出回答中的知识问题">
+      <header><span><CircleAlert size={16} /></span><div><strong>哪类知识需要修订？</strong><p>系统会定位已发布定义；当前发布版本保持只读。</p></div></header>
+      <div role="radiogroup" aria-label="知识问题类型">{answerIssueOptions.map((option) => <label key={option.id}><input type="radio" name="answer-issue" value={option.id} checked={selectedIssue === option.id} onChange={() => onSelectIssue(option.id)} /><span><strong>{option.label}</strong><small>{option.detail}</small></span></label>)}</div>
+      <footer><button className="text-button" type="button" onClick={() => onReportingIssue(false)}>取消</button><button className="primary-button" type="button" onClick={() => { const issue = answerIssueOptions.find((option) => option.id === selectedIssue) ?? answerIssueOptions[0]; onStartRevision(firstDefinition?.assetId, issue.fieldPath, `来自问答“${question}”：${issue.label}。`); }}><MessageSquareWarning size={15} />修订相关知识</button></footer>
+    </section>}
+    <footer><div><ShieldCheck size={14} /><span>原始问题不持久化；仅记录输入哈希、模型版本、发布版本和解析结果。</span></div>{firstDefinition && <button className="secondary-button" type="button" aria-expanded={reportingIssue} onClick={() => onReportingIssue(!reportingIssue)}><MessageSquareWarning size={15} />指出问题</button>}</footer>
+  </article>;
+}
+
+export function AskView({ workspaceId, onOpenEvidence, onStartRevision }: AskViewProps) {
   const [question, setQuestion] = useState("");
-  const [submittedQuestion, setSubmittedQuestion] = useState(savedQuestions[conversationIndex] ?? "");
-  const [state, setState] = useState<"ready" | "running" | "answered">(conversationIndex === 0 ? "ready" : "answered");
+  const [submittedQuestion, setSubmittedQuestion] = useState("");
+  const [state, setState] = useState<"ready" | "running" | "answered" | "error">("ready");
+  const [result, setResult] = useState<AskResponse | null>(null);
+  const [failure, setFailure] = useState<{ code: string; title: string; detail: string } | null>(null);
   const [reportingIssue, setReportingIssue] = useState(false);
   const [selectedIssue, setSelectedIssue] = useState<(typeof answerIssueOptions)[number]["id"]>("definition");
-  const timerRef = useRef<number | null>(null);
-  const answer = answerFor(submittedQuestion);
-
-  useEffect(() => () => {
-    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
-  }, []);
 
   const ask = (nextQuestion?: string) => {
     const value = (nextQuestion ?? question).trim();
-    if (!value) return;
-    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    if (!value || !workspaceId || state === "running") return;
     setQuestion("");
     setSubmittedQuestion(value);
     setState("running");
+    setResult(null);
+    setFailure(null);
     setReportingIssue(false);
-    timerRef.current = window.setTimeout(() => setState("answered"), 650);
+    askReleasedSemantics(workspaceId, {
+        question: value,
+        context: { mode: "current" },
+        idempotencyKey: `web-ask-${globalThis.crypto.randomUUID()}`,
+      })
+      .then((response) => {
+        setResult(response);
+        setState("answered");
+      })
+      .catch((error: unknown) => {
+        setFailure(errorMessage(error));
+        setState("error");
+      });
   };
 
-  return (
-    <section className="view view-ask">
-      <div className="ask-layout">
-        <section className="conversation-panel" aria-label="语义问答会话">
-          {state === "ready" ? (
-            <div className="ask-empty">
-              <span className="ask-empty-icon"><Sparkles size={22} /></span>
-              <h2>今天想了解什么？</h2>
-              <p>问题会被限制在当前生效版本的知识和可执行语义范围内。</p>
-              <div className="question-suggestions">{suggestedQuestions.map((item) => <button type="button" key={item} onClick={() => ask(item)}>{item}<ArrowRight size={14} /></button>)}</div>
-            </div>
-          ) : (
-            <div className="conversation-thread">
-              <div className="user-message"><span>你</span><p>{submittedQuestion}</p></div>
-              {state === "running" ? (
-                <div className="answer-loading" role="status"><LoaderCircle size={18} /><div><strong>正在形成可信回答</strong><span>检索知识块、解析语义并执行受控查询...</span></div></div>
-              ) : (
-                <article className="assistant-answer">
-                  <header><span className="assistant-mark"><Sparkles size={17} /></span><div><strong>Semlia</strong><small>基于 {activeRelease} · 3 个知识块 · Cube 查询</small></div><span className="grounded-badge"><BadgeCheck size={13} />已溯源</span></header>
-                  <div className="answer-copy">
-                    <p>{answer.lead}</p>
-                    <p>{answer.detail}</p>
-                  </div>
-                  <div className="answer-evidence">
-                    <span className="content-label">引用的知识块</span>
-                    {knowledgeBlocks.map((block) => <button type="button" key={block.id} onClick={onOpenEvidence}><span><strong>{block.title}</strong><small>{block.id} · {block.kind} · {block.source}</small></span><ChevronRight size={14} /></button>)}
-                  </div>
-                  {reportingIssue && <section className="answer-issue-panel" aria-label="指出回答中的知识问题">
-                    <header><span><CircleAlert size={16} /></span><div><strong>哪类知识需要修订？</strong><p>系统会定位相关 Claim，原始资料和当前发布版本保持只读。</p></div></header>
-                    <div role="radiogroup" aria-label="知识问题类型">{answerIssueOptions.map((option) => <label key={option.id}><input type="radio" name="answer-issue" value={option.id} checked={selectedIssue === option.id} onChange={() => setSelectedIssue(option.id)} /><span><strong>{option.label}</strong><small>{option.detail}</small></span></label>)}</div>
-                    <footer><button className="text-button" type="button" onClick={() => setReportingIssue(false)}>取消</button><button className="primary-button" type="button" onClick={() => { const issue = answerIssueOptions.find((option) => option.id === selectedIssue) ?? answerIssueOptions[0]; onStartRevision(issue.fieldPath, `来自问答“${submittedQuestion}”：${issue.label}。`); }}><MessageSquareWarning size={15} />修订相关知识</button></footer>
-                  </section>}
-                  <footer><div><ShieldCheck size={14} /><span>结果受 G1 策略保护，未把原始业务行发送给 LLM。</span></div><button className="secondary-button" type="button" aria-expanded={reportingIssue} onClick={() => setReportingIssue((open) => !open)}><MessageSquareWarning size={15} />指出问题</button></footer>
-                </article>
-              )}
-            </div>
-          )}
-
-        </section>
-
-        <form className="ask-composer" onSubmit={(event) => { event.preventDefault(); ask(); }}>
-          <textarea aria-label="向 Semlia 提问" value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="询问指标口径、经营变化或语义资产..." rows={2} />
-          <div><span><ShieldCheck size={13} />仅使用已发布知识</span><button type="submit" aria-label="发送问题" disabled={!question.trim() || state === "running"}><Send size={16} /></button></div>
-        </form>
-      </div>
-    </section>
-  );
+  return <section className="view view-ask">
+    <div className="ask-layout">
+      <section className="conversation-panel" aria-label="语义问答会话">
+        {state === "ready" ? <div className="ask-empty">
+          <span className="ask-empty-icon"><Sparkles size={22} /></span>
+          <h2>今天想了解什么？</h2>
+          <p>问题会被解释为结构化语义请求，并且只解析当前已发布版本。</p>
+          <div className="question-suggestions">{suggestedQuestions.map((item) => <button type="button" key={item} onClick={() => ask(item)}>{item}<ArrowRight size={14} /></button>)}</div>
+        </div> : <div className="conversation-thread">
+          <div className="user-message"><span>你</span><p>{submittedQuestion}</p></div>
+          {state === "running" ? <div className="answer-loading" role="status"><LoaderCircle size={18} /><div><strong>正在解释并验证语义请求</strong><span>模型只负责结构化解释；发布版本选择与计划验证由 Semlia 执行。</span></div></div> : state === "error" && failure ? <article className="assistant-answer ask-error" role="alert"><header><span className="assistant-mark ask-mark-warning"><CircleAlert size={17} /></span><div><strong>{failure.title}</strong><small>{failure.code}</small></div><span className="grounded-badge ask-badge-warning">未回退</span></header><div className="answer-copy"><p>{failure.detail}</p></div></article> : result ? <AskResultView result={result} question={submittedQuestion} reportingIssue={reportingIssue} selectedIssue={selectedIssue} onOpenEvidence={onOpenEvidence} onReportingIssue={setReportingIssue} onSelectIssue={setSelectedIssue} onStartRevision={onStartRevision} /> : null}
+        </div>}
+      </section>
+      <AskExecutionPanel key={`${workspaceId}:${result?.resolution?.plan?.id ?? "history"}`} workspaceId={workspaceId} plan={result?.resolution?.plan?.executionStatus === "requires_execution_validation" ? result.resolution.plan : undefined} />
+      <form className="ask-composer" onSubmit={(event) => { event.preventDefault(); ask(); }}>
+        <textarea aria-label="向 Semlia 提问" value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="询问已发布的指标口径、维度或语义计划..." rows={2} />
+        <div><span><ShieldCheck size={13} />仅使用已发布知识 · 查询需单独确认</span><button type="submit" aria-label="发送问题" disabled={!question.trim() || state === "running"}><Send size={16} /></button></div>
+      </form>
+    </div>
+  </section>;
 }

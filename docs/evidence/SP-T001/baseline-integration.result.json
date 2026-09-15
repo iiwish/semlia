@@ -1,0 +1,49 @@
+{
+  "command": "env -u SEMLIA_INGESTION_TEST_DATABASE_URL -u SEMLIA_EXECUTION_CRASH_HELPER -u SEMLIA_EXECUTION_TEST_DB -u SEMLIA_DATABASE_URL go test -json -count=1 -timeout=20m ./tests/integration/ingestion ./tests/integration/discovery ./tests/integration/governance ./tests/integration/projection",
+  "start": "2026-09-09T04:21:30.475Z",
+  "end": "2026-09-09T04:23:59.548Z",
+  "elapsedSeconds": 149.073,
+  "exitCode": 0,
+  "signal": null,
+  "packages": [
+    {
+      "Time": "2026-09-09T12:21:53.6975+08:00",
+      "Action": "pass",
+      "Package": "github.com/iiwish/semlia/tests/integration/projection",
+      "Elapsed": 18.933
+    },
+    {
+      "Time": "2026-09-09T12:21:56.00181+08:00",
+      "Action": "pass",
+      "Package": "github.com/iiwish/semlia/tests/integration/ingestion",
+      "Elapsed": 22.65
+    },
+    {
+      "Time": "2026-09-09T12:21:58.041912+08:00",
+      "Action": "pass",
+      "Package": "github.com/iiwish/semlia/tests/integration/discovery",
+      "Elapsed": 23.277
+    },
+    {
+      "Time": "2026-09-09T12:23:58.61671+08:00",
+      "Action": "pass",
+      "Package": "github.com/iiwish/semlia/tests/integration/governance",
+      "Elapsed": 143.851
+    }
+  ],
+  "counts": {
+    "pass": 85,
+    "fail": 0,
+    "skip": 1
+  },
+  "failures": [],
+  "skips": [
+    {
+      "Time": "2026-09-09T12:22:46.744557+08:00",
+      "Action": "skip",
+      "Package": "github.com/iiwish/semlia/tests/integration/governance",
+      "Test": "TestExecutionCrashWorker",
+      "Elapsed": 0
+    }
+  ]
+}

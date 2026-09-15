@@ -3,6 +3,7 @@ package jobs
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/iiwish/semlia/pkg/identity"
@@ -84,6 +85,22 @@ func (fn BackoffFunc) Delay(attempt int32) time.Duration { return fn(attempt) }
 
 type Handler func(context.Context, Job) error
 
+type HandlerError struct {
+	Err       error
+	Code      string
+	Permanent bool
+}
+
+func (failure *HandlerError) Error() string { return failure.Err.Error() }
+func (failure *HandlerError) Unwrap() error { return failure.Err }
+
+func Permanent(err error, code string) error {
+	if err == nil {
+		err = errors.New("permanent job failure")
+	}
+	return &HandlerError{Err: err, Code: code, Permanent: true}
+}
+
 type Publisher interface {
 	Publish(context.Context, OutboxEvent) error
 }
@@ -91,8 +108,9 @@ type Publisher interface {
 type Repository interface {
 	ReapExpiredJobs(context.Context, time.Time) error
 	ClaimJob(context.Context, string, time.Time, time.Duration) (*Job, error)
+	ExtendJobLease(context.Context, identity.RunID, string, time.Time, time.Duration) error
 	MarkJobSucceeded(context.Context, identity.RunID, string, time.Time) error
-	MarkJobFailed(context.Context, identity.RunID, string, string, time.Time, time.Time) error
+	MarkJobFailedWithDisposition(context.Context, identity.RunID, string, string, bool, time.Time, time.Time) error
 }
 
 type OutboxRepository interface {

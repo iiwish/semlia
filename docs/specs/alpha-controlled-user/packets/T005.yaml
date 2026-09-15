@@ -1,0 +1,82 @@
+schema_version: 1
+packet_id: ALPHA-T005-A001
+task_id: T005
+feature_id: alpha-controlled-user
+mode: execute_one_task
+status: Completed
+
+goal: >-
+  Deliver the Alpha REST semantic-distribution foundation: immutable release selection and
+  projection, consumer and binding administration, typed SemanticQuery, deterministic resolution,
+  stable validation/refusal, generated clients and attributable records. Resolution must never
+  inspect drafts or mutable object pointers after selecting a release.
+
+requirements:
+  - FR-008 released semantic resolution and explicit refusal
+  - FR-009 current, explicit and binding-selected release contexts
+  - FR-012 workspace isolation, authorization and auditable attribution
+  - NFR-001 privacy and fail-closed security
+  - NFR-002 restart-stable persisted resolution
+  - NFR-003 10,000-asset p95 below one second on the reference stack
+
+dependencies:
+  - T001 is Needs_Review with authenticated identity and authorization evidence
+  - T003 is Needs_Review with source and discovery evidence
+  - M2 immutable releases, release assets and release objects are present
+  - Controlled-User Alpha technical baseline 0.1.0 approved on 2026-09-04
+
+allowed_files:
+  - api/**
+  - cmd/**
+  - docs/specs/alpha-controlled-user/**
+  - docs/specs/m3-headless-semantic-distribution/**
+  - docs/evidence/ALPHA-T005/**
+  - internal/**
+  - migrations/**
+  - pkg/**
+  - sdk/typescript/**
+  - tests/**
+
+forbidden_changes:
+  - Do not resolve draft assets, mutable current revisions or object versions outside the selected release.
+  - Do not let a model, caller-supplied SQL or physical table name choose semantic authority.
+  - Do not disclose unauthorized resource names, candidates, plans or existence.
+  - Do not couple semantic.resolve to the unused semantic.execute capability.
+  - Do not fabricate execution results when no warehouse adapter is configured.
+  - Do not persist raw Ask text, fact rows, source credentials or provider reasoning.
+
+tdd:
+  red:
+    - Missing release, inactive or expired binding, unauthorized consumer and cross-workspace release fail closed.
+    - No match, material ambiguity, absent physical binding, missing join path and incompatible grain return distinct refusal codes.
+    - Invalid filter, time, ordering or limit semantics cannot create a plan.
+    - A release-pinned request is unaffected by later publish, rollback, mutable revision or object updates.
+  green:
+    - Authorized administrators manage consumers and current or pinned bindings through REST.
+    - Direct typed resolution selects one immutable release snapshot and stores either one plan or one refusal.
+    - Exact TypeID and stable address precede normalized name/alias and bounded lexical matching.
+    - Successful plans report executionStatus not_configured and contain a restart-stable canonical digest.
+  refactor:
+    - Keep domain matching and validation independent from PostgreSQL and HTTP adapters.
+    - Share one application resolver across direct REST and the later Ask path.
+
+validation:
+  - domain golden, property and validator tests
+  - real PostgreSQL release snapshot and persistence integration tests
+  - HTTP authentication, authorization, isolation and error-contract tests
+  - current, explicit and pinned behavior across publish and rollback
+  - 10,000-asset resolver p95 benchmark
+  - make contracts-check
+  - make db-generate-check
+  - make check-source
+  - git diff --check
+
+acceptance:
+  - One canonical SemanticQuery produces the same plan digest for the same release and resolver version after restart.
+  - Every selected asset revision, object version, physical binding, grain and join belongs to the selected immutable release.
+  - Refusal codes are stable, specific and disclose candidate identities only to authorized readers.
+  - Consumer and binding state, plan/refusal outcome, principal, release, channel and trace are attributable without raw prompts.
+
+evidence:
+  summary: docs/evidence/ALPHA-T005/summary.md
+  test_results: docs/evidence/ALPHA-T005/test-results.md

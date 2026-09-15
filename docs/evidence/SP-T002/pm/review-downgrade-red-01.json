@@ -1,0 +1,27 @@
+{
+  "owner": "PM",
+  "command": [
+    "go",
+    "test",
+    "-p=1",
+    "-count=1",
+    "-timeout=10m",
+    "-overlay=docs/evidence/SP-T002/pm/downgrade-overlay.json",
+    "./tests/integration/db",
+    "-run",
+    "^TestPMCoverageAttemptBlocksDowngrade$",
+    "-v"
+  ],
+  "clearedEnvironment": [
+    "SEMLIA_INGESTION_TEST_DATABASE_URL",
+    "SEMLIA_EXECUTION_CRASH_HELPER",
+    "SEMLIA_EXECUTION_TEST_DB",
+    "SEMLIA_DATABASE_URL"
+  ],
+  "start": "2026-09-09T07:25:36.848Z",
+  "end": "2026-09-09T07:25:46.231Z",
+  "exitStatus": 1,
+  "signal": null,
+  "stdout": "2026/09/09 15:25:42 github.com/testcontainers/testcontainers-go - Connected to docker: \n  Server Version: 29.4.0\n  API Version: 1.54\n  Operating System: OrbStack\n  Total Memory: 16040 MB\n  Testcontainers for Go Version: v0.44.0\n  Resolved Docker Host: unix:///var/run/docker.sock\n  Resolved Docker Socket Path: /var/run/docker.sock\n  Test SessionID: 9adf50ab8e50c031eeadbca2f5bfc913ceb6e1bff43da535ec03a6f708d5cbcc\n  Test ProcessID: 09ac3ffa-8175-4221-8edb-09f506fe798e\n2026/09/09 15:25:42 🐳 Creating container for image postgres:18-alpine\n2026/09/09 15:25:42 🐳 Creating container for image testcontainers/ryuk:0.14.0\n2026/09/09 15:25:42 ✅ Container created: 3a772fb93c67\n2026/09/09 15:25:42 🐳 Starting container: 3a772fb93c67\n2026/09/09 15:25:42 ✅ Container started: 3a772fb93c67\n2026/09/09 15:25:42 ⏳ Waiting for container id 3a772fb93c67 image: testcontainers/ryuk:0.14.0. Waiting for: all of: [log message \"Started\", port 8080/tcp to be listening]\n2026/09/09 15:25:42 Shell not found in container\n2026/09/09 15:25:42 🔔 Container is ready: 3a772fb93c67\n2026/09/09 15:25:42 ✅ Container created: e89852fbe09d\n2026/09/09 15:25:42 🐳 Starting container: e89852fbe09d\n2026/09/09 15:25:42 ✅ Container started: e89852fbe09d\n2026/09/09 15:25:42 ⏳ Waiting for container id e89852fbe09d image: postgres:18-alpine. Waiting for: all of: [log message \"database system is ready to accept connections\" (occurrence: 2), port 5432/tcp to be listening]\n2026/09/09 15:25:44 🔔 Container is ready: e89852fbe09d\n=== RUN   TestPMCoverageAttemptBlocksDowngrade\n    pm_downgrade_review_test.go:23: before down: coverageHeads=1 snapshots=0\n    pm_downgrade_review_test.go:29: after down: error=<nil> coverageHeadsTableExists=false\n    pm_downgrade_review_test.go:31: downgrade removed an authoritative coverage attempt\n--- FAIL: TestPMCoverageAttemptBlocksDowngrade (1.04s)\nFAIL\n2026/09/09 15:25:45 🐳 Stopping container: e89852fbe09d\n2026/09/09 15:25:45 ✅ Container stopped: e89852fbe09d\n2026/09/09 15:25:45 🐳 Terminating container: e89852fbe09d\n2026/09/09 15:25:46 🚫 Container terminated: e89852fbe09d\nFAIL\tgithub.com/iiwish/semlia/tests/integration/db\t6.848s\nFAIL\n",
+  "stderr": ""
+}

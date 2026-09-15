@@ -1,0 +1,14 @@
+{
+  "time": "2026-09-11T10:43:34.023Z",
+  "deletedMachineId": "01M27SHHEPNQ4GTQ5FAA1RXBPB",
+  "deletedMachineName": "semlia-t007-20260911",
+  "machineAbsent": true,
+  "hostDockerId": "d743259d-6bd2-47c5-a84f-bcbfe8d353ad",
+  "defaultStack": [
+    "c730f3eb928e semlia-local-server-1 Up 4 days (healthy)",
+    "b271bdc288e7 semlia-local-worker-1 Up 4 days",
+    "cd0dac4bcf38 semlia-local-postgres-1 Up 4 days (healthy)"
+  ],
+  "deleteByIdExitCode": 2,
+  "deleteByNameExitCode": 0
+}

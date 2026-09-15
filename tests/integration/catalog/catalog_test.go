@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -21,6 +22,29 @@ import (
 )
 
 const traceID = "4bf92f3577b34da6a3ce929d0e0e4736"
+
+func TestProductionDisplayNameAppearsInCatalog(t *testing.T) {
+	pool, _, service := fixture(t)
+	workspaceID := createWorkspace(t, pool, "catalog-production-name")
+	created, err := service.CreateAsset(context.Background(), application.CreateAssetRequest{
+		WorkspaceID: workspaceID, Address: "demo.net_revenue", AssetType: semantic.Metric,
+		Lifecycle: "active", SchemaVersion: "1.0.0", CreatedBy: "catalog-test", TraceID: traceID,
+		Content: json.RawMessage(`{"displayName":"Synthetic net revenue","name":"Legacy name","definition":"Synthetic revenue after refunds"}`),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.Title != "Synthetic net revenue" {
+		t.Fatalf("detail title = %q", created.Title)
+	}
+	page, err := service.ListAssets(context.Background(), application.ListAssetsRequest{WorkspaceID: workspaceID, Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Items) != 1 || page.Items[0].Title != "Synthetic net revenue" {
+		t.Fatalf("catalog title mismatch: %+v", page.Items)
+	}
+}
 
 var databaseURL string
 
@@ -93,7 +117,9 @@ func TestAssetRevisionJourneyIsAtomicAndImmutable(t *testing.T) {
 	if appended.Sequence != 2 || appended.ID == firstRevisionID {
 		t.Fatalf("appended revision = %+v", appended)
 	}
-	first, err := service.GetRevision(context.Background(), workspaceID, created.ID, firstRevisionID)
+	first, err := service.GetRevision(context.Background(), application.GetRevisionRequest{
+		WorkspaceID: workspaceID, AssetID: created.ID, RevisionID: firstRevisionID,
+	})
 	if err != nil || !containsJSON(first.Content, "Revenue after refunds") {
 		t.Fatalf("first revision = %+v, err = %v", first, err)
 	}
@@ -104,7 +130,8 @@ func TestAssetRevisionJourneyIsAtomicAndImmutable(t *testing.T) {
 	revisionPage, err := service.ListRevisions(context.Background(), application.ListRevisionsRequest{
 		WorkspaceID: workspaceID, AssetID: created.ID, Limit: 1,
 	})
-	if err != nil || len(revisionPage.Items) != 1 || revisionPage.Items[0].Sequence != 2 || revisionPage.NextCursor == "" {
+	if err != nil || len(revisionPage.Items) != 1 || revisionPage.Items[0].Sequence != 2 ||
+		revisionPage.NextCursor == "" || revisionPage.Total != 2 {
 		t.Fatalf("first revision page = %+v, err = %v", revisionPage, err)
 	}
 	olderPage, err := service.ListRevisions(context.Background(), application.ListRevisionsRequest{
@@ -131,6 +158,287 @@ func TestAssetRevisionJourneyIsAtomicAndImmutable(t *testing.T) {
 	assertCounts(t, pool, map[string]int{
 		"semantic_assets": 1, "asset_revisions": 2, "audit_events": 2, "outbox_events": 2,
 	})
+}
+
+func TestAssetAuthorityUsesIndependentObjectPinsAndExactConsumerRelease(t *testing.T) {
+	pool, _, service := fixture(t)
+	workspace := createWorkspace(t, pool, "catalog-authority")
+	created, err := service.CreateAsset(context.Background(), application.CreateAssetRequest{
+		WorkspaceID: workspace, Address: "commerce.net_revenue", AssetType: semantic.Metric,
+		Lifecycle: "active", SchemaVersion: "1.0.0", Content: json.RawMessage(`{"name":"Net revenue"}`),
+		CreatedBy: "founder", TraceID: traceID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assetRelease := mustID(t, identity.NewReleaseID)
+	objectRelease := mustID(t, identity.NewReleaseID)
+	bindingID := mustID(t, identity.NewPhysicalBindingID)
+	grainID := mustID(t, identity.NewModelGrainID)
+	keyID := mustID(t, identity.NewEntityKeyID)
+	joinID := mustID(t, identity.NewJoinContractID)
+	datasetID := mustID(t, identity.NewPhysicalDatasetID)
+	otherDatasetID := mustID(t, identity.NewPhysicalDatasetID)
+	fieldID := mustID(t, identity.NewPhysicalFieldID)
+	sourceID := mustID(t, identity.NewSourceConnectionID)
+	sourceRevisionID := mustID(t, identity.NewSourceRevisionID)
+	lineageID := mustID(t, identity.NewLineageEdgeID)
+	consumerID := mustID(t, identity.NewConsumerID)
+	consumerBindingID := mustID(t, identity.NewConsumerBindingID)
+	pinnedConsumerBindingID := mustID(t, identity.NewConsumerBindingID)
+	now := time.Now().UTC()
+	if _, err := pool.Exec(context.Background(), `
+		INSERT INTO releases (id,workspace_id,sequence,manifest_digest,state,published_by,published_at,created_at)
+		VALUES ($1,$2,1,$3,'published','publisher',$4,$4),
+		       ($5,$2,2,$6,'published','publisher',$4 + interval '1 minute',$4 + interval '1 minute')`,
+		assetRelease.UUID(), workspace.UUID(), digest("asset-release"), now, objectRelease.UUID(), digest("object-release")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(context.Background(), `
+		INSERT INTO release_assets (workspace_id,release_id,asset_id,revision_id,compatibility,position,created_at)
+		VALUES ($1,$2,$3,$4,'{}',1,$5)`, workspace.UUID(), assetRelease.UUID(), created.ID.UUID(),
+		created.CurrentRevision.ID.UUID(), now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(context.Background(), `
+		INSERT INTO release_object_snapshots (workspace_id,release_id,object_type,object_id,version,payload,position,created_at)
+		VALUES ($1,$2,'physical_binding',$3,1,jsonb_build_object(
+		           'asset_id',$4::text,'dataset_id',$5::text,'field_id',$6::text,'transform','sum(amount)'),1,$7),
+		       ($1,$2,'model_grain',$8,1,jsonb_build_object(
+		           'asset_id',$4::text,'grain_expression','one row per invoice',
+		           'grain_field_refs',jsonb_build_array($6::text)),2,$7),
+		       ($1,$2,'entity_key',$9,1,jsonb_build_object(
+		           'asset_id',$4::text,'key_field_refs',jsonb_build_array($6::text),
+		           'uniqueness_semantics','exact'),3,$7),
+		       ($1,$2,'join_contract',$10,1,jsonb_build_object(
+		           'left_dataset_id',$5::text,'right_dataset_id',$11::text,
+		           'left_field_refs',jsonb_build_array($6::text),'right_field_refs',jsonb_build_array($6::text),
+		           'join_type','left','cardinality','many_to_one','join_expression','left.id = right.id'),4,$7)`,
+		workspace.UUID(), objectRelease.UUID(), bindingID.UUID(), created.ID.UUID(), datasetID.UUID(), fieldID.UUID(), now,
+		grainID.UUID(), keyID.UUID(), joinID.UUID(), otherDatasetID.UUID()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(context.Background(), `
+		INSERT INTO source_connections (id,workspace_id,adapter_kind,name,normalized_locator,status,metadata)
+		VALUES ($1,$2,'postgres','Catalog authority source','postgres://authority','active','{}')`,
+		sourceID.UUID(), workspace.UUID()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(context.Background(), `
+		INSERT INTO source_revisions (id,workspace_id,source_connection_id,content_digest,adapter_version,observed_at)
+		VALUES ($1,$2,$3,$4,'1.0.0',$5)`, sourceRevisionID.UUID(), workspace.UUID(), sourceID.UUID(),
+		digest("authority-source"), now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(context.Background(), `
+		INSERT INTO physical_datasets (id,workspace_id,source_connection_id,external_key,qualified_name)
+		VALUES ($1,$2,$3,'left','warehouse.left'),($4,$2,$3,'right','warehouse.right')`,
+		datasetID.UUID(), workspace.UUID(), sourceID.UUID(), otherDatasetID.UUID()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(context.Background(), `
+		INSERT INTO lineage_edges (id,workspace_id,source_revision_id,upstream_dataset_id,downstream_dataset_id,edge_kind,confidence,created_at)
+		VALUES ($1,$2,$3,$4,$5,'derived_from',0.875,$6)`,
+		lineageID.UUID(), workspace.UUID(), sourceRevisionID.UUID(), datasetID.UUID(), otherDatasetID.UUID(), now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(context.Background(), `
+		INSERT INTO consumers (id,workspace_id,stable_key,name,kind,status,owner_principal_ref,created_at,updated_at)
+		VALUES ($1,$2,'catalog-authority','Catalog authority','application','active','owner',$3,$3)`,
+		consumerID.UUID(), workspace.UUID(), now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(context.Background(), `
+		INSERT INTO consumer_bindings (id,workspace_id,consumer_id,environment,purpose,mode,release_id,status,version,created_at,updated_at)
+		VALUES ($1,$2,$3,'prod','current','current',NULL,'active',1,$4,$4),
+		       ($5,$2,$3,'archive','pinned','pinned',$6,'active',1,$4,$4)`,
+		consumerBindingID.UUID(), workspace.UUID(), consumerID.UUID(), now,
+		pinnedConsumerBindingID.UUID(), assetRelease.UUID()); err != nil {
+		t.Fatal(err)
+	}
+	current, err := service.AppendRevision(context.Background(), application.AppendRevisionRequest{
+		WorkspaceID: workspace, AssetID: created.ID, SchemaVersion: "1.1.0",
+		Content: json.RawMessage(`{"name":"Net revenue v2"}`), CreatedBy: "founder", TraceID: traceID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	detail, err := service.GetAsset(context.Background(), workspace, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sections := make(map[string]domain.AuthoritySection, len(detail.AuthoritySections))
+	for _, section := range detail.AuthoritySections {
+		sections[section.Kind] = section
+	}
+	physical := sections["physical_bindings"]
+	if physical.Availability != domain.AvailabilityAvailable || physical.ReleaseID == nil ||
+		*physical.ReleaseID != objectRelease || physical.Values["bindingCount"] != 1 ||
+		physical.Values["grainCount"] != 1 || physical.Values["entityKeyCount"] != 1 || len(physical.Records) != 3 {
+		t.Fatalf("independent object authority = %+v", physical)
+	}
+	records := make(map[string]domain.AuthorityRecord, len(physical.Records))
+	for _, record := range physical.Records {
+		records[record.Kind] = record
+	}
+	if record := records["physical_binding"]; record.ID != bindingID.String() || record.PhysicalBinding == nil ||
+		record.PhysicalBinding.DatasetID != datasetID || record.PhysicalBinding.Transform != "sum(amount)" {
+		t.Fatalf("physical binding authority = %+v", record)
+	}
+	if record := records["model_grain"]; record.ID != grainID.String() || record.ModelGrain == nil ||
+		record.ModelGrain.GrainExpression != "one row per invoice" || len(record.ModelGrain.GrainFieldRefs) != 1 {
+		t.Fatalf("model grain authority = %+v", record)
+	}
+	if record := records["entity_key"]; record.ID != keyID.String() || record.EntityKey == nil ||
+		record.EntityKey.UniquenessSemantics != "exact" || len(record.EntityKey.KeyFieldRefs) != 1 {
+		t.Fatalf("entity key authority = %+v", record)
+	}
+	joins := sections["join_contracts"]
+	if len(joins.Records) != 1 || joins.Records[0].ID != joinID.String() || joins.Records[0].JoinContract == nil ||
+		joins.Records[0].JoinContract.Direction != "outgoing" || joins.Records[0].JoinContract.RightDatasetID != otherDatasetID ||
+		joins.Records[0].JoinContract.JoinType != "left" || joins.Records[0].JoinContract.JoinExpression != "left.id = right.id" {
+		t.Fatalf("join authority = %+v", joins)
+	}
+	lineage := sections["lineage"]
+	if lineage.RevisionID != nil || lineage.ReleaseID != nil || len(lineage.Records) != 1 ||
+		lineage.Records[0].Lineage == nil || lineage.Records[0].Lineage.SourceRevisionID != sourceRevisionID ||
+		lineage.Records[0].Lineage.Confidence != 0.875 {
+		t.Fatalf("lineage authority = %+v", lineage)
+	}
+	if evidence := sections["evidence"]; evidence.RevisionID == nil || *evidence.RevisionID != current.ID ||
+		evidence.ReleaseID != nil || evidence.ReleaseSequence != nil {
+		t.Fatalf("current evidence authority = %+v, current revision = %s", evidence, current.ID)
+	}
+	if validation := sections["validation"]; validation.Availability != domain.AvailabilityNotConfigured ||
+		validation.Values["runCount"] != 0 || len(validation.Records) != 0 {
+		t.Fatalf("zero-run validation authority = %+v", validation)
+	}
+	impact := sections["consumer_impact"]
+	if impact.Values["currentConsumerCount"] != 0 || impact.Values["pinnedConsumerCount"] != 1 ||
+		len(impact.Records) != 1 || impact.Records[0].ID != pinnedConsumerBindingID.String() ||
+		impact.Records[0].ConsumerBinding == nil ||
+		impact.Records[0].ConsumerBinding.EffectiveReleaseID != assetRelease ||
+		impact.Records[0].ConsumerBinding.Mode != "pinned" {
+		t.Fatalf("consumer binding authority = %+v", impact)
+	}
+}
+
+func TestAuthorityRecordsAreCursorPagedAndLegacyGraphFailsExplicitlyAtLimit(t *testing.T) {
+	pool, _, service := fixture(t)
+	workspace := createWorkspace(t, pool, "catalog-authority-paging")
+	created, err := service.CreateAsset(context.Background(), application.CreateAssetRequest{
+		WorkspaceID: workspace, Address: "commerce.paging_root", AssetType: semantic.Metric,
+		Lifecycle: "active", SchemaVersion: "1.0.0", Content: json.RawMessage(`{"name":"Paging root"}`),
+		CreatedBy: "founder", TraceID: traceID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if _, err := pool.Exec(context.Background(), `
+		WITH peers AS MATERIALIZED (
+			SELECT semlia_seed_uuidv7('authority-peer', $1::uuid::text || ':' || value::text,
+			                           $3::timestamptz + value * interval '1 microsecond') AS id,
+			       value
+			FROM generate_series(1, 205) AS value
+		), inserted AS (
+			INSERT INTO semantic_assets (id,workspace_id,namespace,key,asset_type,lifecycle_state,created_at,updated_at)
+			SELECT id,$1::uuid,'commerce','peer_' || value::text,'metric','active',$3,$3 FROM peers
+			RETURNING id
+		)
+		INSERT INTO semantic_relations (
+			id,workspace_id,subject_asset_id,predicate,object_asset_id,plane,assertion_state,created_by,created_at
+		)
+		SELECT semlia_seed_uuidv7('authority-relation', $1::uuid::text || ':' || inserted.id::text, $3),
+		       $1::uuid,$2::uuid,'synonym_of',inserted.id,'taxonomy','asserted','test',$3
+		FROM inserted`, workspace.UUID(), created.ID.UUID(), now); err != nil {
+		t.Fatal(err)
+	}
+	detail, err := service.GetAsset(context.Background(), workspace, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var relations domain.AuthoritySection
+	for _, section := range detail.AuthoritySections {
+		if section.Kind == "relations" {
+			relations = section
+			break
+		}
+	}
+	if len(relations.Records) != 100 || relations.RecordsTotal != 205 || relations.RecordsNextCursor == "" ||
+		relations.Records[0].Relation == nil {
+		t.Fatalf("first authority page = %+v", relations)
+	}
+	second, err := service.ListAuthorityRecords(context.Background(), application.ListAuthorityRecordsRequest{
+		WorkspaceID: workspace, AssetID: created.ID, Section: "relations", Limit: 100,
+		Cursor: relations.RecordsNextCursor,
+	})
+	if err != nil || len(second.Items) != 100 || second.Total != 205 || second.NextCursor == "" {
+		t.Fatalf("second authority page = %+v, err = %v", second, err)
+	}
+	third, err := service.ListAuthorityRecords(context.Background(), application.ListAuthorityRecordsRequest{
+		WorkspaceID: workspace, AssetID: created.ID, Section: "relations", Limit: 100,
+		Cursor: second.NextCursor,
+	})
+	if err != nil || len(third.Items) != 5 || third.Total != 205 || third.NextCursor != "" {
+		t.Fatalf("third authority page = %+v, err = %v", third, err)
+	}
+	if _, err := service.ListRelations(context.Background(), application.ListRelationsRequest{
+		WorkspaceID: workspace, AssetID: created.ID, Depth: 1, Limit: 50,
+	}); !errors.Is(err, domain.ErrInvariant) {
+		t.Fatalf("legacy graph overflow error = %v, want explicit invariant", err)
+	}
+}
+
+func TestReleasedAssetWithoutGovernedObjectsReportsNotConfigured(t *testing.T) {
+	pool, _, service := fixture(t)
+	workspace := createWorkspace(t, pool, "catalog-authority-empty-object-sections")
+	created, err := service.CreateAsset(context.Background(), application.CreateAssetRequest{
+		WorkspaceID: workspace, Address: "commerce.release_only", AssetType: semantic.Metric,
+		Lifecycle: "active", SchemaVersion: "1.0.0", Content: json.RawMessage(`{"name":"Release only"}`),
+		CreatedBy: "founder", TraceID: traceID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := service.GetAsset(context.Background(), workspace, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, section := range before.AuthoritySections {
+		if (section.Kind == "physical_bindings" || section.Kind == "join_contracts") &&
+			section.Availability != domain.AvailabilityNotReleased {
+			t.Fatalf("unreleased %s availability = %s", section.Kind, section.Availability)
+		}
+	}
+	releaseID := mustID(t, identity.NewReleaseID)
+	now := time.Now().UTC()
+	if _, err := pool.Exec(context.Background(), `
+		INSERT INTO releases (id,workspace_id,sequence,manifest_digest,state,published_by,published_at,created_at)
+		VALUES ($1,$2,1,$3,'published','publisher',$4,$4)`,
+		releaseID.UUID(), workspace.UUID(), "sha256:"+strings.Repeat("1", 64), now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(context.Background(), `
+		INSERT INTO release_assets (workspace_id,release_id,asset_id,revision_id,compatibility,position,created_at)
+		VALUES ($1,$2,$3,$4,'{}',1,$5)`,
+		workspace.UUID(), releaseID.UUID(), created.ID.UUID(), created.CurrentRevision.ID.UUID(), now); err != nil {
+		t.Fatal(err)
+	}
+	after, err := service.GetAsset(context.Background(), workspace, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, section := range after.AuthoritySections {
+		if section.Kind != "physical_bindings" && section.Kind != "join_contracts" &&
+			section.Kind != "validation" && section.Kind != "trust" {
+			continue
+		}
+		if section.Availability != domain.AvailabilityNotConfigured || section.ReleaseID != nil ||
+			section.ReleaseSequence != nil || len(section.Records) != 0 {
+			t.Fatalf("released empty %s authority = %+v", section.Kind, section)
+		}
+	}
 }
 
 func TestWorkspaceBootstrapIsAuditedAndListable(t *testing.T) {
@@ -203,13 +511,13 @@ func TestCatalogSearchPaginationAndWorkspaceIsolation(t *testing.T) {
 	first, err := service.ListAssets(context.Background(), application.ListAssetsRequest{
 		WorkspaceID: workspaceID, AssetType: semantic.Metric, Limit: 2,
 	})
-	if err != nil || len(first.Items) != 2 || first.NextCursor == "" {
+	if err != nil || len(first.Items) != 2 || first.NextCursor == "" || first.Total != 5 {
 		t.Fatalf("first page = %+v, err = %v", first, err)
 	}
 	second, err := service.ListAssets(context.Background(), application.ListAssetsRequest{
 		WorkspaceID: workspaceID, AssetType: semantic.Metric, Limit: 2, Cursor: first.NextCursor,
 	})
-	if err != nil || len(second.Items) != 2 || second.NextCursor == "" {
+	if err != nil || len(second.Items) != 2 || second.NextCursor == "" || second.Total != 5 {
 		t.Fatalf("second page = %+v, err = %v", second, err)
 	}
 	if first.Items[0].ID == second.Items[0].ID || first.Items[1].ID == second.Items[1].ID {
@@ -235,6 +543,43 @@ func TestCatalogSearchPaginationAndWorkspaceIsolation(t *testing.T) {
 	}
 }
 
+func TestCatalogTenThousandAssetsRemainCursorPagedWithServerTotal(t *testing.T) {
+	pool, _, service := fixture(t)
+	workspaceID := createWorkspace(t, pool, "catalog-10k")
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	if _, err := pool.Exec(context.Background(), `
+		INSERT INTO semantic_assets (
+			id,workspace_id,namespace,key,asset_type,lifecycle_state,created_at,updated_at
+		)
+		SELECT semlia_seed_uuidv7(
+				'catalog-10k', $1::uuid::text || ':' || value::text,
+				$2::timestamptz + value * interval '1 microsecond'
+			),
+			$1::uuid,'scale','asset_' || lpad(value::text,5,'0'),'metric','active',
+			$2::timestamptz + value * interval '1 microsecond',
+			$2::timestamptz + value * interval '1 microsecond'
+		FROM generate_series(1,10000) AS value`, workspaceID.UUID(), now); err != nil {
+		t.Fatal(err)
+	}
+	first, err := service.ListAssets(context.Background(), application.ListAssetsRequest{
+		WorkspaceID: workspaceID, AssetType: semantic.Metric, Limit: 100,
+	})
+	if err != nil || len(first.Items) != 100 || first.Total != 10000 || first.NextCursor == "" {
+		t.Fatalf("10k first page count=%d total=%d cursor=%t err=%v",
+			len(first.Items), first.Total, first.NextCursor != "", err)
+	}
+	second, err := service.ListAssets(context.Background(), application.ListAssetsRequest{
+		WorkspaceID: workspaceID, AssetType: semantic.Metric, Limit: 100, Cursor: first.NextCursor,
+	})
+	if err != nil || len(second.Items) != 100 || second.Total != 10000 || second.NextCursor == "" {
+		t.Fatalf("10k second page count=%d total=%d cursor=%t err=%v",
+			len(second.Items), second.Total, second.NextCursor != "", err)
+	}
+	if first.Items[len(first.Items)-1].ID == second.Items[0].ID {
+		t.Fatal("10k cursor repeated the page boundary asset")
+	}
+}
+
 func TestBoundedRelationsAndDiscoveryRunProjection(t *testing.T) {
 	pool, store, service := fixture(t)
 	workspaceID := createWorkspace(t, pool, "catalog-relations")
@@ -253,7 +598,7 @@ func TestBoundedRelationsAndDiscoveryRunProjection(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	relations, err := service.ListRelations(context.Background(), domain.ListRelationsQuery{
+	relations, err := service.ListRelations(context.Background(), application.ListRelationsRequest{
 		WorkspaceID: workspaceID, AssetID: assets[0].ID, Direction: "outgoing",
 		Plane: semantic.TaxonomyPlane, Depth: 3,
 	})
@@ -325,7 +670,7 @@ func TestRelationPlanesProjectHierarchySemanticAndImpact(t *testing.T) {
 		semantic.DependencyPlane: semantic.DerivedFrom,
 	}
 	for plane, predicate := range expected {
-		projected, err := service.ListRelations(context.Background(), domain.ListRelationsQuery{
+		projected, err := service.ListRelations(context.Background(), application.ListRelationsRequest{
 			WorkspaceID: workspaceID, AssetID: root.ID, Direction: "outgoing", Plane: plane, Depth: 1,
 		})
 		if err != nil {

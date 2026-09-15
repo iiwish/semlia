@@ -1,16 +1,94 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { afterEach, vi } from "vitest";
 
-import { CatalogRuntimeProvider } from "./catalogRuntime";
-import { ProductApp } from "./ProductApp";
+import { CapabilityProvider } from "./authorization";
+import { CatalogRuntimeProvider } from "./testing/catalogFixture";
+import { CompatibilityImpactView, ProductApp } from "./ProductApp";
+import type { CapabilitySession } from "./types";
 import { assetTypeProfiles, evaluateAssetTypeRules } from "./assetTypeProfiles";
-import { assets } from "./data";
+import { assets, authorizationRoles, authorizationSession } from "./testing/data";
 
-function App() {
-  return <CatalogRuntimeProvider fixtureAssets={assets}><ProductApp /></CatalogRuntimeProvider>;
+vi.mock("./sessionRuntime", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./sessionRuntime")>();
+  return { ...actual, useSessionRuntime: () => ({ activeWorkspaceId: "wsp_01arz3ndektsv4rrffq69g5fav", session: null }) };
+});
+
+vi.mock("./authorizationAdminRuntime", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./authorizationAdminRuntime")>();
+  const { useMemo } = await import("react");
+  const { createAuthorizationFixtureApi } = await import("./testing/authorizationFixture");
+  return { ...actual, AuthorizationAdminRuntimeProvider: function TestAuthorizationProvider(props: React.ComponentProps<typeof actual.AuthorizationAdminRuntimeProvider>) {
+    const api = useMemo(() => createAuthorizationFixtureApi(props.workspaceId), [props.workspaceId]);
+    return <actual.AuthorizationAdminRuntimeProvider {...props} authorizationVersion="1" api={api} />;
+  } };
+});
+
+vi.mock("./operationsRuntime", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./operationsRuntime")>();
+  const { useMemo } = await import("react");
+  const { createOperationsFixtureApi } = await import("./testing/operationsFixture");
+  return { ...actual, OperationsRuntimeProvider: function TestOperationsProvider(props: React.ComponentProps<typeof actual.OperationsRuntimeProvider>) {
+    const api = useMemo(() => createOperationsFixtureApi(), []);
+    return <actual.OperationsRuntimeProvider {...props} api={api} />;
+  } };
+});
+
+vi.mock("./governanceRuntime", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./governanceRuntime")>();
+  const { useMemo } = await import("react");
+  const { createGovernanceFixtureApi } = await import("./testing/governanceFixtureApi");
+  return { ...actual, GovernanceRuntimeProvider: function TestGovernanceProvider(props: React.ComponentProps<typeof actual.GovernanceRuntimeProvider>) {
+    const api = useMemo(() => createGovernanceFixtureApi(), []);
+    return <actual.GovernanceRuntimeProvider {...props} api={api} />;
+  } };
+});
+
+vi.mock("./workbenchRuntime", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./workbenchRuntime")>();
+  const { useMemo } = await import("react");
+  const { createWorkbenchFixtureApi } = await import("./testing/workbenchFixture");
+  return { ...actual, WorkbenchRuntimeProvider: function TestWorkbenchProvider(props: React.ComponentProps<typeof actual.WorkbenchRuntimeProvider>) {
+    const api = useMemo(() => createWorkbenchFixtureApi(), []);
+    return <actual.WorkbenchRuntimeProvider {...props} api={api} />;
+  } };
+});
+
+function App({ session = authorizationSession }: { session?: CapabilitySession }) {
+  return <CatalogRuntimeProvider fixtureAssets={assets}><ProductApp session={session} /></CatalogRuntimeProvider>;
 }
 
+const authorSession: CapabilitySession = { principalId: "prn_01arz3ndektsv4rrffq69g5fav", version: "1", capabilities: [...new Set(authorizationRoles.filter((role) => ["ROLE-ASSET-OWNER", "ROLE-SOURCE-OPERATOR"].includes(role.id)).flatMap((role) => role.permissions)), "workspace.manage", "member.manage", "role.assign"] };
+
+afterEach(() => {
+  window.history.replaceState({}, "", "/");
+  vi.unstubAllGlobals();
+});
+
 describe("Semlia product workspace", () => {
+  it("keeps the topbar free of simulated identity and workspace switching", async () => {
+    const user = userEvent.setup();
+    render(<App session={authorSession} />);
+    const topbar = document.querySelector(".topbar") as HTMLElement;
+    expect(within(topbar).queryByRole("combobox", { name: "工作区" })).not.toBeInTheDocument();
+    expect(within(topbar).getByText("模拟数据")).toBeVisible();
+    expect(within(topbar).queryByRole("combobox", { name: "本机验收身份" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "系统设置" }));
+    expect(screen.queryByRole("button", { name: /本机验收/ })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "知识资产" }));
+    expect(screen.getByRole("button", { name: "刷新知识目录" })).toBeVisible();
+    expect(within(topbar).queryByRole("button", { name: "刷新知识目录" })).not.toBeInTheDocument();
+  });
+
+  it("does not expose acceptance tools in a regular session", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    expect(screen.queryByRole("combobox", { name: "本机验收身份" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "工作区" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "系统设置" }));
+    expect(screen.queryByRole("button", { name: /本机验收/ })).not.toBeInTheDocument();
+  });
+
   it("uses a three-layer semantic operations workspace", () => {
     render(<App />);
 
@@ -30,12 +108,129 @@ describe("Semlia product workspace", () => {
     expect(screen.getByRole("main")).toHaveClass("workspace-canvas");
   });
 
-  it("searches recent conversations directly from the ask context", async () => {
+  it("keeps the complete product navigation available during local acceptance", async () => {
+    const user = userEvent.setup();
+    render(<App session={authorSession} />);
+
+    const primaryNavigation = screen.getByLabelText("Semlia 主功能");
+    expect(within(primaryNavigation).getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual(["语义问答", "工作台", "知识资产", "变更与发布", "数据接入"]);
+    expect(within(screen.getByLabelText("Semlia 平台管理")).getByRole("button", { name: "系统设置" })).toBeVisible();
+
+    await user.click(within(primaryNavigation).getByRole("button", { name: "语义问答" }));
+    expect(screen.getByRole("textbox", { name: "向 Semlia 提问" })).toBeVisible();
+  });
+
+  it("restores a persisted Workbench item from its URL", async () => {
+    window.history.replaceState({}, "", "/?view=overview&attentionItem=ati_01arz3ndektsv4rrffq69g5fax");
+    render(<App />);
+
+    const detail = await screen.findByRole("region", { name: "工作台待办详情" });
+    expect(within(detail).getByRole("heading", { name: "检查客户增长域运行异常" })).toBeVisible();
+    expect(within(detail).getByText("ati_01arz3ndektsv4rrffq69g5fax")).toBeVisible();
+    expect(screen.getByRole("button", { name: "工作台" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("restores asset and immutable release detail routes without a browser merge", async () => {
+    const asset = assets[0];
+    window.history.replaceState({}, "", `/assets?asset=${encodeURIComponent(asset.id)}`);
+    const assetRender = render(<App />);
+    expect(await screen.findByRole("heading", { name: asset.name, level: 1 })).toBeVisible();
+    expect(screen.getByRole("region", { name: "语义资产详情" })).toBeVisible();
+    assetRender.unmount();
+
+    window.history.replaceState({}, "", "/governance?release=release-2026.08.3");
+    render(<App />);
+    const release = await screen.findByRole("region", { name: "发布 #6 详情" });
+    expect(within(release).getByText("fixture.release_manifest")).toBeVisible();
+    expect(within(release).queryByText("Fluxale Production")).not.toBeInTheDocument();
+  });
+
+  it("restores a compatibility route without a redundant consumer parameter", async () => {
+    window.history.replaceState({}, "", "/delivery/compatibility?binding=cbd_01arz3ndektsv4rrffq69g5fav&query=smq_01arz3ndektsv4rrffq69g5fav");
+    render(<App />);
+
+    const detail = await screen.findByRole("region", { name: "兼容性影响详情" });
+    expect(detail).toHaveTextContent("由 binding 解析中");
+    expect(detail).toHaveTextContent("cbd_01arz3ndektsv4rrffq69g5fav");
+    expect(detail).toHaveTextContent("smq_01arz3ndektsv4rrffq69g5fav");
+  });
+
+  it("loads the exact persisted consumer, binding, and refused query for a compatibility target", async () => {
+    const consumerId = "csm_01arz3ndektsv4rrffq69g5fav";
+    const bindingId = "cbd_01arz3ndektsv4rrffq69g5fav";
+    const queryId = "smq_01arz3ndektsv4rrffq69g5fav";
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input instanceof Request ? input.url : String(input);
+      const body = url.includes(`/consumers/${consumerId}`) ? {
+        id: consumerId, stableKey: "finance-dashboard", name: "Finance dashboard", kind: "application", status: "active", ownerPrincipalRef: "prn_finance", metadata: {}, createdAt: "2026-09-05T01:00:00Z", updatedAt: "2026-09-05T01:00:00Z",
+      } : url.includes(`/consumer-bindings/${bindingId}`) ? {
+        id: bindingId, consumerId, environment: "production", purpose: "Quarter close", mode: "pinned", releaseId: "rls_01arz3ndektsv4rrffq69g5fav", compatibilityConstraint: { requires: "region_v2" }, status: "active", version: 3, createdAt: "2026-09-05T01:00:00Z", updatedAt: "2026-09-05T01:00:00Z",
+      } : {
+        id: queryId, schemaVersion: "1.0.0", resolverVersion: "resolver-9", requestDigest: `sha256:${"a".repeat(64)}`, outcome: "refused", channel: "api", releaseId: "rls_01arz3ndektsv4rrffq69g5fav", consumerId, bindingId,
+        refusal: { code: "STALE_RELEASE_BINDING", candidateIds: [], clarification: "Pin the consumer to a compatible release.", details: {} },
+        validation: { id: "qvr_01arz3ndektsv4rrffq69g5fav", queryId, validator: "compatibility", validatorVersion: "1.0.0", inputDigest: `sha256:${"b".repeat(64)}`, status: "failed", results: [{ severity: "blocker", code: "STALE_RELEASE_BINDING", message: "Pinned release is stale.", details: {} }], createdAt: "2026-09-05T01:00:00Z", completedAt: "2026-09-05T01:00:01Z" },
+        createdAt: "2026-09-05T01:00:00Z",
+      };
+      return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const compatibilitySession: CapabilitySession = { principalId: "prn_reader", version: "authz-1", capabilities: ["binding.read", "semantic.resolve"] };
+    render(<CapabilityProvider session={compatibilitySession}><CompatibilityImpactView workspaceId="wsp_01arz3ndektsv4rrffq69g5fav" consumerId={consumerId} bindingId={bindingId} queryId={queryId} /></CapabilityProvider>);
+
+    const detail = await screen.findByRole("region", { name: "兼容性影响详情" });
+    expect(within(detail).getByText("Finance dashboard")).toBeVisible();
+    expect(within(detail).getByText("pinned / active")).toBeVisible();
+    expect(within(detail).getAllByText("STALE_RELEASE_BINDING").length).toBeGreaterThan(0);
+    expect(within(detail).getByText("Pin the consumer to a compatible release.")).toBeVisible();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("keeps compatibility partitions independent when one read is forbidden", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (url.includes("/consumers/")) return new Response(JSON.stringify({ code: "CAPABILITY_DENIED", message: "consumer is outside scope" }), { status: 403, headers: { "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ id: "cbd_01arz3ndektsv4rrffq69g5fav", consumerId: "csm_01arz3ndektsv4rrffq69g5fav", environment: "production", purpose: "Quarter close", mode: "current", compatibilityConstraint: {}, status: "active", version: 2, createdAt: "2026-09-05T01:00:00Z", updatedAt: "2026-09-05T01:00:00Z" }), { status: 200, headers: { "Content-Type": "application/json" } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const session: CapabilitySession = { principalId: "prn_reader", version: "authz-1", capabilities: ["binding.read"] };
+    render(<CapabilityProvider session={session}><CompatibilityImpactView workspaceId="wsp_01arz3ndektsv4rrffq69g5fav" consumerId="csm_01arz3ndektsv4rrffq69g5fav" bindingId="cbd_01arz3ndektsv4rrffq69g5fav" queryId="smq_01arz3ndektsv4rrffq69g5fav" /></CapabilityProvider>);
+
+    expect(await within(screen.getByRole("region", { name: "消费绑定事实" })).findByText("Quarter close")).toBeVisible();
+    expect(within(screen.getByRole("region", { name: "消费者事实" })).getByRole("alert")).toHaveTextContent("consumer is outside scope");
+    expect(within(screen.getByRole("region", { name: "语义查询事实" })).getByRole("alert")).toHaveTextContent("需要 semantic.resolve 权限");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("resolves a missing compatibility consumer from the persisted binding", async () => {
+    const consumerId = "csm_01arz3ndektsv4rrffq69g5fav";
+    const bindingId = "cbd_01arz3ndektsv4rrffq69g5fav";
+    const queryId = "smq_01arz3ndektsv4rrffq69g5fav";
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (url.includes(`/consumer-bindings/${bindingId}`)) return new Response(JSON.stringify({ id: bindingId, consumerId, environment: "production", purpose: "Month close", mode: "current", compatibilityConstraint: {}, status: "active", version: 2, createdAt: "2026-09-05T01:00:00Z", updatedAt: "2026-09-05T01:00:00Z" }), { status: 200, headers: { "Content-Type": "application/json" } });
+      if (url.includes(`/consumers/${consumerId}`)) return new Response(JSON.stringify({ id: consumerId, stableKey: "finance-dashboard", name: "Finance dashboard", kind: "application", status: "active", ownerPrincipalRef: "prn_finance", metadata: {}, createdAt: "2026-09-05T01:00:00Z", updatedAt: "2026-09-05T01:00:00Z" }), { status: 200, headers: { "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ id: queryId, schemaVersion: "1.0.0", resolverVersion: "resolver-9", requestDigest: `sha256:${"a".repeat(64)}`, outcome: "resolved", channel: "api", consumerId, bindingId, createdAt: "2026-09-05T01:00:00Z" }), { status: 200, headers: { "Content-Type": "application/json" } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const session: CapabilitySession = { principalId: "prn_reader", version: "authz-1", capabilities: ["binding.read", "semantic.resolve"] };
+    render(<CapabilityProvider session={session}><CompatibilityImpactView workspaceId="wsp_01arz3ndektsv4rrffq69g5fav" bindingId={bindingId} queryId={queryId} /></CapabilityProvider>);
+
+    expect(await within(screen.getByRole("region", { name: "消费者事实" })).findByText("Finance dashboard")).toBeVisible();
+    expect(screen.getByRole("region", { name: "兼容性影响详情" })).toHaveTextContent(consumerId);
+    expect(fetchMock.mock.calls.some(([input]) => String(input instanceof Request ? input.url : input).includes(`/consumers/${consumerId}`))).toBe(true);
+  });
+
+  it("searches the session-only Ask conversation directly from context", async () => {
     const user = userEvent.setup();
     render(<App />);
 
     const context = screen.getByRole("complementary", { name: "治理上下文" });
     const conversationSearch = within(context).getByRole("searchbox", { name: "搜索会话" });
+    await user.click(screen.getByRole("button", { name: "编辑会话标题：新会话" }));
+    const titleInput = screen.getByRole("textbox", { name: "编辑会话标题" });
+    await user.clear(titleInput);
+    await user.type(titleInput, "客单价口径");
+    await user.keyboard("{Enter}");
     await user.keyboard("{Control>}k{/Control}");
     expect(conversationSearch).toHaveFocus();
 
@@ -47,7 +242,7 @@ describe("Semlia product workspace", () => {
     await user.type(conversationSearch, "不存在的会话");
     expect(within(context).getByText("没有匹配会话")).toBeVisible();
     await user.click(within(context).getByRole("button", { name: "清除会话搜索" }));
-    expect(within(context).getByRole("button", { name: /8 月收入诊断/ })).toBeVisible();
+    expect(within(context).getByRole("button", { name: /客单价口径/ })).toBeVisible();
   });
 
   it("collapses, reopens and resizes the secondary menu while keeping a single-level page title", async () => {
@@ -71,7 +266,7 @@ describe("Semlia product workspace", () => {
     expect(document.querySelector(".app-shell")).toHaveStyle("--context-panel-width: 440px");
   });
 
-  it("opens on a traceable semantic answer instead of low-frequency setup", async () => {
+  it("opens the normal Ask composer without fabricating an answer", async () => {
     const user = userEvent.setup();
     render(<App />);
 
@@ -79,57 +274,44 @@ describe("Semlia product workspace", () => {
     expect(screen.queryByText(/稳定版 ·/)).not.toBeInTheDocument();
     expect(screen.queryByText("可信语义问答")).not.toBeInTheDocument();
     expect(screen.queryByText("知识索引就绪")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /编辑会话标题：8 月收入诊断/ }));
+    await user.click(screen.getByRole("button", { name: /编辑会话标题：新会话/ }));
     const titleInput = screen.getByRole("textbox", { name: "编辑会话标题" });
     await user.clear(titleInput);
     await user.type(titleInput, "华东收入复盘");
     await user.keyboard("{Enter}");
     expect(screen.getByRole("button", { name: /编辑会话标题：华东收入复盘/ })).toBeVisible();
     expect(screen.queryByRole("region", { name: "数据库到 LLM 问答链路" })).not.toBeInTheDocument();
-    expect(screen.getByText("净收入确认口径")).toBeVisible();
+    expect(screen.queryByText("Prototype 预览")).not.toBeInTheDocument();
+    expect(screen.getByText("问题会被解释为结构化语义请求，并且只解析当前已发布版本。")).toBeVisible();
+    expect(screen.queryByText("净收入确认口径")).not.toBeInTheDocument();
     expect(screen.queryByText("Semlia 检索已发布知识块和语义资产，委托 Cube 执行查询，并保留答案、口径与来源之间的完整链路。")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /连接数据/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("complementary", { name: "回答执行与证据" })).not.toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "向 Semlia 提问" })).toBeVisible();
   });
 
-  it("opens evidence in the owning asset instead of a pipeline-stage page", async () => {
-    const user = userEvent.setup();
+  it("enables normal Ask input without fabricated evidence", () => {
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: /净收入确认口径.*KB-2048/ }));
-    expect(screen.getByRole("heading", { name: "净收入" })).toBeVisible();
-    expect(screen.getByRole("tab", { name: "可信度" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByText("Cube schema 编译通过")).toBeVisible();
-    expect(within(screen.getByRole("complementary", { name: "治理上下文" })).queryByRole("button", { name: /知识块与证据/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /KB-2048/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "向 Semlia 提问" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "发送问题" })).toBeDisabled();
   });
 
-  it("turns an incorrect answer into a field-level knowledge revision", async () => {
+  it("does not offer knowledge revision before an answer exists", () => {
+    render(<App />);
+
+    expect(screen.queryByRole("button", { name: "指出问题" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "指出回答中的知识问题" })).not.toBeInTheDocument();
+  });
+
+  it("uses normal navigation without a prototype runtime notice", async () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "指出问题" }));
-    const issuePanel = screen.getByRole("region", { name: "指出回答中的知识问题" });
-    await user.click(within(issuePanel).getByRole("radio", { name: /计算规则或实现不准确/ }));
-    await user.click(within(issuePanel).getByRole("button", { name: "修订相关知识" }));
-
-    const workbench = screen.getByRole("region", { name: "净收入 知识修订工作台" });
-    expect(within(workbench).getByText("已发布版本受保护")).toBeVisible();
-    expect(within(workbench).getByRole("complementary", { name: "证据与检查" })).toHaveTextContent("来源 revision");
-    const expression = within(workbench).getByRole("textbox", { name: "计算表达式候选值" });
-    await user.clear(expression);
-    await user.type(expression, "SUM(paid_amount - confirmed_refund_amount - discount_amount - tax_amount)");
-    expect(within(workbench).getByRole<HTMLTextAreaElement>("textbox", { name: "知识修订原因" }).value).toContain("来自问答");
-
-    await user.click(within(workbench).getByRole("button", { name: "运行检查" }));
-    expect(within(workbench).getByText("3/3 完成")).toBeVisible();
-    await user.click(within(workbench).getByRole("button", { name: "提交审核" }));
-
-    expect(screen.getByRole("region", { name: "净收入 @13 候选资产版本详情" })).toBeVisible();
-    expect(screen.getByText("spec.expression")).toBeVisible();
-    expect(screen.getByText(/confirmed_refund_amount/)).toBeVisible();
-    await user.click(screen.getByRole("tab", { name: /变更来源.*1/ }));
-    expect(screen.getByText("人工知识修订")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "工作台" }));
+    expect(screen.queryByText("Prototype 数据环境")).not.toBeInTheDocument();
+    expect(screen.queryByText("不会写入服务端")).not.toBeInTheDocument();
   });
 
   it("filters the semantic asset catalog and opens an explainable asset contract", async () => {
@@ -260,7 +442,7 @@ describe("Semlia product workspace", () => {
 
     await user.click(within(detail).getByRole("tab", { name: "交付与影响" }));
     expect(within(detail).getByText("尚无已注册使用方")).toBeVisible();
-    expect(within(detail).getByRole("button", { name: "注册使用方" })).toBeVisible();
+    expect(within(detail).queryByRole("button", { name: "注册使用方" })).not.toBeInTheDocument();
   });
 
   it("distinguishes an optional empty implementation from a missing contract", async () => {
@@ -318,12 +500,14 @@ describe("Semlia product workspace", () => {
     await user.click(screen.getByRole("button", { name: "审核候选版本 客单价 @9" }));
 
     const dialog = screen.getByRole("dialog", { name: "审核 客单价 · @9" });
-    expect(within(dialog).getByText(/不会写入或发布真实数据/)).toBeVisible();
-    expect(within(dialog).getByText("Cube 编译")).toBeVisible();
-
-    await user.click(within(dialog).getByRole("button", { name: "模拟批准版本" }));
-    expect(screen.getByRole("status")).toHaveTextContent("客单价 候选版本已在本次原型会话中标记为批准");
-    expect(screen.getByRole("button", { name: "模拟发布 @9" })).toBeVisible();
+    expect(within(dialog).getAllByText("structural", { exact: false }).length).toBeGreaterThan(0);
+    expect(within(dialog).getByText("职责分离由服务端强制")).toBeVisible();
+    const approve = within(dialog).getByRole("button", { name: "批准版本" });
+    expect(approve).toBeDisabled();
+    await user.type(within(dialog).getByRole("textbox", { name: "审核意见" }), "退款口径变化已由增长组确认。");
+    await user.click(approve);
+    expect(await screen.findByRole("status")).toHaveTextContent("评审已记录：批准");
+    expect(screen.getByRole("button", { name: "发布 @9" })).toBeVisible();
   });
 
   it("shows immutable release bindings", async () => {
@@ -335,11 +519,14 @@ describe("Semlia product workspace", () => {
     expect(versionRegistry.firstElementChild).toHaveClass("asset-version-toolbar");
     expect(within(versionRegistry).queryByRole("heading", { name: "资产版本" })).not.toBeInTheDocument();
     expect(within(versionRegistry).queryByText("3 个候选 · 6 条已发布")).not.toBeInTheDocument();
-    const currentRelease = screen.getByRole("button", { name: "查看语义资产版本 净收入 @12" });
+    const currentRelease = screen.getByRole("button", { name: "查看发布记录 @12 #6" });
     expect(currentRelease).toHaveTextContent("当前版本");
     await user.click(currentRelease);
-    expect(screen.getByText("Fluxale Production")).toBeVisible();
-    expect(screen.getAllByText("锁定 release-2026.08.3")).toHaveLength(2);
+    const release = screen.getByRole("region", { name: "发布 #6 详情" });
+    expect(within(release).getByText("fixture.release_manifest")).toBeVisible();
+    expect(within(release).getByText("服务端消费影响")).toBeVisible();
+    expect(within(release).getByText("当前合同提供权威计数，不提供消费者明细。")).toBeVisible();
+    expect(within(release).queryByText("Fluxale Production")).not.toBeInTheDocument();
   });
 
   it("keeps every secondary menu inside its primary module", async () => {
@@ -362,14 +549,14 @@ describe("Semlia product workspace", () => {
     expect(within(context).queryByRole("button", { name: "搜索资产、变更与功能" })).not.toBeInTheDocument();
     await user.click(within(context).getByRole("button", { name: /接入自动化/ }));
     expect(screen.getByRole("button", { name: "数据接入" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("region", { name: "接入自动化列表" })).toBeVisible();
+    expect(screen.getByRole("region", { name: "接入自动化" })).toBeVisible();
     expect(within(context).getByRole("button", { name: /接入运行/ })).toBeVisible();
     expect(screen.queryByRole("tab", { name: /运行活动/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "接入运行" })).not.toBeInTheDocument();
 
     await user.click(within(context).getByRole("button", { name: /接入运行/ }));
     expect(screen.getByRole("region", { name: "接入运行" })).toBeVisible();
-    expect(screen.queryByRole("region", { name: "接入自动化列表" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "接入自动化" })).not.toBeInTheDocument();
   });
 
   it("opens searchable commands and jumps directly to an asset", async () => {
@@ -395,7 +582,7 @@ describe("Semlia product workspace", () => {
     expect(within(context).queryByText("最近打开")).not.toBeInTheDocument();
     await user.click(within(context).getByRole("button", { name: "搜索知识目录" }));
     expect(screen.getByRole("searchbox", { name: "搜索知识目录" })).toHaveFocus();
-    expect(within(context).getAllByRole("button").filter((button) => button.classList.contains("context-item")).map((button) => button.querySelector("strong")?.textContent)).toEqual(["净收入", "订单经营模型", "高价值客户"]);
+    expect(within(context).getAllByRole("button").filter((button) => button.classList.contains("context-item")).map((button) => button.querySelector("strong")?.textContent)).toEqual(assets.slice(0, 3).map(asset => asset.name));
     expect(within(context).queryByRole("button", { name: /关系与映射/ })).not.toBeInTheDocument();
     expect(within(context).queryByRole("button", { name: /知识块与证据/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: /清单|语义关系|物理映射/ })).not.toBeInTheDocument();
@@ -411,9 +598,9 @@ describe("Semlia product workspace", () => {
     expect(screen.getByRole("tab", { name: "实现" })).toHaveAttribute("aria-selected", "true");
     expect(within(screen.getByRole("region", { name: "语义资产详情" })).getAllByText("BIND-NET-REV-12").some((element) => element.closest("article")?.getAttribute("aria-current") === "true")).toBe(true);
 
-    await user.click(within(context).getByRole("button", { name: "打开最近资产 高价值客户" }));
-    expect(screen.getByRole("heading", { name: "高价值客户" })).toBeVisible();
-    expect(within(context).getByRole("button", { name: "打开最近资产 高价值客户" })).toHaveAttribute("aria-current", "page");
+    await user.click(within(context).getByRole("button", { name: `打开最近资产 ${assets[2].name}` }));
+    expect(screen.getByRole("heading", { name: assets[2].name })).toBeVisible();
+    expect(within(context).getByRole("button", { name: `打开最近资产 ${assets[2].name}` })).toHaveAttribute("aria-current", "page");
   });
 
   it("keeps recent asset positions stable until the user re-enters the module", async () => {
@@ -425,40 +612,78 @@ describe("Semlia product workspace", () => {
     const recentNames = () => within(context).getAllByRole("button")
       .filter((button) => button.classList.contains("context-item"))
       .map((button) => button.querySelector("strong")?.textContent);
-    const initialOrder = ["净收入", "订单经营模型", "高价值客户"];
+    const initialOrder = assets.slice(0, 3).map(asset => asset.name);
 
     expect(recentNames()).toEqual(initialOrder);
-    await user.click(within(context).getByRole("button", { name: "打开最近资产 高价值客户" }));
+    await user.click(within(context).getByRole("button", { name: `打开最近资产 ${initialOrder[2]}` }));
     expect(recentNames()).toEqual(initialOrder);
-    expect(within(context).getByRole("button", { name: "打开最近资产 高价值客户" })).toHaveAttribute("aria-current", "page");
+    expect(within(context).getByRole("button", { name: `打开最近资产 ${initialOrder[2]}` })).toHaveAttribute("aria-current", "page");
 
     await user.click(screen.getByRole("button", { name: "工作台" }));
     await user.click(screen.getByRole("button", { name: "知识资产" }));
-    expect(recentNames()).toEqual(["高价值客户", "净收入", "订单经营模型"]);
+    expect(recentNames()).toEqual([initialOrder[2], initialOrder[0], initialOrder[1]]);
   });
 
   it("opens system settings as a focused member directory", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (url.endsWith("/auth/methods")) return Response.json({ password: true, oidc: false });
+      return Response.json({ items: url.includes("/members") ? [{ id: "mbr_test", accountId: "usr_test", principalId: "prn_test", displayName: "Verified member", status: "active", roleIds: ["workspace_admin"], admittedAt: "2026-09-04T09:00:00Z" }] : [], page: { limit: 50, total: 1 } });
+    }));
     const user = userEvent.setup();
     render(<App />);
+    await user.click(screen.getByRole("button", { name: "系统设置" }));
+    const directory = screen.getByRole("region", { name: "成员管理" });
+    const list = within(directory).getByRole("region", { name: "工作区成员列表" });
+    expect(await within(list).findByText("Verified member")).toBeVisible();
+    expect(within(list).getByText("prn_test")).toBeVisible();
+    expect(screen.queryByText("EMP-10001")).not.toBeInTheDocument();
+    expect(screen.queryByText("24 名成员")).not.toBeInTheDocument();
+    await user.type(within(directory).getByRole("searchbox", { name: "搜索成员与邀请" }), "missing");
+    expect(within(list).queryByText("Verified member")).not.toBeInTheDocument();
+  });
+
+  it("keeps Access Control reachable for a role-manage-only session", async () => {
+    const user = userEvent.setup();
+    const manageOnlySession: CapabilitySession = {
+      principalId: "EMP-ROLE-MANAGER",
+      version: "authzv-manage-only",
+      capabilities: ["role.manage"],
+    };
+    render(<App session={manageOnlySession} />);
 
     await user.click(screen.getByRole("button", { name: "系统设置" }));
     const context = screen.getByRole("complementary", { name: "治理上下文" });
-    expect(within(context).getByRole("button", { name: /成员.*24 名成员/ })).toBeVisible();
-    expect(within(context).getByRole("button", { name: /访问控制/ })).toBeVisible();
-    expect(within(context).queryByRole("button", { name: "搜索资产、变更与功能" })).not.toBeInTheDocument();
-    expect(within(document.querySelector(".topbar") as HTMLElement).getByText("成员", { exact: true })).toBeVisible();
-    expect(screen.queryByRole("heading", { name: "工作区与成员" })).not.toBeInTheDocument();
-    expect(screen.queryByText("身份提供方")).not.toBeInTheDocument();
-    expect(screen.queryByText("默认角色")).not.toBeInTheDocument();
+    const accessControlEntry = within(context).getByRole("button", { name: /访问控制/ });
+    expect(accessControlEntry).toBeVisible();
+    await user.click(accessControlEntry);
 
-    const directory = screen.getByRole("region", { name: "成员目录" });
-    const memberList = within(directory).getByRole("region", { name: "成员列表" });
-    expect(within(memberList).getByText("EMP-10001")).toBeVisible();
-    expect(within(memberList).getByText("yue.lin@semlia.example")).toBeVisible();
-    expect(within(memberList).getAllByText("收入分析", { exact: true }).length).toBeGreaterThan(0);
-    await user.type(within(directory).getByRole("searchbox", { name: "搜索成员" }), "许言");
-    expect(within(memberList).getByText("EMP-10005")).toBeVisible();
-    expect(within(memberList).queryByText("EMP-10001")).not.toBeInTheDocument();
+    const accessControl = screen.getByRole("region", { name: "访问控制" });
+    expect(within(accessControl).getByText("角色管理上下文不可用")).toBeVisible();
+    expect(within(accessControl).getByText(/缺少 role.read/)).toBeVisible();
+  });
+
+  it("keeps Operations reachable for a runtime-manage-only session without unauthorized reads", async () => {
+    const user = userEvent.setup();
+    render(<App session={{ principalId: "EMP-RUNTIME-MANAGER", version: "authzv-runtime-manage", capabilities: ["runtime.manage"] }} />);
+
+    await user.click(screen.getByRole("button", { name: "系统设置" }));
+    const context = screen.getByRole("complementary", { name: "治理上下文" });
+    const operationsEntry = within(context).getByRole("button", { name: /审计与运行/ });
+    expect(operationsEntry).toBeVisible();
+    await user.click(operationsEntry);
+
+    const operations = screen.getByRole("region", { name: "审计与运行" });
+    expect(within(operations).getByText("需要运行读取上下文")).toBeVisible();
+    expect(within(operations).getByText(/runtime\.read/)).toBeVisible();
+  });
+
+  it("hides Operations when the session has no audit or runtime capability", async () => {
+    const user = userEvent.setup();
+    render(<App session={{ principalId: "EMP-MEMBER", version: "authzv-member", capabilities: ["workspace.read"] }} />);
+
+    await user.click(screen.getByRole("button", { name: "系统设置" }));
+    expect(within(screen.getByRole("complementary", { name: "治理上下文" })).queryByRole("button", { name: /审计与运行/ })).not.toBeInTheDocument();
   });
 
   it("inspects roles and grouped permissions from access control", async () => {
@@ -519,16 +744,15 @@ describe("Semlia product workspace", () => {
     await user.click(within(accessControl).getByRole("button", { name: "分配角色" }));
 
     const dialog = screen.getByRole("dialog", { name: "分配角色" });
-    await user.selectOptions(within(dialog).getByRole("combobox", { name: "授权主体" }), "AGENT-GOVERNANCE");
+    await user.type(within(dialog).getByRole("textbox", { name: "主体 ID" }), "AGENT-GOVERNANCE");
     await user.selectOptions(within(dialog).getByRole("combobox", { name: "角色" }), "ROLE-AUDITOR");
-    await user.selectOptions(within(dialog).getByRole("combobox", { name: "资源范围" }), "workspace:WS-SEMLIA");
     await user.click(within(dialog).getByRole("button", { name: "预览授权" }));
-    expect(within(dialog).getByRole("region", { name: "授权变更预览" })).toHaveTextContent("新增 10 项操作权限");
+    expect(within(dialog).getByRole("region", { name: "授权变更预览" })).toHaveTextContent("申请 10 项操作权限");
     await user.click(within(dialog).getByRole("button", { name: "确认分配" }));
 
-    expect(within(accessControl).getByText("治理建议 Agent")).toBeVisible();
+    expect(within(accessControl).getAllByText("AGENT-GOVERNANCE").length).toBeGreaterThan(0);
     expect(within(accessControl).getAllByText("Auditor").length).toBeGreaterThan(1);
-    expect(within(accessControl).getByText("authzv-2026.09.01-002")).toBeVisible();
+    expect(within(accessControl).getByText("2", { exact: true })).toBeVisible();
     expect(screen.getByRole("status")).toHaveTextContent("角色分配已创建");
   });
 
@@ -542,13 +766,14 @@ describe("Semlia product workspace", () => {
     await user.click(within(accessControl).getByRole("tab", { name: "角色分配" }));
     await user.click(within(accessControl).getByRole("button", { name: "分配角色" }));
     const dialog = screen.getByRole("dialog", { name: "分配角色" });
-    await user.selectOptions(within(dialog).getByRole("combobox", { name: "授权主体" }), "USR-REVIEWER");
+    await user.type(within(dialog).getByRole("textbox", { name: "主体 ID" }), "USR-REVIEWER");
     await user.selectOptions(within(dialog).getByRole("combobox", { name: "角色" }), "ROLE-PUBLISHER");
-    await user.selectOptions(within(dialog).getByRole("combobox", { name: "资源范围" }), "asset:METRIC-NET-REVENUE");
+    await user.selectOptions(within(dialog).getByRole("combobox", { name: "范围类型" }), "asset");
+    await user.type(within(dialog).getByRole("textbox", { name: "范围 ID" }), "METRIC-NET-REVENUE");
     await user.click(within(dialog).getByRole("button", { name: "预览授权" }));
 
-    expect(within(dialog).getByRole("alert")).toHaveTextContent("评审者与发布者必须相互独立");
-    expect(within(dialog).getByRole("button", { name: "确认分配" })).toBeDisabled();
+    await user.click(within(dialog).getByRole("button", { name: "确认分配" }));
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("评审者与发布者必须相互独立");
   });
 
   it("explains effective access and keeps business titles separate from roles", async () => {
@@ -556,20 +781,20 @@ describe("Semlia product workspace", () => {
     render(<App />);
     await user.click(screen.getByRole("button", { name: "系统设置" }));
     const context = screen.getByRole("complementary", { name: "治理上下文" });
-    const directory = screen.getByRole("region", { name: "成员目录" });
-    expect(within(directory).getByRole("row", { name: /EMP-10001.*语义产品经理.*Workspace Admin/ })).toBeVisible();
-    expect(within(directory).getByText("已停用", { exact: true })).toBeVisible();
+    expect(screen.queryByText("语义产品经理")).not.toBeInTheDocument();
 
     await user.click(within(context).getByRole("button", { name: /访问控制/ }));
     const accessControl = screen.getByRole("region", { name: "访问控制" });
     await user.click(within(accessControl).getByRole("tab", { name: "有效权限检查" }));
+    await user.type(within(accessControl).getByRole("textbox", { name: "检查主体 ID" }), "USR-AUDITOR");
     await user.click(within(accessControl).getByRole("button", { name: "检查有效权限" }));
     let result = within(accessControl).getByRole("region", { name: "有效权限结果" });
     expect(result).toHaveTextContent("拒绝");
     expect(result).toHaveTextContent("NO_MATCHING_GRANT");
     expect(result).toHaveTextContent("authzv-2026.09.01-001");
 
-    await user.selectOptions(within(accessControl).getByRole("combobox", { name: "检查主体" }), "EMP-10001");
+    await user.clear(within(accessControl).getByRole("textbox", { name: "检查主体 ID" }));
+    await user.type(within(accessControl).getByRole("textbox", { name: "检查主体 ID" }), "EMP-10001");
     await user.click(within(accessControl).getByRole("button", { name: "检查有效权限" }));
     result = within(accessControl).getByRole("region", { name: "有效权限结果" });
     expect(result).toHaveTextContent("允许");
@@ -589,7 +814,7 @@ describe("Semlia product workspace", () => {
     expect(within(configuration).queryByRole("heading", { name: "模型配置" })).not.toBeInTheDocument();
     expect(configuration.querySelector(".model-config-stats")).not.toBeInTheDocument();
     expect(within(configuration).getByRole("tab", { name: "LLM 模型" })).toHaveAttribute("aria-selected", "true");
-    expect(within(configuration).getByRole("combobox", { name: "默认 LLM 模型" })).toHaveValue("llm-gpt-41");
+    expect(within(configuration).getByRole("combobox", { name: "默认 LLM 模型" })).toHaveValue("mdl_fixture_001");
     expect(within(configuration).getByText("gpt-4.1")).toBeVisible();
     expect(within(configuration).getByText("claude-sonnet-4-20250514")).toBeVisible();
 
@@ -601,42 +826,23 @@ describe("Semlia product workspace", () => {
     expect(configuration.querySelector(".embedding-boundary")).not.toBeInTheDocument();
     expect(within(configuration).getByRole("button", { name: "重建向量索引" })).toBeVisible();
 
-    await user.selectOptions(within(configuration).getByRole("combobox", { name: "默认 Embedding 模型" }), "embedding-bge-m3");
+    await user.selectOptions(within(configuration).getByRole("combobox", { name: "默认 Embedding 模型" }), "mdl_fixture_005");
     expect(screen.getByRole("status")).toHaveTextContent("Embedding 默认模型已切换为 bge-m3");
-    await user.click(within(configuration).getByRole("button", { name: "重建向量索引" }));
-    const rebuildDialog = screen.getByRole("dialog", { name: "重建向量索引" });
-    expect(within(rebuildDialog).getByText("全部知识目录")).toBeVisible();
-    expect(within(rebuildDialog).getByText("bge-m3")).toBeVisible();
-    await user.click(within(rebuildDialog).getByRole("button", { name: "开始重建" }));
-    expect(screen.getByRole("status")).toHaveTextContent("向量索引重建任务已创建");
-    const rebuildState = within(configuration).getByRole("region", { name: "最近向量索引重建状态" });
-    expect(rebuildState).toHaveTextContent("生成向量 · 42%");
-    expect(rebuildState).toHaveTextContent("1,436 / 3,420 个知识块");
+    expect(within(configuration).getByRole("button", { name: "重建向量索引" })).toBeDisabled();
+    expect(within(configuration).getByRole("region", { name: "持久向量索引" })).not.toHaveTextContent("42%");
+    expect(within(configuration).queryByText("RUN-IDX-260901-1132")).not.toBeInTheDocument();
 
     await user.click(within(configuration).getByRole("button", { name: "添加供应商" }));
     const dialog = screen.getByRole("dialog", { name: "添加模型供应商" });
     await user.type(within(dialog).getByLabelText("配置名称"), "企业向量网关");
     await user.selectOptions(within(dialog).getByLabelText("供应商"), "OpenAI 兼容");
     await user.type(within(dialog).getByLabelText("Base URL"), "https://models.example.com/v1");
+    await user.type(within(dialog).getByLabelText("凭据环境变量"), "SEMLIA_COMPAT_GATEWAY_KEY");
     await user.type(within(dialog).getByLabelText("API Key"), "sk-prototype");
     await user.click(within(dialog).getByRole("button", { name: "添加供应商" }));
     expect(within(configuration).getByText("企业向量网关")).toBeVisible();
-    expect(within(configuration).getByText("尚未配置模型")).toBeVisible();
+    expect(within(configuration).getAllByText(/尚未配置模型/).length).toBeGreaterThan(0);
 
-    await user.click(within(rebuildState).getByRole("button", { name: "查看进度与日志" }));
-    const rebuildProgressDialog = screen.getByRole("dialog", { name: "重建进度与日志" });
-    expect(within(rebuildProgressDialog).getByRole("region", { name: "向量索引重建进度" })).toHaveTextContent("生成向量");
-    expect(within(rebuildProgressDialog).getByRole("log", { name: "向量索引重建执行日志" })).toHaveTextContent("扫描知识块");
-    expect(within(rebuildProgressDialog).getByText("1,436 / 3,420 个知识块")).toBeVisible();
-    expect(screen.queryByRole("region", { name: "接入运行详情" })).not.toBeInTheDocument();
-    await user.click(within(rebuildProgressDialog).getByRole("button", { name: "在全局运行记录中打开" }));
-    const auditRuntime = screen.getByRole("region", { name: "审计与运行" });
-    expect(within(auditRuntime).getByRole("tab", { name: "运行记录" })).toHaveAttribute("aria-selected", "true");
-    const rebuildRun = screen.getByRole("dialog", { name: "知识目录向量索引重建" });
-    const globalRebuildProgress = within(rebuildRun).getByRole("region", { name: "运行进度" });
-    expect(globalRebuildProgress).toHaveTextContent("生成向量");
-    expect(globalRebuildProgress).toHaveTextContent("1,436 / 3,420 个知识块");
-    expect(within(rebuildRun).getByRole("log", { name: "全局运行执行日志" })).toHaveTextContent("扫描知识块");
   });
 
   it("uses audit and runtime as a global operations center", async () => {
@@ -648,28 +854,30 @@ describe("Semlia product workspace", () => {
     await user.click(within(context).getByRole("button", { name: /审计与运行/ }));
     const runtime = screen.getByRole("region", { name: "审计与运行" });
     expect(within(runtime).queryByRole("heading", { name: "审计与运行" })).not.toBeInTheDocument();
-    expect(within(runtime).getByRole("region", { name: "运行状态概览" })).toHaveTextContent("24 小时失败");
+    expect(within(runtime).getByRole("region", { name: "运行状态概览" })).toHaveTextContent("需要关注");
+    expect(within(runtime).queryByText("日志投递")).not.toBeInTheDocument();
     const runTable = within(runtime).getByRole("region", { name: "全局运行记录" });
-    expect(within(runTable).getByText("客户增长知识增量构建")).toBeVisible();
-    await user.click(within(runTable).getByRole("button", { name: "查看运行 客户增长知识增量构建" }));
-    expect(screen.getByRole("dialog", { name: "客户增长知识增量构建" })).toHaveTextContent("生成候选版本");
-    await user.click(within(screen.getByRole("dialog", { name: "客户增长知识增量构建" })).getByRole("button", { name: "关闭" }));
+    expect(within(runTable).getByText("PostgreSQL Analytics")).toBeVisible();
+    await user.click(within(runTable).getByRole("button", { name: "查看运行 PostgreSQL Analytics" }));
+    expect(screen.getByRole("dialog", { name: "PostgreSQL Analytics" })).toHaveTextContent("生成候选版本");
+    await user.click(within(screen.getByRole("dialog", { name: "PostgreSQL Analytics" })).getByRole("button", { name: "关闭" }));
 
     await user.click(within(runtime).getByRole("tab", { name: "审计日志" }));
     const auditTable = within(runtime).getByRole("region", { name: "审计事件" });
-    expect(within(auditTable).getByText("Codex MCP Workspace")).toBeVisible();
-    await user.selectOptions(within(runtime).getByRole("combobox", { name: "筛选调用渠道" }), "MCP");
-    expect(within(auditTable).getByText("调用语义检索")).toBeVisible();
-    expect(within(auditTable).queryByText("同步元数据")).not.toBeInTheDocument();
-    await user.click(within(auditTable).getByRole("button", { name: "查看审计事件 调用语义检索" }));
-    expect(screen.getByRole("dialog", { name: "调用语义检索" })).toHaveTextContent("tr_d219a4");
-    await user.click(within(screen.getByRole("dialog", { name: "调用语义检索" })).getByRole("button", { name: "关闭" }));
+    expect(within(auditTable).getByText("client-codex-mcp")).toBeVisible();
+    await user.type(within(runtime).getByRole("textbox", { name: "操作者 ID" }), "client-codex-mcp");
+    await user.click(within(runtime).getByRole("button", { name: "应用筛选" }));
+    expect(within(auditTable).getByText("semantic.resolve.completed")).toBeVisible();
+    expect(within(auditTable).queryByText("runtime.discovery.started")).not.toBeInTheDocument();
+    await user.click(within(auditTable).getByRole("button", { name: "查看审计事件 semantic.resolve.completed" }));
+    expect(screen.getByRole("dialog", { name: "semantic.resolve.completed" })).toHaveTextContent("tr_d219a4");
+    await user.click(within(screen.getByRole("dialog", { name: "semantic.resolve.completed" })).getByRole("button", { name: "关闭" }));
 
     await user.click(within(runtime).getByRole("tab", { name: "运行设置" }));
-    await user.clear(within(runtime).getByRole("spinbutton", { name: "最大并发任务" }));
-    await user.type(within(runtime).getByRole("spinbutton", { name: "最大并发任务" }), "6");
+    await user.clear(within(runtime).getByRole("spinbutton", { name: "失败重试上限" }));
+    await user.type(within(runtime).getByRole("spinbutton", { name: "失败重试上限" }), "4");
     await user.click(within(runtime).getByRole("button", { name: "保存更改" }));
-    expect(screen.getByRole("status")).toHaveTextContent("审计与运行设置已保存");
+    expect(await screen.findByText(/运行设置版本 8 已由服务端确认/)).toBeVisible();
   });
 
   it("keeps interfaces, bindings and runtime feedback in their owning modules", async () => {
@@ -683,32 +891,18 @@ describe("Semlia product workspace", () => {
     await user.click(within(context).getByRole("button", { name: /接口与集成/ }));
     const integrations = screen.getByRole("region", { name: "接口与集成" });
     expect(within(integrations).getAllByText("REST API", { exact: true }).length).toBeGreaterThan(0);
-    expect(within(integrations).getByText("MCP", { exact: true })).toBeVisible();
-    expect(within(integrations).getAllByText("CLI", { exact: true }).length).toBeGreaterThan(0);
-    expect(within(integrations).getByText("SDK", { exact: true })).toBeVisible();
-    expect(within(integrations).getByText("Fluxale Production")).toBeVisible();
-    expect(within(integrations).getByText("Codex MCP Workspace")).toBeVisible();
-    expect(within(integrations).queryByText("https://api.semlia.example/v1")).not.toBeInTheDocument();
-    await user.click(within(integrations).getAllByRole("button", { name: "使用说明" })[0]);
-    const guideDialog = screen.getByRole("dialog", { name: "REST API 使用说明" });
-    expect(within(guideDialog).getByText("https://api.semlia.example/v1")).toBeVisible();
-    expect(within(guideDialog).getByRole("heading", { name: "快速开始" })).toBeVisible();
-    expect(within(guideDialog).getByText(/knowledge\/search/)).toBeVisible();
-    await user.click(within(guideDialog).getByRole("button", { name: "完成" }));
-    await user.click(within(integrations).getByRole("button", { name: "创建客户端" }));
-    const clientDialog = screen.getByRole("dialog", { name: "创建客户端" });
-    await user.type(within(clientDialog).getByLabelText("客户端名称"), "经营分析 Agent");
-    await user.selectOptions(within(clientDialog).getByLabelText("调用方式"), "MCP");
-    await user.selectOptions(within(clientDialog).getByLabelText("环境"), "开发");
-    await user.click(within(clientDialog).getByRole("button", { name: "创建客户端" }));
-    expect(screen.getByRole("dialog", { name: "保存客户端凭据" })).toHaveTextContent("只显示一次");
-    await user.click(screen.getByRole("button", { name: "完成" }));
-    expect(within(integrations).getByText("经营分析 Agent")).toBeVisible();
-
+    expect(within(integrations).getByText("MCP Server", { exact: true })).toBeVisible();
+    expect(within(integrations).getByText("CLI", { exact: true })).toBeVisible();
+    expect(within(integrations).getByText("TypeScript SDK", { exact: true })).toBeVisible();
+    expect(within(integrations).queryByText("Fluxale Production")).not.toBeInTheDocument();
+    expect(within(integrations).queryByText("演示环境未连接集成服务，凭据与投递操作不可用。")).not.toBeInTheDocument();
+    expect(within(integrations).getByRole("button", { name: "创建客户端" })).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "变更与发布" }));
-    await user.click(screen.getByRole("button", { name: "查看语义资产版本 净收入 @12" }));
-    expect(screen.getByRole("heading", { name: "使用这个资产版本的应用" })).toBeVisible();
-    expect(screen.getByText("Fluxale Production")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "查看发布记录 @12 #6" }));
+    const release = screen.getByRole("region", { name: /发布 #6 详情/ });
+    expect(release).toBeVisible();
+    expect(within(release).getByText("服务端消费影响")).toBeVisible();
+    expect(within(release).queryByText("Fluxale Production")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "工作台" }));
     expect(screen.getByRole("region", { name: "工作台待办队列" })).toBeVisible();
@@ -716,51 +910,64 @@ describe("Semlia product workspace", () => {
     expect(within(context).queryByRole("button", { name: /动态/ })).not.toBeInTheDocument();
   });
 
-  it("scopes machine clients with expiry and explicit revocation", async () => {
+  it("never simulates credential mutation in the fixture workspace", async () => {
     const user = userEvent.setup();
     render(<App />);
     await user.click(screen.getByRole("button", { name: "系统设置" }));
     const context = screen.getByRole("complementary", { name: "治理上下文" });
     await user.click(within(context).getByRole("button", { name: /接口与集成/ }));
     const integrations = screen.getByRole("region", { name: "接口与集成" });
-
-    expect(within(integrations).getByText("已过期", { exact: true })).toBeVisible();
-    await user.click(within(integrations).getByRole("button", { name: "撤销客户端 Fluxale Production" }));
-    expect(within(integrations).getByText("已撤销", { exact: true })).toBeVisible();
-
-    await user.click(within(integrations).getByRole("button", { name: "创建客户端" }));
-    const dialog = screen.getByRole("dialog", { name: "创建客户端" });
-    expect(within(dialog).queryByText("工作区全量权限")).not.toBeInTheDocument();
-    expect(within(dialog).getByRole("checkbox", { name: "semantic.resolve" })).toBeChecked();
-    expect(within(dialog).getByRole("checkbox", { name: "semantic.execute" })).toBeChecked();
-    await user.type(within(dialog).getByLabelText("客户端名称"), "受限查询 Agent");
-    await user.click(within(dialog).getByRole("checkbox", { name: "semantic.execute" }));
-    await user.clear(within(dialog).getByLabelText("到期时间"));
-    await user.type(within(dialog).getByLabelText("到期时间"), "2027-01-31");
-    await user.click(within(dialog).getByRole("button", { name: "创建客户端" }));
-    await user.click(screen.getByRole("button", { name: "完成" }));
-    expect(within(integrations).getByText("受限查询 Agent")).toBeVisible();
-    expect(within(integrations).getByText("1 项权限")).toBeVisible();
-    expect(within(integrations).getByText("2027-01-31")).toBeVisible();
+    expect(within(integrations).queryByText("已过期", { exact: true })).not.toBeInTheDocument();
+    expect(within(integrations).getByRole("button", { name: "创建客户端" })).toBeDisabled();
+    expect(within(integrations).queryByRole("button", { name: /撤销客户端/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.queryByText("Prototype 数据环境")).not.toBeInTheDocument();
   });
 
-  it("blocks protected publish conflicts while preserving an independent publisher path", async () => {
+  it("does not label connected Integration Settings as a prototype", async () => {
+    const user = userEvent.setup();
+    render(<CatalogRuntimeProvider fixtureAssets={assets}><ProductApp session={authorSession} /></CatalogRuntimeProvider>);
+    await user.click(screen.getByRole("button", { name: "系统设置" }));
+    await user.click(within(screen.getByRole("complementary", { name: "治理上下文" })).getByRole("button", { name: /接口与集成/ }));
+    expect(screen.getByRole("region", { name: "接口与集成" })).toBeVisible();
+    expect(screen.queryByText("Prototype 管理页面")).not.toBeInTheDocument();
+    expect(screen.queryByText("接口客户端尚未接入 Alpha 后端；操作不会形成真实凭据。")).not.toBeInTheDocument();
+    expect(screen.queryByText("Prototype 数据环境")).not.toBeInTheDocument();
+  });
+
+  it("gates review decisions behind a mandatory reason with server-enforced separation of duty", async () => {
     const user = userEvent.setup();
     render(<App />);
     await user.click(screen.getByRole("button", { name: "变更与发布" }));
     await user.click(screen.getByRole("button", { name: "查看候选资产版本 客单价 @9" }));
     await user.click(screen.getByRole("button", { name: "审核候选版本 客单价 @9" }));
     const reviewDialog = screen.getByRole("dialog", { name: "审核 客单价 · @9" });
-    expect(within(reviewDialog).getByText("陈默 · Reviewer")).toBeVisible();
-    expect(reviewDialog).toHaveTextContent("发布者必须是独立主体");
-    await user.click(within(reviewDialog).getByRole("button", { name: "模拟批准版本" }));
-    await user.click(screen.getByRole("button", { name: "模拟发布 @9" }));
+    expect(within(reviewDialog).getByText("职责分离由服务端强制")).toBeVisible();
+    expect(within(reviewDialog).getByRole("button", { name: "批准版本" })).toBeDisabled();
+    expect(within(reviewDialog).getByRole("button", { name: "退回版本" })).toBeDisabled();
+    await user.type(within(reviewDialog).getByRole("textbox", { name: "审核意见" }), "退款口径变化需要财务确认。");
+    expect(within(reviewDialog).getByRole("button", { name: "批准版本" })).toBeEnabled();
+
+    await user.click(within(reviewDialog).getByRole("button", { name: "批准版本" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("评审已记录：批准");
+    await user.click(screen.getByRole("button", { name: "发布 @9" }));
     const publishDialog = screen.getByRole("dialog", { name: "发布客单价 @9" });
-    expect(within(publishDialog).getByRole("combobox", { name: "发布身份" })).toHaveValue("USR-PUBLISHER");
-    expect(within(publishDialog).getByText("陈默评审 · 周岚发布")).toBeVisible();
-    await user.selectOptions(within(publishDialog).getByRole("combobox", { name: "发布身份" }), "USR-REVIEWER");
-    expect(within(publishDialog).getByRole("alert")).toHaveTextContent("评审者与发布者必须相互独立");
-    expect(within(publishDialog).getByRole("button", { name: "确认模拟发布并生效" })).toBeDisabled();
+    expect(within(publishDialog).getByText("独立发布者由服务端强制")).toBeVisible();
+    expect(within(publishDialog).getByRole("button", { name: "确认发布并生效" })).toBeEnabled();
+  });
+
+  it("hides governance actions from principals without the matching capabilities", async () => {
+    const user = userEvent.setup();
+    const limitedSession: CapabilitySession = {
+      principalId: "EMP-LIMITED",
+      version: "authzv-2026.09.01-001",
+      capabilities: ["workspace.read", "asset.read", "asset.propose", "workspace.manage"],
+    };
+    render(<App session={limitedSession} />);
+    await user.click(screen.getByRole("button", { name: "变更与发布" }));
+    expect(screen.queryByRole("button", { name: /汇编批次/ })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "查看候选资产版本 客单价 @9" }));
+    expect(screen.queryByRole("button", { name: "审核候选版本 客单价 @9" })).not.toBeInTheDocument();
   });
 
   it("uses the workbench as an actionable queue instead of a duplicate status dashboard", async () => {
@@ -770,7 +977,7 @@ describe("Semlia product workspace", () => {
     await user.click(screen.getByRole("button", { name: "工作台" }));
     const context = screen.getByRole("complementary", { name: "治理上下文" });
     expect(within(context).queryByRole("button", { name: /^待办/ })).not.toBeInTheDocument();
-    expect(within(context).getAllByRole("button", { name: /打开待办详情/ })).toHaveLength(3);
+    expect(await within(context).findAllByRole("button", { name: /打开待办详情/ })).toHaveLength(3);
     await user.click(within(context).getByRole("button", { name: "搜索待办" }));
     expect(screen.getByRole("searchbox", { name: "搜索待办" })).toHaveFocus();
     expect(within(context).queryByRole("button", { name: /动态/ })).not.toBeInTheDocument();
@@ -780,7 +987,10 @@ describe("Semlia product workspace", () => {
     expect(screen.queryByRole("region", { name: "可信状态" })).not.toBeInTheDocument();
 
     await user.click(within(context).getByRole("button", { name: "打开待办详情 检查客户增长域运行异常" }));
-    expect(screen.getByRole("region", { name: "接入运行详情" })).toBeVisible();
+    const detail = await screen.findByRole("region", { name: "工作台待办详情" });
+    expect(within(detail).getByRole("region", { name: "服务端待办事实" })).toHaveTextContent("DISCOVERY_FAILED");
+    expect(within(detail).getByText("/sources?source=src_01arz3ndektsv4rrffq69g5fav")).toBeVisible();
+    expect(window.location.search).toContain("attentionItem=ati_01arz3ndektsv4rrffq69g5fax");
     expect(within(context).getByRole("button", { name: "打开待办详情 检查客户增长域运行异常" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("button", { name: "工作台" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("button", { name: "变更与发布" })).not.toHaveAttribute("aria-current", "page");
@@ -789,14 +999,15 @@ describe("Semlia product workspace", () => {
     await user.click(backToTasks);
     expect(screen.getByRole("region", { name: "工作台待办队列" })).toBeVisible();
 
-    await user.selectOptions(screen.getByRole("combobox", { name: "筛选待办风险" }), "高风险");
+    await user.selectOptions(screen.getByRole("combobox", { name: "筛选待办风险" }), "critical");
     const queue = screen.getByRole("region", { name: "工作台待办队列" });
-    expect(within(queue).getByRole("button", { name: /旧区域别名无法安全废弃/ })).toBeVisible();
+    expect(await within(queue).findByRole("button", { name: /旧区域别名无法安全废弃/ })).toBeVisible();
+    expect(document.querySelector(".workbench-queue-meta")).toHaveTextContent("服务端返回 1 / 1 项");
     expect(within(queue).queryByRole("button", { name: /确认客单价退款订单口径/ })).not.toBeInTheDocument();
 
-    await user.selectOptions(screen.getByRole("combobox", { name: "筛选待办风险" }), "全部风险");
-    await user.click(screen.getByRole("button", { name: /我发起 1/ }));
-    expect(within(queue).getByRole("button", { name: /补充净收入财务口径证据/ })).toBeVisible();
+    await user.selectOptions(screen.getByRole("combobox", { name: "筛选待办风险" }), "");
+    await user.click(screen.getByRole("button", { name: /我发起/ }));
+    expect(await within(queue).findByRole("button", { name: /补充净收入财务口径证据/ })).toBeVisible();
     expect(within(queue).queryByRole("button", { name: /旧区域别名无法安全废弃/ })).not.toBeInTheDocument();
   });
 
@@ -806,271 +1017,58 @@ describe("Semlia product workspace", () => {
 
     await user.click(screen.getByRole("button", { name: "变更与发布" }));
     expect(screen.queryByRole("button", { name: "比较版本" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "查看语义资产版本 净收入 @12" }));
-    await user.click(screen.getByRole("button", { name: "与 @11 比较" }));
+    await user.click(screen.getByRole("button", { name: "查看发布记录 @12 #6" }));
+    await user.click(screen.getByRole("button", { name: "查看差异基准" }));
 
-    const dialog = screen.getByRole("dialog", { name: "比较净收入版本" });
+    const dialog = screen.getByRole("dialog", { name: "发布差异基准" });
     expect(dialog).toBeVisible();
-    expect(within(dialog).getByText("净收入 · 上一版本")).toBeVisible();
-    expect(within(dialog).getByText("净收入 · 当前选择")).toBeVisible();
+    expect(within(dialog).getByText("与前一发布固定版本比较")).toBeVisible();
+    expect(within(dialog).getByText("与当前注册表比较")).toBeVisible();
+    expect(within(dialog).getAllByText("所选发布固定版本").length).toBeGreaterThan(0);
+    expect(within(dialog).getByText("fixture.release_manifest")).toBeVisible();
   });
 
   it("provides distinct, functional pages for data ingestion", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ code: "UNAVAILABLE", message: "source API unavailable" }, { status: 503 })));
     const user = userEvent.setup();
     render(<App />);
-    const context = screen.getByRole("complementary", { name: "治理上下文" });
-
     await user.click(screen.getByRole("button", { name: "数据接入" }));
-    const connectionSearch = screen.getByRole("searchbox", { name: "搜索数据来源" });
-    await user.type(connectionSearch, "PostgreSQL");
-    const sourceRegistry = screen.getByRole("tabpanel", { name: /数据库连接/ });
-    expect(within(sourceRegistry).getByText("PostgreSQL Analytics")).toBeVisible();
-    expect(within(sourceRegistry).getAllByText("元数据快照差异 · CDC 未配置").length).toBeGreaterThan(0);
-    expect(within(sourceRegistry).queryByText("Cube Commerce")).not.toBeInTheDocument();
-    await user.clear(connectionSearch);
-    await user.click(screen.getByRole("button", { name: "连接数据库" }));
-    const dialog = screen.getByRole("dialog", { name: "连接数据库" });
-    expect(within(dialog).getByRole("button", { name: "保存并建立基线" })).toBeDisabled();
-    const incrementalCapabilities = within(dialog).getByLabelText("数据库增量能力");
-    expect(incrementalCapabilities).toHaveTextContent("只读 Catalog");
-    expect(incrementalCapabilities).toHaveTextContent("SourceRevision 差异");
-    expect(incrementalCapabilities).toHaveTextContent("CDC 未配置");
-    await user.type(within(dialog).getByLabelText("连接名称"), "Finance Warehouse");
-    await user.type(within(dialog).getByLabelText("主机地址"), "finance.internal");
-    await user.type(within(dialog).getByLabelText("数据库名称"), "finance");
-    await user.type(within(dialog).getByLabelText("用户名"), "semlia_reader");
-    const passwordInput = within(dialog).getByLabelText("密码");
-    await user.type(passwordInput, "read-only-secret");
-    expect(passwordInput).toHaveAttribute("type", "password");
-    await user.click(within(dialog).getByRole("button", { name: "显示密码" }));
-    expect(passwordInput).toHaveAttribute("type", "text");
-    await user.click(within(dialog).getByRole("button", { name: "隐藏密码" }));
-    expect(passwordInput).toHaveAttribute("type", "password");
-    await user.click(within(dialog).getByRole("button", { name: "测试连接" }));
-    expect(await within(dialog).findByText("连接测试通过")).toBeVisible();
-    await user.click(within(dialog).getByRole("button", { name: "保存并建立基线" }));
-    expect(screen.getByText("Finance Warehouse")).toBeVisible();
-
-    await user.click(screen.getByRole("button", { name: "编辑 Finance Warehouse" }));
-    const editDialog = screen.getByRole("dialog", { name: "编辑数据库连接" });
-    const editName = within(editDialog).getByLabelText("连接名称");
-    await user.clear(editName);
-    await user.type(editName, "Finance Warehouse Updated");
-    await user.click(within(editDialog).getByRole("button", { name: "测试连接" }));
-    expect(await within(editDialog).findByText("连接测试通过")).toBeVisible();
-    await user.click(within(editDialog).getByRole("button", { name: "保存修改" }));
-    expect(screen.getByText("Finance Warehouse Updated")).toBeVisible();
-
-    await user.click(screen.getByRole("button", { name: "删除 Finance Warehouse Updated" }));
-    const deleteDialog = screen.getByRole("alertdialog", { name: "删除数据库连接" });
-    expect(within(deleteDialog).getByText("Finance Warehouse Updated")).toBeVisible();
-    await user.click(within(deleteDialog).getByRole("button", { name: "确认删除" }));
-    expect(screen.queryByText("Finance Warehouse Updated")).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("tab", { name: /文件导入/ }));
-    await user.click(screen.getByRole("button", { name: "重新导入 FY2026 营收目标" }));
-    const reimportDialog = screen.getByRole("dialog", { name: "导入文件" });
-    expect(within(reimportDialog).getByLabelText("导入方式")).toHaveValue("snapshot");
-    expect(within(reimportDialog).getByLabelText("目标来源")).toHaveValue("FY2026 营收目标");
-    await user.click(within(reimportDialog).getByRole("button", { name: "取消" }));
-
-    await user.click(screen.getByRole("button", { name: "导入文件" }));
-    const fileDialog = screen.getByRole("dialog", { name: "导入文件" });
-    expect(within(fileDialog).getByRole("button", { name: "导入并开始构建" })).toBeDisabled();
-    await user.selectOptions(within(fileDialog).getByLabelText("导入方式"), "snapshot");
-    expect(within(fileDialog).getByLabelText("目标来源")).toHaveValue("FY2026 营收目标");
-    expect(within(fileDialog).queryByLabelText("来源名称")).not.toBeInTheDocument();
-    await user.selectOptions(within(fileDialog).getByLabelText("导入方式"), "create");
-    expect(within(fileDialog).getByLabelText("来源名称")).toBeVisible();
-    await user.upload(within(fileDialog).getByLabelText("选择文件"), new File(["region,target\n华东,120"], "regional_targets.csv", { type: "text/csv" }));
-    await user.click(within(fileDialog).getByRole("button", { name: "检查文件" }));
-    expect(await within(fileDialog).findByText("文件检查通过")).toBeVisible();
-    await user.click(within(fileDialog).getByRole("button", { name: "导入并开始构建" }));
-    expect(screen.getByRole("tabpanel", { name: /文件导入/ })).toHaveTextContent("regional_targets");
-
-    await user.click(screen.getByRole("button", { name: "编辑 regional_targets" }));
-    const editFileDialog = screen.getByRole("dialog", { name: "编辑文件来源" });
-    expect(within(editFileDialog).getByLabelText("源文件")).toHaveValue("regional_targets.csv · 1 KB");
-    const editDatasetName = within(editFileDialog).getByLabelText("来源名称");
-    await user.clear(editDatasetName);
-    await user.type(editDatasetName, "区域经营目标");
-    await user.click(within(editFileDialog).getByRole("button", { name: "保存修改" }));
-    expect(screen.getByText("区域经营目标")).toBeVisible();
-
-    await user.click(screen.getByRole("button", { name: "删除 区域经营目标" }));
-    const deleteFileDialog = screen.getByRole("alertdialog", { name: "删除文件来源" });
-    expect(within(deleteFileDialog).getByText("区域经营目标")).toBeVisible();
-    await user.click(within(deleteFileDialog).getByRole("button", { name: "确认删除" }));
-    expect(screen.queryByText("区域经营目标")).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "导入文件" }));
-    const markdownDialog = screen.getByRole("dialog", { name: "导入文件" });
-    await user.upload(within(markdownDialog).getByLabelText("选择文件"), new File(["# 净收入\n\n净收入扣除全额退款。\n\n```sql\nselect 1\n```"], "metric_dictionary.md", { type: "text/markdown" }));
-    expect(within(markdownDialog).getByLabelText("分块方式")).toHaveValue("按标题层级");
-    expect(within(markdownDialog).getByLabelText("保留代码块")).toBeChecked();
-    expect(within(markdownDialog).queryByLabelText("字段分隔符")).not.toBeInTheDocument();
-    await user.click(within(markdownDialog).getByRole("button", { name: "检查文件" }));
-    expect(await within(markdownDialog).findByText("文件检查通过")).toBeVisible();
-    await user.click(within(markdownDialog).getByRole("button", { name: "导入并开始构建" }));
-    expect(screen.getByRole("tabpanel", { name: /文件导入/ })).toHaveTextContent("metric_dictionary");
-
-    await user.click(screen.getByRole("button", { name: "编辑 metric_dictionary" }));
-    const editMarkdownDialog = screen.getByRole("dialog", { name: "编辑文件来源" });
-    const markdownName = within(editMarkdownDialog).getByLabelText("来源名称");
-    await user.clear(markdownName);
-    await user.type(markdownName, "指标口径手册");
-    await user.selectOptions(within(editMarkdownDialog).getByLabelText("分块方式"), "按固定长度");
-    await user.click(within(editMarkdownDialog).getByRole("button", { name: "保存修改" }));
-    expect(await screen.findByText("指标口径手册")).toBeVisible();
-
-    await user.click(screen.getByRole("button", { name: "重新导入 指标口径手册" }));
-    const markdownVersionDialog = screen.getByRole("dialog", { name: "导入文件" });
-    expect(within(markdownVersionDialog).getByLabelText("目标来源")).toHaveValue("指标口径手册");
-    await user.upload(within(markdownVersionDialog).getByLabelText("选择文件"), new File(["# 净收入\n\n更新后的口径。"], "metric_dictionary.md", { type: "text/markdown" }));
-    await user.click(within(markdownVersionDialog).getByRole("button", { name: "检查文件" }));
-    expect(await within(markdownVersionDialog).findByText("文件检查通过", {}, { timeout: 2_000 })).toBeVisible();
-    await user.click(within(markdownVersionDialog).getByRole("button", { name: "导入新版本" }));
-    expect(screen.getByRole("tabpanel", { name: /文件导入/ })).toHaveTextContent("新版本");
-
+    expect(screen.getByRole("region", { name: "数据来源" })).toBeVisible();
+    expect(await screen.findByText("source API unavailable")).toBeVisible();
+    expect(screen.queryByText("PostgreSQL Analytics")).not.toBeInTheDocument();
+    const context = screen.getByRole("complementary", { name: "治理上下文" });
     await user.click(within(context).getByRole("button", { name: /接入自动化/ }));
-    expect(screen.getByRole("region", { name: "接入自动化列表" })).toBeVisible();
-    expect(within(context).queryByRole("button", { name: /构建运行/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "接入自动化" })).toBeVisible();
     await user.click(within(context).getByRole("button", { name: /接入运行/ }));
-    const runList = screen.getByRole("region", { name: "接入运行" });
-    expect(runList).toBeVisible();
-    expect(runList).toHaveTextContent("经营数据元数据同步");
-    expect(runList).toHaveTextContent("2,846 对象 · 12 项变化");
-    expect(runList).toHaveTextContent("数据库同步");
-    expect(runList).not.toHaveTextContent("候选版本");
-    expect(runList).not.toHaveTextContent("知识块");
-    const firstRunRow = within(runList).getByRole("button", { name: /查看运行 RUN-240824-1432/ });
-    expect(firstRunRow.querySelector(".build-run-list-id")).toHaveTextContent("RUN-240824-1432");
-    expect(firstRunRow.querySelector(".build-run-list-task")).toHaveTextContent("经营数据元数据同步");
-    expect(firstRunRow.querySelector(".build-run-list-time")).toHaveTextContent("2026-08-24 14:32:18");
-    expect(firstRunRow.querySelector(".build-run-list-mode")).toHaveTextContent("数据库同步");
-    expect(firstRunRow.querySelector(".build-run-list-duration")).toHaveTextContent("2 分 18 秒");
-    expect(screen.getByRole("searchbox", { name: "搜索接入运行" })).toHaveAttribute("placeholder", "搜索 Run ID、任务或来源");
-    expect(screen.getByText("这里只记录数据进入系统的过程")).toBeVisible();
-    await user.click(screen.getByRole("button", { name: /查看运行 RUN-240824-1432/ }));
-    const runDetail = screen.getByRole("region", { name: "接入运行详情" });
-    expect(within(runDetail).getByLabelText("元数据版本差异")).toBeVisible();
-    expect(within(runDetail).getByLabelText("元数据版本差异")).toHaveTextContent("3新增8修改1删除");
-    expect(runDetail).toHaveTextContent("schema:9f2e8a");
-    expect(within(runDetail).getByLabelText("接入阶段")).toHaveTextContent("触发下游");
-    expect(within(runDetail).queryByRole("group", { name: "运行结果关系图" })).not.toBeInTheDocument();
-    expect(within(runDetail).queryByRole("button", { name: /关联候选版本/ })).not.toBeInTheDocument();
-    await user.click(within(runDetail).getByRole("button", { name: "查看执行日志" }));
-    const runLogDialog = screen.getByRole("dialog", { name: "执行日志" });
-    expect(within(runLogDialog).getByRole("log", { name: "运行执行日志" })).toHaveTextContent("连接来源");
-    expect(within(runLogDialog).getByRole("log", { name: "运行执行日志" })).toHaveTextContent("RUN-240901-1208");
-    await user.click(within(runLogDialog).getByRole("button", { name: "关闭执行日志" }));
-    const backToRuns = screen.getByRole("button", { name: "返回接入运行" });
-    expect(backToRuns.closest(".topbar")).not.toBeNull();
-    await user.click(backToRuns);
     expect(screen.getByRole("region", { name: "接入运行" })).toBeVisible();
-    await user.click(screen.getByRole("button", { name: /查看运行 RUN-240824-1432/ }));
-    await user.click(within(screen.getByRole("region", { name: "接入运行详情" })).getByRole("button", { name: "打开下游运行" }));
-    expect(screen.getByRole("region", { name: "全局运行记录" })).toBeVisible();
-    const downstreamDialog = screen.getByRole("dialog", { name: "客户增长知识增量构建" });
-    expect(downstreamDialog).toHaveTextContent("上游接入 RUN-240824-1432");
+    expect(screen.queryByText("RUN-SESSION")).not.toBeInTheDocument();
   }, 15_000);
 
-  it("creates, edits, filters, pauses and deletes build tasks", async () => {
+  it("never substitutes prototype schedules when the schedule API fails", async () => {
+    const requests: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = input instanceof Request ? input.url : String(input);
+      requests.push(url);
+      const path = new URL(url).pathname;
+      if (path.endsWith("/schedules")) return Response.json({ code: "UNAVAILABLE", message: "schedule API unavailable" }, { status: 503 });
+      return Response.json({ items: path.endsWith("/sources") ? [{ id: "src_test", name: "Persisted source", sourceKind: "postgresql", status: "active", version: 1, host: "db", port: 5432, database: "analytics", username: "reader", sslMode: "require", credentialVersion: 1, createdAt: "2026-09-04T09:00:00Z", updatedAt: "2026-09-04T09:00:00Z" }] : [], page: { limit: 50, total: 1 } });
+    }));
     const user = userEvent.setup();
     render(<App />);
-    const context = screen.getByRole("complementary", { name: "治理上下文" });
-
     await user.click(screen.getByRole("button", { name: "数据接入" }));
-    await user.click(within(context).getByRole("button", { name: /接入自动化/ }));
-    const taskTable = screen.getByRole("region", { name: "接入自动化列表" });
-    expect(within(taskTable).getByText("经营数据元数据同步")).toBeVisible();
-    expect(within(taskTable).getAllByText("全量校准").length).toBeGreaterThan(0);
-    expect(within(taskTable).queryByText("src-ecommerce@9f2e8a")).not.toBeInTheDocument();
-    expect(within(taskTable).queryByRole("button", { name: /^(停用|启用) / })).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "异常" }));
-    expect(within(taskTable).getByText("客户增长源增量扫描")).toBeVisible();
-    expect(within(taskTable).queryByText("经营数据元数据同步")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /^全部/ }));
-
-    await user.click(screen.getByRole("button", { name: "新建构建任务" }));
-    const createDialog = screen.getByRole("dialog", { name: "新建构建任务" });
-    expect(createDialog.querySelector(".build-task-section-heading")).not.toBeInTheDocument();
-    expect(within(createDialog).queryByText("基本信息", { exact: true })).not.toBeInTheDocument();
-    expect(within(createDialog).queryByText("输入范围", { exact: true })).not.toBeInTheDocument();
-    expect(within(createDialog).queryByText("运行策略", { exact: true })).not.toBeInTheDocument();
-    const enabledToggle = within(createDialog).getByLabelText("启用任务");
-    expect(enabledToggle).toBeChecked();
-    expect(enabledToggle.closest("header")).toHaveClass("build-task-dialog-header");
-    expect(within(createDialog).getByRole("radio", { name: /元数据增量/ })).toBeChecked();
-    expect(within(createDialog).getByRole("button", { name: "查看元数据增量说明" })).toBeVisible();
-    const modeHelp = within(createDialog).getByRole("tooltip");
-    expect(modeHelp).toHaveTextContent("元数据快照，不是业务数据快照");
-    expect(modeHelp).toHaveTextContent("失败运行不会推进 checkpoint");
-    expect(within(createDialog).queryByText("保存任务配置，不会立即发起构建。")).not.toBeInTheDocument();
-    expect(within(createDialog).queryByText("识别这项持续构建工作")).not.toBeInTheDocument();
-    expect(within(createDialog).queryByText("所选来源内有权限读取的对象均参与构建")).not.toBeInTheDocument();
-    expect(within(createDialog).queryByText("定义每次构建的处理方式与触发时机")).not.toBeInTheDocument();
-    expect(within(createDialog).queryByRole("combobox", { name: "对象范围" })).not.toBeInTheDocument();
-    expect(within(createDialog).getByRole("button", { name: "创建任务" })).toBeDisabled();
-    await user.type(within(createDialog).getByLabelText("任务名称"), "区域目标知识构建");
-    expect(within(createDialog).getByRole("button", { name: "创建任务" })).toBeDisabled();
-    await user.click(within(createDialog).getByRole("button", { name: /选择数据来源/ }));
-    expect(within(createDialog).getByRole("searchbox", { name: "搜索可用数据来源" })).toBeVisible();
-    await user.click(within(createDialog).getByRole("checkbox", { name: "选择数据来源 PostgreSQL Analytics" }));
-    await user.click(within(createDialog).getByRole("button", { name: "完成选择" }));
-    await user.click(within(createDialog).getByRole("radio", { name: /全量校准/ }));
-    await user.click(within(createDialog).getByRole("radio", { name: "定时调度" }));
-    await user.selectOptions(within(createDialog).getByLabelText("计划模板"), "0 9 * * 1-5");
-    expect(within(createDialog).getByLabelText("Cron 表达式")).toHaveValue("0 9 * * 1-5");
-    expect(createDialog.querySelector(".build-schedule-preview")).not.toBeInTheDocument();
-    expect(createDialog.querySelector(".build-task-toggle")).not.toBeInTheDocument();
-    await user.clear(within(createDialog).getByLabelText("Cron 表达式"));
-    expect(within(createDialog).getByRole("button", { name: "创建任务" })).toBeDisabled();
-    await user.type(within(createDialog).getByLabelText("Cron 表达式"), "30 3 * * 1-5");
-    await user.selectOptions(within(createDialog).getByLabelText("调度时区"), "UTC");
-    await user.click(within(createDialog).getByRole("button", { name: "创建任务" }));
-    expect(within(taskTable).getByText("区域目标知识构建")).toBeVisible();
-
-    await user.click(within(taskTable).getByRole("button", { name: "编辑 区域目标知识构建" }));
-    const editDialog = screen.getByRole("dialog", { name: "编辑构建任务" });
-    expect(within(editDialog).getByRole("radio", { name: "定时调度" })).toBeChecked();
-    expect(within(editDialog).getByLabelText("Cron 表达式")).toHaveValue("30 3 * * 1-5");
-    expect(within(editDialog).getByLabelText("调度时区")).toHaveValue("UTC");
-    const taskName = within(editDialog).getByLabelText("任务名称");
-    await user.clear(taskName);
-    await user.type(taskName, "区域目标增量构建");
-    await user.click(within(editDialog).getByLabelText("启用任务"));
-    await user.click(within(editDialog).getByRole("button", { name: "保存修改" }));
-    expect(within(taskTable).getByText("区域目标增量构建")).toBeVisible();
-    const editedTaskRow = within(taskTable).getByText("区域目标增量构建").closest(".build-task-row");
-    expect(editedTaskRow).not.toBeNull();
-    expect(within(editedTaskRow as HTMLElement).getByText("停用")).toBeVisible();
-    expect(within(editedTaskRow as HTMLElement).getByRole("button", { name: "运行 区域目标增量构建" })).toBeDisabled();
-
-    await user.click(within(taskTable).getByRole("button", { name: "删除 区域目标增量构建" }));
-    const deleteDialog = screen.getByRole("alertdialog", { name: "删除构建任务" });
-    await user.click(within(deleteDialog).getByRole("button", { name: "确认删除" }));
-    expect(within(taskTable).queryByText("区域目标增量构建")).not.toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "查看来源 Persisted source" })).toBeVisible();
+    await user.click(within(screen.getByRole("complementary", { name: "治理上下文" })).getByRole("button", { name: /接入自动化/ }));
+    expect(screen.getByRole("region", { name: "接入自动化" })).toBeVisible();
+    expect((await screen.findAllByText(/schedule API unavailable/)).length).toBeGreaterThan(0);
+    expect(requests.some(url => url.includes("/sources/src_test/schedules"))).toBe(true);
+    expect(screen.queryByText("经营数据元数据同步")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "新建构建任务" })).not.toBeInTheDocument();
   }, 15_000);
 
-  it("completes the governed lifecycle from discovery to feedback", async () => {
+  it("completes review, publish and compatibility feedback using API facts", async () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "数据接入" }));
-    expect(screen.getByRole("searchbox", { name: "搜索数据来源" })).toBeVisible();
-    const context = screen.getByRole("complementary", { name: "治理上下文" });
-    await user.click(within(context).getByRole("button", { name: /接入自动化/ }));
-    const taskTable = screen.getByRole("region", { name: "接入自动化列表" });
-    expect(taskTable).toBeVisible();
-    await user.click(within(taskTable).getByRole("button", { name: "运行 经营数据元数据同步" }));
-    expect(screen.getAllByText("运行中").length).toBeGreaterThan(1);
-    expect(await within(taskTable).findByText("已完成")).toBeVisible();
-    await user.click(within(context).getByRole("button", { name: /接入运行/ }));
-    const ingressRuns = screen.getByRole("region", { name: "接入运行" });
-    expect(ingressRuns).not.toHaveTextContent("RUN-SESSION");
-    expect(ingressRuns).not.toHaveTextContent("知识增量构建");
     await user.click(screen.getByRole("button", { name: "变更与发布" }));
     expect(within(screen.getByRole("complementary", { name: "治理上下文" })).queryByRole("button", { name: "搜索资产、变更与功能" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "查看候选资产版本 客单价 @9" }));
@@ -1079,23 +1077,35 @@ describe("Semlia product workspace", () => {
     expect(document.querySelector(".governance-detail-commandbar")).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "客单价 @9 候选资产版本详情" })).toHaveTextContent("版本范围");
     await user.click(screen.getByRole("button", { name: "审核候选版本 客单价 @9" }));
-    await user.click(within(screen.getByRole("dialog", { name: "审核 客单价 · @9" })).getByRole("button", { name: "模拟批准版本" }));
-    await user.click(screen.getByRole("button", { name: "模拟发布 @9" }));
-    await user.click(within(screen.getByRole("dialog", { name: "发布客单价 @9" })).getByRole("button", { name: "确认模拟发布并生效" }));
-    expect(screen.getByText(/release-2026\.08\.4-session/)).toBeVisible();
+    const lifecycleDialog = screen.getByRole("dialog", { name: "审核 客单价 · @9" });
+    await user.type(within(lifecycleDialog).getByRole("textbox", { name: "审核意见" }), "口径变化已确认，可以发布。");
+    await user.click(within(lifecycleDialog).getByRole("button", { name: "批准版本" }));
+    await user.click(await screen.findByRole("button", { name: "发布 @9" }));
+    await user.click(within(screen.getByRole("dialog", { name: "发布客单价 @9" })).getByRole("button", { name: "确认发布并生效" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("发布完成：批次 rls_fixture_0007 · 序列 #7");
 
     await user.click(backToVersions);
-    await user.click(screen.getByRole("button", { name: "查看语义资产版本 净收入 @12" }));
-    expect(screen.getByRole("heading", { name: "使用这个资产版本的应用" })).toBeVisible();
-    expect(screen.getByText("Fluxale Production")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "查看发布记录 @12 #6" }));
+    const release = screen.getByRole("region", { name: /发布 #6 详情/ });
+    expect(release).toBeVisible();
+    expect(within(release).getByText("服务端消费影响")).toBeVisible();
+    expect(within(release).queryByText("Fluxale Production")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "工作台" }));
     await user.click(within(screen.getByRole("complementary", { name: "治理上下文" })).getByRole("button", { name: "打开待办详情 旧区域别名无法安全废弃" }));
-    expect(screen.getByRole("region", { name: "业务区域 @4 候选资产版本详情" })).toBeVisible();
+    const attentionDetail = await screen.findByRole("region", { name: "工作台待办详情" });
+    expect(within(attentionDetail).getByText("SEMANTIC_QUERY_REFUSED")).toBeVisible();
     expect(screen.getByRole("button", { name: "工作台" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("button", { name: "变更与发布" })).not.toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("button", { name: "返回待办" }).closest(".topbar")).not.toBeNull();
-    await user.click(screen.getByRole("tab", { name: /变更来源.*1/ }));
-    expect(screen.getByRole("heading", { name: "包含的变更事项" })).toBeVisible();
+    await user.click(within(attentionDetail).getByRole("button", { name: "处理兼容性" }));
+    const compatibility = await screen.findByRole("region", { name: "兼容性影响详情" });
+    expect(compatibility).toHaveTextContent("服务端拒绝与绑定事实");
+    expect(compatibility).not.toHaveTextContent("Fixture target");
+    expect(compatibility).toHaveTextContent("csm_01arz3ndektsv4rrffq69g5fav");
+    expect(compatibility).toHaveTextContent("cbd_01arz3ndektsv4rrffq69g5fav");
+    expect(compatibility).toHaveTextContent("smq_01arz3ndektsv4rrffq69g5fav");
+    expect(window.location.pathname).toBe("/delivery/compatibility");
+    expect(screen.queryByRole("region", { name: "工作台待办详情" })).not.toBeInTheDocument();
   }, 15_000);
 });

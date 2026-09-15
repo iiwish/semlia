@@ -1,22 +1,24 @@
 import { CatalogEntryState } from "./CatalogControls";
 import { CatalogRuntimeProvider, useCatalogRuntime } from "./catalogRuntime";
 import { ProductApp } from "./ProductApp";
+import { SessionEntryState, SessionRuntimeProvider, useSessionRuntime } from "./sessionRuntime";
 import { StatusView } from "./StatusView";
-import { assets as previewAssets } from "./data";
 import "./styles.css";
 
 export function App() {
   if (window.location.pathname === "/status") return <StatusView />;
-  return (
-    <CatalogRuntimeProvider fixtureAssets={import.meta.env.VITE_CATALOG_FIXTURE === "1" ? previewAssets : undefined}>
-      <CatalogApplication />
-    </CatalogRuntimeProvider>
-  );
+  return <SessionRuntimeProvider><SessionApplication /></SessionRuntimeProvider>;
 }
 
-function CatalogApplication() {
+function SessionApplication() {
+  const runtime = useSessionRuntime();
+  if (runtime.phase !== "authenticated" || !runtime.session || !runtime.activeWorkspace) return <SessionEntryState />;
+  return <CatalogRuntimeProvider><CatalogApplication session={runtime.capabilitySession} /></CatalogRuntimeProvider>;
+}
+
+function CatalogApplication({ session }: { session?: import("./types").CapabilitySession }) {
   const runtime = useCatalogRuntime();
   const entry = <CatalogEntryState />;
-  if (!runtime.workspaceId || (!runtime.loading && runtime.assets.length === 0 && !runtime.query) || (runtime.loading && runtime.workspaces.length === 0) || (runtime.error && !runtime.workspaceId)) return entry;
-  return <ProductApp key={runtime.workspaceId} />;
+  if (!runtime.workspaceId || (runtime.loading && runtime.workspaces.length === 0)) return entry;
+  return <ProductApp key={runtime.workspaceId} session={session} />;
 }

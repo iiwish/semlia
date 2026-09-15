@@ -1,0 +1,192 @@
+import { act, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, vi } from "vitest";
+
+import { assets } from "./data";
+import type { DiscoveryRun, SemanticCandidate, SourceConnection, SourceDiscoveryRun } from "./discovery";
+import { LiveSourcesView } from "./LiveSourcesView";
+
+const workspaceId = "wsp_01arz3ndektsv4rrffq69g5fav";
+
+const mocks = vi.hoisted(() => ({
+  listSources: vi.fn(),
+  createSource: vi.fn(),
+  updateSource: vi.fn(),
+  deleteSource: vi.fn(),
+  rotateSourceCredential: vi.fn(),
+  testSourceConnection: vi.fn(),
+  listSourceRuns: vi.fn(),
+  startSourceRun: vi.fn(),
+  getDiscoveryRun: vi.fn(),
+  listSemanticCandidates: vi.fn(),
+  decideSemanticCandidate: vi.fn(),
+  createAndSubmitProposal: vi.fn(),
+  ensureAsset: vi.fn(),
+  allowed: new Set(["source.read", "source.manage", "ingestion.run", "asset.propose"]),
+  listArtifacts: vi.fn(),
+  stageArtifact: vi.fn(),
+  finalizeArtifactSet: vi.fn(),
+  registerSQL: vi.fn(),
+  getArtifactSet: vi.fn(),
+  listSchedules: vi.fn(),
+  createSchedule: vi.fn(),
+  runScheduleNow: vi.fn(),
+  listOccurrences: vi.fn(),
+}));
+
+vi.mock("./ingestion", async (importOriginal) => ({ ...await importOriginal<typeof import("./ingestion")>(), ingestionApi: {
+  listArtifacts: mocks.listArtifacts, stageArtifact: mocks.stageArtifact, finalizeArtifactSet: mocks.finalizeArtifactSet,
+  registerSQL: mocks.registerSQL, getArtifactSet: mocks.getArtifactSet, listSchedules: mocks.listSchedules,
+  createSchedule: mocks.createSchedule, runScheduleNow: mocks.runScheduleNow, listOccurrences: mocks.listOccurrences,
+} }));
+
+vi.mock("./discovery", async (importOriginal) => ({
+  ...await importOriginal<typeof import("./discovery")>(),
+  listSources: mocks.listSources,
+  createSource: mocks.createSource,
+  updateSource: mocks.updateSource,
+  deleteSource: mocks.deleteSource,
+  rotateSourceCredential: mocks.rotateSourceCredential,
+  testSourceConnection: mocks.testSourceConnection,
+  listSourceRuns: mocks.listSourceRuns,
+  startSourceRun: mocks.startSourceRun,
+  getDiscoveryRun: mocks.getDiscoveryRun,
+  listSemanticCandidates: mocks.listSemanticCandidates,
+  decideSemanticCandidate: mocks.decideSemanticCandidate,
+}));
+
+vi.mock("./catalogRuntime", () => ({
+  useCatalogRuntime: () => ({ workspaceId, assets, ensureAsset: mocks.ensureAsset }),
+}));
+
+vi.mock("./catalog", () => ({
+  getAsset: vi.fn(async (_workspaceId: string, assetId: string) => {
+    const asset = assets.find((item) => item.id === assetId)!;
+    return {
+      id: asset.id,
+      address: `${asset.identity.namespace}.${asset.key}`,
+      assetType: "metric",
+      lifecycleState: "active",
+      currentRevisionId: asset.revisionRecord.revisionId,
+      title: asset.name,
+      summary: asset.definition,
+      createdAt: "2026-09-04T08:00:00Z",
+      updatedAt: "2026-09-04T08:00:00Z",
+      relationCount: 0,
+      currentRevision: {
+        id: asset.revisionRecord.revisionId,
+        assetId: asset.id,
+        sequence: asset.revisionRecord.sequence,
+        schemaVersion: asset.revisionRecord.schemaVersion,
+        contentDigest: asset.revisionRecord.contentHash,
+        content: { definition: asset.definition },
+        createdBy: "fixture",
+        createdAt: "2026-09-04T08:00:00Z",
+        evidence: [],
+      },
+    };
+  }),
+}));
+
+vi.mock("./governanceRuntime", () => ({
+  useGovernanceRuntime: () => ({ createAndSubmitProposal: mocks.createAndSubmitProposal }),
+}));
+
+vi.mock("./authorization", () => ({ useCan: (action: string) => mocks.allowed.has(action) }));
+
+const source: SourceConnection = {
+  id: "src_01arz3ndektsv4rrffq69g5fav",
+  name: "Alpha Warehouse",
+  sourceKind: "postgresql",
+  version: 4,
+  adapterKind: "postgresql_catalog",
+  host: "warehouse.internal",
+  port: 5432,
+  database: "analytics",
+  username: "metadata_ro",
+  sslMode: "require",
+  artifactPaths: [],
+  status: "active",
+  credentialVersion: 2,
+  createdAt: "2026-09-04T08:00:00Z",
+  updatedAt: "2026-09-04T08:00:00Z",
+};
+
+const run: SourceDiscoveryRun = {
+  id: "run_01arz3ndektsv4rrffq69g5fav",
+  sourceConnectionId: source.id,
+  operationsPath: "/operations/runtime?run=run_01arz3ndektsv4rrffq69g5fav",
+  credentialVersion: 2,
+  status: "degraded",
+  stats: { datasets: 8, fields: 42 },
+  createdAt: "2026-09-04T08:10:00Z",
+  updatedAt: "2026-09-04T08:12:00Z",
+};
+
+const candidate: SemanticCandidate = {
+  id: "scd_01arz3ndektsv4rrffq69g5fav",
+  sourceConnectionId: source.id,
+  sourceRevisionId: "srv_01arz3ndektsv4rrffq69g5fav",
+  discoveryRunId: run.id,
+  candidateKey: "entity:public.orders",
+  candidateKind: "entity",
+  title: "public.orders",
+  proposalInput: { qualifiedName: "public.orders", fields: [{ name: "order_id" }] },
+  evidence: [{ locator: "postgresql://catalog/public.orders" }],
+  contentDigest: `sha256:${"a".repeat(64)}`,
+  status: "pending",
+  createdAt: "2026-09-04T08:12:00Z",
+  updatedAt: "2026-09-04T08:12:00Z",
+};
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.allowed = new Set(["source.read", "source.manage", "ingestion.run", "asset.propose"]);
+  mocks.listArtifacts.mockResolvedValue({ items: [], total: 0, limit: 50 });
+  mocks.listSchedules.mockResolvedValue({ items: [], total: 0, limit: 50 });
+  mocks.listOccurrences.mockResolvedValue({ items: [], total: 0, limit: 50 });
+  mocks.listSources.mockResolvedValue({ items: [source], total: 1, limit: 50 });
+  mocks.listSourceRuns.mockResolvedValue({ items: [run], total: 1, limit: 50 });
+  mocks.listSemanticCandidates.mockResolvedValue({ items: [candidate], total: 1, limit: 50 });
+  mocks.ensureAsset.mockResolvedValue(undefined);
+  mocks.testSourceConnection.mockResolvedValue(undefined);
+});
+
+
+describe("acceptance counterexamples", () => {
+  it("does not create a second proposal after closing an association failure", async () => {
+    const user = userEvent.setup();
+    mocks.createAndSubmitProposal.mockResolvedValue({ id: "prp_first" });
+    mocks.decideSemanticCandidate.mockRejectedValue(new Error("association unavailable"));
+    render(<LiveSourcesView focusIndex={2} runDetailBackRequestEpoch={0} onRunDetailOpenChange={() => {}} onOpenProposal={() => {}} />);
+    await user.click(await screen.findByRole("tab", { name: /语义候选/ }));
+    const submit = async () => {
+      await user.click(screen.getByRole("button", { name: `查看语义候选 ${candidate.title}` }));
+      await user.selectOptions(screen.getByLabelText("目标语义资产"), assets[0].id);
+      await user.clear(screen.getByLabelText("候选定义"));
+      await user.type(screen.getByLabelText("候选定义"), "Reviewed definition");
+      await user.type(screen.getByLabelText("候选决策依据"), "Reviewed fields");
+      await user.click(screen.getByRole("button", { name: "创建并提交提案" }));
+      await screen.findByRole("alert");
+    };
+    await submit();
+    await user.click(screen.getByRole("button", { name: `关闭${candidate.title}` }));
+    await submit();
+    expect(mocks.createAndSubmitProposal).toHaveBeenCalledTimes(1);
+  });
+  it("refreshes candidates when a newly scheduled run is opened completed", async () => {
+    const user = userEvent.setup();
+    const newRunId = "run_new";
+    const newRevision = "srv_new";
+    const schedule = { id: "sch_test", sourceId: source.id, expression: "0 2 * * *", timezone: "Asia/Shanghai", enabled: true, version: 1, misfirePolicy: "skip", createdAt: source.createdAt, updatedAt: source.updatedAt };
+    mocks.listSchedules.mockResolvedValue({ items: [schedule], total: 1, limit: 50 });
+    mocks.listOccurrences.mockResolvedValue({ items: [{ id: "occ_test", scheduleId: schedule.id, sourceId: source.id, eligibleAt: run.createdAt, triggerKind: "cron", state: "enqueued", discoveryRunId: newRunId, runtimeRunId: newRunId }], total: 1, limit: 50 });
+    mocks.getDiscoveryRun.mockResolvedValue({ ...run, id: newRunId, status: "succeeded", sourceRevisionId: newRevision, adapterVersion: "v1", findings: [] });
+    render(<LiveSourcesView focusIndex={1} runDetailBackRequestEpoch={0} onRunDetailOpenChange={() => {}} onOpenProposal={() => {}} />);
+    await user.click(await screen.findByRole("button", { name: "查看计划 sch_test" }));
+    mocks.listSemanticCandidates.mockResolvedValue({ items: [{ ...candidate, id: "scd_new", title: "new.results", discoveryRunId: newRunId, sourceRevisionId: newRevision }], total: 1, limit: 50 });
+    await user.click(await screen.findByRole("button", { name: "打开运行" }));
+    expect(await screen.findByRole("button", { name: /new.results/ })).toBeVisible();
+  });
+});
+

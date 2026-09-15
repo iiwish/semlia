@@ -1,0 +1,21 @@
+{
+  "command": [
+    "docker",
+    "inspect",
+    "03506fdaf9fa",
+    "--format",
+    "{{json .Config.Labels}} {{.Created}} {{.Config.Image}} {{.State.Status}}"
+  ],
+  "clearedEnvironment": [
+    "SEMLIA_INGESTION_TEST_DATABASE_URL",
+    "SEMLIA_EXECUTION_CRASH_HELPER",
+    "SEMLIA_EXECUTION_TEST_DB",
+    "SEMLIA_DATABASE_URL"
+  ],
+  "start": "2026-09-09T08:20:55.603Z",
+  "end": "2026-09-09T08:20:55.752Z",
+  "exitStatus": 0,
+  "signal": null,
+  "stdout": "{\"org.testcontainers\":\"true\",\"org.testcontainers.lang\":\"go\",\"org.testcontainers.reap\":\"true\",\"org.testcontainers.sessionId\":\"e7243efefdefd443120283e7275d98d02561d07ff2158d3715598d4f70925bdb\",\"org.testcontainers.version\":\"0.44.0\"} 2026-09-09T07:46:39.710269585Z postgres:18-alpine created\n",
+  "stderr": ""
+}

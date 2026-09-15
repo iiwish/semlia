@@ -1,0 +1,297 @@
+schema_version: 1
+packet_id: FMB-T003-A003
+task_id: FMB-T003
+feature_id: full-menu-beta
+mode: execute_one_task
+status: Completed
+adapter: agent-neutral
+
+governance_inputs:
+  constitution:
+    - AGENTS.md
+    - docs/SSOT.md
+  product_contract: docs/specs/full-menu-beta/spec.md
+  requirements_checklist: docs/specs/full-menu-beta/checklists/requirements.md
+  technical_decisions: docs/specs/full-menu-beta/technology-decision-record.md
+  data_model: docs/specs/full-menu-beta/data-model.md
+  feature_plan: docs/specs/full-menu-beta/plan.md
+  work_graph: docs/specs/full-menu-beta/tasks.md
+  analysis: docs/specs/full-menu-beta/analysis.md
+  approval_gates:
+    product_scope: Confirmed by founder on 2026-09-04
+    technical_plan_and_work_graph: Confirmed by founder on 2026-09-04
+    continuous_execution: Approved through FMB-T007 without per-task approval pauses
+    dependency_gate: Satisfied by FMB-T001 A003 evidence and independent review on 2026-09-05
+    retry_reason: Independent A002 review found stale Playwright assertions, export replay/command-truth, deployment wiring, typography and cursor-validation gaps
+
+work_unit:
+  title: Audit and Runtime common foundation
+  goal: >-
+    Add a redacted, cursor-paged Audit contract plus normalized durable Runtime runs/events and
+    bounded workspace runtime settings so later ingestion, embedding, webhook and execution work is
+    observable without exposing internal job/outbox payloads or replacing domain write models.
+  epic: FMB-E001
+  story: FMB-US-003
+  requirements:
+    - FR-001
+    - FR-004
+    - FR-005
+    - NFR-001
+    - NFR-002
+    - NFR-003
+    - NFR-004
+  priority: P0
+  depends_on:
+    - FMB-T001 Needs_Review or Accepted
+  blocks:
+    - FMB-T002
+    - FMB-T004
+    - FMB-T005
+    - FMB-T006
+  parallel: false
+  conflicts_with:
+    - FMB-T002 when editing api/openapi/semlia.v1.yaml, generated contracts, internal/platform/http/handler.go, web/src/ProductApp.tsx or web/src/styles.css
+    - FMB-T004 through FMB-T006 when editing jobs, worker routing, sqlc output, readiness or shared Operations contracts
+
+codebase_context:
+  local_instructions:
+    - AGENTS.md
+  relevant_files:
+    - api/openapi/semlia.v1.yaml
+    - migrations/000001_m0_foundation.up.sql
+    - migrations/000004_usage_events.up.sql
+    - db/queries/audit.sql
+    - db/queries/discovery.sql
+    - db/queries/distribution.sql
+    - db/queries/governance.sql
+    - db/queries/jobs.sql
+    - db/queries/outbox.sql
+    - internal/application/jobs/types.go
+    - internal/application/jobs/worker.go
+    - internal/application/jobs/router.go
+    - internal/application/usage/service.go
+    - internal/adapters/postgres/store.go
+    - internal/adapters/postgres/usage.go
+    - internal/platform/http/handler.go
+    - cmd/semlia/main.go
+    - cmd/semlia/readiness.go
+    - web/src/AuditRuntimeView.tsx
+    - web/src/ProductApp.tsx
+  existing_patterns:
+    - Audit events are immutable attributable facts; usage and OpenTelemetry have separate responsibilities.
+    - Jobs use leases, attempts, idempotency keys and terminal state; outbox delivery is a separate queue.
+    - Domain-specific discovery, validation, Agent and semantic records remain payload authority.
+    - HTTP lists use workspace authorization, stable TypeIDs and bounded pagination.
+    - Deployment-owned trust settings are read from configuration and are not mutable workspace data.
+  runtime_projection_contract:
+    - Runtime kind includes semantic_resolution for the persisted semantic_queries owner; query validation may project as a validation subtype.
+    - runtime_runs normalizes source type/id, nullable job and trace links, idempotency, requester, attempts, state, phase, progress, timestamps and redacted error metadata with a source-version digest.
+    - runtime_run_events is append-only, monotonically sequence ordered and bounded; it stores only safe redacted fields and never copies raw job payloads or provider bodies.
+    - Runtime write ownership remains in the originating domain; projection updates are idempotent.
+    - Retry and cancellation are advertised only when the owning handler implements safe semantics.
+    - runtime_settings contains only retry ceiling, statement/webhook timeout, query row/byte limits and run-metadata retention as bounded future-run defaults.
+    - Worker concurrency, OTel endpoints, OIDC, encryption roots and audit retention remain deployment-owned and read-only in Web.
+    - audit_exports stores bounded export metadata and artifact identity; export content is generated from the same authorized redacted filter as Audit list.
+    - Migration 000017 also creates the confirmed attention_items storage contract, including initiator_principal_id and rule_version; FMB-T002 owns its rules, API and UI behavior.
+
+execution_constraints:
+  branch_or_worktree: current shared worktree
+  coordination: >-
+    The orchestrator must serialize T003 against T002 on shared OpenAPI, generated contract, HTTP,
+    ProductApp and styles files. It must also serialize T003 worker/sqlc/readiness edits against
+    T004-T006. No two attempts may modify those shared files concurrently.
+  allowed_files:
+    - api/openapi/semlia.v1.yaml
+    - api/gen/go/types.gen.go
+    - sdk/typescript/src/schema.gen.ts
+    - sdk/typescript/src/client.ts
+    - sdk/typescript/src/client.test.ts
+    - sdk/typescript/src/index.ts
+    - migrations/000017_fmb_operations_runtime.up.sql
+    - migrations/000017_fmb_operations_runtime.down.sql
+    - db/sqlc.yaml
+    - db/queries/audit.sql
+    - db/queries/jobs.sql
+    - db/queries/operations.sql
+    - internal/adapters/postgres/operations.go
+    - internal/adapters/postgres/discovery.go
+    - internal/adapters/postgres/source_discovery.go
+    - internal/adapters/postgres/governance.go
+    - internal/adapters/postgres/distribution.go
+    - internal/adapters/postgres/store.go
+    - internal/adapters/postgres/sqlc/**
+    - internal/domain/operations/**
+    - internal/application/operations/**
+    - internal/application/jobs/types.go
+    - internal/application/jobs/worker.go
+    - internal/application/jobs/worker_test.go
+    - internal/application/jobs/router.go
+    - internal/application/jobs/router_test.go
+    - internal/platform/config/**
+    - internal/platform/http/catalog.go
+    - internal/platform/http/governance.go
+    - internal/platform/http/handler.go
+    - internal/platform/http/handler_test.go
+    - internal/platform/http/operations.go
+    - internal/platform/http/operations_test.go
+    - cmd/semlia/main.go
+    - cmd/semlia/main_test.go
+    - cmd/semlia/readiness.go
+    - cmd/semlia/readiness_test.go
+    - pkg/identity/id.go
+    - pkg/identity/id_test.go
+    - web/src/AuditRuntimeView.tsx
+    - web/src/AuditRuntimeView.test.tsx
+    - web/src/operations.ts
+    - web/src/operations.test.ts
+    - web/src/operationsRuntime.tsx
+    - web/src/operationsRuntime.test.tsx
+    - web/src/ProductApp.tsx
+    - web/src/ProductApp.test.tsx
+    - web/src/types.ts
+    - web/src/styles.css
+    - web/e2e/product-journey.spec.ts
+    - web/e2e/system-status.spec.ts
+    - tests/contracts/**
+    - tests/integration/operations/**
+    - tests/integration/worker/**
+    - tests/integration/db/**
+    - docs/operations/**
+    - docs/evidence/FMB-T003/**
+  test_targets:
+    - internal/domain/operations/**
+    - internal/application/operations/**
+    - internal/application/jobs/**
+    - internal/platform/http/handler_test.go
+    - tests/integration/operations/**
+    - tests/integration/worker/**
+    - tests/integration/db/**
+    - web/src/AuditRuntimeView.test.tsx
+    - web/src/ProductApp.test.tsx
+    - web/e2e/product-journey.spec.ts
+    - web/e2e/system-status.spec.ts
+  ownership_notes:
+    - FMB-T003 exclusively owns migration 000017 and the schema/read-model foundation used by FMB-T002.
+    - Globs cover new focused modules/tests and generated sqlc output; they do not authorize unrelated refactors.
+    - Existing discovery, governance and distribution adapter/query files may change only to publish the operations projection in the owning transaction; Operations must not absorb their write models.
+    - The worker does not edit plan.md, tasks.md, packets or another task's evidence.
+
+forbidden_changes:
+  - Do not expose raw jobs.payload, outbox payloads, provider responses, prompts, DSNs, credentials or fact rows.
+  - Do not treat audit, usage and OpenTelemetry as interchangeable stores.
+  - Do not make immutable audit rows editable or deletable by application users.
+  - Do not let workspace settings redirect OTel, outbound traffic, secret roots, OIDC or database configuration.
+  - Do not invent progress percentages, phases, timestamps, logs, actors or outcomes absent from persisted records.
+  - Do not advertise retry or cancel for a run kind without an owning-domain safety contract.
+  - Do not implement Workbench rules/UI, ingestion, embedding, webhook or execution behavior.
+  - Do not modify shared conflict files while FMB-T002 or a later task owns them.
+  - Do not edit historical migrations 000001 through 000016.
+
+tdd_plan:
+  required: true
+  exception: null
+  red:
+    command: >-
+      go test ./internal/application/jobs/... ./internal/application/usage/...
+      ./internal/platform/http/... ./tests/integration/worker/... ./tests/integration/db/... &&
+      pnpm --dir web test -- AuditRuntime ProductApp
+    expected_failure: >-
+      Tests expose static Audit/Runtime rows, missing read/export/settings contracts, raw payload
+      leakage, absent normalized restart-safe run state and unsupported controls reporting success.
+  green:
+    command: >-
+      go test ./internal/domain/operations/... ./internal/application/operations/...
+      ./internal/application/jobs/... ./internal/platform/http/...
+      ./tests/integration/operations/... ./tests/integration/worker/... ./tests/integration/db/... &&
+      pnpm --dir web test -- AuditRuntime ProductApp
+    expected_signal: >-
+      Persisted audit/runtime/settings tests and the real Web surface pass with stable pagination,
+      redacted diagnostics, domain-owned retry/cancel capability and restart recovery.
+  refactor:
+    command: make contracts-check && make db-generate-check && make check-source && git diff --check
+    expected_signal: >-
+      Generated artifacts are current, migration/readiness state agrees at version 17 and the shared
+      operational projection does not absorb domain write behavior.
+
+validation_loop:
+  commands:
+    - go test ./internal/domain/operations/... ./internal/application/operations/... ./internal/application/jobs/... ./internal/platform/http/...
+    - go test ./tests/integration/operations/... ./tests/integration/worker/... ./tests/integration/db/...
+    - pnpm --dir web test -- AuditRuntime ProductApp
+    - pnpm --dir web lint
+    - pnpm --dir web typecheck
+    - make contracts-check
+    - make db-generate-check
+    - make check-source
+    - git diff --check
+  migration_proof:
+    - Apply migrations 000001 through 000017 to an empty PostgreSQL database.
+    - Upgrade a populated version-16 fixture to 000017.
+    - Revert 000017 with populated operations state, reapply it, and verify source domain records remain intact.
+    - Verify readiness requires schema version 17 for this execution head.
+  scenario_proof:
+    - Audit filters and cursor pagination by time, actor, event, object and trace with cross-workspace denial.
+    - Authorized bounded export uses the same filter, is redacted and records its own audit fact.
+    - Discovery, validation, Agent and semantic runs project idempotently and survive process/database restart.
+    - Retry/cancel capability is absent for unsupported run kinds and enforced server-side for supported kinds.
+    - Stale runtime-setting versions fail; deployment-owned settings remain read-only.
+    - Redaction corpus covers DSNs, cookies, bearer/provider/signing secrets, prompt content and job/outbox payloads.
+    - Keyboard, focus, reduced motion and screenshots at 1440x900 and 1024x768.
+  retry_budget: 2
+  failure_policy:
+    first_failure: Fix only the operations projection, migration, contract or Web binding owned by FMB-T003 and rerun the smallest failing layer.
+    second_failure: Classify a dependency, schema, redaction, domain-ownership or shared-file blocker and return it to the orchestrator.
+    beyond_budget: Stop and produce blocked evidence without exposing raw payloads, weakening tests or widening allowed files.
+
+evidence_contract:
+  summary: docs/evidence/FMB-T003/summary.md
+  diff: docs/evidence/FMB-T003/diff.patch
+  test_results: docs/evidence/FMB-T003/test-results.md
+  required:
+    - Dependency and shared-file ownership preflight
+    - Exact changed-files inventory
+    - RED/GREEN/REFACTOR results
+    - Empty and populated migration up/down/up results
+    - Audit paging/export/authorization and redaction results
+    - Run projection idempotency, retry/cancel and restart results
+    - Runtime-settings version and deployment-owned boundary results
+    - Desktop accessibility screenshots at both supported viewports
+    - Diff summary and residual risks
+
+review_contract:
+  required_passes:
+    - spec_compliance
+    - bug_code_quality
+    - security_privacy
+    - qa_acceptance
+  blocking_findings:
+    - Any secret, prompt, fact row or raw job/outbox payload disclosure
+    - Any mutable application audit path
+    - Any invented run fact or unsupported retry/cancel success
+    - Any deployment trust setting writable by a workspace command
+    - Any duplicate or non-recoverable runtime projection
+    - Any shared-file edit concurrent with FMB-T002 ownership
+  acceptance_rule: >-
+    The orchestrator may advance FMB-T003 to Needs_Review only after all evidence and review passes;
+    the worker never marks it Accepted.
+
+handoff:
+  attempt_owner: delegated worker selected after FMB-T001 evidence passes
+  external_issue: null
+  pull_request: null
+  next_ready_candidates:
+    - FMB-T002 after the attention/runtime storage contract passes
+    - FMB-T004 and FMB-T005 after operations evidence passes and their packets exist
+    - FMB-T006 after FMB-T001 and FMB-T003 evidence pass and its packet exists
+  finish_options:
+    - integrate reviewed evidence and mark Needs_Review
+    - create FMB-T003-A002 for scoped fixes
+    - mark Blocked with the named dependency or ownership condition
+
+stop_conditions:
+  - FMB-T001 dependency evidence is missing or has a blocking review finding.
+  - Another active task owns a shared OpenAPI, generated, HTTP, ProductApp, styles, jobs, sqlc or readiness file.
+  - Migration 000017 is already owned by another attempt or contains incompatible unreviewed content.
+  - Relevant existing changes cannot be preserved safely.
+  - Required work leaves the allowed files or moves domain write ownership into Operations.
+  - Validation requires raw-payload exposure, fixture fallback, deleted tests, weakened assertions or fabricated evidence.

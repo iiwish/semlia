@@ -1,0 +1,19 @@
+{
+  "command": [
+    "node",
+    "-e",
+    "const fs=require(\"fs\"),crypto=require(\"crypto\");for(const mode of [\"baseline\",\"a001\"]){const record=JSON.parse(fs.readFileSync(`docs/evidence/SP-T002/worker/a002-final-delta-01-${mode}.json`));for(const item of record.implementation){const actual=crypto.createHash(\"sha256\").update(fs.readFileSync(item.path)).digest(\"hex\");if(actual!==item.afterSha256)throw Error(item.path+\" changed after freeze\")}if(record.outsidePacket.length)throw Error(\"outside-packet delta\");console.log(mode+\": \"+record.implementation.length+\" implementation hashes match\")}"
+  ],
+  "clearedEnvironment": [
+    "SEMLIA_INGESTION_TEST_DATABASE_URL",
+    "SEMLIA_EXECUTION_CRASH_HELPER",
+    "SEMLIA_EXECUTION_TEST_DB",
+    "SEMLIA_DATABASE_URL"
+  ],
+  "start": "2026-09-09T08:23:13.917Z",
+  "end": "2026-09-09T08:23:13.967Z",
+  "exitStatus": 0,
+  "signal": null,
+  "stdout": "baseline: 47 implementation hashes match\na001: 18 implementation hashes match\n",
+  "stderr": ""
+}

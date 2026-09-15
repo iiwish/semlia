@@ -1,0 +1,25 @@
+{
+  "command": [
+    "go",
+    "test",
+    "./tests/integration/discovery",
+    "-run",
+    "^TestSourceSnapshot",
+    "-count=1",
+    "-v",
+    "-timeout",
+    "10m"
+  ],
+  "clearedEnvironment": [
+    "SEMLIA_INGESTION_TEST_DATABASE_URL",
+    "SEMLIA_EXECUTION_CRASH_HELPER",
+    "SEMLIA_EXECUTION_TEST_DB",
+    "SEMLIA_DATABASE_URL"
+  ],
+  "start": "2026-09-09T07:02:35.676Z",
+  "end": "2026-09-09T07:03:26.127Z",
+  "exitStatus": 0,
+  "signal": null,
+  "stdout": "2026/09/09 15:02:50 github.com/testcontainers/testcontainers-go - Connected to docker: \n  Server Version: 29.4.0\n  API Version: 1.54\n  Operating System: OrbStack\n  Total Memory: 16040 MB\n  Testcontainers for Go Version: v0.44.0\n  Resolved Docker Host: unix:///var/run/docker.sock\n  Resolved Docker Socket Path: /var/run/docker.sock\n  Test SessionID: ffa77ebbee3dd100669989843d64ce806e07e3913950c14715e98cd2a47ec849\n  Test ProcessID: 48182dd7-8f79-4b5c-bb0f-beec6ac4c3db\n2026/09/09 15:02:50 🐳 Creating container for image postgres:18-alpine\n2026/09/09 15:02:53 🐳 Creating container for image testcontainers/ryuk:0.14.0\n2026/09/09 15:02:54 ✅ Container created: 0bdcbf6b8028\n2026/09/09 15:02:54 🐳 Starting container: 0bdcbf6b8028\n2026/09/09 15:02:55 ✅ Container started: 0bdcbf6b8028\n2026/09/09 15:02:55 ⏳ Waiting for container id 0bdcbf6b8028 image: testcontainers/ryuk:0.14.0. Waiting for: all of: [log message \"Started\", port 8080/tcp to be listening]\n2026/09/09 15:02:56 Shell not found in container\n2026/09/09 15:02:56 🔔 Container is ready: 0bdcbf6b8028\n2026/09/09 15:02:56 ✅ Container created: 14e9c08e3718\n2026/09/09 15:02:56 🐳 Starting container: 14e9c08e3718\n2026/09/09 15:02:57 ✅ Container started: 14e9c08e3718\n2026/09/09 15:02:57 ⏳ Waiting for container id 14e9c08e3718 image: postgres:18-alpine. Waiting for: all of: [log message \"database system is ready to accept connections\" (occurrence: 2), port 5432/tcp to be listening]\n2026/09/09 15:03:13 🔔 Container is ready: 14e9c08e3718\n=== RUN   TestSourceSnapshotUnchangedMembersAndHistoricalNames\n--- PASS: TestSourceSnapshotUnchangedMembersAndHistoricalNames (0.49s)\n=== RUN   TestSourceSnapshotPartialFailedAndOutOfOrderHeads\n--- PASS: TestSourceSnapshotPartialFailedAndOutOfOrderHeads (0.83s)\n=== RUN   TestSourceSnapshotConcurrentReplay\n--- PASS: TestSourceSnapshotConcurrentReplay (0.76s)\n=== RUN   TestSourceSnapshotCodeBytesAndPreciseLineage\n--- PASS: TestSourceSnapshotCodeBytesAndPreciseLineage (2.52s)\n=== RUN   TestSourceSnapshotOutOfOrderDoesNotRegressCurrent\n--- PASS: TestSourceSnapshotOutOfOrderDoesNotRegressCurrent (1.06s)\n=== RUN   TestSourceSnapshotReadIsolationCursorsAndWatermark\n=== RUN   TestSourceSnapshotReadIsolationCursorsAndWatermark/filter\n=== RUN   TestSourceSnapshotReadIsolationCursorsAndWatermark/snapshot\n=== RUN   TestSourceSnapshotReadIsolationCursorsAndWatermark/source\n=== RUN   TestSourceSnapshotReadIsolationCursorsAndWatermark/workspace\n=== RUN   TestSourceSnapshotReadIsolationCursorsAndWatermark/tamper\n=== RUN   TestSourceSnapshotReadIsolationCursorsAndWatermark/route\n=== RUN   TestSourceSnapshotReadIsolationCursorsAndWatermark/known_snapshot_wrong_source\n=== RUN   TestSourceSnapshotReadIsolationCursorsAndWatermark/known_source_wrong_workspace\n=== RUN   TestSourceSnapshotReadIsolationCursorsAndWatermark/known_foreign_snapshot\n--- PASS: TestSourceSnapshotReadIsolationCursorsAndWatermark (2.63s)\n    --- PASS: TestSourceSnapshotReadIsolationCursorsAndWatermark/filter (0.00s)\n    --- PASS: TestSourceSnapshotReadIsolationCursorsAndWatermark/snapshot (0.00s)\n    --- PASS: TestSourceSnapshotReadIsolationCursorsAndWatermark/source (0.00s)\n    --- PASS: TestSourceSnapshotReadIsolationCursorsAndWatermark/workspace (0.00s)\n    --- PASS: TestSourceSnapshotReadIsolationCursorsAndWatermark/tamper (0.00s)\n    --- PASS: TestSourceSnapshotReadIsolationCursorsAndWatermark/route (0.00s)\n    --- PASS: TestSourceSnapshotReadIsolationCursorsAndWatermark/known_snapshot_wrong_source (0.00s)\n    --- PASS: TestSourceSnapshotReadIsolationCursorsAndWatermark/known_source_wrong_workspace (0.00s)\n    --- PASS: TestSourceSnapshotReadIsolationCursorsAndWatermark/known_foreign_snapshot (0.00s)\n=== RUN   TestSourceSnapshotMemberByteBudgetAndSourceConfig\n--- PASS: TestSourceSnapshotMemberByteBudgetAndSourceConfig (1.75s)\nPASS\n2026/09/09 15:03:24 🐳 Stopping container: 14e9c08e3718\n2026/09/09 15:03:25 ✅ Container stopped: 14e9c08e3718\n2026/09/09 15:03:25 🐳 Terminating container: 14e9c08e3718\n2026/09/09 15:03:25 🚫 Container terminated: 14e9c08e3718\nok  \tgithub.com/iiwish/semlia/tests/integration/discovery\t37.290s\n",
+  "stderr": ""
+}

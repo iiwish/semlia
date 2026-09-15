@@ -1,0 +1,22 @@
+{
+  "command": [
+    "go",
+    "test",
+    "./internal/domain/discovery",
+    "./internal/application/discovery",
+    "./tests/contracts",
+    "-count=1"
+  ],
+  "clearedEnvironment": [
+    "SEMLIA_INGESTION_TEST_DATABASE_URL",
+    "SEMLIA_EXECUTION_CRASH_HELPER",
+    "SEMLIA_EXECUTION_TEST_DB",
+    "SEMLIA_DATABASE_URL"
+  ],
+  "start": "2026-09-09T07:05:31.020Z",
+  "end": "2026-09-09T07:05:36.680Z",
+  "exitStatus": 1,
+  "signal": null,
+  "stdout": "ok  \tgithub.com/iiwish/semlia/internal/domain/discovery\t0.662s\nok  \tgithub.com/iiwish/semlia/internal/application/discovery\t1.070s\n--- FAIL: TestSharedSchemaValidationMatrix (0.31s)\n    --- FAIL: TestSharedSchemaValidationMatrix/snapshot_field_parent (0.00s)\n        contract_test.go:392: expected valid payload: Error at \"/parentObjectId\": string doesn't match the regular expression \"^pds_[0-7][0-9a-hjkmnp-tv-z]{25}$\"\n            Schema:\n              {\n                \"format\": \"typeid\",\n                \"pattern\": \"^pds_[0-7][0-9a-hjkmnp-tv-z]{25}$\",\n                \"type\": \"string\",\n                \"x-go-type\": \"identity.PhysicalDatasetID\",\n                \"x-go-type-import\": {\n                  \"name\": \"identity\",\n                  \"path\": \"github.com/iiwish/semlia/pkg/identity\"\n                }\n              }\n            \n            Value:\n              \"ds_01arz3ndektsv4rrffq69g5fav\"\n             | Error at \"/parentRevisionId\": string doesn't match the regular expression \"^pdr_[0-7][0-9a-hjkmnp-tv-z]{25}$\"\n            Schema:\n              {\n                \"format\": \"typeid\",\n                \"pattern\": \"^pdr_[0-7][0-9a-hjkmnp-tv-z]{25}$\",\n                \"type\": \"string\",\n                \"x-go-type\": \"identity.PhysicalDatasetRevisionID\",\n                \"x-go-type-import\": {\n                  \"name\": \"identity\",\n                  \"path\": \"github.com/iiwish/semlia/pkg/identity\"\n                }\n              }\n            \n            Value:\n              \"dsrev_01arz3ndektsv4rrffq69g5fav\"\nFAIL\nFAIL\tgithub.com/iiwish/semlia/tests/contracts\t3.781s\nFAIL\n",
+  "stderr": ""
+}

@@ -99,3 +99,68 @@ func TestTypedIDRejectsAnotherRegisteredResourceType(t *testing.T) {
 		t.Fatalf("decoded = %q, want %q", decoded, asset)
 	}
 }
+
+func TestAttentionItemIDUsesDedicatedPrefixAndUUIDv7(t *testing.T) {
+	id, err := identity.NewAttentionItemID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(id.String(), "ati_") || id.UUID()[14] != '7' {
+		t.Fatalf("attention item ID = %q / %q", id.String(), id.UUID())
+	}
+	parsed, err := identity.ParseAttentionItemID(id.String())
+	if err != nil || parsed != id {
+		t.Fatalf("attention item round trip = %q / %v", parsed, err)
+	}
+}
+
+func TestProductionOperationIDUsesDedicatedPrefixAndUUIDv7(t *testing.T) {
+	id, err := identity.NewProductionOperationID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(id.String(), "prodop_") || id.UUID()[14] != '7' {
+		t.Fatalf("production operation ID = %q / %q", id.String(), id.UUID())
+	}
+	parsed, err := identity.ParseProductionOperationID(id.String())
+	if err != nil || parsed != id {
+		t.Fatalf("production operation round trip = %q / %v", parsed, err)
+	}
+}
+
+func TestIngestionIDsUseDedicatedPrefixesAndUUIDv7(t *testing.T) {
+	tests := []struct {
+		prefix string
+		newID  func() (string, string, error)
+		parse  func(string) error
+	}{
+		{"art_", func() (string, string, error) {
+			id, err := identity.NewArtifactID()
+			return id.String(), id.UUID(), err
+		}, func(value string) error { _, err := identity.ParseArtifactID(value); return err }},
+		{"ars_", func() (string, string, error) {
+			id, err := identity.NewArtifactSetID()
+			return id.String(), id.UUID(), err
+		}, func(value string) error { _, err := identity.ParseArtifactSetID(value); return err }},
+		{"sch_", func() (string, string, error) {
+			id, err := identity.NewSourceScheduleID()
+			return id.String(), id.UUID(), err
+		}, func(value string) error { _, err := identity.ParseSourceScheduleID(value); return err }},
+		{"occ_", func() (string, string, error) {
+			id, err := identity.NewScheduleOccurrenceID()
+			return id.String(), id.UUID(), err
+		}, func(value string) error { _, err := identity.ParseScheduleOccurrenceID(value); return err }},
+	}
+	for _, test := range tests {
+		value, uuid, err := test.newID()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.HasPrefix(value, test.prefix) || uuid[14] != '7' {
+			t.Fatalf("ingestion ID = %q / %q", value, uuid)
+		}
+		if err := test.parse(value); err != nil {
+			t.Fatalf("parse %q: %v", value, err)
+		}
+	}
+}

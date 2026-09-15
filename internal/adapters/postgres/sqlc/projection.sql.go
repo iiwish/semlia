@@ -73,3 +73,194 @@ func (q *Queries) GetAssetProjection(ctx context.Context, arg GetAssetProjection
 	)
 	return i, err
 }
+
+const getReleaseOriginProposalProjection = `-- name: GetReleaseOriginProposalProjection :one
+SELECT proposal.id,
+       proposal.title,
+       proposal.target_object_type,
+       proposal.target_object_id,
+       proposal.asset_id,
+       proposal.created_by
+FROM proposals AS proposal
+WHERE proposal.workspace_id = $1
+  AND proposal.id = $2
+`
+
+type GetReleaseOriginProposalProjectionParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	ProposalID  pgtype.UUID `json:"proposal_id"`
+}
+
+type GetReleaseOriginProposalProjectionRow struct {
+	ID               pgtype.UUID `json:"id"`
+	Title            string      `json:"title"`
+	TargetObjectType string      `json:"target_object_type"`
+	TargetObjectID   pgtype.UUID `json:"target_object_id"`
+	AssetID          pgtype.UUID `json:"asset_id"`
+	CreatedBy        string      `json:"created_by"`
+}
+
+func (q *Queries) GetReleaseOriginProposalProjection(ctx context.Context, arg GetReleaseOriginProposalProjectionParams) (GetReleaseOriginProposalProjectionRow, error) {
+	row := q.db.QueryRow(ctx, getReleaseOriginProposalProjection, arg.WorkspaceID, arg.ProposalID)
+	var i GetReleaseOriginProposalProjectionRow
+	err := row.Scan(
+		&i.ID,
+		&i.Title,
+		&i.TargetObjectType,
+		&i.TargetObjectID,
+		&i.AssetID,
+		&i.CreatedBy,
+	)
+	return i, err
+}
+
+const getReleaseProjection = `-- name: GetReleaseProjection :one
+SELECT release.id,
+       release.workspace_id,
+       release.sequence,
+       release.manifest_digest,
+       release.state,
+       release.rolled_back_to_release_id,
+       release.origin_proposal_id,
+       release.published_by,
+       release.published_at
+FROM releases AS release
+WHERE release.workspace_id = $1
+  AND release.id = $2
+`
+
+type GetReleaseProjectionParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	ReleaseID   pgtype.UUID `json:"release_id"`
+}
+
+type GetReleaseProjectionRow struct {
+	ID                    pgtype.UUID        `json:"id"`
+	WorkspaceID           pgtype.UUID        `json:"workspace_id"`
+	Sequence              int64              `json:"sequence"`
+	ManifestDigest        string             `json:"manifest_digest"`
+	State                 string             `json:"state"`
+	RolledBackToReleaseID pgtype.UUID        `json:"rolled_back_to_release_id"`
+	OriginProposalID      pgtype.UUID        `json:"origin_proposal_id"`
+	PublishedBy           string             `json:"published_by"`
+	PublishedAt           pgtype.Timestamptz `json:"published_at"`
+}
+
+func (q *Queries) GetReleaseProjection(ctx context.Context, arg GetReleaseProjectionParams) (GetReleaseProjectionRow, error) {
+	row := q.db.QueryRow(ctx, getReleaseProjection, arg.WorkspaceID, arg.ReleaseID)
+	var i GetReleaseProjectionRow
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Sequence,
+		&i.ManifestDigest,
+		&i.State,
+		&i.RolledBackToReleaseID,
+		&i.OriginProposalID,
+		&i.PublishedBy,
+		&i.PublishedAt,
+	)
+	return i, err
+}
+
+const listReleaseAssetProjection = `-- name: ListReleaseAssetProjection :many
+SELECT entry.asset_id,
+       entry.revision_id,
+       entry.compatibility,
+       entry.position,
+       asset.namespace,
+       asset.key
+FROM release_assets AS entry
+JOIN semantic_assets AS asset
+  ON asset.workspace_id = entry.workspace_id
+ AND asset.id = entry.asset_id
+WHERE entry.workspace_id = $1
+  AND entry.release_id = $2
+ORDER BY entry.position
+`
+
+type ListReleaseAssetProjectionParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	ReleaseID   pgtype.UUID `json:"release_id"`
+}
+
+type ListReleaseAssetProjectionRow struct {
+	AssetID       pgtype.UUID `json:"asset_id"`
+	RevisionID    pgtype.UUID `json:"revision_id"`
+	Compatibility []byte      `json:"compatibility"`
+	Position      int32       `json:"position"`
+	Namespace     string      `json:"namespace"`
+	Key           string      `json:"key"`
+}
+
+func (q *Queries) ListReleaseAssetProjection(ctx context.Context, arg ListReleaseAssetProjectionParams) ([]ListReleaseAssetProjectionRow, error) {
+	rows, err := q.db.Query(ctx, listReleaseAssetProjection, arg.WorkspaceID, arg.ReleaseID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListReleaseAssetProjectionRow{}
+	for rows.Next() {
+		var i ListReleaseAssetProjectionRow
+		if err := rows.Scan(
+			&i.AssetID,
+			&i.RevisionID,
+			&i.Compatibility,
+			&i.Position,
+			&i.Namespace,
+			&i.Key,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listReleaseObjectProjection = `-- name: ListReleaseObjectProjection :many
+SELECT object_type, object_id, version, position
+FROM release_objects
+WHERE workspace_id = $1
+  AND release_id = $2
+ORDER BY position
+`
+
+type ListReleaseObjectProjectionParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	ReleaseID   pgtype.UUID `json:"release_id"`
+}
+
+type ListReleaseObjectProjectionRow struct {
+	ObjectType string      `json:"object_type"`
+	ObjectID   pgtype.UUID `json:"object_id"`
+	Version    int32       `json:"version"`
+	Position   int32       `json:"position"`
+}
+
+func (q *Queries) ListReleaseObjectProjection(ctx context.Context, arg ListReleaseObjectProjectionParams) ([]ListReleaseObjectProjectionRow, error) {
+	rows, err := q.db.Query(ctx, listReleaseObjectProjection, arg.WorkspaceID, arg.ReleaseID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListReleaseObjectProjectionRow{}
+	for rows.Next() {
+		var i ListReleaseObjectProjectionRow
+		if err := rows.Scan(
+			&i.ObjectType,
+			&i.ObjectID,
+			&i.Version,
+			&i.Position,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

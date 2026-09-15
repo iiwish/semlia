@@ -1,0 +1,75 @@
+schema_version: 1
+packet_id: M2-T003-A001
+task_id: T003
+feature_id: m2-governed-authoring
+mode: execute_one_task
+status: Ready
+
+goal: >-
+  Expose the governed proposal pipeline over generated OpenAPI contracts with server-side
+  authorization, JSON-Schema-validated AI structured output, agent attribution and a
+  no-substantive-change gate, without adding validation orchestration, review or release behavior.
+
+dependencies:
+  - T002 Accepted (2026-09-02)
+  - T008 Accepted (2026-09-02)
+  - founder continuous M2 execution authorization through T007 (2026-09-02)
+  - docs/SSOT.md §8.2, §8.6, D-015 adoption conditions in ADR-0002 TDR-015
+  - docs/specs/m2-governed-authoring/data-model.md
+
+allowed_files:
+  - internal/**
+  - api/openapi/**
+  - db/**
+  - migrations/**
+  - sdk/typescript/**
+  - tests/**
+  - docs/specs/m2-governed-authoring/**
+  - docs/evidence/M2-T003/**
+  - go.mod
+  - go.sum
+
+forbidden_changes:
+  - Do not add validation orchestration, review commands, release cuts or rollback endpoints;
+    those belong to T004/T006/T007.
+  - Do not accept AI output into the domain layer without schema validation.
+  - Do not enforce authorization by role names; actions are the identifiers (FR-003).
+  - Do not expose storage UUIDs; TypeIDs on the wire per ADR-0003.
+  - Do not let proposals with no substantive diff enter the human queue.
+  - Do not store raw prompts or provider credentials; agent attribution references agent runs.
+  - Do not alter M1 endpoint behavior or weaken existing tests.
+
+tdd:
+  red:
+    - Contract: proposal create/submit/detail/list endpoints do not exist in the generated
+      contracts until this task; contract tests fail before implementation.
+    - AI structured output: a malformed agent payload (missing required field, unknown field,
+      wrong type) is rejected with 422 and a stable error code before any domain write; a valid
+      agent-attributed payload creates a proposal referencing its agent run.
+    - No-substantive-change: a change-set whose items all carry equal before/after digests is
+      rejected without entering the proposed state.
+    - Authorization: an unbound principal is denied proposal creation with 403 and a stable
+      reason code; denials and allows are audited.
+  green:
+    - Create draft, submit, detail and list work end to end against real PostgreSQL with
+      workspace scoping and TypeIDs on the wire.
+    - Semantic-asset and all four governance-object targets are accepted by the API.
+  refactor:
+    - Share one request-decoding and error-mapping helper across the new governance handlers,
+      mirroring the existing catalog handler style.
+
+validation:
+  - go test ./...
+  - go vet ./...
+  - make contracts-check
+  - make check-source
+  - pnpm --filter @semlia/web typecheck
+  - git diff --check
+
+acceptance:
+  - Proposal create/submit/detail/list are served under /api/v1/workspaces/{workspaceId}/governance
+    with generated contracts and regenerated TypeScript types.
+  - AI structured output is validated by github.com/santhosh-tekuri/jsonschema/v6 before domain
+    entry; agent attribution references a persisted agent run.
+  - No-substantive-change proposals never reach the proposed state.
+  - Every proposal command enforces capabilities server-side and writes authorization events.

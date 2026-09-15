@@ -1,0 +1,40 @@
+{
+  "checkedAt": "2026-09-09T07:13:01Z",
+  "hostFilesystem": {
+    "command": "df -h .",
+    "exitCode": 0,
+    "available": "2.1 GiB",
+    "capacity": "100%"
+  },
+  "dockerInventory": {
+    "command": "docker system df",
+    "exitCode": 0,
+    "images": {
+      "total": 159,
+      "active": 37,
+      "size": "91.05GB"
+    },
+    "containers": {
+      "total": 55,
+      "active": 19,
+      "size": "957.6MB"
+    },
+    "volumes": {
+      "total": 92,
+      "active": 26,
+      "size": "9.861GB"
+    },
+    "buildCache": {
+      "total": 205,
+      "active": 0,
+      "size": "13.98GB"
+    }
+  },
+  "taskDiskUse": {
+    "baselineCopy": "7.4 MiB",
+    "evidence": "428 KiB"
+  },
+  "failure": "Worker final concurrent integration/migration rerun reported No space left on device; failing raw command logs retained by worker.",
+  "response": "Same required package/test coverage rerun serially with -p=1; no pruning of shared Docker images, cache, volumes or databases. Only exact test-owned resources may be cleaned.",
+  "validationStatus": "Pending final serial rerun, not a pass"
+}

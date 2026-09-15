@@ -172,11 +172,19 @@ func (repository *catalogRepository) ListCatalogAssets(context.Context, catalogd
 	return []catalogdomain.AssetSummary{repository.summary(time.Now().UTC())}, nil
 }
 
+func (repository *catalogRepository) CountCatalogAssets(context.Context, catalogdomain.ListAssetsQuery) (int64, error) {
+	return 1, repository.getErr
+}
+
 func (repository *catalogRepository) GetCatalogAsset(context.Context, identity.WorkspaceID, identity.AssetID) (catalogdomain.AssetDetail, error) {
 	if repository.getErr != nil {
 		return catalogdomain.AssetDetail{}, repository.getErr
 	}
 	return repository.detail(time.Now().UTC()), nil
+}
+
+func (repository *catalogRepository) ListCatalogAuthorityRecords(context.Context, catalogdomain.ListAuthorityRecordsQuery) (catalogdomain.AuthorityRecordResult, error) {
+	return catalogdomain.AuthorityRecordResult{}, repository.getErr
 }
 
 func (repository *catalogRepository) CreateCatalogAsset(_ context.Context, command catalogdomain.CreateAssetCommand) (catalogdomain.AssetDetail, error) {
@@ -187,6 +195,10 @@ func (repository *catalogRepository) CreateCatalogAsset(_ context.Context, comma
 
 func (repository *catalogRepository) ListCatalogRevisions(context.Context, catalogdomain.ListRevisionsQuery) ([]catalogdomain.Revision, error) {
 	return nil, nil
+}
+
+func (repository *catalogRepository) CountCatalogRevisions(context.Context, identity.WorkspaceID, identity.AssetID) (int64, error) {
+	return 0, repository.getErr
 }
 
 func (repository *catalogRepository) GetCatalogRevision(context.Context, identity.WorkspaceID, identity.AssetID, identity.RevisionID) (catalogdomain.Revision, error) {

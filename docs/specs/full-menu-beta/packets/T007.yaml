@@ -1,0 +1,191 @@
+schema_version: 1
+packet_id: FMB-T007-SPRINT-A002
+task_id: FMB-T007
+feature_id: full-menu-beta
+mode: execute_one_task
+status: Needs_Review
+adapter: agent-neutral
+
+governance_inputs:
+  constitution: [AGENTS.md, docs/SSOT.md]
+  product_contract: docs/specs/full-menu-beta/spec.md
+  requirements_checklist: docs/specs/full-menu-beta/checklists/requirements.md
+  technical_decisions: docs/specs/full-menu-beta/technology-decision-record.md
+  data_model: docs/specs/full-menu-beta/data-model.md
+  feature_plan: docs/specs/full-menu-beta/plan.md
+  work_graph: docs/specs/full-menu-beta/tasks.md
+  analysis: docs/specs/full-menu-beta/analysis.md
+  approval_gates:
+    scope_and_plan: Founder confirmed the Full-Menu Beta plan on 2026-09-04.
+    execution: Founder authorized continuous T001-T007 execution and explicitly requested the fourth three-hour sprint on 2026-09-05, starting 10:45:36 UTC.
+    dependency: T002, T004, T005 and T006 must have passing implementation and review evidence.
+
+work_unit:
+  title: Bounded read-only PostgreSQL execution and final Beta evidence
+  goal: >-
+    Execute persisted validated plans through a dedicated read-only PostgreSQL adapter, then
+    integrate the complete desktop and machine workflow. Report deterministic and hosted evidence
+    separately. Missing external configuration cannot become a fabricated successful release gate.
+  story: FMB-US-007
+  requirements: [FR-001, FR-011, FR-012, NFR-001, NFR-002, NFR-003, NFR-004, NFR-005]
+  depends_on: [FMB-T002 evidence, FMB-T004 evidence, FMB-T005 evidence, FMB-T006 evidence]
+  parallel: false
+
+codebase_context:
+  relevant_files:
+    - internal/application/distribution/service.go
+    - internal/domain/distribution
+    - internal/adapters/postgres/distribution.go
+    - internal/adapters/discovery/postgreslive
+    - internal/application/operations
+    - internal/platform/http/distribution.go
+    - cmd/semlia/main.go
+    - web/src/ask.ts
+    - web/src/ProductApp.tsx
+  contracts:
+    - Canonical persisted plan ID and digest are the public input; raw SQL is never accepted.
+    - Exact release-pinned physical metadata, supported expressions and join contracts enter the digest.
+    - semantic.execute and current workspace, credential, consumer, binding and resource scope precede compilation or connection.
+    - Current mutable catalog objects cannot substitute for release-pinned physical snapshots.
+    - Dedicated source execution credentials remain encrypted or deployment referenced, never response data.
+    - Runtime and audit retain only redacted provenance, counts, outcome and result digest, not fact rows or SQL values.
+
+execution_constraints:
+  branch_or_worktree: current shared worktree
+  owner: One delegated implementation worker; do not delegate further.
+  coordination: >-
+    No concurrent FMB implementation. Preserve existing user work, do not commit, push, reset,
+    deploy to an external environment or mark acceptance. The orchestrator owns task status.
+    Sprint A001 has an incomplete frozen handoff in docs/evidence/FMB-T007/summary.md.
+    A002 original window is 10:45:36-13:45:36 UTC. Founder explicitly authorizes overtime
+    continuation on 2026-09-05. Overtime closes the remaining contrast defect and final
+    verification/artifact alignment only; no feature expansion. Preserve frozen A001/A002
+    evidence and write overtime proof under attempts/a002/overtime/.
+    Founder confirms no server is available and explicitly requests local testing and
+    closeout first. Hosted gates are deferred and disclosed, not required to pass for
+    this local closeout and not presented as production acceptance.
+  allowed_files:
+    - Makefile
+    - api/openapi/semlia.v1.yaml
+    - api/gen/go/types.gen.go
+    - sdk/typescript/src/**
+    - migrations/000021_fmb_query_execution.up.sql
+    - migrations/000021_fmb_query_execution.down.sql
+    - db/queries/execution.sql
+    - db/queries/distribution.sql
+    - db/queries/governance.sql
+    - db/queries/governed_objects.sql
+    - db/sqlc.yaml
+    - internal/domain/execution/**
+    - internal/application/execution/**
+    - internal/adapters/execution/**
+    - internal/adapters/postgres/execution.go
+    - internal/adapters/postgres/sqlc/**
+    - internal/domain/distribution/**
+    - internal/application/distribution/**
+    - internal/adapters/postgres/distribution.go
+    - internal/adapters/postgres/distribution_execution_test.go
+    - internal/application/authorization/**
+    - internal/application/identity/**
+    - internal/domain/identity/**
+    - internal/adapters/mcp/**
+    - internal/application/governance/publishing.go
+    - internal/application/governance/publishing*_test.go
+    - internal/domain/governance/**
+    - internal/adapters/postgres/release_publishing.go
+    - internal/adapters/postgres/governance.go
+    - internal/application/operations/**
+    - internal/adapters/postgres/operations.go
+    - internal/platform/http/**
+    - internal/platform/mcp/**
+    - internal/platform/config/**
+    - cmd/semlia/**
+    - pkg/identity/**
+    - web/src/ask*
+    - web/src/execution*
+    - web/src/ProductApp.tsx
+    - web/src/ProductApp.test.tsx
+    - web/src/Ask*.tsx
+    - web/src/KnowledgeViews.tsx
+    - web/src/KnowledgeViews.test.tsx
+    - web/src/IntegrationSettingsView.tsx
+    - web/src/IntegrationSettingsView.test.tsx
+    - web/src/integrations.ts
+    - web/src/localUAT.ts
+    - web/src/localUAT.test.tsx
+    - web/src/AuditRuntimeView*.tsx
+    - web/src/styles.css
+    - internal/platform/web/static/**
+    - tests/**
+    - web/e2e*/**
+    - web/playwright*.ts
+    - compose.yaml
+    - deploy/**
+    - scripts/ci/**
+    - scripts/release/**
+    - .env.example
+    - go.mod
+    - go.sum
+    - docs/operations/**
+    - docs/evidence/FMB-T007/**
+    - docs/specs/full-menu-beta/release-report.md
+
+forbidden_changes:
+  - No arbitrary SQL, best-effort join approximation or client-controlled identifiers.
+  - No bypass of release freshness, authorization or credential revocation for idempotent replay.
+  - No query execution using a privileged discovery credential by default.
+  - No storage or telemetry of compiled SQL, bound values, returned rows or raw database diagnostics.
+  - No edits to migrations 000001-000020; preserve populated upgrade and rollback paths.
+  - No production local-UAT identities, disabled security tests or claims that stubs prove hosted operation.
+
+tdd_plan:
+  red:
+    - Refuse raw SQL, tampered or stale plans, unsupported joins, cross-workspace and revoked access before connection.
+    - Exercise real read-only role and transaction behavior, cancellation, timeout, row and byte caps.
+    - Prove concurrent identical requests and process loss cannot create duplicate execution.
+    - Scan stored records, audit, usage, errors and runtime events for synthetic sensitive result values.
+  green:
+    - Implement typed aggregate compiler with trusted identifier quoting and bound values.
+    - Add migration, durable run metadata, bounded result handling and current authorization checks.
+    - Wire REST, MCP, CLI, SDK and Ask/Operations views through the same application service.
+  refactor:
+    - Regenerate contracts and SQL; synchronize embedded Web after source tests pass.
+
+validation_loop:
+  resource_policy: Use go test -p 1 or GOFLAGS=-p=1 and Vitest --maxWorkers=1 on this host; never stop unrelated containers.
+  commands:
+    - go test -p 1 ./internal/domain/execution/... ./internal/application/execution/... ./internal/adapters/execution/...
+    - go test -p 1 ./tests/integration/... ./tests/contracts/...
+    - pnpm -r --if-present typecheck
+    - pnpm -r --if-present test
+    - make contracts-check
+    - make db-generate-check
+    - GOFLAGS=-p=1 make check-source
+    - make smoke
+    - make security-check
+    - make release
+    - git diff --check
+  proof:
+    - Populated migration 15-to-21 lifecycle preserves previous domains and exposes no raw result store.
+    - Actual PostgreSQL read-only, timeout, cancellation, row/byte cap and authorization evidence.
+    - Desktop 1440x900 and compact desktop 1024x768 live paths, keyboard and focus evidence.
+    - Truthfulness inventory covers all production menu successes, refresh and restart persistence.
+    - Real hosted HTTPS, OIDC, Chat, Embedding, external webhook and read-only source results are separate gates.
+    - Build version, migration version, release checksums and SBOM match the tested artifact.
+
+evidence_contract:
+  summary: docs/evidence/FMB-T007/attempts/a002/summary.md
+  test_results: docs/evidence/FMB-T007/attempts/a002/test-results.md
+  attempt: docs/evidence/FMB-T007/attempts/sprint-a002.md
+  required: [changed files, RED/GREEN results, migration proof, security proof, channel parity, desktop evidence, hosted matrix, residual risks]
+
+review_contract:
+  required_passes: [spec_compliance, bug_code_quality, security_privacy, qa_acceptance]
+  acceptance_rule: Recommend acceptance only with complete evidence; Accepted remains founder-owned.
+
+stop_conditions:
+  - Any dependency lacks passing review evidence or still owns shared implementation files.
+  - Required behavior relaxes read-only, privacy, authorization or release-pinning invariants.
+  - Missing external configuration blocks hosted proof; continue independent local verification and report the exact gap.
+  - No feature expansion during authorized overtime; fix final QA findings and verify exact candidate.
+  - Missing hosted inputs remain explicit; do not authorize external deployment implicitly.

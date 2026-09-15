@@ -1,0 +1,45 @@
+{
+  "checkedAt": "2026-09-06T02:28:57Z",
+  "workspaceId": "wsp_01m1t6ypf8eye8yn23y0a62q9z",
+  "checks": [
+    {
+      "check": "ask",
+      "httpStatus": 503,
+      "elapsedMs": 50,
+      "error": {
+        "code": "PROVIDER_UNAVAILABLE",
+        "message": "the configured provider is unavailable",
+        "traceId": "e5d557f1090f3e982671411c5cc17f97"
+      },
+      "agentRun": null,
+      "proposalId": null,
+      "indexId": null
+    },
+    {
+      "check": "generation",
+      "httpStatus": 503,
+      "elapsedMs": 24,
+      "error": {
+        "code": "PROVIDER_UNAVAILABLE",
+        "message": "the configured provider is unavailable",
+        "traceId": "d4c90d89f0288fcd6c60748a7ee9b61e"
+      },
+      "agentRun": null,
+      "proposalId": null,
+      "indexId": null
+    },
+    {
+      "check": "embedding",
+      "httpStatus": 503,
+      "elapsedMs": 18,
+      "error": {
+        "code": "EMBEDDING_NOT_CONFIGURED",
+        "message": "the embedding operation is unavailable",
+        "traceId": "2e8345f3d3b62aeabe7411f91db7f4e7"
+      },
+      "agentRun": null,
+      "proposalId": null,
+      "indexId": null
+    }
+  ]
+}
