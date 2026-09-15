@@ -251,6 +251,17 @@ func TestFreshCloneLauncherTimesOutHangingGoProcessGroup(t *testing.T) {
 	fixture := newLauncherSupervisorFixture(t, false, nil)
 	parentRecord, descendantRecord := installHangingLauncherGo(t, fixture)
 	setLauncherPreflightBudgets(t, fixture.launcher, 5, 20)
+	phaseRecord := filepath.Join(filepath.Dir(fixture.moduleRoot), "go-phase-start")
+	launcher, err := os.ReadFile(fixture.launcher)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const phaseStart = "GO_PHASE_DEADLINE=$(( $(/bin/date +%s) + LAUNCHER_PREFLIGHT_TIMEOUT_SECONDS ))"
+	launcherText := replaceLauncherFragment(t, string(launcher), phaseStart,
+		"printf ready >'"+phaseRecord+"'\n"+phaseStart)
+	if err := os.WriteFile(fixture.launcher, []byte(launcherText), 0o700); err != nil {
+		t.Fatal(err)
+	}
 
 	started := time.Now()
 	process := startLauncherSupervisorFixture(t, fixture)
@@ -260,8 +271,16 @@ func TestFreshCloneLauncherTimesOutHangingGoProcessGroup(t *testing.T) {
 	if waitErr == nil {
 		t.Fatalf("launcher accepted a timed-out Go version probe\n%s", process.output.String())
 	}
-	if elapsed := time.Since(started); elapsed > 5*time.Second {
+	phaseInfo, err := os.Stat(phaseRecord)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Node and CA preflight have separate budgets; measure Go from its phase boundary.
+	if elapsed := time.Since(phaseInfo.ModTime()); elapsed > 5*time.Second {
 		t.Fatalf("launcher exceeded the 5-second Go phase budget: %s\n%s", elapsed, process.output.String())
+	}
+	if elapsed := time.Since(started); elapsed > 20*time.Second {
+		t.Fatalf("launcher exceeded the 20-second total preflight budget: %s", elapsed)
 	}
 	output := process.output.String()
 	for _, want := range []string{"Go version probe", "5-second phase budget", "Go version probe stdout", "hanging go parent", "Go version probe stderr", "hanging go descendant"} {
