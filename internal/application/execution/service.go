@@ -219,6 +219,8 @@ func (s *Service) Execute(ctx context.Context, r Request) (d.Result, error) {
 	}
 	result := d.Result{Run: run, Availability: "unavailable"}
 	if run.State == "succeeded" {
+		result.SQL = query.SQL
+		result.Parameters = query.Args
 		result.Availability = "ephemeral"
 		result.Columns = output.Columns
 		result.Rows = output.Rows

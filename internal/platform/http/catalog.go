@@ -53,6 +53,7 @@ const (
 	routeCandidateDecisions
 	routeIngestionArtifacts
 	routeIngestionArtifactSet
+	routeIngestionArtifactPreview
 	routeIngestionFinalize
 	routeIngestionSQLRegistrations
 	routeSourceSchedules
@@ -101,6 +102,7 @@ type matchedRoute struct {
 	section     string
 	schedule    string
 	artifactSet string
+	artifact    string
 }
 
 func matchRoute(path string) matchedRoute {
@@ -243,6 +245,11 @@ func matchRoute(path string) matchedRoute {
 		}
 		return base
 	}
+	if len(parts) == 10 && parts[4] == "ingestion" && parts[5] == "artifact-sets" && parts[7] == "members" && parts[9] == "preview" {
+		base.kind, base.label, base.artifactSet, base.artifact = routeIngestionArtifactPreview,
+			"/api/v1/workspaces/{workspaceId}/ingestion/artifact-sets/{artifactSetId}/members/{artifactId}/preview", parts[6], parts[8]
+		return base
+	}
 	if len(parts) == 7 && parts[4] == "ingestion" && parts[5] == "artifact-sets" {
 		base.kind, base.label, base.artifactSet = routeIngestionArtifactSet,
 			"/api/v1/workspaces/{workspaceId}/ingestion/artifact-sets/{artifactSetId}", parts[6]
@@ -357,7 +364,7 @@ func (route matchedRoute) methods() []string {
 		return []string{http.MethodPost}
 	case routeSchedule:
 		return []string{http.MethodGet, http.MethodPatch, http.MethodDelete}
-	case routeScheduleOccurrences, routeIngestionArtifactSet:
+	case routeScheduleOccurrences, routeIngestionArtifactSet, routeIngestionArtifactPreview:
 		return []string{http.MethodGet}
 	case routeSource:
 		return []string{http.MethodGet, http.MethodPatch, http.MethodDelete}

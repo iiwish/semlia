@@ -31,7 +31,8 @@ func (s *Store) ListProductionOperationsPage(ctx context.Context, workspace iden
 			return nil, domain.ErrInvalidArgument
 		}
 	}
-	rows, err := s.pool.Query(ctx, `SELECT o.id,o.created_by,o.current_version,o.created_at,o.updated_at
+	rows, err := s.pool.Query(ctx, `SELECT o.id,o.created_by,o.current_version,o.created_at,o.updated_at,
+	EXISTS(SELECT 1 FROM production_operations successor WHERE successor.workspace_id=o.workspace_id AND successor.supersedes_operation_id=o.id)
 	FROM production_operations o JOIN production_versions v ON v.workspace_id=o.workspace_id AND v.operation_id=o.id AND v.version=o.current_version
 	WHERE o.workspace_id=$1 AND v.history_quality='verified'
 	AND ($2::uuid IS NULL OR o.created_by=$2)
@@ -48,7 +49,7 @@ func (s *Store) ListProductionOperationsPage(ctx context.Context, workspace iden
 	for rows.Next() {
 		var id, creator pgtype.UUID
 		var operation domain.ProductionOperation
-		if err := rows.Scan(&id, &creator, &operation.CurrentVersion, &operation.CreatedAt, &operation.UpdatedAt); err != nil {
+		if err := rows.Scan(&id, &creator, &operation.CurrentVersion, &operation.CreatedAt, &operation.UpdatedAt, &operation.Superseded); err != nil {
 			return nil, err
 		}
 		operation.ID, err = identity.ProductionOperationIDFromUUIDBytes(id.Bytes)

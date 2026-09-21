@@ -125,7 +125,7 @@ func TestRecomputabilityDifferentInputsProduceDifferentDigests(t *testing.T) {
 
 	lowRisk, err := service.Decide(context.Background(), governanceapp.DecideRequest{
 		WorkspaceID: workspace, ProposalID: proposal, RuleVersion: governance.RiskRuleVersion,
-		Inputs: json.RawMessage(`{"assetType":"concept","blockerCount":0,"evidenceComplete":true}`),
+		Inputs: json.RawMessage(`{"assetType":"business_term","blockerCount":0,"evidenceComplete":true}`),
 	})
 	if err != nil {
 		t.Fatalf("low-risk decision: %v", err)

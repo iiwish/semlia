@@ -61,4 +61,27 @@ func TestProductionAuthoringSupersedePreservesIdentityAndDecisions(t *testing.T)
 	if r.Code != http.StatusOK || authoringLifecycleDecode(t, r.Body.Bytes())["operationId"] != op {
 		t.Fatalf("old command replay: %d %s", r.Code, r.Body.String())
 	}
+	// The inbox must retain history without offering the replaced operation again.
+	r = sendProdRequest(h, http.MethodGet, path, p.String(), "", "")
+	if r.Code != http.StatusOK {
+		t.Fatalf("inbox list: %d %s", r.Code, r.Body.String())
+	}
+	var page struct {
+		Items []struct {
+			ID          string   `json:"id"`
+			Superseded  bool     `json:"superseded"`
+			ProposalIDs []string `json:"proposalIds"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(r.Body.Bytes(), &page); err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Items) != 2 {
+		t.Fatalf("expected both history and successor: %s", r.Body.String())
+	}
+	for _, item := range page.Items {
+		if item.Superseded != (item.ID == op) || len(item.ProposalIDs) != 1 {
+			t.Fatalf("incorrect inbox metadata: %s", r.Body.String())
+		}
+	}
 }

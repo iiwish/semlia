@@ -128,7 +128,7 @@ func loadFixture(t *testing.T, ctx context.Context, pool *pgstore.Pool) (identit
 		})
 		sum := sha256.Sum256(content)
 		assetRows = append(assetRows, []any{
-			assetID.UUID(), workspace.UUID(), "warehouse", key, string(semantic.Entity), revisionID.UUID(), "active", createdAt, createdAt,
+			assetID.UUID(), workspace.UUID(), "warehouse", key, string(semantic.BusinessObject), revisionID.UUID(), "active", createdAt, createdAt,
 		})
 		revisionRows = append(revisionRows, []any{
 			revisionID.UUID(), workspace.UUID(), assetID.UUID(), int64(1), "1.0.0",

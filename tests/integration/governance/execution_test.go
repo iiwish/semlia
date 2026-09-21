@@ -17,7 +17,6 @@ import (
 	execadapter "github.com/iiwish/semlia/internal/adapters/execution"
 	pgstore "github.com/iiwish/semlia/internal/adapters/postgres"
 	authapp "github.com/iiwish/semlia/internal/application/authorization"
-	catalogapp "github.com/iiwish/semlia/internal/application/catalog"
 	distapp "github.com/iiwish/semlia/internal/application/distribution"
 	execapp "github.com/iiwish/semlia/internal/application/execution"
 	governanceapp "github.com/iiwish/semlia/internal/application/governance"
@@ -86,24 +85,14 @@ func proveExecutionPostgresFixture(t *testing.T, channelsOnly bool) {
 	publisher := createPrincipalWithRoles(t, env, w, "publisher", []string{"publisher"})
 	reviewer := createReviewerPrincipal(t, env, w, "reviewer")
 	executor := createPrincipalWithRoles(t, env, w, "executor", []string{"workspace_admin"})
-	asset, revision := env.createAsset(t, w)
-	catalog := catalogapp.NewService(env.store, catalogapp.ClockFunc(time.Now))
-	appended, err := catalog.AppendRevision(ctx, catalogapp.AppendRevisionRequest{WorkspaceID: w, AssetID: asset, SchemaVersion: "1.0.0", Content: json.RawMessage(`{"name":"Net revenue","definition":"Revenue after refunds","execution":{"aggregation":"sum"}}`), CreatedBy: "founder", TraceID: traceID})
-	if err != nil {
-		t.Fatal(err)
-	}
-	revision = appended.ID
-	_, _, proposal := proposeToInReview(t, env, w, author, asset, revision)
-	approveProposal(t, env, w, reviewer, proposal)
-	if response := publishProposal(t, env, w, publisher, proposal); response.Code != http.StatusCreated {
-		t.Fatalf("publish asset: %d %s", response.Code, response.Body.String())
-	}
 	src, _ := identity.NewSourceConnectionID()
 	srv, _ := identity.NewSourceRevisionID()
 	dataset, _ := identity.NewPhysicalDatasetID()
 	dr, _ := identity.NewPhysicalDatasetRevisionID()
 	field, _ := identity.NewPhysicalFieldID()
 	fr, _ := identity.NewPhysicalFieldRevisionID()
+	paid, _ := identity.NewPhysicalFieldID()
+	paidRevision, _ := identity.NewPhysicalFieldRevisionID()
 	binding, _ := identity.NewPhysicalBindingID()
 	parsed, err := url.Parse(databaseURL)
 	if err != nil {
@@ -114,8 +103,8 @@ func proveExecutionPostgresFixture(t *testing.T, channelsOnly bool) {
 		sql  string
 		args []any
 	}{
-		{`CREATE TABLE public.execution_facts(amount numeric NOT NULL)`, nil},
-		{`INSERT INTO public.execution_facts VALUES(123456789.123456789),(0.000000001)`, nil},
+		{`CREATE TABLE public.execution_facts(amount numeric NOT NULL, paid_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP)`, nil},
+		{`INSERT INTO public.execution_facts(amount) VALUES(123456789.123456789),(0.000000001)`, nil},
 		{`INSERT INTO source_connections(id,workspace_id,adapter_kind,name,normalized_locator,status) VALUES($1,$2,'postgresql_catalog','Execution source',$3,'active')`, []any{src.UUID(), w.UUID(), locator}},
 		{`INSERT INTO source_revisions(id,workspace_id,source_connection_id,content_digest,adapter_version,observed_at) VALUES($1,$2,$3,$4,'test/1',CURRENT_TIMESTAMP)`, []any{srv.UUID(), w.UUID(), src.UUID(), digestOf("source")}},
 		{`INSERT INTO physical_datasets(id,workspace_id,source_connection_id,external_key,qualified_name) VALUES($1,$2,$3,'execution_facts','public.execution_facts')`, []any{dataset.UUID(), w.UUID(), src.UUID()}},
@@ -124,12 +113,18 @@ func proveExecutionPostgresFixture(t *testing.T, channelsOnly bool) {
 		{`INSERT INTO physical_fields(id,workspace_id,physical_dataset_id,external_key,name) VALUES($1,$2,$3,'amount','amount')`, []any{field.UUID(), w.UUID(), dataset.UUID()}},
 		{`INSERT INTO physical_field_revisions(id,workspace_id,physical_field_id,dataset_revision_id,ordinal,data_type,nullable) VALUES($1,$2,$3,$4,1,'numeric',false)`, []any{fr.UUID(), w.UUID(), field.UUID(), dr.UUID()}},
 		{`UPDATE physical_fields SET current_revision_id=$2 WHERE id=$1`, []any{field.UUID(), fr.UUID()}},
-		{`INSERT INTO physical_bindings(id,workspace_id,asset_id,dataset_id,field_id,created_by) VALUES($1,$2,$3,$4,$5,'steward')`, []any{binding.UUID(), w.UUID(), asset.UUID(), dataset.UUID(), field.UUID()}},
+		{`INSERT INTO physical_fields(id,workspace_id,physical_dataset_id,external_key,name) VALUES($1,$2,$3,'paid_at','paid_at')`, []any{paid.UUID(), w.UUID(), dataset.UUID()}},
+		{`INSERT INTO physical_field_revisions(id,workspace_id,physical_field_id,dataset_revision_id,ordinal,data_type,nullable) VALUES($1,$2,$3,$4,2,'timestamptz',false)`, []any{paidRevision.UUID(), w.UUID(), paid.UUID(), dr.UUID()}},
+		{`UPDATE physical_fields SET current_revision_id=$2 WHERE id=$1`, []any{paid.UUID(), paidRevision.UUID()}},
 	}
 	for _, s := range statements {
 		if _, err := env.pool.Exec(ctx, s.sql, s.args...); err != nil {
 			t.Fatal(err)
 		}
+	}
+	asset, dataAsset := publishExecutionKnowledge(t, env, w, author, reviewer, publisher, dataset, dr, field, paid, fr, paidRevision)
+	if _, err := env.pool.Exec(ctx, `INSERT INTO physical_bindings(id,workspace_id,asset_id,dataset_id,created_by) VALUES($1,$2,$3,$4,'steward')`, binding.UUID(), w.UUID(), dataAsset.UUID(), dataset.UUID()); err != nil {
+		t.Fatal(err)
 	}
 	body := fmt.Sprintf(`{"targetObjectType":"physical_binding","targetObjectId":%q,"title":"Publish execution binding","reason":"Governed execution","createdBy":%q,"changeSet":[{"fieldPath":"notes","op":"add","afterDigest":%q,"afterValue":"Execution binding reviewed"}]}`, binding.String(), author.String(), sha256Of(`"Execution binding reviewed"`))
 	created := env.request(t, http.MethodPost, env.proposalsPath(t, w), author.String(), body)
@@ -177,6 +172,14 @@ func proveExecutionPostgresFixture(t *testing.T, channelsOnly bool) {
 		t.Fatal(err)
 	}
 	adapter.WithLocalPlaintext()
+	if _, err := env.pool.Exec(ctx, `ALTER ROLE execution_reader SET TimeZone='America/New_York'`); err != nil {
+		t.Fatal(err)
+	}
+	timezoneProbe := adapter.Execute(ctx, w, execdomain.Compiled{SourceID: src.UUID(), SourceLocator: locator,
+		SQL: `SELECT current_setting('TimeZone')`, Columns: []string{"zone"}}, execdomain.DefaultLimits())
+	if timezoneProbe.ErrorCode != "" || len(timezoneProbe.Rows) != 1 || timezoneProbe.Rows[0][0] != "UTC" {
+		t.Fatalf("execution timezone was inherited from source role: %+v", timezoneProbe)
+	}
 	compiled, err := execdomain.Compile(*resolved.Plan)
 	if err != nil {
 		t.Fatal(err)

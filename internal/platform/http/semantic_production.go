@@ -225,15 +225,48 @@ type ProductionCommandResultResponse struct {
 }
 
 type OperationSummaryResponse struct {
-	ID             string  `json:"id"`
-	CurrentVersion int     `json:"currentVersion"`
-	CreatedBy      string  `json:"createdBy"`
-	CreatedAt      string  `json:"createdAt"`
-	UpdatedAt      string  `json:"updatedAt"`
-	Frozen         bool    `json:"frozen"`
-	Progress       string  `json:"progress"`
-	TargetCount    int     `json:"targetCount"`
-	ReleaseID      *string `json:"releaseId"`
+	Superseded     bool     `json:"superseded"`
+	ProposalIDs    []string `json:"proposalIds"`
+	ID             string   `json:"id"`
+	Title          string   `json:"title,omitempty"`
+	CurrentVersion int      `json:"currentVersion"`
+	CreatedBy      string   `json:"createdBy"`
+	CreatedAt      string   `json:"createdAt"`
+	UpdatedAt      string   `json:"updatedAt"`
+	Frozen         bool     `json:"frozen"`
+	Progress       string   `json:"progress"`
+	TargetCount    int      `json:"targetCount"`
+	ReleaseID      *string  `json:"releaseId"`
+}
+
+func productionProposalIDs(targets []domain.ProductionTarget) []string {
+	ids := []string{}
+	for _, target := range targets {
+		if target.ProposalID != nil {
+			ids = append(ids, target.ProposalID.String())
+		}
+	}
+	return ids
+}
+
+func productionTitle(targets []domain.ProductionTarget) string {
+	var fallback string
+	for _, target := range targets {
+		if target.Declaration == nil {
+			continue
+		}
+		title := strings.TrimSpace(target.Declaration.Title)
+		if title == "" {
+			continue
+		}
+		if target.Declaration.Kind == "semantic_asset" {
+			return title
+		}
+		if fallback == "" {
+			fallback = title
+		}
+	}
+	return fallback
 }
 
 type HeadReferenceResponse struct {
@@ -642,7 +675,10 @@ func (handler *Handler) getProductionOperation(response http.ResponseWriter, req
 
 	res := ProductionOperationResponse{
 		Summary: OperationSummaryResponse{
+			Superseded:     op.Superseded,
+			ProposalIDs:    productionProposalIDs(targets),
 			ID:             op.ID.String(),
+			Title:          productionTitle(targets),
 			CurrentVersion: op.CurrentVersion,
 			CreatedBy:      op.CreatedBy.String(),
 			CreatedAt:      op.CreatedAt.UTC().Format(time.RFC3339),
@@ -767,7 +803,10 @@ func (handler *Handler) listProductionOperations(response http.ResponseWriter, r
 			releaseID = &value
 		}
 		items = append(items, OperationSummaryResponse{
+			Superseded:     op.Superseded,
+			ProposalIDs:    productionProposalIDs(targets),
 			ID:             op.ID.String(),
+			Title:          productionTitle(targets),
 			CurrentVersion: op.CurrentVersion,
 			CreatedBy:      op.CreatedBy.String(),
 			CreatedAt:      op.CreatedAt.UTC().Format(time.RFC3339),

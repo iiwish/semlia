@@ -20,16 +20,37 @@ const LiveAdapterVersion = "1.0.0"
 type LiveCollector struct {
 	connectTimeout time.Duration
 	queryTimeout   time.Duration
+	// allowUnsafeSourceRole relaxes only the role-capability assertion. It never
+	// relaxes the session read-only assertion, so discovery statements stay
+	// non-mutating even when the bound role could write.
+	allowUnsafeSourceRole bool
 }
 
-func NewLiveCollector(connectTimeout, queryTimeout time.Duration) *LiveCollector {
+type Option func(*LiveCollector)
+
+// WithUnsafeSourceRole accepts a source role that is not provably read-only.
+// This is a development-only relief for sources whose operator holds no
+// dedicated read-only account. It must never be reachable from production or
+// from a shared acceptance environment; the configuration loader enforces that
+// gate for SEMLIA_DISCOVERY_ALLOW_UNSAFE_SOURCE.
+func WithUnsafeSourceRole() Option {
+	return func(collector *LiveCollector) { collector.allowUnsafeSourceRole = true }
+}
+
+func NewLiveCollector(connectTimeout, queryTimeout time.Duration, options ...Option) *LiveCollector {
 	if connectTimeout <= 0 {
 		connectTimeout = 5 * time.Second
 	}
 	if queryTimeout <= 0 {
 		queryTimeout = 15 * time.Second
 	}
-	return &LiveCollector{connectTimeout: connectTimeout, queryTimeout: queryTimeout}
+	collector := &LiveCollector{connectTimeout: connectTimeout, queryTimeout: queryTimeout}
+	for _, option := range options {
+		if option != nil {
+			option(collector)
+		}
+	}
+	return collector
 }
 
 func (collector *LiveCollector) Collect(
@@ -69,7 +90,7 @@ func (collector *LiveCollector) Collect(
 		return domain.Snapshot{}, domain.ErrConnectionTest
 	}
 	defer func() { _ = tx.Rollback(context.Background()) }()
-	if err := assertReadOnlyRole(queryCtx, tx); err != nil {
+	if err := collector.assertReadOnlyRole(queryCtx, tx); err != nil {
 		return domain.Snapshot{}, err
 	}
 	datasets, err := collectDatasets(queryCtx, tx, source)
@@ -103,9 +124,18 @@ func (collector *LiveCollector) Test(ctx context.Context, source domain.Source, 
 	return err
 }
 
-func assertReadOnlyRole(ctx context.Context, tx pgx.Tx) error {
-	var elevated, writable bool
-	err := tx.QueryRow(ctx, `
+// assertReadOnlyRole rejects source roles that could mutate the source.
+//
+// The capability assertion (administrative attributes and CREATE privileges) is
+// skipped when the collector was built WithUnsafeSourceRole. The session
+// read-only assertion below always applies: the collector connects with
+// default_transaction_read_only=on inside a read-only transaction, so a role
+// that happens to be privileged still cannot execute a mutating statement
+// through this code path.
+func (collector *LiveCollector) assertReadOnlyRole(ctx context.Context, tx pgx.Tx) error {
+	if !collector.allowUnsafeSourceRole {
+		var elevated, writable bool
+		err := tx.QueryRow(ctx, `
 SELECT (r.rolsuper OR r.rolcreaterole OR r.rolcreatedb OR r.rolreplication OR r.rolbypassrls),
        (has_database_privilege(current_user, current_database(), 'CREATE') OR EXISTS (
            SELECT 1 FROM pg_namespace n
@@ -113,11 +143,12 @@ SELECT (r.rolsuper OR r.rolcreaterole OR r.rolcreatedb OR r.rolreplication OR r.
              AND has_schema_privilege(current_user, n.oid, 'CREATE')
        ))
 FROM pg_roles r WHERE r.rolname = current_user`).Scan(&elevated, &writable)
-	if err != nil {
-		return domain.ErrConnectionTest
-	}
-	if elevated || writable {
-		return domain.ErrUnsafeSource
+		if err != nil {
+			return domain.ErrConnectionTest
+		}
+		if elevated || writable {
+			return domain.ErrUnsafeSource
+		}
 	}
 	var readOnly string
 	if err := tx.QueryRow(ctx, "SHOW transaction_read_only").Scan(&readOnly); err != nil || readOnly != "on" {
@@ -135,6 +166,7 @@ FROM pg_class c
 JOIN pg_namespace n ON n.oid = c.relnamespace
 JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
 WHERE c.relkind IN ('r','p','v','m') AND n.nspname NOT LIKE 'pg_%' AND n.nspname <> 'information_schema'
+  AND n.nspname <> 'gp_toolkit'
   AND has_table_privilege(current_user, c.oid, 'SELECT')
 ORDER BY n.nspname, c.relname, a.attnum`)
 	if err != nil {
@@ -176,6 +208,7 @@ LEFT JOIN pg_class ref ON ref.oid = con.confrelid
 LEFT JOIN pg_namespace rns ON rns.oid = ref.relnamespace
 LEFT JOIN pg_attribute ratt ON ratt.attrelid = ref.oid AND ratt.attnum = con.confkey[key.ord]
 WHERE con.contype IN ('p','u','f') AND ns.nspname NOT LIKE 'pg_%' AND ns.nspname <> 'information_schema'
+  AND ns.nspname <> 'gp_toolkit'
   AND has_table_privilege(current_user, tbl.oid, 'SELECT')
 GROUP BY con.conname, con.contype, ns.nspname, tbl.relname, rns.nspname, ref.relname
 ORDER BY ns.nspname, tbl.relname, con.conname`)

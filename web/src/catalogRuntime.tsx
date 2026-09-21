@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import {
   createAsset as createCatalogAsset,
@@ -16,10 +16,13 @@ import {
   type SemanticAssetType,
   type Workspace,
 } from "./catalog";
-import type { Asset, AssetAuthoritySection, AssetReadinessGate, AssetType, AssetTypeSpec, EvidenceAuthority } from "./types";
+import type { Asset, AssetAuthoritySection, AssetType, AssetTypeSpec, EvidenceAuthority } from "./types";
 import { useOptionalSessionRuntime } from "./sessionRuntime";
+import { knowledgeReadiness } from "./knowledgeReadiness";
 
 interface CreateAssetInput {
+  scope?: string;
+  spec?: import("./knowledge").KnowledgeSpec;
   address: string;
   assetType: SemanticAssetType;
   title: string;
@@ -105,9 +108,35 @@ export function CatalogRuntimeProvider({ children }: { children: ReactNode }) {
   const [revisionStates, setRevisionStates] = useState<Record<string, CatalogRevisionState>>({});
   const [authorityPageStates, setAuthorityPageStates] = useState<Record<string, CatalogAuthorityPageState>>({});
   const workspaceRef = useRef(workspaceId);
+  const workspaceGenerationRef = useRef(0);
   const catalogRequestRef = useRef<CatalogRequestFingerprint>({ workspaceId, query, assetType, generation: 0 });
   const assetsRef = useRef(assets);
   const revisionStatesRef = useRef(revisionStates);
+
+  const applyWorkspace = useCallback((nextWorkspaceId: string) => {
+    if (workspaceRef.current === nextWorkspaceId) return;
+    workspaceRef.current = nextWorkspaceId;
+    workspaceGenerationRef.current += 1;
+    catalogRequestRef.current = { ...catalogRequestRef.current, workspaceId: nextWorkspaceId, generation: catalogRequestRef.current.generation + 1 };
+    assetsRef.current = [];
+    revisionStatesRef.current = {};
+    setWorkspaceIdState(nextWorkspaceId);
+    setAssets([]);
+    setCatalogAssetIds([]);
+    setDetailStates({});
+    setRevisionStates({});
+    setAuthorityPageStates({});
+    setPageState({ loadingMore: false, appendError: "" });
+    setLoading(Boolean(nextWorkspaceId));
+    setError("");
+  }, []);
+
+  const preferredWorkspaceId = sessionRuntime?.activeWorkspaceId ?? "";
+  const preferredWorkspaceAdmitted = sessionRuntime?.session?.workspaces.some((item) => item.id === preferredWorkspaceId) ?? false;
+  // Clear the old workspace before painting or awaiting the workspace list.
+  useLayoutEffect(() => {
+    if (preferredWorkspaceAdmitted) applyWorkspace(preferredWorkspaceId);
+  }, [applyWorkspace, preferredWorkspaceAdmitted, preferredWorkspaceId]);
 
   useEffect(() => {
     assetsRef.current = assets;
@@ -121,20 +150,21 @@ export function CatalogRuntimeProvider({ children }: { children: ReactNode }) {
     const controller = new AbortController();
     listWorkspaces(controller.signal)
       .then((items) => {
+        if (controller.signal.aborted) return;
         setWorkspaces(items);
-        const preferredWorkspaceId = sessionRuntime?.activeWorkspaceId ?? "";
-        setWorkspaceIdState((current) => {
-          const next = current || (items.some((item) => item.id === preferredWorkspaceId) ? preferredWorkspaceId : items[0]?.id) || "";
-          workspaceRef.current = next;
-          catalogRequestRef.current = { ...catalogRequestRef.current, workspaceId: next, generation: catalogRequestRef.current.generation + 1 };
-          return next;
-        });
+        const next = items.some((item) => item.id === preferredWorkspaceId) ? preferredWorkspaceId
+          : items.some((item) => item.id === workspaceRef.current) ? workspaceRef.current : items[0]?.id ?? "";
+        applyWorkspace(next);
         setError("");
+        if (!next) setLoading(false);
       })
-      .catch((reason: Error) => setError(reason.message))
-      .finally(() => setLoading(false));
+      .catch((reason: Error) => {
+        if (controller.signal.aborted) return;
+        setError(reason.message);
+        setLoading(false);
+      });
     return () => controller.abort();
-  }, [sessionRuntime?.activeWorkspaceId]);
+  }, [applyWorkspace, preferredWorkspaceId]);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -173,18 +203,9 @@ export function CatalogRuntimeProvider({ children }: { children: ReactNode }) {
       setRefreshVersion((value) => value + 1);
       return;
     }
-    workspaceRef.current = nextWorkspaceId;
-    catalogRequestRef.current = { workspaceId: nextWorkspaceId, query, assetType, generation: catalogRequestRef.current.generation + 1 };
-    setWorkspaceIdState(nextWorkspaceId);
+    applyWorkspace(nextWorkspaceId);
     sessionRuntime?.selectWorkspace(nextWorkspaceId);
-    setAssets([]);
-    setCatalogAssetIds([]);
-    setDetailStates({});
-    setRevisionStates({});
-    setAuthorityPageStates({});
-    setPageState({ loadingMore: false, appendError: "" });
-    setError("");
-  }, [assetType, query, sessionRuntime, workspaceId]);
+  }, [applyWorkspace, sessionRuntime, workspaceId]);
 
   const setQuery = useCallback((nextQuery: string, nextAssetType: SemanticAssetType | "") => {
     if (nextQuery === query && nextAssetType === assetType) return;
@@ -230,12 +251,13 @@ export function CatalogRuntimeProvider({ children }: { children: ReactNode }) {
   const ensureRevisions = useCallback(async (assetId: string) => {
     if (!workspaceId) return;
     const requestWorkspaceId = workspaceId;
+    const requestGeneration = workspaceGenerationRef.current;
     const existing = revisionStates[assetId];
     if (existing?.state === "loading" || existing?.state === "ready") return;
     setRevisionStates((current) => ({ ...current, [assetId]: { state: "loading", error: "", items: [], loadingMore: false, appendError: "" } }));
     try {
       const page = await listAssetRevisions(workspaceId, assetId);
-      if (workspaceRef.current !== requestWorkspaceId) return;
+      if (workspaceRef.current !== requestWorkspaceId || workspaceGenerationRef.current !== requestGeneration) return;
       setRevisionStates((current) => ({ ...current, [assetId]: {
         state: "ready",
         error: "",
@@ -246,7 +268,7 @@ export function CatalogRuntimeProvider({ children }: { children: ReactNode }) {
         appendError: "",
       } }));
     } catch (reason) {
-      if (workspaceRef.current !== requestWorkspaceId) return;
+      if (workspaceRef.current !== requestWorkspaceId || workspaceGenerationRef.current !== requestGeneration) return;
       const message = reason instanceof Error ? reason.message : "无法读取修订历史。";
       setRevisionStates((current) => ({ ...current, [assetId]: { state: "error", error: message, items: [], loadingMore: false, appendError: "" } }));
     }
@@ -257,10 +279,11 @@ export function CatalogRuntimeProvider({ children }: { children: ReactNode }) {
     const cursor = existing?.nextCursor;
     if (!workspaceId || !cursor || existing.loadingMore) return;
     const requestWorkspaceId = workspaceId;
+    const requestGeneration = workspaceGenerationRef.current;
     setRevisionStates((current) => ({ ...current, [assetId]: { ...current[assetId], loadingMore: true, appendError: "" } }));
     try {
       const page = await listAssetRevisions(workspaceId, assetId, cursor);
-      if (workspaceRef.current !== requestWorkspaceId) return;
+      if (workspaceRef.current !== requestWorkspaceId || workspaceGenerationRef.current !== requestGeneration) return;
       if (revisionStatesRef.current[assetId]?.nextCursor !== cursor) return;
       setRevisionStates((current) => {
         const prior = current[assetId];
@@ -280,7 +303,7 @@ export function CatalogRuntimeProvider({ children }: { children: ReactNode }) {
         } };
       });
     } catch (reason) {
-      if (workspaceRef.current !== requestWorkspaceId) return;
+      if (workspaceRef.current !== requestWorkspaceId || workspaceGenerationRef.current !== requestGeneration) return;
       const message = reason instanceof Error ? reason.message : "无法加载更多修订。";
       setRevisionStates((current) => ({ ...current, [assetId]: { ...current[assetId], loadingMore: false, appendError: message } }));
     }
@@ -293,10 +316,11 @@ export function CatalogRuntimeProvider({ children }: { children: ReactNode }) {
     const key = `${assetId}:${sectionKind}`;
     if (!workspaceId || !cursor || authorityPageStates[key]?.loadingMore) return;
     const requestWorkspaceId = workspaceId;
+    const requestGeneration = workspaceGenerationRef.current;
     setAuthorityPageStates((current) => ({ ...current, [key]: { loadingMore: true, appendError: "" } }));
     try {
       const page = await listAssetAuthorityRecords(workspaceId, assetId, sectionKind, cursor);
-      if (workspaceRef.current !== requestWorkspaceId) return;
+      if (workspaceRef.current !== requestWorkspaceId || workspaceGenerationRef.current !== requestGeneration) return;
       if (assetsRef.current.find((item) => item.id === assetId)?.authoritySections?.find((item) => item.kind === sectionKind)?.recordsPage.nextCursor !== cursor) return;
       setAssets((current) => current.map((item) => {
         if (item.id !== assetId || !item.authoritySections) return item;
@@ -315,7 +339,7 @@ export function CatalogRuntimeProvider({ children }: { children: ReactNode }) {
         appendError: page.page.nextCursor === cursor ? "服务器返回了重复游标，已停止继续加载。" : "",
       } }));
     } catch (reason) {
-      if (workspaceRef.current !== requestWorkspaceId) return;
+      if (workspaceRef.current !== requestWorkspaceId || workspaceGenerationRef.current !== requestGeneration) return;
       const message = reason instanceof Error ? reason.message : "无法加载更多权威记录。";
       setAuthorityPageStates((current) => ({ ...current, [key]: { loadingMore: false, appendError: message } }));
     }
@@ -324,10 +348,11 @@ export function CatalogRuntimeProvider({ children }: { children: ReactNode }) {
   const ensureAsset = useCallback(async (assetId: string) => {
     if (!workspaceId) return;
     const requestWorkspaceId = workspaceId;
+    const requestGeneration = workspaceGenerationRef.current;
     setDetailStates((current) => ({ ...current, [assetId]: { state: "loading", error: "" } }));
     try {
       const detail = await getAsset(workspaceId, assetId);
-      if (workspaceRef.current !== requestWorkspaceId) return;
+      if (workspaceRef.current !== requestWorkspaceId || workspaceGenerationRef.current !== requestGeneration) return;
       const projected = projectDetail(workspaceId, detail);
       setAssets((current) => current.some((item) => item.id === assetId)
         ? current.map((item) => item.id === assetId ? projected : item)
@@ -337,7 +362,7 @@ export function CatalogRuntimeProvider({ children }: { children: ReactNode }) {
       setDetailStates((current) => ({ ...current, [assetId]: { state: "ready", error: "" } }));
       setError("");
     } catch (reason) {
-      if (workspaceRef.current !== requestWorkspaceId) return;
+      if (workspaceRef.current !== requestWorkspaceId || workspaceGenerationRef.current !== requestGeneration) return;
       const message = reason instanceof Error ? reason.message : "无法加载资产详情。";
       setDetailStates((current) => ({ ...current, [assetId]: { state: "error", error: message } }));
     }
@@ -345,36 +370,29 @@ export function CatalogRuntimeProvider({ children }: { children: ReactNode }) {
 
   const createWorkspace = useCallback(async (slug: string, displayName: string) => {
     const workspace = await createCatalogWorkspace(slug, displayName);
-    workspaceRef.current = workspace.id;
+    applyWorkspace(workspace.id);
     catalogRequestRef.current = { workspaceId: workspace.id, query: "", assetType: "", generation: catalogRequestRef.current.generation + 1 };
     setWorkspaces((current) => [...current, workspace]);
-    setWorkspaceIdState(workspace.id);
     setQueryState("");
     setAssetType("");
-    setAssets([]);
-    setCatalogAssetIds([]);
-    setDetailStates({});
-    setRevisionStates({});
-    setAuthorityPageStates({});
-    setPageState({ loadingMore: false, appendError: "" });
-    setError("");
     if (sessionRuntime) {
       await sessionRuntime.refresh();
       sessionRuntime.selectWorkspace(workspace.id);
     }
-  }, [sessionRuntime]);
+  }, [applyWorkspace, sessionRuntime]);
 
   const createAsset = useCallback(async (input: CreateAssetInput) => {
     if (!workspaceId) throw new Error("请先创建工作区。");
     const requestWorkspaceId = workspaceId;
-    const detail = await createCatalogAsset(workspaceId, input);
+    const requestGeneration = workspaceGenerationRef.current;
+    const detail = await createCatalogAsset(workspaceId, { ...input, ownerPrincipalId: sessionRuntime?.capabilitySession?.principalId });
     const projected = projectDetail(workspaceId, detail);
-    if (workspaceRef.current !== requestWorkspaceId) return projected;
+    if (workspaceRef.current !== requestWorkspaceId || workspaceGenerationRef.current !== requestGeneration) return projected;
     setAssets((current) => [projected, ...current.filter((item) => item.id !== projected.id)]);
     catalogRequestRef.current = { ...catalogRequestRef.current, generation: catalogRequestRef.current.generation + 1 };
     setRefreshVersion((value) => value + 1);
     return projected;
-  }, [workspaceId]);
+  }, [workspaceId, sessionRuntime?.capabilitySession?.principalId]);
 
   const refresh = useCallback(() => {
     catalogRequestRef.current = { ...catalogRequestRef.current, generation: catalogRequestRef.current.generation + 1 };
@@ -420,13 +438,11 @@ export function useCatalogRuntime() {
 }
 
 const typeLabels: Record<SemanticAssetType, AssetType> = {
-  concept: "业务概念",
-  entity: "业务实体",
-  semantic_model: "语义模型",
-  dimension: "维度",
-  measure: "度量",
+  business_object: "业务对象",
+  business_term: "业务口径",
   metric: "指标",
-  segment: "分群",
+  data_asset: "数据资产",
+  analysis_model: "分析模型",
 };
 
 const evidenceAuthorities: Record<string, EvidenceAuthority> = {
@@ -507,10 +523,11 @@ function projectAsset(workspaceId: string, summary: CatalogAsset, detail: Catalo
   const validationBasis = validationAuthority?.availability === "available"
     ? validationComplete ? `${validationAuthority.authority} · ${validationRunCount} 次运行` : `${validationAuthority.authority} · 结果不完整`
     : `${validationAuthority?.authority ?? "validation_runs"} · ${validationAuthority?.availability ?? "未返回"}`;
-  const readiness = projectReadiness(summary, definition, evidence.length, relationRecords.length, Boolean(detail), detail?.authoritySections);
+  const readiness = knowledgeReadiness({ assetType: summary.assetType, revisionId, content, sections: detail?.authoritySections });
 
   return {
     id: summary.id,
+    knowledgeSpec: (content.spec ?? {}) as Asset["knowledgeSpec"],
     detailLoaded: Boolean(detail),
     authoritySections,
     revision: revision?.sequence ? `@${revision.sequence}` : "@0",
@@ -607,48 +624,6 @@ function projectAsset(workspaceId: string, summary: CatalogAsset, detail: Catalo
   };
 }
 
-function projectReadiness(summary: CatalogAsset, definition: string, evidenceCount: number, relationCount: number, detailLoaded: boolean, authoritySections?: CatalogAssetDetail["authoritySections"]): AssetReadinessGate[] {
-  if (authoritySections) {
-    const section = (kind: CatalogAssetDetail["authoritySections"][number]["kind"]) => authoritySections.find((item) => item.kind === kind);
-    const gate = (id: AssetReadinessGate["id"], label: string, kind: CatalogAssetDetail["authoritySections"][number]["kind"]): AssetReadinessGate => {
-      const value = section(kind);
-      return { id, label, state: value?.availability === "available" ? "passed" : value?.availability === "not_configured" || value?.availability === "not_released" ? "not_applicable" : "warning", detail: value ? `${value.authority} · ${value.availability}` : "服务端未返回该权威分区。" };
-    };
-    const validation = section("validation");
-    const runCount = authorityCount(validation, "runCount");
-    const blockerCount = authorityCount(validation, "blockerCount");
-    const warningCount = authorityCount(validation, "warningCount");
-    const validationGate: AssetReadinessGate = validation?.availability === "not_configured" || validation?.availability === "not_released"
-      ? { id: "validation", label: "验证结果", state: "not_applicable", detail: `${validation.authority} · ${validation.availability}` }
-      : validation?.availability !== "available"
-        ? { id: "validation", label: "验证结果", state: "warning", detail: validation ? `${validation.authority} · ${validation.availability}` : "服务端未返回验证权威分区。" }
-        : runCount === null || runCount === 0 || blockerCount === null || warningCount === null
-          ? { id: "validation", label: "验证结果", state: "warning", detail: `${validation.authority} · 验证分区可用，但未返回完整运行与结果计数。` }
-          : blockerCount > 0 || warningCount > 0
-            ? { id: "validation", label: "验证结果", state: "warning", detail: `${validation.authority} · ${runCount} 次运行，${blockerCount} 项阻断，${warningCount} 项提醒。` }
-            : { id: "validation", label: "验证结果", state: "passed", detail: `${validation.authority} · ${runCount} 次运行，未返回阻断或提醒。` };
-    return [
-      { id: "identity", label: "稳定身份", state: "passed", detail: `${summary.id} · ${summary.address}` },
-      { id: "ownership", label: "责任归属", state: "not_applicable", detail: "当前权威详情合同未提供责任人投影。" },
-      gate("definition", "规范定义", "definition"),
-      gate("relations", "本体关系", "relations"),
-      gate("mapping", "物理实现", "physical_bindings"),
-      gate("evidence", "证据覆盖", "evidence"),
-      validationGate,
-      gate("compatibility", "消费兼容", "consumer_impact"),
-    ];
-  }
-  return [
-    { id: "identity", label: "稳定身份", state: "passed", detail: `${summary.id} · ${summary.address}` },
-    { id: "ownership", label: "责任归属", state: "warning", detail: "M1 Catalog 尚未提供责任人字段。" },
-    { id: "definition", label: "规范定义", state: definition === "尚未声明规范定义。" ? "warning" : "passed", detail: definition === "尚未声明规范定义。" ? definition : "当前不可变修订包含规范定义。" },
-    { id: "relations", label: "本体关系", state: !detailLoaded ? "not_applicable" : relationCount > 0 ? "passed" : "warning", detail: !detailLoaded ? "打开资产后按需读取有界关系。" : relationCount > 0 ? `${relationCount} 条真实注册表关系。` : "尚未声明关系。" },
-    { id: "mapping", label: "物理实现", state: "not_applicable", detail: "M1 Catalog API 不包含物理绑定。" },
-    { id: "evidence", label: "证据覆盖", state: evidenceCount > 0 ? "passed" : "warning", detail: evidenceCount > 0 ? `${evidenceCount} 项不可变证据。` : "当前修订尚未关联证据。" },
-    { id: "validation", label: "验证结果", state: "not_applicable", detail: "验证运行属于后续里程碑。" },
-    { id: "compatibility", label: "消费兼容", state: "not_applicable", detail: "消费绑定属于后续里程碑。" },
-  ];
-}
 
 function projectTypeSpec(type: AssetType, content: Record<string, unknown>): AssetTypeSpec {
   const base = {
@@ -659,11 +634,10 @@ function projectTypeSpec(type: AssetType, content: Record<string, unknown>): Ass
     aggregation: contentString(content, "aggregation") || "尚未声明",
   };
   if (type === "指标") return { ...base, kind: "metric", metricKind: enumValue(contentValue(content, "metricKind", "metric_kind"), ["simple", "ratio", "derived", "cumulative", "conversion"] as const, "undeclared"), allowedDimensions: contentStrings(content, "allowedDimensions", "allowed_dimensions"), comparisonSemantics: contentString(content, "comparisonSemantics", "comparison_semantics") || "尚未声明" };
-  if (type === "度量") return { ...base, kind: "measure", additivity: enumValue(contentValue(content, "additivity"), ["additive", "semi_additive", "non_additive"] as const, "undeclared"), nullHandling: contentString(content, "nullHandling", "null_handling") || "尚未声明" };
-  if (type === "维度") return { ...base, kind: "dimension", valueType: contentString(content, "valueType", "value_type") || "尚未声明", nullSemantics: contentString(content, "nullSemantics", "null_semantics") || "尚未声明", hierarchy: contentStrings(content, "hierarchy") };
-  if (type === "业务实体") return { ...base, kind: "entity", entityKeys: contentStrings(content, "entityKeys", "entity_keys"), identityPolicy: contentString(content, "identityPolicy", "identity_policy") || "尚未声明", lifecycle: contentString(content, "lifecycle") || "尚未声明" };
-  if (type === "语义模型") return { ...base, kind: "model", primaryEntity: contentString(content, "primaryEntity", "primary_entity") || "尚未声明", publicMembers: contentStrings(content, "publicMembers", "public_members"), joinPathPolicy: contentString(content, "joinPathPolicy", "join_path_policy") || "尚未声明" };
-  if (type === "分群") return { ...base, kind: "segment", baseEntity: contentString(content, "baseEntity", "base_entity") || "尚未声明", refreshPolicy: contentString(content, "refreshPolicy", "refresh_policy") || "尚未声明", effectiveTime: contentString(content, "effectiveTime", "effective_time") || "尚未声明" };
+  if (type === "数据资产") return { ...base, kind: "dimension", valueType: contentString(content, "valueType", "value_type") || "尚未声明", nullSemantics: contentString(content, "nullSemantics", "null_semantics") || "尚未声明", hierarchy: contentStrings(content, "hierarchy") };
+  if (type === "业务对象") return { ...base, kind: "entity", entityKeys: contentStrings(content, "entityKeys", "entity_keys"), identityPolicy: contentString(content, "identityPolicy", "identity_policy") || "尚未声明", lifecycle: contentString(content, "lifecycle") || "尚未声明" };
+  if (type === "分析模型") return { ...base, kind: "model", primaryEntity: contentString(content, "primaryEntity", "primary_entity") || "尚未声明", publicMembers: contentStrings(content, "publicMembers", "public_members"), joinPathPolicy: contentString(content, "joinPathPolicy", "join_path_policy") || "尚未声明" };
+  if (type === "业务口径") return { ...base, kind: "segment", baseEntity: contentString(content, "baseEntity", "base_entity") || "尚未声明", refreshPolicy: contentString(content, "refreshPolicy", "refresh_policy") || "尚未声明", effectiveTime: contentString(content, "effectiveTime", "effective_time") || "尚未声明" };
   return { ...base, kind: "concept", conceptClass: contentString(content, "conceptClass", "concept_class") || "尚未声明", disambiguationRule: contentString(content, "disambiguationRule", "disambiguation_rule") || "尚未声明" };
 }
 

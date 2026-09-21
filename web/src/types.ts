@@ -3,7 +3,7 @@ import type { components } from "@semlia/sdk-typescript";
 export type ViewId = "ask" | "sources" | "overview" | "assets" | "releases" | "settings";
 export type NavigateToView = (view: ViewId, contextIndex?: number) => void;
 
-export type AssetType = "业务概念" | "业务实体" | "语义模型" | "维度" | "度量" | "指标" | "分群";
+export type AssetType = "业务对象" | "业务口径" | "指标" | "数据资产" | "分析模型";
 export type AssetStatus = "已发布" | "需关注" | "草稿" | "待确认";
 export type ReadinessState = "passed" | "warning" | "not_applicable";
 export type EvidenceAuthority = "DECLARED" | "CONSTRAINED" | "DERIVED" | "OBSERVED" | "INFERRED";
@@ -143,7 +143,7 @@ export interface KnowledgeRevisionSubmission {
   title: string;
   summary: string;
   reason: string;
-  changes: Proposal["changes"];
+  changes: Array<{ field: string; before: string | Record<string, unknown>; after: string | Record<string, unknown> }>;
 }
 
 export interface EvidenceArtifact {
@@ -282,6 +282,7 @@ export interface JoinContract {
 }
 
 export interface Asset {
+  knowledgeSpec?: import("./knowledge").KnowledgeSpec;
   // This is a denormalized detail projection. Canonical identity, revision,
   // deployment and quality records remain independently addressable.
   id: string;

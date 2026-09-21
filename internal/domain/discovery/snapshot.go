@@ -51,6 +51,10 @@ type SnapshotMember struct {
 	CoverageKey      string `json:"coverageKey"`
 	ParentObjectID   string `json:"parentObjectId,omitempty"`
 	ParentRevisionID string `json:"parentRevisionId,omitempty"`
+	DatasetKind      string `json:"datasetKind,omitempty"`
+	DataType         string `json:"dataType,omitempty"`
+	Nullable         *bool  `json:"nullable,omitempty"`
+	Ordinal          *int   `json:"ordinal,omitempty"`
 }
 
 type SnapshotDiagnostic struct {

@@ -105,12 +105,17 @@
 .production-muted { color: #626975; font-size: 12px; overflow-wrap: anywhere; }
 .production-muted small { display: block; margin-top: 4px; }
 .production-alert { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; color: #a73432; background: #fdf0f0; padding: 10px 12px; margin: 12px 0; overflow-wrap: anywhere; }
+ul.production-alert { display: grid; gap: 6px; padding-left: 28px; }
 .production-notice { padding: 8px 0; color: #22704c; overflow-wrap: anywhere; }
 .production-empty { padding: 60px 0; text-align: center; color: #626975; }
 .production-records { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 270px), 1fr)); gap: 12px; }
 .production-record { display: flex; align-items: center; gap: 12px; text-align: left; width: 100%; padding: 14px; margin-bottom: 8px; background: #fff; border: 1px solid #dde1e6; border-radius: 6px; color: inherit; }
 .production-record > span { display: grid; gap: 4px; min-width: 0; flex: 1; }
 .production-record small { color: #626975; }
+.production-record strong { overflow-wrap: anywhere; }
+.knowledge-next-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.knowledge-next-actions:empty { display: none; }
+.knowledge-next-actions button { white-space: normal; text-align: left; overflow-wrap: anywhere; }
 .production-record:hover { border-color: #9daecc; }
 .production-start { padding: 12px 0 20px; }
 .production-source { padding: 12px 0; margin: 12px 0 20px; }

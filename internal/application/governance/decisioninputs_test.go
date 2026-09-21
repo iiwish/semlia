@@ -50,6 +50,8 @@ func TestClassifyDiffCategoriesIsDeterministicByFieldPathPrefix(t *testing.T) {
 		contract    bool
 	}{
 		{"expression", true, false, false, false, false},
+		{"spec", true, false, false, false, false},
+		{"spec.expression", true, false, false, false, false},
 		{"GrainExpression", true, false, false, false, false},
 		{"join.cardinality", true, false, false, false, false},
 		{"transform", true, false, false, false, false},
@@ -335,7 +337,7 @@ func TestInputsCollectorResolvesAssetScopedGovernedObjects(t *testing.T) {
 	objectID := mustInputTestID(t, identity.NewModelGrainID)
 	facts.objectAssets[objectID.UUID()] = assetID
 	facts.assetFacts[assetID.String()] = governanceapp.PolicyAssetFacts{
-		AssetType: "entity", EvidenceLinkCount: 1, CurrentRevisionContent: json.RawMessage(`{"owner":"stewards"}`),
+		AssetType: "business_object", EvidenceLinkCount: 1, CurrentRevisionContent: json.RawMessage(`{"owner":"stewards"}`),
 	}
 	proposal := governance.Proposal{
 		ID: newGovernanceProposalID(t), WorkspaceID: newGovernanceWorkspaceID(t),
@@ -345,7 +347,7 @@ func TestInputsCollectorResolvesAssetScopedGovernedObjects(t *testing.T) {
 	if err != nil {
 		t.Fatalf("collect: %v", err)
 	}
-	if target.AssetType != "entity" || target.EvidenceLinkCount != 1 || string(target.OwnerContent) != `{"owner":"stewards"}` {
+	if target.AssetType != "business_object" || target.EvidenceLinkCount != 1 || string(target.OwnerContent) != `{"owner":"stewards"}` {
 		t.Fatalf("target inputs = %+v", target)
 	}
 }
@@ -471,7 +473,7 @@ func TestPolicyServiceEvaluatesThroughTheRuleSource(t *testing.T) {
 	service := governanceapp.NewPolicyService(repository, governanceapp.ClockFunc(time.Now), governanceapp.WithRuleSource(source))
 	decision, err := service.Decide(context.Background(), governanceapp.DecideRequest{
 		WorkspaceID: newGovernanceWorkspaceID(t), ProposalID: newGovernanceProposalID(t), RuleVersion: "2.0",
-		Inputs: json.RawMessage(`{"assetType":"concept","blockerCount":0}`),
+		Inputs: json.RawMessage(`{"assetType":"business_term","blockerCount":0}`),
 	})
 	if err != nil {
 		t.Fatalf("decide with rule source: %v", err)

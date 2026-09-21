@@ -585,7 +585,7 @@ func TestBoundedRelationsAndDiscoveryRunProjection(t *testing.T) {
 	workspaceID := createWorkspace(t, pool, "catalog-relations")
 	assets := make([]domain.AssetDetail, 0, 4)
 	for _, address := range []string{"commerce.a", "commerce.b", "commerce.c", "commerce.d"} {
-		assets = append(assets, createAsset(t, service, workspaceID, address, semantic.Concept, `{"name":"Concept"}`))
+		assets = append(assets, createAsset(t, service, workspaceID, address, semantic.BusinessTerm, `{"name":"Concept"}`))
 	}
 	for index := 0; index < 3; index++ {
 		relationID := mustID(t, identity.NewRelationID)
@@ -638,7 +638,7 @@ func TestRelationPlanesProjectHierarchySemanticAndImpact(t *testing.T) {
 	workspaceID := createWorkspace(t, pool, "catalog-relation-planes")
 	root := createAsset(t, service, workspaceID, "commerce.net_revenue", semantic.Metric, `{"name":"Net revenue"}`)
 	taxonomyTarget := createAsset(t, service, workspaceID, "commerce.gross_revenue", semantic.Metric, `{"name":"Gross revenue"}`)
-	semanticTarget := createAsset(t, service, workspaceID, "commerce.order", semantic.Entity, `{"name":"Order"}`)
+	semanticTarget := createAsset(t, service, workspaceID, "commerce.order", semantic.BusinessObject, `{"name":"Order"}`)
 	impactTarget := createAsset(t, service, workspaceID, "commerce.recognized_revenue", semantic.Metric, `{"name":"Recognized revenue"}`)
 
 	relations := []semantic.RelationRecord{

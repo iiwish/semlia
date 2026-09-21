@@ -104,17 +104,17 @@ export async function listAssetRevisions(workspaceId: string, assetId: string, c
 
 export async function createAsset(
   workspaceId: string,
-  input: { address: string; assetType: SemanticAssetType; title: string; summary: string },
+  input: { address: string; assetType: SemanticAssetType; title: string; summary: string; scope?: string; ownerPrincipalId?: string; spec?: import("./knowledge").KnowledgeSpec },
 ): Promise<CatalogAssetDetail> {
   const response = await client.POST("/api/v1/workspaces/{workspaceId}/catalog/assets", {
     params: { path: { workspaceId } },
     body: {
       address: input.address,
       assetType: input.assetType,
-      lifecycleState: "active",
+      lifecycleState: "draft",
       schemaVersion: "1.0.0",
       createdBy: "catalog-web",
-      content: { title: input.title, summary: input.summary },
+      content: { address: input.address, assetType: input.assetType, displayName: input.title, definition: input.summary, scope: input.scope || null, ownerPrincipalId: input.ownerPrincipalId, spec: input.spec },
     },
   });
   if (!response.data) throw new Error(errorMessage(response.error));

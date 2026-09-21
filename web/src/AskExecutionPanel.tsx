@@ -65,6 +65,8 @@ function ScopedExecutionPanel({ workspaceId, plan }: { workspaceId: string; plan
     {error && <p role="alert"><CircleAlert size={14} />{error}</p>}
     {result && <><dl><div><dt>执行记录</dt><dd><code>{result.run.id}</code></dd></div><div><dt>结果</dt><dd>{result.run.rowCount} 行 / {result.run.byteCount} 字节</dd></div><div><dt>生效限制</dt><dd>{result.run.timeoutMs} 毫秒 / {result.run.maxRows} 行 / {result.run.maxBytes} 字节</dd></div><div><dt>策略版本</dt><dd>{result.run.policyVersion}</dd></div></dl>
       {result.run.errorCode && <p role="alert">{result.run.errorCode}</p>}
+      <p>查询开始：{new Date(result.run.startedAt).toLocaleString("zh-CN")} · 业务数据更新时间：来源未提供</p>
+      {result.sql && <details><summary>执行 SQL 与参数</summary><pre>{result.sql}</pre><pre>{JSON.stringify(result.parameters ?? [], null, 2)}</pre></details>}
       {result.availability === "metadata_only" && <p role="status">仅保留执行记录，原始结果行未存储。此响应没有重新执行查询。</p>}
       {result.availability === "ephemeral" && <><div className="execution-results"><table><thead><tr>{result.columns?.map((name, index) => <th key={index} scope="col">{name}</th>)}</tr></thead><tbody>{result.rows?.map((row, index) => <tr key={index}>{row.map((value, column) => <td key={column}>{value === null ? "NULL" : typeof value === "object" ? JSON.stringify(value) : String(value)}</td>)}</tr>)}</tbody></table></div><p>结果仅在本次会话展示；刷新后只保留执行记录。</p></>}
     </>}

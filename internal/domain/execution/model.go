@@ -31,6 +31,7 @@ func (l Limits) Valid() bool {
 }
 
 type Compiled struct {
+	Guards           []string
 	SQL              string
 	Args             []any
 	Columns          []string
@@ -71,11 +72,14 @@ type Run struct {
 
 // Rows are ephemeral and deliberately separate from the persistence contract.
 type Result struct {
-	Run          Run      `json:"run"`
-	Availability string   `json:"availability"`
-	Columns      []string `json:"columns,omitempty"`
-	Rows         [][]any  `json:"rows,omitempty"`
-	Replay       bool     `json:"replay"`
+	SQL          string     `json:"sql,omitempty"`
+	Parameters   []any      `json:"parameters,omitempty"`
+	DataTime     *time.Time `json:"dataTime,omitempty"`
+	Run          Run        `json:"run"`
+	Availability string     `json:"availability"`
+	Columns      []string   `json:"columns,omitempty"`
+	Rows         [][]any    `json:"rows,omitempty"`
+	Replay       bool       `json:"replay"`
 }
 type Output struct {
 	Columns   []string

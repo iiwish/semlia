@@ -14,6 +14,18 @@ import (
 	"github.com/iiwish/semlia/internal/domain/ingestion"
 )
 
+func TestXLSXPreviewPreservesSparseCoordinatesAndRejectsActiveContent(t *testing.T) {
+	data := workbook(map[string]string{"xl/worksheets/sheet1.xml": `<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>id</t></is></c><c r="B1" t="inlineStr"><is><t>name</t></is></c></row><row r="7"><c r="B7" t="inlineStr"><is><t>Example</t></is></c></row></sheetData></worksheet>`})
+	p, err := filesadapter.XLSX().Preview(context.Background(), "test.xlsx", data)
+	if err != nil || len(p.Sheets) != 1 || len(p.Sheets[0].Rows) != 1 || p.Sheets[0].Rows[0].Number != 7 || p.Sheets[0].Rows[0].Cells[0] != "" || p.Sheets[0].Rows[0].Cells[1] != "Example" {
+		t.Fatalf("preview=%+v err=%v", p, err)
+	}
+	bad := workbook(map[string]string{"xl/worksheets/sheet1.xml": `<worksheet><sheetData><row r="1"><c r="A1"><f>NOW()</f><v>1</v></c></row></sheetData></worksheet>`})
+	if _, err = filesadapter.XLSX().Preview(context.Background(), "bad.xlsx", bad); err == nil {
+		t.Fatal("formula accepted")
+	}
+}
+
 func TestCSVPreservesMaximumUploadNameInCoverage(t *testing.T) {
 	for _, length := range []int{251, 252, 255} {
 		name := strings.Repeat("x", length-4) + ".csv"

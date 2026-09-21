@@ -43,7 +43,11 @@ func (e *evaluator) Evaluate(_ context.Context, r authorizationapp.EvaluationReq
 
 func TestPersistentEmbeddingCheckpointActivationReuseAndReleasedSearch(t *testing.T) {
 	ctx := context.Background()
-	container, err := tcpostgres.Run(ctx, "pgvector/pgvector:pg17", tcpostgres.WithDatabase("semlia_embedding_test"), tcpostgres.WithUsername("semlia"), tcpostgres.WithPassword("test-only"), tcpostgres.BasicWaitStrategies())
+	image := os.Getenv("SEMLIA_TEST_PGVECTOR_IMAGE")
+	if image == "" {
+		image = "pgvector/pgvector:pg17"
+	}
+	container, err := tcpostgres.Run(ctx, image, tcpostgres.WithDatabase("semlia_embedding_test"), tcpostgres.WithUsername("semlia"), tcpostgres.WithPassword("test-only"), tcpostgres.BasicWaitStrategies())
 	if err != nil {
 		t.Fatal(err)
 	}

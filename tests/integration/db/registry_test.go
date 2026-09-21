@@ -64,7 +64,7 @@ func TestRegistryRepositoryRoundTripAndInvariants(t *testing.T) {
 	}
 
 	metric := createRegistryAsset(t, store, workspaceID, "net_revenue", semantic.Metric)
-	entity := createRegistryAsset(t, store, workspaceID, "order", semantic.Entity)
+	entity := createRegistryAsset(t, store, workspaceID, "order", semantic.BusinessObject)
 	if _, err := store.CreateAsset(ctx, metric); !errors.Is(err, semantic.ErrConflict) {
 		t.Fatalf("duplicate semantic address error = %v", err)
 	}

@@ -1,0 +1,637 @@
+{
+  "purpose": "五类知识及成员的目标结构示例，用于汇报和方案讨论，不是当前 API 请求格式。",
+  "boundary": "对象、字段和引用均为合成示例，来源及部分依赖未解析，不构成可执行闭环，不能用于发布取数。共有治理信息为阅读投影；来源结构按版本引用，不复制事实明细。",
+  "commonExample": {
+    "domain": "电商分析（示例）",
+    "revision": "example-r1",
+    "status": "draft",
+    "ownerPrincipalId": null,
+    "evidenceRefs": [],
+    "validation": "not_run"
+  },
+  "groups": [
+    {
+      "letter": "A",
+      "title": "业务对象与口径的定义结构",
+      "subtitle": "对象自身说明身份与属性；口径在一份知识中管理术语含义及可选判定。",
+      "takeaway": "属性是可引用成员，定义与条件共同发布，不要求同名双对象。",
+      "types": [
+        {
+          "number": "01",
+          "name": "业务对象",
+          "type": "business_object",
+          "definition": "有明确身份和粒度的业务对象，包含自身定义与属性。",
+          "fields": [
+            [
+              "身份与粒度",
+              "一个客户、一个账号或一笔订单"
+            ],
+            [
+              "成员属性",
+              "稳定 ID、含义、类型、空值与编码"
+            ],
+            [
+              "时间语义",
+              "当前值、历史值与事件时间"
+            ],
+            [
+              "对象关系",
+              "所属对象、关系方向及业务基数"
+            ],
+            [
+              "实现引用",
+              "属性对应的数据资产成员与绑定"
+            ]
+          ],
+          "example": "客户：区域、首次支付日期是属性成员。",
+          "note": "客户对象自身保存客户定义，不另建同名概念。属性随对象修订发布，引用固定对象 ID、修订和成员 ID。实际表字段由独立发布的成员绑定解析，模型与临时查询计划按版本引用同一绑定。示例客户身份和来源均待验证。",
+          "sample": {
+            "id": "example.object.customer",
+            "type": "business_object",
+            "name": "客户",
+            "definition": "已确认范围内以统一客户身份识别的业务对象。",
+            "scope": "不把电商账号直接等同统一客户。",
+            "spec": {
+              "grain": "一个统一客户",
+              "identity": {
+                "keyMemberId": "customer_id",
+                "keyContractRef": null
+              },
+              "attributes": [
+                {
+                  "id": "customer_id",
+                  "name": "统一客户 ID",
+                  "valueType": "string",
+                  "nullPolicy": "required"
+                },
+                {
+                  "id": "current_region",
+                  "name": "客户当前区域",
+                  "valueType": "string",
+                  "nullMeaning": "归属未知",
+                  "historyPolicy": "current_value",
+                  "codeMappingRef": null
+                },
+                {
+                  "id": "first_valid_paid_date",
+                  "name": "首次有效支付日期",
+                  "valueType": "date",
+                  "grain": "客户",
+                  "definition": "按有效支付口径计算的全历史首次支付日期。",
+                  "nullMeaning": "没有已确认有效支付日期",
+                  "derivationArtifactRef": null,
+                  "timezone": null
+                }
+              ],
+              "relations": [],
+              "knownGaps": [
+                "身份映射、编码和加工实现待确认"
+              ]
+            }
+          }
+        },
+        {
+          "number": "02",
+          "name": "业务口径",
+          "type": "business_term",
+          "definition": "独立业务术语的含义，以及可选的结构化判定规则。",
+          "fields": [
+            [
+              "定义与边界",
+              "包含、排除、正反例与适用范围"
+            ],
+            [
+              "适用对象",
+              "条件针对客户、订单或其他对象"
+            ],
+            [
+              "判定条件",
+              "引用属性或指标，明确计算阶段"
+            ],
+            [
+              "参数与空值",
+              "参数类型、必填及未知值处理"
+            ],
+            [
+              "共同发布",
+              "定义、条件、依赖和有效范围同版本"
+            ]
+          ],
+          "example": "老客户：首次有效支付日期 < 统计期起点。",
+          "note": "一份老客户口径包含解释与判定。具体统计期来自查询，不固定进全局定义。没有判定能力的术语只能解释；聚合条件必须声明窗口与求值阶段。本例按已具有客户粒度的日期属性判定，不计算或保存固定名单。",
+          "sample": {
+            "id": "example.term.existing_customer",
+            "type": "business_term",
+            "name": "老客户",
+            "definition": "首次有效支付日期早于统计期开始日的客户。",
+            "scope": "与统一客户身份及有效支付口径兼容的分析场景。",
+            "spec": {
+              "capability": "predicate",
+              "subjectRef": {
+                "assetId": "example.object.customer",
+                "revisionId": "example-r1"
+              },
+              "predicate": {
+                "op": "lt",
+                "left": {
+                  "attributeRef": {
+                    "assetId": "example.object.customer",
+                    "revisionId": "example-r1",
+                    "memberId": "first_valid_paid_date"
+                  }
+                },
+                "right": {
+                  "parameter": "period_start"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "period_start",
+                  "type": "date",
+                  "required": true
+                }
+              ],
+              "evaluation": {
+                "stage": "object",
+                "mode": "query_time"
+              },
+              "nullPolicy": "unknown_does_not_match",
+              "effectiveRange": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "letter": "B",
+      "title": "指标的定义结构与计算层次",
+      "subtitle": "同一个指标体系内，明确区分输入属性、基础聚合与聚合后的计算。",
+      "takeaway": "跨组汇总客单价必须重新计算分子分母，不能累加或直接平均比率。",
+      "calculationLevels": [
+        {
+          "label": "输入属性",
+          "title": "订单实付金额",
+          "detail": "一笔订单的数值，保留币种与空值语义。"
+        },
+        {
+          "label": "基础指标",
+          "title": "实付总金额 / 有效订单数",
+          "detail": "SUM 金额、COUNT DISTINCT 订单键，采用同一范围。"
+        },
+        {
+          "label": "派生指标",
+          "title": "客单价 = 总金额 ÷ 订单数",
+          "detail": "先聚合再相除；分母为零返回空值，跨组重新计算。"
+        }
+      ],
+      "types": [
+        {
+          "number": "03",
+          "name": "指标",
+          "type": "metric",
+          "definition": "有业务定义的数值计算，包含基础和派生两种结构。",
+          "fields": [
+            [
+              "计算类型",
+              "基础聚合，或引用指标的派生计算"
+            ],
+            [
+              "输入与规则",
+              "属性 / 指标引用，聚合 / 公式"
+            ],
+            [
+              "统计范围",
+              "口径、时间、筛选条件及粒度"
+            ],
+            [
+              "数值语义",
+              "单位、空值、精度与零分母"
+            ],
+            [
+              "汇总约束",
+              "依赖无环，同范围，按可加性重算"
+            ]
+          ],
+          "example": "实付总金额与订单数是基础指标，客单价是派生指标。",
+          "note": "公式不复制到分析模型或业务口径中。普通客单价不永久绑定老客户条件，本次查询对两个基础指标施加同样条件。以下两个基础指标和一个派生指标都是同一主要类型；它们引用的订单对象、有效订单口径和实现仍是未解析的示例依赖。",
+          "sample": {
+            "id": "example.metric.avg_order_value",
+            "type": "metric",
+            "name": "客单价",
+            "definition": "同一范围内每笔有效订单的平均实付金额。",
+            "scope": "以订单数为分母的说明性定义，企业实际口径待确认。",
+            "spec": {
+              "kind": "derived",
+              "expression": {
+                "op": "divide",
+                "left": {
+                  "metricRef": {
+                    "assetId": "example.metric.total_paid_amount",
+                    "revisionId": "example-r1"
+                  }
+                },
+                "right": {
+                  "metricRef": {
+                    "assetId": "example.metric.valid_order_count",
+                    "revisionId": "example-r1"
+                  }
+                }
+              },
+              "filterConsistency": "same_scope_for_all_inputs",
+              "fixedCustomerPredicateRef": null,
+              "timeAttributeRef": {
+                "assetId": "example.object.order",
+                "revisionId": "example-r1",
+                "memberId": "paid_at"
+              },
+              "zeroDenominator": "null",
+              "unit": "CNY/order（示例）",
+              "rollup": "recompute_from_inputs"
+            }
+          },
+          "relatedSamples": [
+            {
+              "id": "example.metric.total_paid_amount",
+              "type": "metric",
+              "name": "实付总金额",
+              "definition": "同一有效订单范围内的实付金额之和。",
+              "scope": "一行一笔订单、同币种、没有连接扇出的示例范围。",
+              "spec": {
+                "kind": "aggregate",
+                "input": {
+                  "attributeRef": {
+                    "assetId": "example.object.order",
+                    "revisionId": "example-r1",
+                    "memberId": "paid_amount"
+                  }
+                },
+                "aggregation": "sum",
+                "filterRef": {
+                  "assetId": "example.term.valid_order",
+                  "revisionId": "example-r1"
+                },
+                "timeAttributeRef": {
+                  "assetId": "example.object.order",
+                  "revisionId": "example-r1",
+                  "memberId": "paid_at"
+                },
+                "unit": "CNY（示例）",
+                "nullPolicy": "require_non_null_before_execution",
+                "additivity": "disjoint_orders_same_currency"
+              }
+            },
+            {
+              "id": "example.metric.valid_order_count",
+              "type": "metric",
+              "name": "有效订单数",
+              "definition": "同一范围内有效订单身份的去重计数。",
+              "scope": "统一订单键及有效订单口径兼容的场景。",
+              "spec": {
+                "kind": "aggregate",
+                "input": {
+                  "attributeRef": {
+                    "assetId": "example.object.order",
+                    "revisionId": "example-r1",
+                    "memberId": "order_id"
+                  }
+                },
+                "aggregation": "count_distinct",
+                "filterRef": {
+                  "assetId": "example.term.valid_order",
+                  "revisionId": "example-r1"
+                },
+                "timeAttributeRef": {
+                  "assetId": "example.object.order",
+                  "revisionId": "example-r1",
+                  "memberId": "paid_at"
+                },
+                "unit": "order",
+                "nullPolicy": "require_non_null_key",
+                "additivity": "only_disjoint_order_sets"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "letter": "C",
+      "title": "数据资产与分析模型的定义结构",
+      "subtitle": "数据资产说明一份实际数据，分析模型引用独立映射与关联，复用常用配置。",
+      "takeaway": "对象、资产、模型分别管理身份、实际数据与场景组合；不能因为同名就互换。",
+      "types": [
+        {
+          "number": "04",
+          "name": "数据资产",
+          "type": "data_asset",
+          "definition": "一份数据的业务解释与使用契约，引用真实来源。",
+          "fields": [
+            [
+              "来源结构",
+              "来源版本、数据集和字段成员引用"
+            ],
+            [
+              "字段含义",
+              "业务义、类型、编码与空值解释"
+            ],
+            [
+              "粒度与时间",
+              "行含义、唯一键、事件 / 快照时间"
+            ],
+            [
+              "规则与实现",
+              "过滤、去重、加工和物理绑定"
+            ],
+            [
+              "质量与限制",
+              "覆盖、刷新、敏感级别及验证缺口"
+            ]
+          ],
+          "example": "注册账号数据：仅覆盖账号，不代表全部客户。",
+          "note": "原始字段名、类型和约束保存在来源版本。资产成员补充解释并引用原始结构，不再维护第二套来源事实。必要规则未知时保持草稿；仅登记需要去重不等于已完成加工。",
+          "sample": {
+            "id": "example.asset.ecommerce_accounts",
+            "type": "data_asset",
+            "name": "电商注册账号数据",
+            "definition": "描述电商注册账号及状态的一份数据。",
+            "scope": "不直接代表全渠道客户。",
+            "spec": {
+              "source": {
+                "revisionRef": null,
+                "datasetRef": null,
+                "nameExample": "user_info"
+              },
+              "members": [
+                {
+                  "id": "account_id",
+                  "sourceFieldRef": null,
+                  "sourceNameExample": "user_id",
+                  "meaning": "账号身份",
+                  "sourceTypeProjection": "string（示例）",
+                  "nullPolicy": "required"
+                },
+                {
+                  "id": "account_status",
+                  "sourceFieldRef": null,
+                  "sourceNameExample": "status",
+                  "meaning": "账号状态",
+                  "sourceTypeProjection": "integer（示例）",
+                  "codeMappingRef": null
+                },
+                {
+                  "id": "registered_at",
+                  "sourceFieldRef": null,
+                  "sourceNameExample": "created_at",
+                  "meaning": "注册时间",
+                  "sourceTypeProjection": "timestamp（示例）",
+                  "timezone": null
+                }
+              ],
+              "grain": "一行一个账号，待验证",
+              "keyContractRef": null,
+              "time": {
+                "eventMemberId": "registered_at",
+                "snapshotMemberId": null,
+                "refreshFrequency": null
+              },
+              "usageRules": {
+                "excludeTestAccounts": "需有可执行过滤",
+                "closedAccountTreatment": "待确认",
+                "deduplication": "核验唯一性后确认"
+              },
+              "implementation": {
+                "physicalBindingSetRef": null,
+                "processingArtifactRef": null
+              },
+              "quality": {
+                "validation": "not_run",
+                "knownGaps": [
+                  "来源、编码、时间、身份及加工均未核实"
+                ]
+              },
+              "sensitivity": null
+            }
+          }
+        },
+        {
+          "number": "05",
+          "name": "分析模型",
+          "type": "analysis_model",
+          "definition": "按真实复用需求沉淀的场景配置，引用独立的成员绑定与关联，不是所有查询的前提。",
+          "fields": [
+            [
+              "场景与粒度",
+              "基础对象、范围、一行代表什么"
+            ],
+            [
+              "能力与范围",
+              "公开属性、场景约束及经验证的能力索引引用"
+            ],
+            [
+              "时间角色",
+              "支付时间、下单时间或快照时间"
+            ],
+            [
+              "数据实现",
+              "资产版本与独立成员绑定、关联契约引用"
+            ],
+            [
+              "连接限制",
+              "键、路径、基数、权限与有效范围"
+            ]
+          ],
+          "example": "订单分析：订单交易数据关联统一客户档案。",
+          "note": "分析模型由试点、常用报表或 SQL 的复用需求驱动，保存场景、默认值和独立记录引用，不复制公式、绑定或明细。模型引用的记录定义见 reusableImplementationExamples；能力索引是经依赖校验后生成的版本化投影，示例仅展示未验证结构。无模型但获准依据完整且策略允许时可形成临时计划；未知关系只能提出候选。月份、地区或问法变化不新建模型，临时计划和一次 SQL 成功不自动成为已发布知识。",
+          "sample": {
+            "id": "example.model.order_analysis",
+            "type": "analysis_model",
+            "name": "订单分析",
+            "definition": "按支付时间及客户当前属性分析有效订单。",
+            "scope": "不支持用客户当前区域冒充交易时历史区域。",
+            "spec": {
+              "baseObjectRef": {
+                "assetId": "example.object.order",
+                "revisionId": "example-r1"
+              },
+              "grainContractRef": null,
+              "publicAttributeRefs": [
+                {
+                  "assetId": "example.object.order",
+                  "revisionId": "example-r1",
+                  "memberId": "paid_at"
+                },
+                {
+                  "assetId": "example.object.customer",
+                  "revisionId": "example-r1",
+                  "memberId": "current_region"
+                }
+              ],
+              "capabilityIndexRef": null,
+              "requiredTermRefs": [
+                {
+                  "assetId": "example.term.valid_order",
+                  "revisionId": "example-r1"
+                }
+              ],
+              "defaultTimeAttributeRef": {
+                "assetId": "example.object.order",
+                "revisionId": "example-r1",
+                "memberId": "paid_at"
+              },
+              "implementation": {
+                "dataAssetRefs": [
+                  {
+                    "assetId": "example.asset.order_transactions",
+                    "revisionId": "example-r1"
+                  },
+                  {
+                    "assetId": "example.asset.customer_master",
+                    "revisionId": "example-r1"
+                  }
+                ],
+                "memberBindingRefs": [
+                  {
+                    "recordId": "example.binding.customer_first_paid",
+                    "revisionId": "example-r1"
+                  }
+                ],
+                "joinContractRefs": [
+                  {
+                    "recordId": "example.join.orders_customer",
+                    "revisionId": "example-r1"
+                  }
+                ]
+              },
+              "knownGaps": [
+                "订单对象与交易/客户资产示例未展开",
+                "完整成员绑定、来源、连接和权限需验证",
+                "能力索引尚未验证生成，当前模型不可执行"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "reusableImplementationExamples": {
+    "boundary": "以下为可独立验证、审核发布的实现记录示意，不增加一级知识类型。均为草稿；引用未完整解析，不能用于取数。",
+    "memberBindings": [
+      {
+        "id": "example.binding.customer_first_paid",
+        "revisionId": "example-r1",
+        "status": "draft",
+        "semanticMemberRef": {
+          "assetId": "example.object.customer",
+          "revisionId": "example-r1",
+          "memberId": "first_valid_paid_date"
+        },
+        "dataMemberRef": {
+          "assetId": "example.asset.customer_master",
+          "revisionId": "example-r1",
+          "memberId": "first_paid_date"
+        },
+        "scope": "统一客户粒度，全历史首次有效支付；真实覆盖待核实",
+        "physicalBindingRef": null,
+        "releaseRef": null,
+        "ownerPrincipalId": null,
+        "evidenceRefs": [],
+        "validation": "not_run"
+      }
+    ],
+    "joinContracts": [
+      {
+        "id": "example.join.orders_customer",
+        "revisionId": "example-r1",
+        "status": "draft",
+        "leftKeyRef": {
+          "assetId": "example.asset.order_transactions",
+          "revisionId": "example-r1",
+          "memberId": "customer_id"
+        },
+        "rightKeyRef": {
+          "assetId": "example.asset.customer_master",
+          "revisionId": "example-r1",
+          "memberId": "customer_id"
+        },
+        "joinType": "inner",
+        "cardinality": "many_to_one",
+        "identityContractRef": null,
+        "leftGrainContractRef": null,
+        "rightKeyContractRef": null,
+        "scope": "订单关联客户当前属性；客户键唯一且目标订单范围内匹配完整，均待验证",
+        "temporalRule": "current_customer_attributes_not_historical_region",
+        "requiredPredicateRefs": [],
+        "releaseRef": null,
+        "ownerPrincipalId": null,
+        "evidenceRefs": [],
+        "validation": "not_run",
+        "knownGaps": [
+          "同名键不证明身份相同，真实身份、唯一性、覆盖及扇出未验证",
+          "实际过滤与连接契约未确认，inner 仅为示例假设"
+        ]
+      }
+    ]
+  },
+  "capabilityIndexExamples": [
+    {
+      "boundary": "示意经校验后可形成的检索投影；当前未验证、未发布，不具备可用能力声明或执行授权。",
+      "modelRef": {
+        "assetId": "example.model.order_analysis",
+        "revisionId": "example-r1"
+      },
+      "releaseRef": null,
+      "metricRefs": [
+        { "assetId": "example.metric.total_paid_amount", "revisionId": "example-r1" },
+        { "assetId": "example.metric.valid_order_count", "revisionId": "example-r1" },
+        { "assetId": "example.metric.avg_order_value", "revisionId": "example-r1" }
+      ],
+      "compatibleTermRefs": [
+        { "assetId": "example.term.valid_order", "revisionId": "example-r1" },
+        { "assetId": "example.term.existing_customer", "revisionId": "example-r1" }
+      ],
+      "validation": "not_run",
+      "executable": false
+    }
+  ],
+  "queryPlanExamples": {
+    "boundary": "两条路径引用相同实现记录，但当前示例均未验证、不能执行。modelRef 为 null 不免除获准知识、绑定、关联、策略及完整计划校验。仅展示必要引用，不是完整查询 AST。",
+    "modelReuse": {
+      "mode": "model_reuse",
+      "status": "illustration_only",
+      "releaseRef": null,
+      "modelRef": { "assetId": "example.model.order_analysis", "revisionId": "example-r1" },
+      "memberBindingRefs": [
+        { "recordId": "example.binding.customer_first_paid", "revisionId": "example-r1" }
+      ],
+      "joinContractRefs": [
+        { "recordId": "example.join.orders_customer", "revisionId": "example-r1" }
+      ],
+      "validation": "not_run",
+      "executable": false,
+      "publishesKnowledge": false
+    },
+    "adHoc": {
+      "mode": "ad_hoc",
+      "status": "illustration_only",
+      "releaseRef": null,
+      "modelRef": null,
+      "memberBindingRefs": [
+        { "recordId": "example.binding.customer_first_paid", "revisionId": "example-r1" }
+      ],
+      "joinContractRefs": [
+        { "recordId": "example.join.orders_customer", "revisionId": "example-r1" }
+      ],
+      "validation": "not_run",
+      "executable": false,
+      "publishesKnowledge": false
+    },
+    "needsEvidence": {
+      "mode": "needs_evidence",
+      "modelRef": null,
+      "status": "needs_validation",
+      "reason": "客户身份或关联依据未确认；只能提出候选并申请获授权的验证",
+      "executable": false,
+      "publishesKnowledge": false
+    }
+  }
+}

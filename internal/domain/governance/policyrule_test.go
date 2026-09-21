@@ -49,7 +49,7 @@ func TestRuleTableRoutesHighRiskComputationWithBlockersToExpert(t *testing.T) {
 
 func TestRuleTableRoutesCleanDocumentationChangeToBatch(t *testing.T) {
 	inputs := governance.DecisionInputs{
-		AssetType: "concept", TargetObjectType: "semantic_asset",
+		AssetType: "business_term", TargetObjectType: "semantic_asset",
 		AffectsDefinition: true, OwnerAssigned: "assigned", AuthorKind: "human",
 	}
 	decision, err := governance.EvaluatePolicyRules(canonicalRulesV1(t), inputs)
@@ -183,14 +183,14 @@ func TestEvaluateRiskRuleMatchesCanonicalRuleTable(t *testing.T) {
 	// T002 compatibility: the pure versioned entry point must produce exactly
 	// the decisions of the canonical rule table it is now implemented over.
 	corpus := []governance.DecisionInputs{
-		{AssetType: "concept", BlockerCount: 0, EvidenceComplete: true},
+		{AssetType: "business_term", BlockerCount: 0, EvidenceComplete: true},
 		{AssetType: "metric", BlockerCount: 2, EvidenceComplete: true},
 		{AssetType: "metric", AffectsComputation: true, ProductionEnvironment: true},
 		{AssetType: "metric", AffectsComputation: true},
 		{AssetType: "policy", AffectsAccess: true},
 		{AssetType: "contract", AffectsContract: true},
 		{AssetType: "metric", ProductionEnvironment: true},
-		{AssetType: "concept", AffectsDefinition: true, OwnerAssigned: "unassigned", AuthorKind: "human"},
+		{AssetType: "business_term", AffectsDefinition: true, OwnerAssigned: "unassigned", AuthorKind: "human"},
 	}
 	rules := canonicalRulesV1(t)
 	for _, inputs := range corpus {

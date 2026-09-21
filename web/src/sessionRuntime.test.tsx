@@ -86,6 +86,42 @@ describe("controlled-user session runtime", () => {
     expect(screen.getByText("不可管理成员")).toBeVisible();
   });
 
+  it("switches admitted workspaces from the account menu using the existing session runtime", async () => {
+    const secondWorkspace: SessionWorkspace = { id: "wsp_01arz3ndektsv4rrffq69g5faw", slug: "demo", displayName: "合成演示工作区", principalId: "prn_01arz3ndektsv4rrffq69g5faw", roleIds: ["auditor"], capabilities: ["audit.read"], authorizationVersion: 4 };
+    const fetchMock = vi.fn(async () => sessionResponse([defaultWorkspace(), secondWorkspace]));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<SessionRuntimeProvider><SessionAccountControl /><CapabilityHarness /></SessionRuntimeProvider>);
+
+    await user.click(await screen.findByLabelText("账户 Alpha Admin"));
+    const workspaces = screen.getByRole("radiogroup", { name: "切换工作区" });
+    expect(within(workspaces).getByRole("radio", { name: "Alpha Workspace" })).toBeChecked();
+    expect(within(workspaces).getByRole("radio", { name: "合成演示工作区" })).not.toBeChecked();
+    expect(screen.getByText("当前工作区").parentElement).toHaveTextContent("Alpha Workspace");
+
+    await user.click(within(workspaces).getByRole("radio", { name: "合成演示工作区" }));
+    expect(within(workspaces).getByRole("radio", { name: "合成演示工作区" })).toBeChecked();
+    expect(screen.getByText("当前工作区").parentElement).toHaveTextContent("合成演示工作区");
+    expect(screen.getByText("不可管理成员")).toBeVisible();
+    expect(window.sessionStorage.getItem(`semlia.workspace.${accountId}`)).toBe(secondWorkspace.id);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await user.keyboard("{ArrowUp}");
+    expect(within(workspaces).getByRole("radio", { name: "Alpha Workspace" })).toBeChecked();
+    expect(screen.getByText("可管理成员")).toBeVisible();
+  });
+
+  it("keeps workspace choices out of the single-workspace account menu", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => sessionResponse([defaultWorkspace()])));
+    const user = userEvent.setup();
+    render(<SessionRuntimeProvider><SessionAccountControl /></SessionRuntimeProvider>);
+
+    await user.click(await screen.findByLabelText("账户 Alpha Admin"));
+    expect(screen.getByRole("button", { name: "退出登录" })).toBeVisible();
+    expect(screen.queryByRole("radiogroup", { name: "切换工作区" })).not.toBeInTheDocument();
+    expect(screen.queryByText("当前工作区")).not.toBeInTheDocument();
+  });
+
   it("returns an expired session to sign-in and refreshes a stale authorization without clearing view state", async () => {
     const fetchMock = vi.fn(async () => sessionResponse([defaultWorkspace()]));
     vi.stubGlobal("fetch", fetchMock);

@@ -364,7 +364,7 @@ GRANT SELECT ON ALL TABLES IN SCHEMA alpha_fixture TO semlia_alpha_reader;`); er
 	assetID := mustID(t, identity.NewAssetID)
 	revisionID := mustID(t, identity.NewRevisionID)
 	proposalID := mustID(t, identity.NewProposalID)
-	if _, err := pool.Exec(ctx, `INSERT INTO semantic_assets (id,workspace_id,namespace,key,asset_type,lifecycle_state) VALUES ($1,$2,'alpha','orders','entity','draft')`, assetID.UUID(), workspaceID.UUID()); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO semantic_assets (id,workspace_id,namespace,key,asset_type,lifecycle_state) VALUES ($1,$2,'alpha','orders','business_object','draft')`, assetID.UUID(), workspaceID.UUID()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := pool.Exec(ctx, `INSERT INTO asset_revisions (id,workspace_id,asset_id,sequence,schema_version,content_digest,content,created_by) VALUES ($1,$2,$3,1,'1.0.0',$4,'{}','integration-admin')`, revisionID.UUID(), workspaceID.UUID(), assetID.UUID(), "sha256:"+strings.Repeat("d", 64)); err != nil {

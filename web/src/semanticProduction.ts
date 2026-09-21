@@ -1,5 +1,6 @@
 import type { components } from "@semlia/sdk-typescript";
 import { apiClient as client } from "./apiClient";
+import { initialKnowledgeSpec } from "./knowledge";
 
 type Schema = components["schemas"];
 export type ProductionInput = Schema["ProductionInput"];
@@ -28,6 +29,8 @@ export class ProductionApiError extends Error {
 }
 
 const errorLabels: Record<string, string> = {
+  DEPENDENCY_UNAVAILABLE: "知识整理服务尚未就绪，请联系管理员检查服务是否启用；现有知识不会因此丢失。",
+  SOD_CONFLICT: "请由未参与本次编辑或业务确认的其他成员完成审核与发布。",
   FORBIDDEN: "当前主体无权执行此操作", NO_MATCHING_GRANT: "当前权限不覆盖所选对象", UNAUTHENTICATED: "请重新登录", VERSION_CONFLICT: "版本已变化，请读取服务器版本后重新核对", INPUT_STALE: "来源版本已过期，请重新选择来源", INPUT_INCOMPLETE: "来源覆盖不完整，不能提交", EVIDENCE_MISSING: "缺少可验证的证据", GENERATION_NOT_AUTHORIZED: "当前主体与模型配置没有服务端生成额度授权", GENERATION_OUTCOME_UNKNOWN: "模型调用结果未知，未自动重新调用", VALIDATION_REQUIRED: "验证结果已失效，需要重新验证和审核", SEPARATION_OF_DUTY: "参与建模的主体不能审核或发布同一生产集合", ALREADY_PRODUCED: "候选已有生产记录，请恢复已有操作", IDENTITY_CONFLICT: "业务身份已存在，请明确匹配已有对象", HEAD_CONFLICT: "发布基线已变化，请重新核对", BASELINE_CONFLICT: "对象基础版本已变化，请重新建模", CHANGE_SET_FROZEN: "当前版本已冻结，请创建纠正版本", NO_APPROVING_REVIEW: "缺少当前验证版本的独立审核", PRODUCTION_BUSINESS_RULE_UNCONFIRMED: "业务规则尚未由有权主体确认",
 };
 export function productionMessage(error: unknown): string {
@@ -95,7 +98,7 @@ export async function listProductionMembers(workspaceId: string, sourceId: strin
   return dataOrThrow(await client.GET("/api/v1/workspaces/{workspaceId}/sources/{sourceId}/snapshots/{snapshotId}/members", { params: { path: { workspaceId, sourceId, snapshotId }, query: { limit: 200, ...(cursor ? { cursor } : {}) } }, signal }));
 }
 export function makeAssetTarget(localKey: string, title: string, address: string, assetType: AssetContent["assetType"], principalId: string): ProductionTarget {
-  return { intent: "create", kind: "semantic_asset", localKey, title, identityKey: address, content: { address, assetType, displayName: title, definition: null, scope: null, ownerPrincipalId: principalId }, changes: [], evidenceIds: [] };
+  return { intent: "create", kind: "semantic_asset", localKey, title, identityKey: address, content: { address, assetType, displayName: title, definition: null, scope: null, ownerPrincipalId: principalId, spec: initialKnowledgeSpec(assetType) }, changes: [], evidenceIds: [] };
 }
 export function buildProductionInput(snapshot: SourceSnapshot, candidate: { id: string; contentDigest: string }, targetKeys: string[], primaryTargetKey: string): ProductionInput {
   const coverageKeys = snapshot.coverage.filter((unit) => unit.status === "complete" && unit.enumerationComplete).map((unit) => unit.key);
@@ -116,4 +119,4 @@ export function targetChanges(before: ProductionContent, after: ProductionConten
   });
 }
 export const progressLabels: Record<OperationSummary["progress"], string> = { draft: "建模中", no_change: "无实质变化", validating: "验证中", needs_correction: "需要纠正", in_review: "待独立审核", ready_to_publish: "可发布", released: "已发布", rejected: "已拒绝" };
-export const kindLabels: Record<TargetKind, string> = { semantic_asset: "语义资产", physical_binding: "物理绑定", model_grain: "模型粒度", entity_key: "实体键", join_contract: "Join 合约" };
+export const kindLabels: Record<TargetKind, string> = { semantic_asset: "业务知识", physical_binding: "来源表与字段", model_grain: "数据粒度", entity_key: "唯一标识", join_contract: "表间关联规则" };

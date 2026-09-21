@@ -7,6 +7,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/iiwish/semlia/internal/domain/semantic"
 	"github.com/iiwish/semlia/pkg/identity"
 )
 
@@ -213,11 +214,11 @@ func InspectProductionContent(kind string, content json.RawMessage) (ProductionC
 	var object map[string]any
 	switch kind {
 	case TargetKindSemanticAsset:
-		object, err = productionObject(value, "address assetType displayName definition scope ownerPrincipalId", "")
+		object, err = productionObject(value, "address assetType displayName definition scope ownerPrincipalId", "spec")
 		if err != nil {
 			return refs, err
 		}
-		if !productionText(object["address"], 1, 512) || !productionAddress.MatchString(object["address"].(string)) || !productionEnum(object["assetType"], "concept entity semantic_model dimension measure metric segment") || !productionText(object["displayName"], 1, 256) {
+		if !productionText(object["address"], 1, 512) || !productionAddress.MatchString(object["address"].(string)) || !productionEnum(object["assetType"], "business_object business_term metric data_asset analysis_model") || !productionText(object["displayName"], 1, 256) {
 			return refs, ErrInvalidArgument
 		}
 		if object["definition"] != nil && !productionText(object["definition"], 1, 16384) {
@@ -234,6 +235,22 @@ func InspectProductionContent(kind string, content json.RawMessage) (ProductionC
 			return refs, ErrInvalidArgument
 		}
 		refs.OwnerPrincipalID = owner
+		raw, _ := json.Marshal(object["spec"])
+		spec, err := semantic.ParseKnowledgeSpec(semantic.AssetType(object["assetType"].(string)), raw, false)
+		if err != nil {
+			return refs, fmt.Errorf("%w: %s", ErrInvalidArgument, err)
+		}
+		for _, ref := range spec.References() {
+			refs.Published = append(refs.Published, ProductionPublishedReference{Kind: TargetKindSemanticAsset, TargetID: ref.AssetID, ReleaseID: ref.ReleaseID, RevisionID: ref.RevisionID})
+		}
+		if spec.DatasetRef != nil {
+			refs.Physical = append(refs.Physical, ProductionPhysicalReference(*spec.DatasetRef))
+		}
+		for _, member := range spec.Members {
+			if member.SourceFieldRef != nil {
+				refs.Physical = append(refs.Physical, ProductionPhysicalReference(*member.SourceFieldRef))
+			}
+		}
 	case TargetKindPhysicalBinding:
 		object, err = productionObject(value, "asset dataset", "field transform")
 	case TargetKindModelGrain:
@@ -408,7 +425,7 @@ func parseProductionPublishedReference(value any) (ProductionPublishedReference,
 
 func validateProductionChangePaths(target TargetDeclaration) error {
 	allowed := map[string]string{
-		TargetKindSemanticAsset:   "displayName definition scope ownerPrincipalId",
+		TargetKindSemanticAsset:   "displayName definition scope ownerPrincipalId spec",
 		TargetKindPhysicalBinding: "asset dataset field transform",
 		TargetKindModelGrain:      "asset expression fields",
 		TargetKindEntityKey:       "asset fields uniqueness",

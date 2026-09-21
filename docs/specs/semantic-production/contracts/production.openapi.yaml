@@ -776,7 +776,7 @@ components:
       required: [address, assetType, displayName, definition, scope, ownerPrincipalId]
       properties:
         address: { type: string, pattern: '^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$', maxLength: 512 }
-        assetType: { type: string, enum: [concept, entity, semantic_model, dimension, measure, metric, segment] }
+        assetType: { type: string, enum: [business_object, business_term, metric, data_asset, analysis_model] }
         displayName: { type: string, minLength: 1, maxLength: 256 }
         definition: { type: string, minLength: 1, maxLength: 16384, nullable: true }
         scope: { type: string, minLength: 1, maxLength: 4096, nullable: true }

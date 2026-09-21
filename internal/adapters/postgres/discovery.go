@@ -409,7 +409,7 @@ func persistSemanticCandidates(
 			return err
 		}
 		proposalInput, _ := json.Marshal(map[string]any{
-			"schemaVersion": "semlia.proposal-input/v1", "candidateKind": "entity",
+			"schemaVersion": "semlia.proposal-input/v1", "candidateKind": "data_asset",
 			"qualifiedName": dataset.QualifiedName, "fields": dataset.Fields,
 		})
 		evidence, _ := json.Marshal([]map[string]string{{
@@ -420,8 +420,8 @@ func persistSemanticCandidates(
 		if _, err := tx.Exec(ctx, `INSERT INTO semantic_candidates
 (id, workspace_id, source_connection_id, source_revision_id, discovery_run_id, candidate_key,
  candidate_kind, title, proposal_input, evidence, content_digest)
-VALUES ($1,$2,$3,$4,$5,$6,'entity',$7,$8,$9,$10) ON CONFLICT (discovery_run_id, candidate_key) DO NOTHING`,
-			databaseCandidateID, workspaceID, sourceID, sourceRevisionID, runID, "entity:"+dataset.ExternalKey,
+VALUES ($1,$2,$3,$4,$5,$6,'data_asset',$7,$8,$9,$10) ON CONFLICT (discovery_run_id, candidate_key) DO NOTHING`,
+			databaseCandidateID, workspaceID, sourceID, sourceRevisionID, runID, "data_asset:"+dataset.ExternalKey,
 			dataset.QualifiedName, proposalInput, evidence, digest); err != nil {
 			return repositoryError("persist semantic candidate", err)
 		}

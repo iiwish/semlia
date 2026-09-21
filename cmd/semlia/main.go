@@ -239,6 +239,18 @@ func migrationFailureStage(err error) string {
 	}
 }
 
+// newLiveCollector builds the discovery collector. SEMLIA_DISCOVERY_ALLOW_UNSAFE_SOURCE
+// is a development-only relief for source roles that are not provably read-only;
+// configuration loading refuses the flag outside development, so this helper does
+// not need to re-check the environment.
+func newLiveCollector(cfg config.Config) *postgreslive.LiveCollector {
+	options := []postgreslive.Option{}
+	if cfg.DiscoveryAllowUnsafeSource {
+		options = append(options, postgreslive.WithUnsafeSourceRole())
+	}
+	return postgreslive.NewLiveCollector(5*time.Second, 15*time.Second, options...)
+}
+
 func runWorker(ctx context.Context, cfg config.Config) error {
 	pool, err := pgstore.Open(ctx, cfg.DatabaseURL)
 	if err != nil {
@@ -260,8 +272,10 @@ func runWorker(ctx context.Context, cfg config.Config) error {
 		30*time.Second,
 	)
 	governanceClock := governanceapp.ClockFunc(time.Now)
+	var generationService *governanceapp.ProductionGenerationService
 	if cfg.SemanticProductionEnabled {
-		worker.Register(governanceapp.ProductionGenerationJobType, governanceapp.NewProductionGenerationService(store, cfg.ProductionGenerationGrants).JobHandler())
+		generationService = governanceapp.NewProductionGenerationService(store, cfg.ProductionGenerationGrants)
+		worker.Register(governanceapp.ProductionGenerationJobType, generationService.JobHandler())
 	}
 	governancePolicy := governanceapp.NewPolicyService(
 		store, governanceClock, governanceapp.WithRuleSource(store))
@@ -285,10 +299,24 @@ func runWorker(ctx context.Context, cfg config.Config) error {
 		return errors.New("SQL artifact root configuration is invalid")
 	}
 	discoveryService := discoveryapp.NewControlService(
-		store, credentialCipher, postgreslive.NewLiveCollector(5*time.Second, 15*time.Second),
+		store, credentialCipher, newLiveCollector(cfg),
 		artifactLoader, postgresdiscovery.Adapter{}, nil, discoveryapp.ClockFunc(time.Now),
 	).WithArtifactStore(artifactStore, ingestionAdapters())
-	worker.Register(discoveryapp.DiscoveryJobType, discoveryService.JobHandler())
+	discoveryHandler := discoveryService.JobHandler()
+	if cfg.SemanticProductionEnabled && generationService != nil {
+		productionService := governanceapp.NewProductionService(store)
+		workerLogger := newLogger(cfg.LogFormat, os.Stderr)
+		autoFinalize := governanceapp.NewProductionAutoFinalizeService(store, productionService, governanceClock, workerLogger)
+		worker.Register(governanceapp.ProductionAutoFinalizeJobType, autoFinalize.JobHandler())
+		autoDraft := governanceapp.NewCandidateAutoDraftService(store,
+			productionService, generationService,
+			governanceapp.NewModelConfigService(store, nil, governanceClock),
+			governanceapp.CandidateAutoDraftConfig{SchemaWhitelist: cfg.AutoDraftSchemas, Limit: cfg.AutoDraftLimit},
+			cfg.ProductionGenerationGrants, governanceClock, workerLogger, autoFinalize)
+		worker.Register(governanceapp.CandidateAutoDraftJobType, autoDraft.JobHandler())
+		discoveryHandler = autoDraft.WrapDiscoveryHandler(discoveryHandler)
+	}
+	worker.Register(discoveryapp.DiscoveryJobType, discoveryHandler)
 	worker.Register(embeddingapp.JobType, embeddingapp.NewService(store, embeddingadapter.NewClient(nil, nil), nil).JobHandler())
 	owner, err := newWorkerOwner()
 	if err != nil {
@@ -482,6 +510,30 @@ func serve(ctx context.Context, cfg config.Config, output io.Writer) error {
 		}
 		logger.Info("workbench startup reconciliation complete", "scanned", reconcile.Scanned,
 			"upserted", reconcile.Upserted, "resolved", reconcile.Resolved, "truncated", reconcile.Truncated)
+		// Attention items are a projection of workspace state (failed discovery
+		// runs, in-review proposals, failed validations). Without a periodic
+		// refresh the projection only reflects state at server startup, so
+		// events that happen while the server runs never surface as to-dos.
+		go func() {
+			ticker := time.NewTicker(2 * time.Minute)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					stats, err := workbenchService.ReconcileStartup(ctx, 10_000)
+					if err != nil {
+						logger.Warn("workbench periodic reconciliation failed", "error", err)
+						continue
+					}
+					if stats.Upserted > 0 || stats.Resolved > 0 {
+						logger.Info("workbench periodic reconciliation", "scanned", stats.Scanned,
+							"upserted", stats.Upserted, "resolved", stats.Resolved)
+					}
+				}
+			}
+		}()
 		options = append(options, httpapi.WithWorkbench(workbenchService))
 		options = append(options, httpapi.WithOperations(operationsapp.NewService(
 			catalogStore, authorizer, operationsapp.ClockFunc(time.Now), operationsdomain.DeploymentStatus{
@@ -554,7 +606,7 @@ func serve(ctx context.Context, cfg config.Config, output io.Writer) error {
 			return errors.New("SQL artifact root configuration is invalid")
 		}
 		discoveryService := discoveryapp.NewControlService(
-			catalogStore, credentialCipher, postgreslive.NewLiveCollector(5*time.Second, 15*time.Second),
+			catalogStore, credentialCipher, newLiveCollector(cfg),
 			artifactLoader, postgresdiscovery.Adapter{}, authorizer, discoveryapp.ClockFunc(time.Now),
 		).WithArtifactStore(artifactStore, ingestionAdapters()).WithSnapshotCursorSecret([]byte(cfg.SecretKey))
 		options = append(options, httpapi.WithDiscovery(discoveryService))

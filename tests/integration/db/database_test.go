@@ -64,7 +64,7 @@ func TestMigrationLifecycleAndTenantSchema(t *testing.T) {
 	if err := migrator.Up(); err != nil {
 		t.Fatalf("upgrade empty database: %v", err)
 	}
-	assertVersion(t, migrator, 29, true)
+	assertVersion(t, migrator, 32, true)
 	if err := migrator.Up(); err != nil {
 		t.Fatalf("repeat upgrade: %v", err)
 	}
@@ -92,7 +92,7 @@ func TestMigrationLifecycleAndTenantSchema(t *testing.T) {
 	if strings.Join(firstInventory, ",") != strings.Join(wantTables, ",") {
 		t.Fatalf("table inventory = %v, want %v", firstInventory, wantTables)
 	}
-	t.Logf("%s migration version 29 inventory: %v", postgresImage, firstInventory)
+	t.Logf("%s migration version 32 inventory: %v", postgresImage, firstInventory)
 	assertTenantForeignKeys(t, pool)
 
 	if err := migrator.Down(); err != nil {
@@ -331,7 +331,7 @@ func TestPostgres17MigrationLifecycle(t *testing.T) {
 	if err := migrator.Up(); err != nil {
 		t.Fatalf("PostgreSQL 17 upgrade: %v", err)
 	}
-	assertVersion(t, migrator, 29, true)
+	assertVersion(t, migrator, 32, true)
 	pool, err := pgstore.Open(ctx, url)
 	if err != nil {
 		t.Fatal(err)
@@ -673,6 +673,7 @@ func assertHistoricalRuntimeBackfill(t *testing.T, pool *pgstore.Pool, workspace
 // upgrade, the downgrade back to the M1 level, and the re-upgrade — with the M2
 // proposal FKs composing against the preserved M1 rows in both directions.
 func TestPopulatedM1UpgradeAndRollbackPreserveRegistryRows(t *testing.T) {
+	resetSchema(t)
 	migrator := newMigrator(t)
 	if err := migrator.Down(); err != nil {
 		t.Fatal(err)
@@ -806,7 +807,7 @@ func TestPopulatedM1UpgradeAndRollbackPreserveRegistryRows(t *testing.T) {
 	if err := migrator.Up(); err != nil {
 		t.Fatalf("re-upgrade populated M1: %v", err)
 	}
-	assertVersion(t, migrator, 29, true)
+	assertVersion(t, migrator, 32, true)
 	store := pgstore.NewStore(pool)
 	detail, err := store.GetCatalogAsset(ctx, workspaceID, assetID)
 	if err != nil {
@@ -1136,10 +1137,13 @@ func newMigrator(t *testing.T) *pgstore.Migrator {
 
 func resetSchema(t *testing.T) {
 	t.Helper()
-	migrator := newMigrator(t)
-	if err := migrator.Down(); err != nil {
+	// This package owns a disposable testcontainer. Populated prototype
+	// downgrades are deliberately refused by migration 32.
+	pool := openPool(t)
+	if _, err := pool.Exec(context.Background(), "DROP SCHEMA public CASCADE; CREATE SCHEMA public"); err != nil {
 		t.Fatal(err)
 	}
+	migrator := newMigrator(t)
 	if err := migrator.Up(); err != nil {
 		t.Fatal(err)
 	}

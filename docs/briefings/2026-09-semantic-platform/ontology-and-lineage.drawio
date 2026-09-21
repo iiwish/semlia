@@ -1,0 +1,37 @@
+<mxfile host="app.diagrams.net">
+<diagram id="ontology" name="本体关系与约束">
+<mxGraphModel grid="1" gridSize="10" page="1" pageWidth="1440" pageHeight="810" background="#ffffff"><root>
+<mxCell id="0"/><mxCell id="1" parent="0"/>
+<mxCell id="heading" value="本体：对象、类型化关系与约束" style="text;html=0;align=left;fontSize=36;fontColor=#171b19;" vertex="1" parent="1"><mxGeometry x="70" y="50" width="1260" height="70" as="geometry"/></mxCell>
+<mxCell id="segment" value="口径&#xa;老客户范围" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#ffffff;strokeColor=#d6dcd6;fontSize=26;fontColor=#171b19;" vertex="1" parent="1"><mxGeometry x="80" y="180" width="240" height="100" as="geometry"/></mxCell>
+<mxCell id="entity" value="业务对象&#xa;客户" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#ffffff;strokeColor=#d6dcd6;fontSize=26;fontColor=#171b19;" vertex="1" parent="1"><mxGeometry x="540" y="180" width="260" height="100" as="geometry"/></mxCell>
+<mxCell id="measure" value="基础指标&#xa;实付总金额" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#ffffff;strokeColor=#d6dcd6;fontSize=26;fontColor=#171b19;" vertex="1" parent="1"><mxGeometry x="80" y="360" width="240" height="100" as="geometry"/></mxCell>
+<mxCell id="metric" value="指标&#xa;客单价" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#ffffff;strokeColor=#d6dcd6;fontSize=26;fontColor=#171b19;" vertex="1" parent="1"><mxGeometry x="540" y="360" width="260" height="100" as="geometry"/></mxCell>
+<mxCell id="customer" value="业务对象&#xa;客户" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#ffffff;strokeColor=#d6dcd6;fontSize=26;fontColor=#171b19;" vertex="1" parent="1"><mxGeometry x="80" y="540" width="240" height="100" as="geometry"/></mxCell>
+<mxCell id="asset" value="数据资产&#xa;统一客户档案" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#ffffff;strokeColor=#d6dcd6;fontSize=26;fontColor=#171b19;" vertex="1" parent="1"><mxGeometry x="540" y="540" width="260" height="100" as="geometry"/></mxCell>
+<mxCell id="filters" value="筛选" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;strokeColor=#3655cf;fontColor=#3655cf;fontSize=22;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="segment" target="entity"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="calculates" value="参与计算" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;strokeColor=#3655cf;fontColor=#3655cf;fontSize=22;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="measure" target="metric"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="maps" value="实现映射" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;strokeColor=#3655cf;fontColor=#3655cf;fontSize=22;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="customer" target="asset"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="rule1" value="基础实体明确&#xa;条件符合老客户定义" style="text;html=0;align=left;fontSize=24;fontColor=#667169;" vertex="1" parent="1"><mxGeometry x="900" y="180" width="400" height="100" as="geometry"/></mxCell>
+<mxCell id="rule2" value="同范围有效订单数作分母&#xa;时间、区域与口径条件一致" style="text;html=0;align=left;fontSize=24;fontColor=#667169;" vertex="1" parent="1"><mxGeometry x="900" y="360" width="400" height="100" as="geometry"/></mxCell>
+<mxCell id="rule3" value="客户键有效&#xa;来源、范围与版本相符" style="text;html=0;align=left;fontSize=24;fontColor=#667169;" vertex="1" parent="1"><mxGeometry x="900" y="540" width="400" height="100" as="geometry"/></mxCell>
+<mxCell id="note" value="说明性关系样例，不是连续血缘；不宣称完整形式推理已实现。" style="text;html=0;align=left;fontSize=20;fontColor=#667169;" vertex="1" parent="1"><mxGeometry x="70" y="710" width="1260" height="50" as="geometry"/></mxCell>
+</root></mxGraphModel></diagram>
+<diagram id="lineage" name="血缘与语义依赖">
+<mxGraphModel grid="1" gridSize="10" page="1" pageWidth="1440" pageHeight="810" background="#ffffff"><root>
+<mxCell id="0"/><mxCell id="1" parent="0"/>
+<mxCell id="heading" value="数据血缘与语义依赖分层，通过映射连接" style="text;html=0;align=left;fontSize=36;fontColor=#171b19;" vertex="1" parent="1"><mxGeometry x="70" y="50" width="1260" height="70" as="geometry"/></mxCell>
+<mxCell id="input" value="支付记录&#xa;客户 ID、支付时间" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#ffffff;strokeColor=#d6dcd6;fontSize=26;" vertex="1" parent="1"><mxGeometry x="80" y="180" width="280" height="110" as="geometry"/></mxCell>
+<mxCell id="transform" value="按客户聚合&#xa;取最早有效支付时间" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#ffffff;strokeColor=#d6dcd6;fontSize=26;" vertex="1" parent="1"><mxGeometry x="580" y="180" width="280" height="110" as="geometry"/></mxCell>
+<mxCell id="output" value="首次支付字段&#xa;客户数据资产成员" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#ffffff;strokeColor=#d6dcd6;fontSize=26;" vertex="1" parent="1"><mxGeometry x="1080" y="180" width="280" height="110" as="geometry"/></mxCell>
+<mxCell id="dimension" value="首次支付日期&#xa;属性" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#ffffff;strokeColor=#d6dcd6;fontSize=26;" vertex="1" parent="1"><mxGeometry x="80" y="510" width="280" height="110" as="geometry"/></mxCell>
+<mxCell id="segment" value="老客户范围&#xa;口径" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#ffffff;strokeColor=#d6dcd6;fontSize=26;" vertex="1" parent="1"><mxGeometry x="580" y="510" width="280" height="110" as="geometry"/></mxCell>
+<mxCell id="metric" value="客单价的本次计算&#xa;采用老客户范围及两个基础指标" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#ffffff;strokeColor=#d6dcd6;fontSize=24;" vertex="1" parent="1"><mxGeometry x="1080" y="510" width="280" height="110" as="geometry"/></mxCell>
+<mxCell id="e1" value="输入" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;fontSize=22;strokeColor=#3655cf;fontColor=#3655cf;" edge="1" parent="1" source="input" target="transform"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e2" value="输出" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;fontSize=22;strokeColor=#3655cf;fontColor=#3655cf;" edge="1" parent="1" source="transform" target="output"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e3" value="被口径引用" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;fontSize=22;strokeColor=#176b54;fontColor=#176b54;" edge="1" parent="1" source="dimension" target="segment"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="e4" value="限定本次计算范围" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;fontSize=22;strokeColor=#176b54;fontColor=#176b54;" edge="1" parent="1" source="segment" target="metric"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="binding" value="实现映射：首次支付字段 ↔ 首次支付日期属性（固定来源、规则与版本）" style="text;html=0;align=center;fontSize=24;fontColor=#176b54;" vertex="1" parent="1"><mxGeometry x="70" y="370" width="1290" height="60" as="geometry"/></mxCell>
+<mxCell id="note" value="说明性样例；首轮覆盖选定案例与关键字段，未知血缘明确标记。" style="text;html=0;align=left;fontSize=20;fontColor=#667169;" vertex="1" parent="1"><mxGeometry x="70" y="710" width="1260" height="50" as="geometry"/></mxCell>
+</root></mxGraphModel></diagram>
+</mxfile>

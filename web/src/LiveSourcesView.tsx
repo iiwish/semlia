@@ -24,6 +24,7 @@ import {
 
 import { useCan, useResourceCan } from "./authorization";
 import { useCatalogRuntime } from "./catalogRuntime";
+import { SourceContents, ArtifactContents } from "./SourceContents";
 import {
   createSource,
   deleteSource,
@@ -389,7 +390,7 @@ function LiveSourcesWorkspace({ focusIndex, navigationEpoch = 0, runDetailBackRe
   </>;
   if (focusIndex === 2) {
     return (
-      <section className="view source-live-view source-list-page ingestion-results-page" aria-label="接入运行">
+      <section className="view source-live-view source-list-page ingestion-results-page" aria-label="运行记录">
         <header className="source-commandbar">
           <div className="source-tabs" role="tablist" aria-label="接入结果">
             <button type="button" role="tab" aria-selected={runTab === "runs"} onClick={() => { setRunTab("runs"); setResultStatus(""); setResultQuery(""); }}><Clock3 size={15} />运行记录 <span>{runs.length}</span></button>
@@ -402,7 +403,7 @@ function LiveSourcesWorkspace({ focusIndex, navigationEpoch = 0, runDetailBackRe
         </header>
         <div className="ingestion-filterbar"><label className="connection-search"><Search size={15} /><input type="search" aria-label="搜索接入结果" placeholder={runTab === "runs" ? "搜索来源或运行 ID" : "搜索候选名称"} value={resultQuery} onChange={(event) => setResultQuery(event.target.value)} /></label><select aria-label="结果状态" value={resultStatus} onChange={(event) => setResultStatus(event.target.value)}><option value="">全部状态</option>{Object.entries(runTab === "runs" ? runLabels : candidateLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
         {state === "error" && <LoadFailure message={error} onRetry={refresh} />}
-        {state === "loading" && <Loading label="正在读取接入运行" />}
+        {state === "loading" && <Loading label="正在读取运行记录" />}
         {state === "ready" && <TablePanel aria-label="接入结果列表">
         {state === "ready" && runTab === "runs" && <RunList runs={visibleRuns} sourceName={sourceName} onOpen={setSelectedRunId} />}
         {state === "ready" && runTab === "candidates" && <CandidateList candidates={visibleCandidates} sourceName={sourceName} onOpen={setSelectedCandidate} onOpenProposal={onOpenProposal} />}
@@ -426,7 +427,7 @@ function LiveSourcesWorkspace({ focusIndex, navigationEpoch = 0, runDetailBackRe
           <label className="connection-search"><Search size={15} /><input type="search" aria-label="搜索数据来源" placeholder="搜索名称、主机或数据库" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
           <button className="secondary-button" type="button" onClick={refresh}><RefreshCw size={15} />刷新</button>
           <button className="primary-button" type="button" disabled={!canManage} title={!canManage ? "需要 source.manage 权限" : undefined} onClick={() => setSourceDialog({ mode: "create" })}><Plus size={15} />新建连接</button>
-          <button className="secondary-button" type="button" disabled={!canManage} onClick={() => setImportTarget("new")}><FileUp size={15} />导入工件</button>
+          <button className="secondary-button" type="button" disabled={!canManage} onClick={() => setImportTarget("new")}><FileUp size={15} />导入文件</button>
         </div>
       </header>
       {testingSourceId && <div className="source-action-notice" role="status"><LoaderCircle className="is-spinning" size={16} /><span>正在测试 {sourceName(testingSourceId)} 的连接…</span></div>}
@@ -595,7 +596,7 @@ function ConfirmDelete({ source, workspaceId, onClose, onDeleted }: { source: So
 }
 
 function RunList({ runs, sourceName, onOpen }: { runs: SourceDiscoveryRun[]; sourceName: (id: string) => string; onOpen: (id: string) => void }) {
-  return <TableViewport className="ingestion-results-table"><Table className="source-data-table" aria-label="接入运行">
+  return <TableViewport className="ingestion-results-table"><Table className="source-data-table" aria-label="运行记录">
     <colgroup><col style={{ width: "36%" }} /><col style={{ width: "15%" }} /><col style={{ width: "24%" }} /><col style={{ width: "25%" }} /></colgroup>
     <TableHeader><TableRow><TableHead scope="col">来源与运行</TableHead><TableHead scope="col">状态</TableHead><TableHead scope="col">发现结果</TableHead><TableHead scope="col">更新时间</TableHead></TableRow></TableHeader>
     <TableBody>{runs.map((run) => <TableRow key={run.id} onOpen={() => onOpen(run.id)}>
@@ -621,9 +622,9 @@ function CandidateList({ candidates, sourceName, onOpen }: { candidates: Semanti
   </Table></TableViewport>;
 }
 function RunDetail({ detail, error, sourceName, onRetry, candidates = [], onOpenCandidate, onBack, backLabel = "返回运行记录" }: { detail: DiscoveryRun | null; error: string; sourceName: string; onRetry: () => void; candidates?: SemanticCandidate[]; onOpenCandidate?: (candidate: SemanticCandidate) => void; onBack?: () => void; backLabel?: string }) {
-  if (!detail) return <section className="view source-live-view ingestion-detail" aria-label="接入运行详情">{onBack && <button className="ingestion-back" onClick={onBack}><ChevronLeft size={16} />{backLabel}</button>}{error ? <LoadFailure message={error} onRetry={onRetry} /> : <Loading label="正在读取运行详情" />}</section>;
+  if (!detail) return <section className="view source-live-view ingestion-detail" aria-label="运行记录详情">{onBack && <button className="ingestion-back" onClick={onBack}><ChevronLeft size={16} />{backLabel}</button>}{error ? <LoadFailure message={error} onRetry={onRetry} /> : <Loading label="正在读取运行详情" />}</section>;
   const active = detail.status === "running" || detail.status === "queued";
-  return <section className="view source-live-view ingestion-detail" aria-label="接入运行详情">
+  return <section className="view source-live-view ingestion-detail" aria-label="运行记录详情">
     {onBack && <button className="ingestion-back" onClick={onBack}><ChevronLeft size={16} />{backLabel}</button>}
     <header className="ingestion-object-heading"><div><span className="panel-kicker">发现运行 · {formatTime(detail.createdAt)}</span><h2>{sourceName}</h2></div><span className={`source-run-state source-run-${detail.status}`}>{active ? <LoaderCircle className="is-spinning" size={15} /> : <CheckCircle2 size={15} />}{runLabels[detail.status]}</span></header>
     <div className="ingestion-summary-grid" aria-label="发现结果摘要">{Object.entries(detail.stats).filter(([key, value]) => key !== "findings" && typeof value === "number").map(([key, value]) => <article key={key}><span>{statLabel(key)}</span><strong>{String(value)}</strong></article>)}<article><span>诊断项</span><strong>{detail.findings.length}</strong></article><article><span>完成时间</span><strong className="is-time">{detail.completedAt ? formatTime(detail.completedAt) : active ? "进行中" : "未记录"}</strong></article></div>
@@ -698,7 +699,7 @@ function ArtifactImportDialog({ source, onClose, onSaved }: { source?: SourceCon
     } catch (reason) { setError(messageFor(reason, "工件保存失败。")); }
     finally { setBusy(false); }
   };
-  return <IngestionDialog title={source ? "更新来源工件" : "导入工件"} onClose={onClose} busy={busy}>
+  return <IngestionDialog title={source ? "更新来源工件" : "导入文件"} onClose={onClose} busy={busy}>
     <div className="source-live-form">
       <label className="field-span-2"><span>来源名称</span><input aria-label="来源名称" value={name} onChange={(event) => setName(event.target.value)} /></label>
       <label className="field-span-2"><span>工件类型</span><select aria-label="工件类型" disabled={Boolean(source)} value={kind} onChange={(event) => { setKind(event.target.value as typeof kind); setFiles([]); setError(""); }}><option value="file">CSV / XLSX / Markdown</option><option value="sql_bundle">版本化 SQL</option><option value="dbt_bundle">dbt manifest / catalog</option></select></label>
@@ -724,9 +725,13 @@ function artifactKind(file: File, sourceKind: "file" | "dbt_bundle"): PublicArti
 }
 
 function ArtifactSetDialog({ value, onClose }: { value: ArtifactSet; onClose: () => void }) {
+  const { workspaceId } = useCatalogRuntime();
+  const [previewOpen, setPreviewOpen] = useState(false);
   return <IngestionDialog title="持久工件集合" onClose={onClose}>
     <dl className="ingestion-metadata"><dt>集合</dt><dd><code>{value.id}</code></dd><dt>来源</dt><dd><code>{value.sourceId}</code></dd><dt>摘要</dt><dd><code>{value.setDigest}</code></dd></dl>
     <ul className="ingestion-file-preview">{value.members.map((member) => <li key={member.artifactId}><span><strong>{member.logicalPath}</strong><small>{member.kind} · {member.byteSize.toLocaleString()} bytes · {member.contentAvailability}</small></span><code>{shortId(member.contentDigest)}</code></li>)}</ul>
+    <button className="secondary-button" onClick={() => setPreviewOpen((open) => !open)}>{previewOpen ? "收起内容" : "查看文件内容"}<ChevronRight size={15} /></button>
+    {previewOpen && <ArtifactContents key={value.id} workspaceId={workspaceId} setId={value.id} />}
   </IngestionDialog>;
 }
 
@@ -796,7 +801,7 @@ function ScheduleWorkspace({ sources, runs = [], candidates = [], loading, sourc
   };
   if (candidate) return <CandidateDialog candidate={candidate} onClose={() => { setCandidate(null); onRefresh(); }} onOpenProposal={onOpenProposal} />;
   if (runId) return <RunDetail detail={runDetail} error={runError} sourceName={sources.find((source) => source.id === runDetail?.sourceConnectionId)?.name ?? "发现运行"} candidates={candidates} onOpenCandidate={setCandidate} onRetry={() => setRetry((value) => value + 1)} onBack={() => { setRunId(""); onRefresh(); }} backLabel="返回计划" />;
-  return <section className={`view source-live-view source-list-page schedule-list-page${embedded ? " ingestion-embedded" : ""}`} aria-label="接入自动化">
+  return <section className={`view source-live-view source-list-page schedule-list-page${embedded ? " ingestion-embedded" : ""}`} aria-label="接入计划">
     <header className="source-commandbar"><div className="source-tabs" role="tablist" aria-label="计划类型"><button type="button" role="tab" aria-selected="true"><Clock3 size={15} />全部计划 <span>{visibleSchedules.length}</span></button></div><div className="source-command-actions"><label className="connection-search"><Search size={15} /><input type="search" aria-label="搜索接入计划" placeholder="搜索来源、计划或时区" value={scheduleQuery} onChange={(event) => setScheduleQuery(event.target.value)} /></label><button className="secondary-button" title="刷新" aria-label="刷新计划" onClick={() => { onRefresh(); sourceIds.forEach((sourceId) => { void loadSchedules(sourceId).catch(() => undefined); }); if (selectedId) void loadOccurrences(selectedId).catch(() => undefined); }}><RefreshCw size={15} />刷新</button><button className="primary-button" disabled={!sources.length || !runtime.access.manage || !runtime.access.run} title={!sources.length ? "需要先创建来源" : "需要 source.manage 与 ingestion.run 权限"} onClick={() => setEditing("new")}><Plus size={15} />新建计划</button></div></header>
     {loading && <Loading label="正在读取来源" />}
     <div className="ingestion-filterbar"><select aria-label="计划状态" value={scheduleStatus} onChange={(event) => setScheduleStatus(event.target.value)}><option value="">全部状态</option><option value="enabled">已启用</option><option value="paused">已暂停</option></select></div>
@@ -974,7 +979,8 @@ function SourceWorkspace({ source, runs, candidates, testResult, busy, canManage
   return <section className="ingestion-detail source-object" aria-label="数据来源详情">
     <button ref={closeRef} className="ingestion-back" onClick={onClose}><ChevronLeft size={16} />返回数据来源</button>
     <header className="ingestion-object-heading"><div><span className="panel-kicker">{sourceKindLabel(source)} · {sourceStatusLabel(source.status)}</span><h2>{source.name}</h2><span className="ingestion-muted">{source.sourceKind === "postgresql" ? `${source.host}:${source.port}/${source.database}` : "版本化文件来源"}</span></div><div className="ingestion-object-actions">{source.sourceKind === "postgresql" && <button className="secondary-button" disabled={!canManage || busy} onClick={onTest}><CheckCircle2 size={15} />测试连接</button>}<button className="primary-button" disabled={!canRun || busy || source.status !== "active"} onClick={onStart}><Play size={15} />启动发现</button></div></header>
-    <div className="source-tabs ingestion-object-tabs" role="tablist" aria-label="来源详情视图">{["概览", "运行历史", "自动化", "连接设置"].map((name) => <button key={name} role="tab" aria-selected={tab === name} onClick={() => onTabChange(name)}>{name}</button>)}</div>
+    <div className="source-tabs ingestion-object-tabs" role="tablist" aria-label="来源详情视图">{["概览", "内容", "运行历史", "自动化", "连接设置"].map((name) => <button key={name} role="tab" aria-selected={tab === name} onClick={() => onTabChange(name)}>{name}</button>)}</div>
+    {tab === "内容" && <SourceContents source={source} />}
     {tab === "概览" && <>
       <div className="ingestion-summary-grid"><article><span>连接检查</span><strong className="is-time">{source.sourceKind === "postgresql" ? testResult ? testResult.ok ? "检查通过" : "检查失败" : "本次会话未检查" : "文件来源"}</strong></article><article><span>最近发现</span><strong className="is-time">{latest ? runLabels[latest.status] : "尚未运行"}</strong><small>{latest ? formatTime(latest.createdAt) : ""}</small></article><article><span>自动化</span><strong className="is-time">{plans?.status.error ? "读取失败" : plans && ["ready", "empty"].includes(plans.status.state) ? `${plans.items.filter((plan) => plan.enabled && !plan.deletedAt).length} 个计划已启用` : "读取中"}</strong><button className="ingestion-link" onClick={() => onTabChange("自动化")}>管理计划<ChevronRight size={14} /></button></article></div>
       <section className="ingestion-section"><header><h3>最近发现结果</h3>{latest && <button className="secondary-button" onClick={() => onOpenRun(latest.id)}>查看结果<ChevronRight size={15} /></button>}</header>{latest ? <RunStats stats={latest.stats} /> : <Empty icon={<Database size={20} />} title="尚无发现结果" detail="" />}</section>

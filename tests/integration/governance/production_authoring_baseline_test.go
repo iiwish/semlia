@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/iiwish/semlia/pkg/identity"
@@ -59,5 +60,51 @@ func TestProductionAuthoringPublishedBaselineUpdateAndNoChange(t *testing.T) {
 	replay := sendProdRequest(h, http.MethodPost, path, p.String(), "baseline-real-update", string(valid))
 	if replay.Code != http.StatusOK {
 		t.Fatalf("update replay: %d %s", replay.Code, replay.Body.String())
+	}
+}
+
+func TestProductionDependencyRejectsRevisionRemovedFromCurrentHead(t *testing.T) {
+	f, h, w, author := authoringLifecycleSetup(t)
+	asset, revision, content := productionPublishedAsset(t, f, w, author)
+	first, err := f.store.CurrentReleaseSnapshot(context.Background(), w)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var baseline struct {
+		Definition string `json:"definition"`
+	}
+	if err := json.Unmarshal(content, &baseline); err != nil {
+		t.Fatal(err)
+	}
+	proposalPath := f.proposalsPath(t, w)
+	body := fmt.Sprintf(`{"targetObjectType":"semantic_asset","targetObjectId":%q,"baseRevisionId":%q,"title":"Revise dependency","reason":"Synthetic revision change","changeSet":[%s],"createdBy":%q}`, asset.String(), revision.String(), validatedChangeItem("definition", baseline.Definition, "A different published definition"), author.String())
+	response := f.request(t, http.MethodPost, proposalPath, author.String(), body)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("propose revision: %d %s", response.Code, response.Body.String())
+	}
+	proposal := decodeProposalDetail(t, response.Body.Bytes())["id"].(string)
+	response = f.request(t, http.MethodPost, proposalPath+"/"+proposal+"/submit", author.String(), "")
+	if response.Code != http.StatusOK {
+		t.Fatalf("submit revision: %d %s", response.Code, response.Body.String())
+	}
+	f.runValidationWorker(t)
+	assertProposalState(t, f, w, proposalPath, proposal, "in_review")
+	reviewer := createReviewerPrincipal(t, f, w, "dependency-revision-reviewer")
+	publisher := createPrincipalWithRoles(t, f, w, "dependency-revision-publisher", []string{"publisher"})
+	approveProposal(t, f, w, reviewer, proposal)
+	response = publishProposal(t, f, w, publisher, proposal)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("publish revision: %d %s", response.Code, response.Body.String())
+	}
+	input := productionFixtureInput(t, f, w, identity.SemanticCandidateID{})
+	input["dependencies"] = []any{map[string]any{"kind": "semantic_asset", "targetId": asset.String(), "revisionId": revision.String(), "releaseId": first.ReleaseID.String()}}
+	raw, err := json.Marshal(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := completeProductionPayload(t, authoringLifecycleBody(string(raw)), author)
+	response = sendProdRequest(h, http.MethodPost, fmt.Sprintf("/api/v1/workspaces/%s/production-operations", w), author.String(), "stale-pinned-revision", request)
+	if response.Code != http.StatusUnprocessableEntity || !strings.Contains(response.Body.String(), "DEPENDENCY_INVALID") {
+		t.Fatalf("stale dependency revision accepted: %d %s", response.Code, response.Body.String())
 	}
 }

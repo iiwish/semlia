@@ -68,6 +68,7 @@ type ProductionOperation struct {
 	CreatedBy             identity.PrincipalID
 	CurrentVersion        int
 	SupersedesOperationID *identity.ProductionOperationID
+	Superseded            bool
 	CreatedAt             time.Time
 	UpdatedAt             time.Time
 }
@@ -382,6 +383,11 @@ func ResolveLocalReferences(content json.RawMessage, localKeyToTargetID map[stri
 			}
 			res := make(map[string]any, len(val))
 			for k, item := range val {
+				if k == "spec" {
+					// Knowledge specs contain immutable versioned references, not local IDs.
+					res[k] = item
+					continue
+				}
 				resolved, err := resolveVal(item)
 				if err != nil {
 					return nil, err

@@ -60,6 +60,7 @@ function emptyWorkspace() {
 }
 
 beforeEach(() => {
+  window.history.replaceState({}, "", "/");
   vi.clearAllMocks();
   emptyWorkspace();
   governanceMocks.getProposal.mockResolvedValue({});
@@ -98,7 +99,8 @@ describe("governance API convergence", () => {
     governanceMocks.listModelProviders.mockRejectedValue(new GovernanceApiError("governance storage unreachable", "CONFLICT"));
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "变更与发布" }));
+    await user.click(screen.getByRole("button", { name: "待办" }));
+    await user.click(screen.getByRole("button", { name: /^批量审核/ }));
     const alerts = await screen.findAllByRole("alert");
     expect(alerts.some((alert) => alert.textContent.includes("提案加载失败：governance storage unreachable"))).toBe(true);
     expect(screen.queryByText("统一客单价的退款订单处理口径")).not.toBeInTheDocument();
@@ -125,7 +127,8 @@ describe("governance API convergence", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "变更与发布" }));
+    await user.click(screen.getByRole("button", { name: "知识库" }));
+    await user.click(screen.getByRole("button", { name: "发布记录" }));
     await vi.waitFor(() => expect(document.querySelector(".governance-list-summary")).toHaveTextContent("发布记录总计 2"));
     await user.click(screen.getByRole("button", { name: "加载更多发布记录" }));
     expect(await screen.findByRole("button", { name: /查看发布记录 #1/ })).toBeVisible();
@@ -139,7 +142,8 @@ describe("governance API convergence", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "变更与发布" }));
+    await user.click(screen.getByRole("button", { name: "知识库" }));
+    await user.click(screen.getByRole("button", { name: "发布记录" }));
     const releaseRow = await screen.findByRole("button", { name: /查看发布记录 #1 #1/ });
     expect(releaseRow).toHaveTextContent("清单读取失败");
     expect(releaseRow).toHaveTextContent("release manifest store unavailable");
@@ -196,7 +200,7 @@ describe("governance API convergence", () => {
     });
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "知识资产" }));
+    await user.click(screen.getByRole("button", { name: "知识库" }));
     await user.click(screen.getByRole("button", { name: "打开语义资产 净收入" }));
     await user.click(screen.getByRole("button", { name: "修订知识" }));
     await user.click(within(screen.getByRole("dialog", { name: "选择知识修订对象" })).getByRole("button", { name: /计算表达式/ }));
@@ -271,7 +275,7 @@ describe("governance API convergence", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "知识资产" }));
+    await user.click(screen.getByRole("button", { name: "知识库" }));
     await user.click(screen.getByRole("button", { name: "打开语义资产 净收入" }));
     await user.click(screen.getByRole("button", { name: "修订知识" }));
     await user.click(within(screen.getByRole("dialog", { name: "选择知识修订对象" })).getByRole("button", { name: /计算表达式/ }));
@@ -294,7 +298,7 @@ describe("governance API convergence", () => {
     governanceMocks.generateProposal.mockRejectedValue(new GovernanceApiError("provider dial failed: connection refused", "PROVIDER_UNAVAILABLE"));
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "知识资产" }));
+    await user.click(screen.getByRole("button", { name: "知识库" }));
     await user.click(screen.getByRole("button", { name: "打开语义资产 净收入" }));
     await user.click(screen.getByRole("button", { name: "修订知识" }));
     await user.click(within(screen.getByRole("dialog", { name: "选择知识修订对象" })).getByRole("button", { name: /计算表达式/ }));
@@ -367,7 +371,7 @@ describe("governance API convergence", () => {
     });
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "知识资产" }));
+    await user.click(screen.getByRole("button", { name: "知识库" }));
     await user.click(screen.getByRole("button", { name: "打开语义资产 净收入" }));
     await user.click(screen.getByRole("button", { name: "修订知识" }));
     await user.click(within(screen.getByRole("dialog", { name: "选择知识修订对象" })).getByRole("button", { name: /计算表达式/ }));
@@ -427,7 +431,8 @@ describe("governance API convergence", () => {
     });
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "变更与发布" }));
+    await user.click(screen.getByRole("button", { name: "待办" }));
+    await user.click(screen.getByRole("button", { name: /^批量审核/ }));
     await user.click(await screen.findByRole("button", { name: "汇编批次" }));
     expect(governanceMocks.assembleReviewBatches).toHaveBeenCalledTimes(1);
     await user.click(await screen.findByRole("button", { name: /rvb_test_0001 · 1 个成员/ }));
@@ -468,7 +473,6 @@ describe("governance API convergence", () => {
   });
 
   it("restores persisted approval facts when proposal data is reloaded", async () => {
-    const user = userEvent.setup();
     governanceMocks.listProposals.mockResolvedValue([{
       id: "prp_test_reviewed",
       targetObjectType: "semantic_asset",
@@ -491,9 +495,10 @@ describe("governance API convergence", () => {
       note: "独立评审通过。",
       createdAt: "2026-09-03T10:00:00Z",
     }]);
+    window.history.replaceState({}, "", "/governance?proposal=prp_test_reviewed");
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "变更与发布" }));
+
     expect(await screen.findByText("待发布")).toBeInTheDocument();
     expect(governanceMocks.listReviews).toHaveBeenCalledWith(
       expect.any(String), "prp_test_reviewed", expect.any(AbortSignal));
@@ -515,10 +520,10 @@ describe("governance API convergence", () => {
       updatedAt: "2026-09-03T09:00:00Z",
     }]);
     governanceMocks.createReview.mockRejectedValue(new GovernanceApiError("the proposal author cannot review their own proposal", "SEPARATION_OF_DUTY", { conflict: "the proposal author cannot review their own proposal", scope: "workspace", policySource: "docs/SSOT.md §8.4 + docs/specs/access-control/product-design.md FR-007" }));
+    window.history.replaceState({}, "", "/governance?proposal=prp_test_0003");
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "变更与发布" }));
-    await user.click(await screen.findByRole("button", { name: "查看候选资产版本 净收入 @13" }));
+
     await user.click(await screen.findByRole("button", { name: "审核候选版本 净收入 @13" }));
     const dialog = screen.getByRole("dialog", { name: "审核 净收入 · @13" });
     await user.type(within(dialog).getByRole("textbox", { name: "审核意见" }), "尝试批准自己的提案。");

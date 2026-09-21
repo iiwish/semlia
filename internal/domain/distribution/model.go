@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -159,12 +160,16 @@ const (
 )
 
 type Selector struct {
-	AssetID *identity.AssetID `json:"assetId,omitempty"`
-	Address string            `json:"address,omitempty"`
-	Search  string            `json:"search,omitempty"`
+	MemberID string            `json:"memberId,omitempty"`
+	AssetID  *identity.AssetID `json:"assetId,omitempty"`
+	Address  string            `json:"address,omitempty"`
+	Search   string            `json:"search,omitempty"`
 }
 
 func (selector Selector) validate() bool {
+	if selector.MemberID != "" && !regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`).MatchString(selector.MemberID) {
+		return false
+	}
 	count := 0
 	if selector.AssetID != nil && !selector.AssetID.IsZero() {
 		count++
@@ -211,6 +216,7 @@ type ResolutionContext struct {
 }
 
 type SemanticQueryInput struct {
+	ModelID       *identity.AssetID `json:"modelId,omitempty"`
 	SchemaVersion string            `json:"schemaVersion"`
 	Intent        Intent            `json:"intent"`
 	Measures      []Selector        `json:"measures,omitempty"`
@@ -402,6 +408,7 @@ type ResolvedObject struct {
 }
 
 type ResolvedSemanticPlan struct {
+	Model           *ResolvedAsset                  `json:"model,omitempty"`
 	Execution       *ExecutionProvenance            `json:"execution,omitempty"`
 	ID              identity.ResolvedSemanticPlanID `json:"id"`
 	QueryID         identity.SemanticQueryID        `json:"queryId"`

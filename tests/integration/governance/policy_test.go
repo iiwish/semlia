@@ -323,7 +323,7 @@ func TestSeededPolicyRulesMatchCanonicalTableAndReproduceDecisions(t *testing.T)
 		})
 	}
 	corpus := []governance.DecisionInputs{
-		{AssetType: "concept", TargetObjectType: "semantic_asset", AffectsDefinition: true, AuthorKind: "human"},
+		{AssetType: "business_term", TargetObjectType: "semantic_asset", AffectsDefinition: true, AuthorKind: "human"},
 		{AssetType: "metric", TargetObjectType: "semantic_asset", AffectsComputation: true, BlockerCount: 1},
 		{AssetType: "metric", TargetObjectType: "semantic_asset", AffectsComputation: true, ProductionEnvironment: true},
 		{AssetType: "contract", TargetObjectType: "semantic_asset", AffectsContract: true, OwnerAssigned: "assigned"},

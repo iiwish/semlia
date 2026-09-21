@@ -9,6 +9,7 @@ import (
 	authapp "github.com/iiwish/semlia/internal/application/authorization"
 	authz "github.com/iiwish/semlia/internal/domain/authorization"
 	domain "github.com/iiwish/semlia/internal/domain/governance"
+	"github.com/iiwish/semlia/internal/domain/semantic"
 	"github.com/iiwish/semlia/pkg/identity"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -101,6 +102,15 @@ func authorizeProductionTargets(ctx context.Context, tx pgx.Tx, access authapp.A
 			}
 			if !exists {
 				return domain.ErrNotFound
+			}
+		}
+		for _, ref := range refs.Physical {
+			var source pgtype.UUID
+			if err := tx.QueryRow(ctx, `SELECT source_connection_id FROM source_snapshots WHERE workspace_id=$1 AND id=$2`, w.UUID(), mustSnapshotUUID(ref.SnapshotID)).Scan(&source); err != nil {
+				return governanceRepositoryError("read knowledge source", err)
+			}
+			if err := productionRequire(access, authz.ActionSourceRead, authz.Resource{Type: authz.ScopeSource, ID: formatUUID(source)}); err != nil {
+				return err
 			}
 		}
 		for _, key := range refs.LocalKeys {
@@ -212,6 +222,7 @@ func validateProductionPhysicalReferences(ctx context.Context, tx pgx.Tx, w iden
 			}
 		}
 		var content struct {
+			Spec    semantic.KnowledgeSpec              `json:"spec"`
 			Dataset domain.ProductionPhysicalReference  `json:"dataset"`
 			Field   *domain.ProductionPhysicalReference `json:"field"`
 			Left    domain.ProductionPhysicalReference  `json:"leftDataset"`
@@ -231,6 +242,11 @@ func validateProductionPhysicalReferences(ctx context.Context, tx pgx.Tx, w iden
 		}
 		if content.Field != nil && !belongs(*content.Field, content.Dataset) {
 			return fmt.Errorf("%w: field does not belong to selected dataset revision", domain.ErrDependencyInvalid)
+		}
+		for _, member := range content.Spec.Members {
+			if member.SourceFieldRef != nil && (content.Spec.DatasetRef == nil || !belongs(domain.ProductionPhysicalReference(*member.SourceFieldRef), domain.ProductionPhysicalReference(*content.Spec.DatasetRef))) {
+				return domain.ErrDependencyInvalid
+			}
 		}
 		for _, pair := range content.Pairs {
 			if !belongs(pair.Left, content.Left) || !belongs(pair.Right, content.Right) {

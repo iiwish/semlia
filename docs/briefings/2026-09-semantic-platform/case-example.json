@@ -1,0 +1,21 @@
+{
+  "purpose": "老客户客单价汇报的合成演算样本，不是真实业务数据或原型执行结果。",
+  "boundary": "客户首次有效支付日期视为已确认的全历史属性，不从本文件的七笔订单推算。is_valid 只用于演算，不定义企业真实有效订单规则。",
+  "parameters": {"month_start": "2026-08-01", "month_end": "2026-09-01", "region": "华东"},
+  "customers": [
+    {"customer_id": "C01", "region": "华东", "first_paid_at": "2026-06-05"},
+    {"customer_id": "C02", "region": "华东", "first_paid_at": "2026-07-31"},
+    {"customer_id": "C03", "region": "华东", "first_paid_at": "2026-08-03"},
+    {"customer_id": "C04", "region": "华南", "first_paid_at": "2026-06-01"}
+  ],
+  "orders": [
+    {"order_id": "O01", "customer_id": "C01", "paid_at": "2026-08-05", "paid_amount": 100, "is_valid": 1},
+    {"order_id": "O02", "customer_id": "C01", "paid_at": "2026-08-20", "paid_amount": 200, "is_valid": 1},
+    {"order_id": "O03", "customer_id": "C02", "paid_at": "2026-08-10", "paid_amount": 300, "is_valid": 1},
+    {"order_id": "O04", "customer_id": "C03", "paid_at": "2026-08-15", "paid_amount": 400, "is_valid": 1},
+    {"order_id": "O05", "customer_id": "C04", "paid_at": "2026-08-22", "paid_amount": 500, "is_valid": 1},
+    {"order_id": "O06", "customer_id": "C01", "paid_at": "2026-07-31", "paid_amount": 600, "is_valid": 1},
+    {"order_id": "O07", "customer_id": "C02", "paid_at": "2026-08-14", "paid_amount": 700, "is_valid": 0}
+  ],
+  "expected": {"includedOrderIds": ["O01", "O02", "O03"], "paidAmount": 600, "orderCount": 3, "customerCount": 2, "avgOrderValue": 200}
+}

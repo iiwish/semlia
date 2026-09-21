@@ -1549,6 +1549,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspaceId}/ingestion/artifact-sets/{artifactSetId}/members/{artifactId}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                artifactSetId: components["schemas"]["ArtifactSetId"];
+                artifactId: components["schemas"]["ArtifactId"];
+            };
+            cookie?: never;
+        };
+        /** Read bounded inert content of a source-authorized immutable set member */
+        get: operations["previewIngestionArtifact"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspaceId}/ingestion/artifact-sets:finalize": {
         parameters: {
             query?: never;
@@ -2422,7 +2443,9 @@ export interface components {
             updatedAt: string;
         };
         EmbeddingIndexStatus: {
+            /** @description Whether pgvector and an enabled embedding provider are both available. */
             configured: boolean;
+            /** @description Machine-readable blocker for starting a rebuild. Empty when a rebuild can start now, not_configured when pgvector or the provider is missing, no_published_release when the workspace has nothing released to index. */
             reason: string;
             active: components["schemas"]["EmbeddingIndexVersion"] | null;
             latest: components["schemas"]["EmbeddingIndexVersion"] | null;
@@ -2717,7 +2740,7 @@ export interface components {
          */
         SemanticAddress: string;
         /** @enum {string} */
-        SemanticAssetType: "concept" | "entity" | "semantic_model" | "dimension" | "measure" | "metric" | "segment";
+        SemanticAssetType: "business_object" | "business_term" | "metric" | "data_asset" | "analysis_model";
         /** @enum {string} */
         RelationPredicate: "measures" | "describes" | "depends_on" | "derived_from" | "filters_by" | "synonym_of" | "contains" | "broader_than" | "narrower_than" | "equivalent_to" | "disjoint_with";
         /** @enum {string} */
@@ -3441,6 +3464,42 @@ export interface components {
         SourceLineageRevisionId: string;
         /** @enum {string} */
         MemberKind: "dataset" | "field" | "code" | "lineage";
+        ArtifactPreview: {
+            artifactId: components["schemas"]["ArtifactId"];
+            contentDigest: components["schemas"]["SnapshotDigest"];
+            /** @enum {string} */
+            kind: "csv" | "xlsx" | "markdown";
+            text: string;
+            datasets: {
+                name: string;
+                fields: {
+                    name: string;
+                    dataType: string;
+                    nullable: boolean;
+                    ordinal: number;
+                }[];
+            }[];
+            truncated: boolean;
+            blocks: {
+                /** @enum {string} */
+                kind: "heading" | "paragraph" | "code";
+                line: number;
+                text: string;
+            }[];
+            lines: {
+                number: number;
+                text: string;
+            }[];
+            sheets: {
+                name: string;
+                truncated: boolean;
+                columns: string[];
+                rows: {
+                    number: number;
+                    cells: string[];
+                }[];
+            }[];
+        };
         /** @enum {string} */
         HistoryQuality: "verified" | "unverifiable";
         SnapshotDigest: string;
@@ -3477,6 +3536,10 @@ export interface components {
             coverageKey: string;
             parentObjectId?: components["schemas"]["PhysicalDatasetId"];
             parentRevisionId?: components["schemas"]["PhysicalDatasetRevisionId"];
+            datasetKind?: string;
+            dataType?: string;
+            nullable?: boolean;
+            ordinal?: number;
         };
         Diagnostic: {
             ordinal: number;
@@ -3537,7 +3600,7 @@ export interface components {
             discoveryRunId: components["schemas"]["RunId"];
             candidateKey: string;
             /** @enum {string} */
-            candidateKind: "entity" | "dimension" | "metric" | "join";
+            candidateKind: "data_asset" | "join";
             title: string;
             proposalInput: {
                 [key: string]: unknown;
@@ -4276,6 +4339,7 @@ export interface components {
         };
         /** @description Exactly one of assetId, address or search is accepted by the service. */
         SemanticSelector: {
+            memberId?: string;
             assetId?: components["schemas"]["SemanticAssetId"];
             address?: components["schemas"]["SemanticAddress"];
             search?: string;
@@ -4306,6 +4370,7 @@ export interface components {
             bindingId?: components["schemas"]["ConsumerBindingId"];
         };
         SemanticQuery: {
+            modelId?: components["schemas"]["SemanticAssetId"];
             /** @enum {string} */
             schemaVersion: "1.0.0";
             /** @enum {string} */
@@ -4338,6 +4403,7 @@ export interface components {
         };
         /** @description The plan digest is an opaque server-owned fingerprint including private immutable execution provenance; clients do not recompute it. */
         ResolvedSemanticPlan: {
+            model?: components["schemas"]["ResolvedSemanticAsset"];
             id: components["schemas"]["ResolvedSemanticPlanId"];
             queryId: components["schemas"]["SemanticQueryId"];
             releaseId: components["schemas"]["GovernanceReleaseId"];
@@ -4394,6 +4460,10 @@ export interface components {
             traceId: string;
         };
         QueryExecutionResult: {
+            /** @description Ephemeral authorized compiler output; not retained for replay. */
+            sql?: string;
+            parameters?: unknown[];
+            dataTime?: components["schemas"]["Timestamp"];
             run: components["schemas"]["QueryExecutionRun"];
             /** @enum {string} */
             availability: "ephemeral" | "metadata_only" | "unavailable";
@@ -4513,12 +4583,90 @@ export interface components {
         } | components["schemas"]["PublishedReference"];
         AssetContent: {
             address: string;
-            /** @enum {string} */
-            assetType: "concept" | "entity" | "semantic_model" | "dimension" | "measure" | "metric" | "segment";
+            assetType: components["schemas"]["SemanticAssetType"];
             displayName: string;
             definition: string | null;
             scope: string | null;
             ownerPrincipalId: components["schemas"]["ResourceId"];
+            spec?: components["schemas"]["KnowledgeSpec"];
+        };
+        /** @description Type-specific knowledge contract. Drafts may be incomplete. Fields are restricted by assetType and publication validates completeness. */
+        KnowledgeSpec: {
+            grain?: string;
+            keys?: string[];
+            identityPolicy?: string;
+            lifecycle?: string;
+            members?: components["schemas"]["KnowledgeMember"][];
+            /** @enum {string} */
+            capability?: "definition" | "predicate";
+            subjectRef?: components["schemas"]["KnowledgeReference"];
+            predicate?: components["schemas"]["KnowledgeExpression"];
+            parameters?: components["schemas"]["KnowledgeParameter"][];
+            /** @enum {string} */
+            stage?: "object";
+            /** @enum {string} */
+            kind?: "aggregate" | "derived";
+            inputRef?: components["schemas"]["KnowledgeReference"];
+            /** @enum {string} */
+            aggregation?: "sum" | "avg" | "count" | "count_distinct" | "min" | "max";
+            expression?: components["schemas"]["KnowledgeExpression"];
+            filterRefs?: components["schemas"]["KnowledgeReference"][];
+            timeAttributeRef?: components["schemas"]["KnowledgeReference"];
+            unit?: string;
+            /** @enum {string} */
+            nullPolicy?: "exclude" | "unknown_does_not_match" | "required";
+            /** @enum {string} */
+            zeroDenominator?: "null";
+            /** @enum {string} */
+            rollup?: "recompute_from_inputs";
+            datasetRef?: components["schemas"]["PhysicalReference"];
+            coverage?: string;
+            refreshFrequency?: string;
+            sensitivity?: string;
+            baseObjectRef?: components["schemas"]["KnowledgeReference"];
+            publicAttributeRefs?: components["schemas"]["KnowledgeReference"][];
+            metricRefs?: components["schemas"]["KnowledgeReference"][];
+            compatibleTermRefs?: components["schemas"]["KnowledgeReference"][];
+            defaultTimeAttributeRef?: components["schemas"]["KnowledgeReference"];
+            dataAssetRefs?: components["schemas"]["KnowledgeReference"][];
+            memberBindings?: components["schemas"]["KnowledgeMemberBinding"][];
+            joinContractIds?: string[];
+        } | null;
+        KnowledgeReference: {
+            assetId: components["schemas"]["ResourceId"];
+            revisionId: components["schemas"]["ResourceId"];
+            releaseId: components["schemas"]["ResourceId"];
+            memberId?: string;
+        };
+        KnowledgeMember: {
+            id: string;
+            name?: string;
+            /** @enum {string} */
+            valueType?: "string" | "number" | "integer" | "boolean" | "date" | "timestamp";
+            /** @enum {string} */
+            nullPolicy?: "required" | "unknown" | "excluded";
+            /** @enum {string} */
+            historyPolicy?: "stable" | "current_value" | "event_time";
+            sourceFieldRef?: components["schemas"]["PhysicalReference"];
+        };
+        KnowledgeExpression: {
+            /** @enum {string} */
+            op: "ref" | "parameter" | "literal" | "add" | "subtract" | "multiply" | "divide" | "eq" | "neq" | "lt" | "lte" | "gt" | "gte" | "and" | "or";
+            ref?: components["schemas"]["KnowledgeReference"];
+            parameter?: string;
+            value?: components["schemas"]["JSONValue"];
+            left?: components["schemas"]["KnowledgeExpression"];
+            right?: components["schemas"]["KnowledgeExpression"];
+        };
+        KnowledgeParameter: {
+            name: string;
+            /** @enum {string} */
+            type: "string" | "number" | "integer" | "boolean" | "date" | "timestamp";
+            required: boolean;
+        };
+        KnowledgeMemberBinding: {
+            semanticRef: components["schemas"]["KnowledgeReference"];
+            dataRef: components["schemas"]["KnowledgeReference"];
         };
         BindingContent: {
             asset: components["schemas"]["SemanticReference"];
@@ -4821,7 +4969,13 @@ export interface components {
             reviewIds: components["schemas"]["ResourceId"][];
         };
         OperationSummary: {
+            /** @description Whether a successor operation replaces this record. Authoritative on list summaries. */
+            superseded?: boolean;
+            /** @description Authorized proposal references for deduplicating knowledge actions. */
+            proposalIds?: components["schemas"]["ResourceId"][];
             id: components["schemas"]["ResourceId"];
+            /** @description Display name from the selected version's primary semantic target or first named target. */
+            title?: string;
             currentVersion: components["schemas"]["Version"];
             createdBy: components["schemas"]["ResourceId"];
             createdAt: components["schemas"]["Timestamp"];
@@ -5625,7 +5779,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Persistent embedding capability and generations */
+            /** @description Persistent embedding capability, the machine-readable reason a rebuild is blocked, and generations */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5660,7 +5814,15 @@ export interface operations {
                 };
             };
             403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
+            /** @description The rebuild cannot start yet. EMBEDDING_NO_PUBLISHED_RELEASE means the workspace has no published release to index; VERSION_CONFLICT means the request collided with current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             503: components["responses"]["ServiceUnavailable"];
         };
     };
@@ -8222,6 +8384,43 @@ export interface operations {
             };
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    previewIngestionArtifact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: components["parameters"]["WorkspaceId"];
+                artifactSetId: components["schemas"]["ArtifactSetId"];
+                artifactId: components["schemas"]["ArtifactId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description CSV/XLSX first 100 data records and 50 columns per sheet, 1024 bytes per cell and 128 KiB aggregate cell budget. Markdown text is limited to 64 KiB and line projection to 500 lines. All truncation is explicit. Full input is validated before preview; no formula, script or external resource execution. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactPreview"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description Content expired or not retained. */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            422: components["responses"]["UnprocessableEntity"];
             default: components["responses"]["Error"];
         };
     };

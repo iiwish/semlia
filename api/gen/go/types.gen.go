@@ -65,6 +65,48 @@ func (e ArtifactKind) Valid() bool {
 	}
 }
 
+// Defines values for ArtifactPreviewBlocksKind.
+const (
+	ArtifactPreviewBlocksKindCode      ArtifactPreviewBlocksKind = "code"
+	ArtifactPreviewBlocksKindHeading   ArtifactPreviewBlocksKind = "heading"
+	ArtifactPreviewBlocksKindParagraph ArtifactPreviewBlocksKind = "paragraph"
+)
+
+// Valid indicates whether the value is a known member of the ArtifactPreviewBlocksKind enum.
+func (e ArtifactPreviewBlocksKind) Valid() bool {
+	switch e {
+	case ArtifactPreviewBlocksKindCode:
+		return true
+	case ArtifactPreviewBlocksKindHeading:
+		return true
+	case ArtifactPreviewBlocksKindParagraph:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ArtifactPreviewKind.
+const (
+	ArtifactPreviewKindCsv      ArtifactPreviewKind = "csv"
+	ArtifactPreviewKindMarkdown ArtifactPreviewKind = "markdown"
+	ArtifactPreviewKindXlsx     ArtifactPreviewKind = "xlsx"
+)
+
+// Valid indicates whether the value is a known member of the ArtifactPreviewKind enum.
+func (e ArtifactPreviewKind) Valid() bool {
+	switch e {
+	case ArtifactPreviewKindCsv:
+		return true
+	case ArtifactPreviewKindMarkdown:
+		return true
+	case ArtifactPreviewKindXlsx:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ArtifactSetSourceKind.
 const (
 	ArtifactSetSourceKindDbtBundle ArtifactSetSourceKind = "dbt_bundle"
@@ -200,39 +242,6 @@ const (
 func (e AskInterpretationSchema) Valid() bool {
 	switch e {
 	case SemliaAskInterpretationv1:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for AssetContentAssetType.
-const (
-	AssetContentAssetTypeConcept       AssetContentAssetType = "concept"
-	AssetContentAssetTypeDimension     AssetContentAssetType = "dimension"
-	AssetContentAssetTypeEntity        AssetContentAssetType = "entity"
-	AssetContentAssetTypeMeasure       AssetContentAssetType = "measure"
-	AssetContentAssetTypeMetric        AssetContentAssetType = "metric"
-	AssetContentAssetTypeSegment       AssetContentAssetType = "segment"
-	AssetContentAssetTypeSemanticModel AssetContentAssetType = "semantic_model"
-)
-
-// Valid indicates whether the value is a known member of the AssetContentAssetType enum.
-func (e AssetContentAssetType) Valid() bool {
-	switch e {
-	case AssetContentAssetTypeConcept:
-		return true
-	case AssetContentAssetTypeDimension:
-		return true
-	case AssetContentAssetTypeEntity:
-		return true
-	case AssetContentAssetTypeMeasure:
-		return true
-	case AssetContentAssetTypeMetric:
-		return true
-	case AssetContentAssetTypeSegment:
-		return true
-	case AssetContentAssetTypeSemanticModel:
 		return true
 	default:
 		return false
@@ -2033,6 +2042,297 @@ func (e JoinContentJoinType) Valid() bool {
 	}
 }
 
+// Defines values for KnowledgeExpressionOp.
+const (
+	KnowledgeExpressionOpAdd       KnowledgeExpressionOp = "add"
+	KnowledgeExpressionOpAnd       KnowledgeExpressionOp = "and"
+	KnowledgeExpressionOpDivide    KnowledgeExpressionOp = "divide"
+	KnowledgeExpressionOpEq        KnowledgeExpressionOp = "eq"
+	KnowledgeExpressionOpGt        KnowledgeExpressionOp = "gt"
+	KnowledgeExpressionOpGte       KnowledgeExpressionOp = "gte"
+	KnowledgeExpressionOpLiteral   KnowledgeExpressionOp = "literal"
+	KnowledgeExpressionOpLt        KnowledgeExpressionOp = "lt"
+	KnowledgeExpressionOpLte       KnowledgeExpressionOp = "lte"
+	KnowledgeExpressionOpMultiply  KnowledgeExpressionOp = "multiply"
+	KnowledgeExpressionOpNeq       KnowledgeExpressionOp = "neq"
+	KnowledgeExpressionOpOr        KnowledgeExpressionOp = "or"
+	KnowledgeExpressionOpParameter KnowledgeExpressionOp = "parameter"
+	KnowledgeExpressionOpRef       KnowledgeExpressionOp = "ref"
+	KnowledgeExpressionOpSubtract  KnowledgeExpressionOp = "subtract"
+)
+
+// Valid indicates whether the value is a known member of the KnowledgeExpressionOp enum.
+func (e KnowledgeExpressionOp) Valid() bool {
+	switch e {
+	case KnowledgeExpressionOpAdd:
+		return true
+	case KnowledgeExpressionOpAnd:
+		return true
+	case KnowledgeExpressionOpDivide:
+		return true
+	case KnowledgeExpressionOpEq:
+		return true
+	case KnowledgeExpressionOpGt:
+		return true
+	case KnowledgeExpressionOpGte:
+		return true
+	case KnowledgeExpressionOpLiteral:
+		return true
+	case KnowledgeExpressionOpLt:
+		return true
+	case KnowledgeExpressionOpLte:
+		return true
+	case KnowledgeExpressionOpMultiply:
+		return true
+	case KnowledgeExpressionOpNeq:
+		return true
+	case KnowledgeExpressionOpOr:
+		return true
+	case KnowledgeExpressionOpParameter:
+		return true
+	case KnowledgeExpressionOpRef:
+		return true
+	case KnowledgeExpressionOpSubtract:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for KnowledgeMemberHistoryPolicy.
+const (
+	CurrentValue KnowledgeMemberHistoryPolicy = "current_value"
+	EventTime    KnowledgeMemberHistoryPolicy = "event_time"
+	Stable       KnowledgeMemberHistoryPolicy = "stable"
+)
+
+// Valid indicates whether the value is a known member of the KnowledgeMemberHistoryPolicy enum.
+func (e KnowledgeMemberHistoryPolicy) Valid() bool {
+	switch e {
+	case CurrentValue:
+		return true
+	case EventTime:
+		return true
+	case Stable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for KnowledgeMemberNullPolicy.
+const (
+	KnowledgeMemberNullPolicyExcluded KnowledgeMemberNullPolicy = "excluded"
+	KnowledgeMemberNullPolicyRequired KnowledgeMemberNullPolicy = "required"
+	KnowledgeMemberNullPolicyUnknown  KnowledgeMemberNullPolicy = "unknown"
+)
+
+// Valid indicates whether the value is a known member of the KnowledgeMemberNullPolicy enum.
+func (e KnowledgeMemberNullPolicy) Valid() bool {
+	switch e {
+	case KnowledgeMemberNullPolicyExcluded:
+		return true
+	case KnowledgeMemberNullPolicyRequired:
+		return true
+	case KnowledgeMemberNullPolicyUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for KnowledgeMemberValueType.
+const (
+	KnowledgeMemberValueTypeBoolean   KnowledgeMemberValueType = "boolean"
+	KnowledgeMemberValueTypeDate      KnowledgeMemberValueType = "date"
+	KnowledgeMemberValueTypeInteger   KnowledgeMemberValueType = "integer"
+	KnowledgeMemberValueTypeNumber    KnowledgeMemberValueType = "number"
+	KnowledgeMemberValueTypeString    KnowledgeMemberValueType = "string"
+	KnowledgeMemberValueTypeTimestamp KnowledgeMemberValueType = "timestamp"
+)
+
+// Valid indicates whether the value is a known member of the KnowledgeMemberValueType enum.
+func (e KnowledgeMemberValueType) Valid() bool {
+	switch e {
+	case KnowledgeMemberValueTypeBoolean:
+		return true
+	case KnowledgeMemberValueTypeDate:
+		return true
+	case KnowledgeMemberValueTypeInteger:
+		return true
+	case KnowledgeMemberValueTypeNumber:
+		return true
+	case KnowledgeMemberValueTypeString:
+		return true
+	case KnowledgeMemberValueTypeTimestamp:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for KnowledgeParameterType.
+const (
+	KnowledgeParameterTypeBoolean   KnowledgeParameterType = "boolean"
+	KnowledgeParameterTypeDate      KnowledgeParameterType = "date"
+	KnowledgeParameterTypeInteger   KnowledgeParameterType = "integer"
+	KnowledgeParameterTypeNumber    KnowledgeParameterType = "number"
+	KnowledgeParameterTypeString    KnowledgeParameterType = "string"
+	KnowledgeParameterTypeTimestamp KnowledgeParameterType = "timestamp"
+)
+
+// Valid indicates whether the value is a known member of the KnowledgeParameterType enum.
+func (e KnowledgeParameterType) Valid() bool {
+	switch e {
+	case KnowledgeParameterTypeBoolean:
+		return true
+	case KnowledgeParameterTypeDate:
+		return true
+	case KnowledgeParameterTypeInteger:
+		return true
+	case KnowledgeParameterTypeNumber:
+		return true
+	case KnowledgeParameterTypeString:
+		return true
+	case KnowledgeParameterTypeTimestamp:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for KnowledgeSpecAggregation.
+const (
+	Avg           KnowledgeSpecAggregation = "avg"
+	Count         KnowledgeSpecAggregation = "count"
+	CountDistinct KnowledgeSpecAggregation = "count_distinct"
+	Max           KnowledgeSpecAggregation = "max"
+	Min           KnowledgeSpecAggregation = "min"
+	Sum           KnowledgeSpecAggregation = "sum"
+)
+
+// Valid indicates whether the value is a known member of the KnowledgeSpecAggregation enum.
+func (e KnowledgeSpecAggregation) Valid() bool {
+	switch e {
+	case Avg:
+		return true
+	case Count:
+		return true
+	case CountDistinct:
+		return true
+	case Max:
+		return true
+	case Min:
+		return true
+	case Sum:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for KnowledgeSpecCapability.
+const (
+	KnowledgeSpecCapabilityDefinition KnowledgeSpecCapability = "definition"
+	KnowledgeSpecCapabilityPredicate  KnowledgeSpecCapability = "predicate"
+)
+
+// Valid indicates whether the value is a known member of the KnowledgeSpecCapability enum.
+func (e KnowledgeSpecCapability) Valid() bool {
+	switch e {
+	case KnowledgeSpecCapabilityDefinition:
+		return true
+	case KnowledgeSpecCapabilityPredicate:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for KnowledgeSpecKind.
+const (
+	KnowledgeSpecKindAggregate KnowledgeSpecKind = "aggregate"
+	KnowledgeSpecKindDerived   KnowledgeSpecKind = "derived"
+)
+
+// Valid indicates whether the value is a known member of the KnowledgeSpecKind enum.
+func (e KnowledgeSpecKind) Valid() bool {
+	switch e {
+	case KnowledgeSpecKindAggregate:
+		return true
+	case KnowledgeSpecKindDerived:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for KnowledgeSpecNullPolicy.
+const (
+	KnowledgeSpecNullPolicyExclude             KnowledgeSpecNullPolicy = "exclude"
+	KnowledgeSpecNullPolicyRequired            KnowledgeSpecNullPolicy = "required"
+	KnowledgeSpecNullPolicyUnknownDoesNotMatch KnowledgeSpecNullPolicy = "unknown_does_not_match"
+)
+
+// Valid indicates whether the value is a known member of the KnowledgeSpecNullPolicy enum.
+func (e KnowledgeSpecNullPolicy) Valid() bool {
+	switch e {
+	case KnowledgeSpecNullPolicyExclude:
+		return true
+	case KnowledgeSpecNullPolicyRequired:
+		return true
+	case KnowledgeSpecNullPolicyUnknownDoesNotMatch:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for KnowledgeSpecRollup.
+const (
+	RecomputeFromInputs KnowledgeSpecRollup = "recompute_from_inputs"
+)
+
+// Valid indicates whether the value is a known member of the KnowledgeSpecRollup enum.
+func (e KnowledgeSpecRollup) Valid() bool {
+	switch e {
+	case RecomputeFromInputs:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for KnowledgeSpecStage.
+const (
+	Object KnowledgeSpecStage = "object"
+)
+
+// Valid indicates whether the value is a known member of the KnowledgeSpecStage enum.
+func (e KnowledgeSpecStage) Valid() bool {
+	switch e {
+	case Object:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for KnowledgeSpecZeroDenominator.
+const (
+	Null KnowledgeSpecZeroDenominator = "null"
+)
+
+// Valid indicates whether the value is a known member of the KnowledgeSpecZeroDenominator enum.
+func (e KnowledgeSpecZeroDenominator) Valid() bool {
+	switch e {
+	case Null:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for MemberKind.
 const (
 	MemberKindCode    MemberKind = "code"
@@ -3016,31 +3316,25 @@ func (e ScheduleMisfirePolicy) Valid() bool {
 
 // Defines values for SemanticAssetType.
 const (
-	SemanticAssetTypeConcept       SemanticAssetType = "concept"
-	SemanticAssetTypeDimension     SemanticAssetType = "dimension"
-	SemanticAssetTypeEntity        SemanticAssetType = "entity"
-	SemanticAssetTypeMeasure       SemanticAssetType = "measure"
-	SemanticAssetTypeMetric        SemanticAssetType = "metric"
-	SemanticAssetTypeSegment       SemanticAssetType = "segment"
-	SemanticAssetTypeSemanticModel SemanticAssetType = "semantic_model"
+	SemanticAssetTypeAnalysisModel  SemanticAssetType = "analysis_model"
+	SemanticAssetTypeBusinessObject SemanticAssetType = "business_object"
+	SemanticAssetTypeBusinessTerm   SemanticAssetType = "business_term"
+	SemanticAssetTypeDataAsset      SemanticAssetType = "data_asset"
+	SemanticAssetTypeMetric         SemanticAssetType = "metric"
 )
 
 // Valid indicates whether the value is a known member of the SemanticAssetType enum.
 func (e SemanticAssetType) Valid() bool {
 	switch e {
-	case SemanticAssetTypeConcept:
+	case SemanticAssetTypeAnalysisModel:
 		return true
-	case SemanticAssetTypeDimension:
+	case SemanticAssetTypeBusinessObject:
 		return true
-	case SemanticAssetTypeEntity:
+	case SemanticAssetTypeBusinessTerm:
 		return true
-	case SemanticAssetTypeMeasure:
+	case SemanticAssetTypeDataAsset:
 		return true
 	case SemanticAssetTypeMetric:
-		return true
-	case SemanticAssetTypeSegment:
-		return true
-	case SemanticAssetTypeSemanticModel:
 		return true
 	default:
 		return false
@@ -3049,22 +3343,16 @@ func (e SemanticAssetType) Valid() bool {
 
 // Defines values for SemanticCandidateCandidateKind.
 const (
-	SemanticCandidateCandidateKindDimension SemanticCandidateCandidateKind = "dimension"
-	SemanticCandidateCandidateKindEntity    SemanticCandidateCandidateKind = "entity"
+	SemanticCandidateCandidateKindDataAsset SemanticCandidateCandidateKind = "data_asset"
 	SemanticCandidateCandidateKindJoin      SemanticCandidateCandidateKind = "join"
-	SemanticCandidateCandidateKindMetric    SemanticCandidateCandidateKind = "metric"
 )
 
 // Valid indicates whether the value is a known member of the SemanticCandidateCandidateKind enum.
 func (e SemanticCandidateCandidateKind) Valid() bool {
 	switch e {
-	case SemanticCandidateCandidateKindDimension:
-		return true
-	case SemanticCandidateCandidateKindEntity:
+	case SemanticCandidateCandidateKindDataAsset:
 		return true
 	case SemanticCandidateCandidateKindJoin:
-		return true
-	case SemanticCandidateCandidateKindMetric:
 		return true
 	default:
 		return false
@@ -4265,6 +4553,48 @@ type ArtifactPage struct {
 	Total      int64   `json:"total"`
 }
 
+// ArtifactPreview defines model for ArtifactPreview.
+type ArtifactPreview struct {
+	ArtifactId ArtifactId `json:"artifactId"`
+	Blocks     []struct {
+		Kind ArtifactPreviewBlocksKind `json:"kind"`
+		Line int                       `json:"line"`
+		Text string                    `json:"text"`
+	} `json:"blocks"`
+	ContentDigest SnapshotDigest `json:"contentDigest"`
+	Datasets      []struct {
+		Fields []struct {
+			DataType string `json:"dataType"`
+			Name     string `json:"name"`
+			Nullable bool   `json:"nullable"`
+			Ordinal  int    `json:"ordinal"`
+		} `json:"fields"`
+		Name string `json:"name"`
+	} `json:"datasets"`
+	Kind  ArtifactPreviewKind `json:"kind"`
+	Lines []struct {
+		Number int    `json:"number"`
+		Text   string `json:"text"`
+	} `json:"lines"`
+	Sheets []struct {
+		Columns []string `json:"columns"`
+		Name    string   `json:"name"`
+		Rows    []struct {
+			Cells  []string `json:"cells"`
+			Number int      `json:"number"`
+		} `json:"rows"`
+		Truncated bool `json:"truncated"`
+	} `json:"sheets"`
+	Text      string `json:"text"`
+	Truncated bool   `json:"truncated"`
+}
+
+// ArtifactPreviewBlocksKind defines model for ArtifactPreview.Blocks.Kind.
+type ArtifactPreviewBlocksKind string
+
+// ArtifactPreviewKind defines model for ArtifactPreview.Kind.
+type ArtifactPreviewKind string
+
 // ArtifactSet defines model for ArtifactSet.
 type ArtifactSet struct {
 	// CreatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
@@ -4377,20 +4707,20 @@ type AskResponse struct {
 
 // AssetContent defines model for AssetContent.
 type AssetContent struct {
-	Address     string                `json:"address"`
-	AssetType   AssetContentAssetType `json:"assetType"`
-	Definition  *string               `json:"definition"`
-	DisplayName string                `json:"displayName"`
+	Address     string            `json:"address"`
+	AssetType   SemanticAssetType `json:"assetType"`
+	Definition  *string           `json:"definition"`
+	DisplayName string            `json:"displayName"`
 
 	// OwnerPrincipalId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
 	//
 	// Example: ast_01arz3ndektsv4rrffq69g5fav
 	OwnerPrincipalId ResourceId `json:"ownerPrincipalId"`
 	Scope            *string    `json:"scope"`
-}
 
-// AssetContentAssetType defines model for AssetContent.AssetType.
-type AssetContentAssetType string
+	// Spec Type-specific knowledge contract. Drafts may be incomplete. Fields are restricted by assetType and publication validates completeness.
+	Spec *KnowledgeSpec `json:"spec,omitempty"`
+}
 
 // AssetLifecycleState defines model for AssetLifecycleState.
 type AssetLifecycleState string
@@ -5396,10 +5726,14 @@ type DiscoveryRunStatus string
 
 // EmbeddingIndexStatus defines model for EmbeddingIndexStatus.
 type EmbeddingIndexStatus struct {
-	Active     *EmbeddingIndexVersion `json:"active"`
+	Active *EmbeddingIndexVersion `json:"active"`
+
+	// Configured Whether pgvector and an enabled embedding provider are both available.
 	Configured bool                   `json:"configured"`
 	Latest     *EmbeddingIndexVersion `json:"latest"`
-	Reason     string                 `json:"reason"`
+
+	// Reason Machine-readable blocker for starting a rebuild. Empty when a rebuild can start now, not_configured when pgvector or the provider is missing, no_published_release when the workspace has nothing released to index.
+	Reason string `json:"reason"`
 }
 
 // EmbeddingIndexVersion defines model for EmbeddingIndexVersion.
@@ -6581,6 +6915,130 @@ type JoinContentCardinality string
 // JoinContentJoinType defines model for JoinContent.JoinType.
 type JoinContentJoinType string
 
+// KnowledgeExpression defines model for KnowledgeExpression.
+type KnowledgeExpression struct {
+	Left      *KnowledgeExpression  `json:"left,omitempty"`
+	Op        KnowledgeExpressionOp `json:"op"`
+	Parameter *string               `json:"parameter,omitempty"`
+	Ref       *KnowledgeReference   `json:"ref,omitempty"`
+	Right     *KnowledgeExpression  `json:"right,omitempty"`
+	Value     *JSONValue            `json:"value,omitempty"`
+}
+
+// KnowledgeExpressionOp defines model for KnowledgeExpression.Op.
+type KnowledgeExpressionOp string
+
+// KnowledgeMember defines model for KnowledgeMember.
+type KnowledgeMember struct {
+	HistoryPolicy  *KnowledgeMemberHistoryPolicy `json:"historyPolicy,omitempty"`
+	Id             string                        `json:"id"`
+	Name           *string                       `json:"name,omitempty"`
+	NullPolicy     *KnowledgeMemberNullPolicy    `json:"nullPolicy,omitempty"`
+	SourceFieldRef *PhysicalReference            `json:"sourceFieldRef,omitempty"`
+	ValueType      *KnowledgeMemberValueType     `json:"valueType,omitempty"`
+}
+
+// KnowledgeMemberHistoryPolicy defines model for KnowledgeMember.HistoryPolicy.
+type KnowledgeMemberHistoryPolicy string
+
+// KnowledgeMemberNullPolicy defines model for KnowledgeMember.NullPolicy.
+type KnowledgeMemberNullPolicy string
+
+// KnowledgeMemberValueType defines model for KnowledgeMember.ValueType.
+type KnowledgeMemberValueType string
+
+// KnowledgeMemberBinding defines model for KnowledgeMemberBinding.
+type KnowledgeMemberBinding struct {
+	DataRef     KnowledgeReference `json:"dataRef"`
+	SemanticRef KnowledgeReference `json:"semanticRef"`
+}
+
+// KnowledgeParameter defines model for KnowledgeParameter.
+type KnowledgeParameter struct {
+	Name     string                 `json:"name"`
+	Required bool                   `json:"required"`
+	Type     KnowledgeParameterType `json:"type"`
+}
+
+// KnowledgeParameterType defines model for KnowledgeParameter.Type.
+type KnowledgeParameterType string
+
+// KnowledgeReference defines model for KnowledgeReference.
+type KnowledgeReference struct {
+	// AssetId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	AssetId  ResourceId `json:"assetId"`
+	MemberId *string    `json:"memberId,omitempty"`
+
+	// ReleaseId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	ReleaseId ResourceId `json:"releaseId"`
+
+	// RevisionId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	RevisionId ResourceId `json:"revisionId"`
+}
+
+// KnowledgeSpec Type-specific knowledge contract. Drafts may be incomplete. Fields are restricted by assetType and publication validates completeness.
+type KnowledgeSpec struct {
+	Aggregation             *KnowledgeSpecAggregation     `json:"aggregation,omitempty"`
+	BaseObjectRef           *KnowledgeReference           `json:"baseObjectRef,omitempty"`
+	Capability              *KnowledgeSpecCapability      `json:"capability,omitempty"`
+	CompatibleTermRefs      *[]KnowledgeReference         `json:"compatibleTermRefs,omitempty"`
+	Coverage                *string                       `json:"coverage,omitempty"`
+	DataAssetRefs           *[]KnowledgeReference         `json:"dataAssetRefs,omitempty"`
+	DatasetRef              *PhysicalReference            `json:"datasetRef,omitempty"`
+	DefaultTimeAttributeRef *KnowledgeReference           `json:"defaultTimeAttributeRef,omitempty"`
+	Expression              *KnowledgeExpression          `json:"expression,omitempty"`
+	FilterRefs              *[]KnowledgeReference         `json:"filterRefs,omitempty"`
+	Grain                   *string                       `json:"grain,omitempty"`
+	IdentityPolicy          *string                       `json:"identityPolicy,omitempty"`
+	InputRef                *KnowledgeReference           `json:"inputRef,omitempty"`
+	JoinContractIds         *[]string                     `json:"joinContractIds,omitempty"`
+	Keys                    *[]string                     `json:"keys,omitempty"`
+	Kind                    *KnowledgeSpecKind            `json:"kind,omitempty"`
+	Lifecycle               *string                       `json:"lifecycle,omitempty"`
+	MemberBindings          *[]KnowledgeMemberBinding     `json:"memberBindings,omitempty"`
+	Members                 *[]KnowledgeMember            `json:"members,omitempty"`
+	MetricRefs              *[]KnowledgeReference         `json:"metricRefs,omitempty"`
+	NullPolicy              *KnowledgeSpecNullPolicy      `json:"nullPolicy,omitempty"`
+	Parameters              *[]KnowledgeParameter         `json:"parameters,omitempty"`
+	Predicate               *KnowledgeExpression          `json:"predicate,omitempty"`
+	PublicAttributeRefs     *[]KnowledgeReference         `json:"publicAttributeRefs,omitempty"`
+	RefreshFrequency        *string                       `json:"refreshFrequency,omitempty"`
+	Rollup                  *KnowledgeSpecRollup          `json:"rollup,omitempty"`
+	Sensitivity             *string                       `json:"sensitivity,omitempty"`
+	Stage                   *KnowledgeSpecStage           `json:"stage,omitempty"`
+	SubjectRef              *KnowledgeReference           `json:"subjectRef,omitempty"`
+	TimeAttributeRef        *KnowledgeReference           `json:"timeAttributeRef,omitempty"`
+	Unit                    *string                       `json:"unit,omitempty"`
+	ZeroDenominator         *KnowledgeSpecZeroDenominator `json:"zeroDenominator,omitempty"`
+}
+
+// KnowledgeSpecAggregation defines model for KnowledgeSpec.Aggregation.
+type KnowledgeSpecAggregation string
+
+// KnowledgeSpecCapability defines model for KnowledgeSpec.Capability.
+type KnowledgeSpecCapability string
+
+// KnowledgeSpecKind defines model for KnowledgeSpec.Kind.
+type KnowledgeSpecKind string
+
+// KnowledgeSpecNullPolicy defines model for KnowledgeSpec.NullPolicy.
+type KnowledgeSpecNullPolicy string
+
+// KnowledgeSpecRollup defines model for KnowledgeSpec.Rollup.
+type KnowledgeSpecRollup string
+
+// KnowledgeSpecStage defines model for KnowledgeSpec.Stage.
+type KnowledgeSpecStage string
+
+// KnowledgeSpecZeroDenominator defines model for KnowledgeSpec.ZeroDenominator.
+type KnowledgeSpecZeroDenominator string
+
 // LineageEdgeId defines model for LineageEdgeId.
 type LineageEdgeId = identity.LineageEdgeID
 
@@ -6655,10 +7113,19 @@ type OperationSummary struct {
 	// Id Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
 	//
 	// Example: ast_01arz3ndektsv4rrffq69g5fav
-	Id          ResourceId               `json:"id"`
-	Progress    OperationSummaryProgress `json:"progress"`
-	ReleaseId   *string                  `json:"releaseId"`
-	TargetCount int                      `json:"targetCount"`
+	Id       ResourceId               `json:"id"`
+	Progress OperationSummaryProgress `json:"progress"`
+
+	// ProposalIds Authorized proposal references for deduplicating knowledge actions.
+	ProposalIds *[]ResourceId `json:"proposalIds,omitempty"`
+	ReleaseId   *string       `json:"releaseId"`
+
+	// Superseded Whether a successor operation replaces this record. Authoritative on list summaries.
+	Superseded  *bool `json:"superseded,omitempty"`
+	TargetCount int   `json:"targetCount"`
+
+	// Title Display name from the selected version's primary semantic target or first named target.
+	Title *string `json:"title,omitempty"`
 
 	// UpdatedAt RFC 3339 timestamp normalized to UTC at public boundaries.
 	//
@@ -7277,11 +7744,20 @@ type QueryExecutionRequestChannel string
 type QueryExecutionResult struct {
 	Availability QueryExecutionResultAvailability `json:"availability"`
 	Columns      *[]string                        `json:"columns,omitempty"`
-	Replay       bool                             `json:"replay"`
+
+	// DataTime RFC 3339 timestamp normalized to UTC at public boundaries.
+	//
+	// Example: 2026-08-08T08:00:00Z
+	DataTime   *Timestamp     `json:"dataTime,omitempty"`
+	Parameters *[]interface{} `json:"parameters,omitempty"`
+	Replay     bool           `json:"replay"`
 
 	// Rows Ephemeral cells; numeric and integer values use exact decimal strings to avoid client precision loss. Never retained for replay.
 	Rows *[][]interface{}  `json:"rows,omitempty"`
 	Run  QueryExecutionRun `json:"run"`
+
+	// Sql Ephemeral authorized compiler output; not retained for replay.
+	Sql *string `json:"sql,omitempty"`
 }
 
 // QueryExecutionResultAvailability defines model for QueryExecutionResult.Availability.
@@ -7551,6 +8027,7 @@ type ResolvedSemanticPlan struct {
 	Intent          ResolvedSemanticPlanIntent          `json:"intent"`
 	Limit           *int                                `json:"limit,omitempty"`
 	Measures        *[]SemanticSelector                 `json:"measures,omitempty"`
+	Model           *ResolvedSemanticAsset              `json:"model,omitempty"`
 	Objects         []ResolvedSemanticObject            `json:"objects"`
 	Order           *[]SemanticOrder                    `json:"order,omitempty"`
 
@@ -7759,12 +8236,15 @@ type SemanticOrderDirection string
 // SemanticQuery defines model for SemanticQuery.
 type SemanticQuery struct {
 	// Context current has no reference; explicit requires releaseId; binding requires bindingId.
-	Context       ResolutionContext          `json:"context"`
-	Dimensions    *[]SemanticSelector        `json:"dimensions,omitempty"`
-	Filters       *[]SemanticFilter          `json:"filters,omitempty"`
-	Intent        SemanticQueryIntent        `json:"intent"`
-	Limit         *int                       `json:"limit,omitempty"`
-	Measures      *[]SemanticSelector        `json:"measures,omitempty"`
+	Context    ResolutionContext   `json:"context"`
+	Dimensions *[]SemanticSelector `json:"dimensions,omitempty"`
+	Filters    *[]SemanticFilter   `json:"filters,omitempty"`
+	Intent     SemanticQueryIntent `json:"intent"`
+	Limit      *int                `json:"limit,omitempty"`
+	Measures   *[]SemanticSelector `json:"measures,omitempty"`
+
+	// ModelId Example: ast_01arz3ndektsv4rrffq69g5fav
+	ModelId       *SemanticAssetId           `json:"modelId,omitempty"`
 	Order         *[]SemanticOrder           `json:"order,omitempty"`
 	SchemaVersion SemanticQuerySchemaVersion `json:"schemaVersion"`
 	TimeRange     *SemanticTimeRange         `json:"timeRange,omitempty"`
@@ -7848,8 +8328,9 @@ type SemanticSelector struct {
 	Address *SemanticAddress `json:"address,omitempty"`
 
 	// AssetId Example: ast_01arz3ndektsv4rrffq69g5fav
-	AssetId *SemanticAssetId `json:"assetId,omitempty"`
-	Search  *string          `json:"search,omitempty"`
+	AssetId  *SemanticAssetId `json:"assetId,omitempty"`
+	MemberId *string          `json:"memberId,omitempty"`
+	Search   *string          `json:"search,omitempty"`
 }
 
 // SemanticTimeRange defines model for SemanticTimeRange.
@@ -7913,14 +8394,18 @@ type SnapshotDigest = string
 type SnapshotMember struct {
 	ContentDigest SnapshotDigest `json:"contentDigest"`
 	CoverageKey   string         `json:"coverageKey"`
+	DataType      *string        `json:"dataType,omitempty"`
+	DatasetKind   *string        `json:"datasetKind,omitempty"`
 	Kind          MemberKind     `json:"kind"`
 	Locator       string         `json:"locator"`
 	Name          string         `json:"name"`
+	Nullable      *bool          `json:"nullable,omitempty"`
 
 	// ObjectId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
 	//
 	// Example: ast_01arz3ndektsv4rrffq69g5fav
 	ObjectId         ResourceId                 `json:"objectId"`
+	Ordinal          *int                       `json:"ordinal,omitempty"`
 	ParentObjectId   *PhysicalDatasetId         `json:"parentObjectId,omitempty"`
 	ParentRevisionId *PhysicalDatasetRevisionId `json:"parentRevisionId,omitempty"`
 

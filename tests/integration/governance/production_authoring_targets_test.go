@@ -140,12 +140,8 @@ func TestProductionAuthoringAllFivePublishedUpdates(t *testing.T) {
 		}
 		targets = append(targets, map[string]any{"localKey": kind, "kind": kind, "intent": "update", "targetId": id, "baseObjectVersion": 2, "title": "Update " + kind, "content": contents[kind], "changes": []any{}, "evidenceIds": []any{}})
 	}
-	var releaseUUID string
-	if err := f.pool.QueryRow(context.Background(), `SELECT id::text FROM releases WHERE workspace_id=$1 ORDER BY sequence DESC LIMIT 1`, w.UUID()).Scan(&releaseUUID); err != nil {
-		t.Fatal(err)
-	}
-	release, _ := identity.FromUUID(identity.Release, releaseUUID)
-	assetRef["releaseId"] = release.String()
+	// The same asset revision remains published in the current head. References
+	// retain the immutable release where they were selected, without rebasing.
 	input["dependencies"] = []any{assetRef}
 	payload := map[string]any{"input": input, "targets": targets}
 	raw, _ := json.Marshal(payload)

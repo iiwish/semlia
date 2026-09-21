@@ -85,13 +85,13 @@ func productionFixtureInput(t *testing.T, f *fixture, workspace identity.Workspa
 		input["evidence"] = []any{map[string]any{"evidenceId": evidence.ID.String(), "snapshotId": id.String(), "digest": digest}}
 	}
 	if !candidate.IsZero() {
-		content := []byte(`{"schemaVersion":"semlia.proposal-input/v1","candidateKind":"entity","qualifiedName":"orders"}`)
+		content := []byte(`{"schemaVersion":"semlia.proposal-input/v1","candidateKind":"data_asset","qualifiedName":"orders"}`)
 		candidateDigest, err := governance.DigestJSON(content)
 		if err != nil {
 			t.Fatal(err)
 		}
 		evidence, _ := json.Marshal([]map[string]string{{"sourceRevisionId": revisionUUID, "discoveryRunId": result.RunID.String(), "locator": "warehouse.orders"}})
-		if _, err := f.pool.Exec(ctx, `INSERT INTO semantic_candidates(id,workspace_id,source_connection_id,source_revision_id,discovery_run_id,candidate_key,candidate_kind,title,proposal_input,evidence,content_digest) VALUES($1,$2,$3,$4,$5,'orders','entity','Orders',$6,$7,$8)`, candidate.UUID(), workspace.UUID(), source.UUID(), revisionUUID, result.RunID.UUID(), content, evidence, candidateDigest); err != nil {
+		if _, err := f.pool.Exec(ctx, `INSERT INTO semantic_candidates(id,workspace_id,source_connection_id,source_revision_id,discovery_run_id,candidate_key,candidate_kind,title,proposal_input,evidence,content_digest) VALUES($1,$2,$3,$4,$5,'orders','data_asset','Orders',$6,$7,$8)`, candidate.UUID(), workspace.UUID(), source.UUID(), revisionUUID, result.RunID.UUID(), content, evidence, candidateDigest); err != nil {
 			t.Fatal(err)
 		}
 		input["candidates"] = []any{map[string]any{"candidateId": candidate.String(), "snapshotId": id.String(), "digest": candidateDigest}}
@@ -101,9 +101,9 @@ func productionFixtureInput(t *testing.T, f *fixture, workspace identity.Workspa
 
 func productionPublishedAsset(t *testing.T, f *fixture, w identity.WorkspaceID, author identity.PrincipalID) (identity.AssetID, identity.RevisionID, json.RawMessage) {
 	t.Helper()
-	content, _ := json.Marshal(map[string]any{"address": "finance.revenue", "assetType": "metric", "displayName": "Revenue", "definition": "Revenue after refunds", "scope": "Finance", "ownerPrincipalId": author.String()})
+	content, _ := json.Marshal(map[string]any{"address": "finance.revenue", "assetType": "business_term", "spec": map[string]any{"capability": "definition"}, "displayName": "Revenue", "definition": "Revenue after refunds", "scope": "Finance", "ownerPrincipalId": author.String()})
 	service := catalogapp.NewService(f.store, catalogapp.ClockFunc(time.Now))
-	created, err := service.CreateAsset(context.Background(), catalogapp.CreateAssetRequest{WorkspaceID: w, Address: "finance.revenue", AssetType: semantic.Metric, Lifecycle: "active", SchemaVersion: "1.0.0", Content: content, CreatedBy: author.String(), TraceID: traceID})
+	created, err := service.CreateAsset(context.Background(), catalogapp.CreateAssetRequest{WorkspaceID: w, Address: "finance.revenue", AssetType: semantic.BusinessTerm, Lifecycle: "active", SchemaVersion: "1.0.0", Content: content, CreatedBy: author.String(), TraceID: traceID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,6 +159,10 @@ func productionPayloadInput(t *testing.T, body string, fixtureInput map[string]a
 	return string(bytes)
 }
 
+func syntheticObjectSpec() map[string]any {
+	return map[string]any{"grain": "one fixture row", "keys": []string{"id"}, "identityPolicy": "stable ID", "lifecycle": "retained", "members": []any{map[string]any{"id": "id", "name": "Identity", "valueType": "integer", "nullPolicy": "required", "historyPolicy": "stable"}}}
+}
+
 func completeProductionTargets(payload map[string]any, owner identity.PrincipalID) {
 	for _, value := range payload["targets"].([]any) {
 		target := value.(map[string]any)
@@ -166,6 +170,11 @@ func completeProductionTargets(payload map[string]any, owner identity.PrincipalI
 			content := target["content"].(map[string]any)
 			content["scope"] = "Synthetic production fixture scope"
 			content["ownerPrincipalId"] = owner.String()
+			// These fixtures test governance transitions, not executable metrics.
+			if _, ok := content["spec"]; !ok {
+				content["assetType"] = "business_term"
+				content["spec"] = map[string]any{"capability": "definition"}
+			}
 			if target["intent"] == "create" {
 				target["identityKey"] = content["address"]
 			}

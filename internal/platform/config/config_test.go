@@ -89,6 +89,22 @@ func TestExecutionPlaintextRequiresExplicitLocalEnvironment(t *testing.T) {
 	}
 }
 
+func TestDiscoveryUnsafeSourceRequiresDevelopmentOnly(t *testing.T) {
+	for _, environment := range []string{"production", "test", "invalid"} {
+		if _, err := config.Load(mapLookup(map[string]string{"SEMLIA_ENV": environment, "SEMLIA_DISCOVERY_ALLOW_UNSAFE_SOURCE": "true"})); err == nil || !strings.Contains(err.Error(), "SEMLIA_DISCOVERY_ALLOW_UNSAFE_SOURCE") {
+			t.Fatalf("unsafe source accepted for %s: %v", environment, err)
+		}
+	}
+	cfg, err := config.Load(mapLookup(map[string]string{"SEMLIA_ENV": "development", "SEMLIA_DISCOVERY_ALLOW_UNSAFE_SOURCE": "true"}))
+	if err != nil || !cfg.DiscoveryAllowUnsafeSource {
+		t.Fatalf("development relief refused: %v", err)
+	}
+	off, err := config.Load(mapLookup(map[string]string{"SEMLIA_ENV": "development"}))
+	if err != nil || off.DiscoveryAllowUnsafeSource {
+		t.Fatalf("unsafe source must default off: %v", err)
+	}
+}
+
 func TestLoadArtifactRetentionIsBounded(t *testing.T) {
 	cfg, err := config.Load(mapLookup(map[string]string{"SEMLIA_ARTIFACT_RETENTION": "168h"}))
 	if err != nil || cfg.ArtifactRetention != 7*24*time.Hour {

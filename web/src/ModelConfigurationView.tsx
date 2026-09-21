@@ -5,6 +5,7 @@ import { EmbeddingIndexPanel } from "./embeddingRuntime";
 import { useCan } from "./authorization";
 import { useGovernanceRuntime } from "./governanceRuntime";
 import type { GovernanceModelProtocol } from "./governance";
+import type { ViewId } from "./types";
 
 type ModelKind = "llm" | "embedding";
 
@@ -19,8 +20,29 @@ function protocolLabel(protocol: GovernanceModelProtocol): string {
   return providerProtocols.find((item) => item.value === protocol)?.label ?? protocol;
 }
 
+/**
+ * The revision digest is stored as `sha256:<64 hex>`. Slicing the raw digest for
+ * display produced "Key vsha256:a"; strip the algorithm prefix first so the
+ * marker shows the actual revision prefix an operator can match against a key.
+ */
 function credentialMarker(digest: string): string {
-  return `Key v${digest.slice(0, 8)}`;
+  const hex = digest.replace(/^sha256:/, "");
+  return `凭据 ${hex.slice(0, 8) || "未记录"}`;
+}
+
+/**
+ * Mirrors domain.IsValidCredentialEnvName: the persisted value is an environment
+ * variable NAME, so it must be UPPER_SNAKE_CASE. Anything else is rejected by the
+ * API with a blanket INVALID_ARGUMENT, so validate here where the reason can be
+ * shown next to the field.
+ */
+const credentialEnvPattern = /^[A-Z][A-Z0-9_]{0,63}$/;
+
+export function credentialEnvError(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed === "") return "凭据环境变量名不能为空。";
+  if (!credentialEnvPattern.test(trimmed)) return "需以大写字母开头，只能含大写字母、数字和下划线，例如 SEMLIA_DEEPSEEK_API_KEY。";
+  return "";
 }
 
 function providerTone(protocol: GovernanceModelProtocol) {
@@ -30,7 +52,7 @@ function providerTone(protocol: GovernanceModelProtocol) {
   return "openai";
 }
 
-export function ModelConfigurationView({ onNotify }: { onNotify: (message: string) => void }) {
+export function ModelConfigurationView({ onNotify, onNavigate }: { onNotify: (message: string) => void; onNavigate?: (view: ViewId) => void }) {
   const canManage = useCan("workspace.manage");
   const governance = useGovernanceRuntime();
   const [kind, setKind] = useState<ModelKind>("llm");
@@ -39,6 +61,7 @@ export function ModelConfigurationView({ onNotify }: { onNotify: (message: strin
   const [providerDraft, setProviderDraft] = useState({ displayName: "", protocol: "openai" as GovernanceModelProtocol, baseUrl: "", credentialEnv: "", credential: "" });
   const [providerActionError, setProviderActionError] = useState("");
   const [savingProvider, setSavingProvider] = useState(false);
+  const providerEnvHint = providerDialogKind ? credentialEnvError(providerDraft.credentialEnv) : "";
   const [modelDialog, setModelDialog] = useState<{ providerId: string; modelId: string | null } | null>(null);
   const [modelActionError, setModelActionError] = useState("");
   const [savingModel, setSavingModel] = useState(false);
@@ -46,6 +69,7 @@ export function ModelConfigurationView({ onNotify }: { onNotify: (message: strin
   const [rotationDraft, setRotationDraft] = useState({ credentialEnv: "", credential: "" });
   const [rotationError, setRotationError] = useState("");
   const [modelDraft, setModelDraft] = useState({ model: "", capability: "文本 · 推理", tokenLimit: "128000", dimension: "1024", enabled: true });
+  const rotationEnvHint = rotationDialog ? credentialEnvError(rotationDraft.credentialEnv) : "";
 
   const activeProviders = useMemo(() => governance.modelProviders
     .map((entry) => ({ provider: entry.provider, models: entry.models.filter((model) => model.kind === kind) })), [governance.modelProviders, kind]);
@@ -199,7 +223,7 @@ export function ModelConfigurationView({ onNotify }: { onNotify: (message: strin
         </div>
       </div>
 
-      {kind === "embedding" && <EmbeddingIndexPanel key={governance.workspaceId} workspaceId={governance.workspaceId} canManage={canManage} />}
+      {kind === "embedding" && <EmbeddingIndexPanel key={governance.workspaceId} workspaceId={governance.workspaceId} canManage={canManage} onNavigate={onNavigate} />}
 
       <div className="model-provider-list" aria-label={`${kindLabel} 供应商和模型`}>
         {modelConfigBusy && <div className="model-config-loading" role="status"><LoaderCircle className="spin" size={16} />正在加载模型配置</div>}
@@ -218,11 +242,18 @@ export function ModelConfigurationView({ onNotify }: { onNotify: (message: strin
               {canManage && <button className="model-icon-button" type="button" aria-label={`为 ${provider.provider.displayName} 添加模型`} title="添加模型" onClick={() => openModelDialog(provider.provider.id)}><Plus size={15} /></button>}
             </header>
             <div className="model-rows" hidden={collapsed}>
+              {provider.models.length > 0 && <div className="model-row model-row-head">
+                <span />
+                <span>模型 · 能力</span>
+                <span>{kind === "embedding" ? "向量维度 · 输入上限" : "输入上限"}</span>
+                <span>状态</span>
+                <span />
+                <span />
+              </div>}
               {provider.models.map((model) => <div className="model-row" key={model.id}>
                 <button className={model.isDefault ? "model-default-button is-active" : "model-default-button"} type="button" aria-label={model.isDefault ? `${model.model} 当前为默认模型` : `设 ${model.model} 为默认模型`} title={model.isDefault ? "当前默认模型" : "设为默认模型"} disabled={!canManage || !provider.provider.enabled || !model.enabled} onClick={() => void setDefaultModel(model.id)}>{model.isDefault ? <Check size={13} /> : <Sparkles size={13} />}</button>
-                <span className="model-row-identity"><strong>{model.model}</strong><small>{kind === "embedding" ? `${(model.embeddingDimension ?? 0).toLocaleString("en-US")} dimensions` : model.capability}</small></span>
-                <span>{kind === "embedding" ? model.capability : `${model.tokenLimit.toLocaleString("en-US")} tokens`}</span>
-                <span>{kind === "embedding" ? `${model.tokenLimit.toLocaleString("en-US")} tokens` : model.capability}</span>
+                <span className="model-row-identity"><strong>{model.model}</strong><small>{model.capability}</small></span>
+                <span className="model-row-spec">{kind === "embedding" ? `${(model.embeddingDimension ?? 0).toLocaleString("en-US")} 维 · ${model.tokenLimit.toLocaleString("en-US")} tokens` : `${model.tokenLimit.toLocaleString("en-US")} tokens`}</span>
                 <span className={model.enabled ? "model-status is-enabled" : "model-status is-disabled"}>{model.enabled ? "可用" : "已停用"}</span>
                 {canManage && <label className="model-switch" title={`${model.enabled ? "停用" : "启用"}${model.model}`}><input type="checkbox" aria-label={`${model.enabled ? "停用" : "启用"}模型 ${model.model}`} checked={model.enabled} onChange={(event) => void toggleModel(model.id, event.target.checked)} /><span /></label>}
                 {canManage && <button className="model-icon-button" type="button" aria-label={`编辑模型 ${model.model}`} title="编辑模型" onClick={() => openModelDialog(provider.provider.id, model.id)}><Settings2 size={14} /></button>}
@@ -241,21 +272,21 @@ export function ModelConfigurationView({ onNotify }: { onNotify: (message: strin
           <label><span>配置名称</span><input autoFocus value={providerDraft.displayName} onChange={(event) => setProviderDraft((current) => ({ ...current, displayName: event.target.value }))} placeholder="例如：企业 OpenAI" /></label>
           <label><span>供应商</span><select value={providerDraft.protocol} onChange={(event) => setProviderDraft((current) => ({ ...current, protocol: event.target.value as GovernanceModelProtocol }))}>{providerProtocols.map((protocol) => <option key={protocol.value} value={protocol.value}>{protocol.label}</option>)}</select></label>
           {providerDraft.protocol === "openai_compatible" && <label className="model-form-wide"><span>Base URL</span><input value={providerDraft.baseUrl} onChange={(event) => setProviderDraft((current) => ({ ...current, baseUrl: event.target.value }))} placeholder="https://models.example.com/v1" /></label>}
-          <label className="model-form-wide"><span>凭据环境变量</span><input value={providerDraft.credentialEnv} onChange={(event) => setProviderDraft((current) => ({ ...current, credentialEnv: event.target.value }))} placeholder="SEMLIA_OPENAI_API_KEY" /></label>
+          <div className="model-form-wide model-form-field"><label><span>凭据环境变量</span><input value={providerDraft.credentialEnv} onChange={(event) => setProviderDraft((current) => ({ ...current, credentialEnv: event.target.value }))} placeholder="SEMLIA_DEEPSEEK_API_KEY" aria-invalid={providerEnvHint !== ""} spellCheck={false} autoComplete="off" /></label>{providerEnvHint ? <small className="model-form-hint" role="note">{providerEnvHint}</small> : <small className="model-form-hint">与部署环境注入的变量名保持一致，平台只保存变量名与密钥摘要。</small>}</div>
           <label className="model-form-wide"><span>API Key</span><input type="password" autoComplete="off" value={providerDraft.credential} onChange={(event) => setProviderDraft((current) => ({ ...current, credential: event.target.value }))} placeholder="只写，不会再次显示" /></label>
           {providerActionError && <div className="model-dialog-error" role="alert"><CircleAlert size={15} />{providerActionError}</div>}
         </form></div>
-        <footer><span className="model-dialog-boundary"><ShieldCheck size={13} />密钥由运行环境注入，平台只保存环境变量名与修订摘要</span><div><button className="secondary-button" type="button" onClick={() => setProviderDialogKind(null)}>取消</button><button className="primary-button" type="submit" form="model-provider-form" disabled={savingProvider || !providerDraft.displayName.trim() || !providerDraft.credentialEnv.trim() || !providerDraft.credential.trim() || (providerDraft.protocol === "openai_compatible" && !providerDraft.baseUrl.trim())}>{savingProvider ? <LoaderCircle className="spin" size={15} /> : null}添加供应商</button></div></footer>
+        <footer><span className="model-dialog-boundary"><ShieldCheck size={13} />密钥由运行环境注入，平台只保存环境变量名与修订摘要</span><div><button className="secondary-button" type="button" onClick={() => setProviderDialogKind(null)}>取消</button><button className="primary-button" type="submit" form="model-provider-form" disabled={savingProvider || providerEnvHint !== "" || !providerDraft.displayName.trim() || !providerDraft.credentialEnv.trim() || !providerDraft.credential.trim() || (providerDraft.protocol === "openai_compatible" && !providerDraft.baseUrl.trim())}>{savingProvider ? <LoaderCircle className="spin" size={15} /> : null}添加供应商</button></div></footer>
       </section></div>}
 
       {rotationDialog && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setRotationDialog(null); }}><section className="review-dialog compact-dialog model-config-dialog" role="dialog" aria-modal="true" aria-labelledby="rotation-dialog-title">
         <header><div><span className="content-label">凭据轮换</span><h2 id="rotation-dialog-title">更新凭据</h2></div><button className="icon-button" type="button" aria-label="关闭凭据轮换" title="关闭" onClick={() => setRotationDialog(null)}><X size={16} /></button></header>
         <div className="dialog-body"><form id="credential-rotation-form" className="model-config-form" onSubmit={rotateCredential}>
-          <label className="model-form-wide"><span>凭据环境变量</span><input value={rotationDraft.credentialEnv} onChange={(event) => setRotationDraft((current) => ({ ...current, credentialEnv: event.target.value }))} placeholder="留空保持不变" /></label>
+          <div className="model-form-wide model-form-field"><label><span>凭据环境变量</span><input value={rotationDraft.credentialEnv} onChange={(event) => setRotationDraft((current) => ({ ...current, credentialEnv: event.target.value }))} placeholder="留空保持不变" aria-invalid={rotationEnvHint !== ""} spellCheck={false} autoComplete="off" /></label>{rotationEnvHint && <small className="model-form-hint" role="note">{rotationEnvHint}</small>}</div>
           <label className="model-form-wide"><span>新 API Key</span><input type="password" autoComplete="off" value={rotationDraft.credential} onChange={(event) => setRotationDraft((current) => ({ ...current, credential: event.target.value }))} placeholder="只写，保存后生成新的修订摘要" /></label>
           {rotationError && <div className="model-dialog-error" role="alert"><CircleAlert size={15} />{rotationError}</div>}
         </form></div>
-        <footer><span className="model-dialog-boundary"><ShieldCheck size={13} />轮换只更新修订摘要，不会回显任何密钥</span><div><button className="secondary-button" type="button" onClick={() => setRotationDialog(null)}>取消</button><button className="primary-button" type="submit" form="credential-rotation-form" disabled={!rotationDraft.credentialEnv.trim() && !rotationDraft.credential.trim()}>更新凭据</button></div></footer>
+        <footer><span className="model-dialog-boundary"><ShieldCheck size={13} />轮换只更新修订摘要，不会回显任何密钥</span><div><button className="secondary-button" type="button" onClick={() => setRotationDialog(null)}>取消</button><button className="primary-button" type="submit" form="credential-rotation-form" disabled={rotationEnvHint !== "" || (!rotationDraft.credentialEnv.trim() && !rotationDraft.credential.trim())}>更新凭据</button></div></footer>
       </section></div>}
 
       {modelDialog && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setModelDialog(null); }}><section className="review-dialog compact-dialog model-config-dialog" role="dialog" aria-modal="true" aria-labelledby="model-dialog-title">

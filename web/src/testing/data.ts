@@ -226,13 +226,13 @@ const ontologyRevisionDeltas: Record<string, { addedRelations: number; removedRe
 function ontologyRelationConstraint(type: AssetRelation["type"], sourceType: AssetType, hasWarning: boolean): OntologyRelationConstraint {
   const [label, inverseLabel] = relationNames[type];
   const targetTypes: Record<AssetRelation["type"], AssetType[]> = {
-    measures: ["业务实体", "语义模型"],
-    describes: ["业务实体", "语义模型", "业务概念"],
-    depends_on: ["指标", "度量", "维度", "语义模型"],
-    derived_from: ["指标", "度量", "语义模型"],
-    filters_by: ["维度", "业务实体"],
+    measures: ["业务对象", "分析模型"],
+    describes: ["业务对象", "分析模型", "业务口径"],
+    depends_on: ["指标", "指标", "数据资产", "分析模型"],
+    derived_from: ["指标", "指标", "分析模型"],
+    filters_by: ["数据资产", "业务对象"],
     synonym_of: [sourceType],
-    contains: ["指标", "度量", "维度", "业务概念"],
+    contains: ["指标", "指标", "数据资产", "业务口径"],
     broader_than: [sourceType],
     narrower_than: [sourceType],
     equivalent_to: [sourceType],
@@ -268,12 +268,11 @@ function projectRelation(relation: AssetRelationSeed): AssetRelation {
 
 function ontologyParentConcepts(type: AssetType) {
   if (type === "指标") return ["业务衡量", "经营结果"];
-  if (type === "度量") return ["可聚合事实"];
-  if (type === "维度") return ["业务描述属性"];
-  if (type === "业务实体") return ["可识别业务对象"];
-  if (type === "语义模型") return ["可查询业务模型"];
-  if (type === "分群") return ["业务判定规则"];
-  return ["业务概念"];
+  if (type === "数据资产") return ["业务描述属性"];
+  if (type === "业务对象") return ["可识别业务对象"];
+  if (type === "分析模型") return ["可查询业务模型"];
+  if (type === "业务口径") return ["业务判定规则"];
+  return ["业务口径"];
 }
 
 function typeSpec(seed: AssetSeed): AssetTypeSpec {
@@ -289,11 +288,10 @@ function typeSpec(seed: AssetSeed): AssetTypeSpec {
     const metricKind = seed.formula.includes("/") ? "ratio" : seed.formula.includes("30") ? "cumulative" : "simple";
     return { ...base, kind: "metric", metricKind, allowedDimensions: seed.grain.split("·").map((item) => item.trim()), comparisonSemantics: "比较必须使用相同时间窗口、日历与维度范围" };
   }
-  if (seed.type === "度量") return { ...base, kind: "measure", additivity: seed.aggregation.includes("不可") ? "non_additive" : "additive", nullHandling: "空值不贡献聚合结果" };
-  if (seed.type === "维度") return { ...base, kind: "dimension", valueType: seed.unit, nullSemantics: "未知值保留为显式未解析成员", hierarchy: seed.includes };
-  if (seed.type === "业务实体") return { ...base, kind: "entity", entityKeys: [seed.formula], identityPolicy: "稳定主身份优先，合并记录保留来源引用", lifecycle: "创建、识别、合并与停用均可追溯" };
-  if (seed.type === "语义模型") return { ...base, kind: "model", primaryEntity: seed.grain, publicMembers: seed.includes, joinPathPolicy: "只允许已发布 JoinContract 路径" };
-  if (seed.type === "分群") return { ...base, kind: "segment", baseEntity: seed.grain, refreshPolicy: seed.defaultTime, effectiveTime: "按快照时间生效，不回写历史成员资格" };
+  if (seed.type === "数据资产") return { ...base, kind: "dimension", valueType: seed.unit, nullSemantics: "未知值保留为显式未解析成员", hierarchy: seed.includes };
+  if (seed.type === "业务对象") return { ...base, kind: "entity", entityKeys: [seed.formula], identityPolicy: "稳定主身份优先，合并记录保留来源引用", lifecycle: "创建、识别、合并与停用均可追溯" };
+  if (seed.type === "分析模型") return { ...base, kind: "model", primaryEntity: seed.grain, publicMembers: seed.includes, joinPathPolicy: "只允许已发布 JoinContract 路径" };
+  if (seed.type === "业务口径") return { ...base, kind: "segment", baseEntity: seed.grain, refreshPolicy: seed.defaultTime, effectiveTime: "按快照时间生效，不回写历史成员资格" };
   return { ...base, kind: "concept", conceptClass: seed.domain, disambiguationRule: "优先使用当前语义域定义，跨域同名时要求澄清" };
 }
 
@@ -570,7 +568,7 @@ const assetSeeds: AssetSeed[] = [
     key: "commerce.paid_order_count",
     name: "支付订单数",
     aliases: ["Paid Orders"],
-    type: "度量",
+    type: "指标",
     status: "已发布",
     owner: "收入分析组",
     maintainer: "数据建模组",
@@ -605,7 +603,7 @@ const assetSeeds: AssetSeed[] = [
     key: "shared.business_region",
     name: "业务区域",
     aliases: ["经营区域", "Business Region"],
-    type: "维度",
+    type: "数据资产",
     status: "草稿",
     owner: "待指定",
     maintainer: "数据平台组",
@@ -640,7 +638,7 @@ const assetSeeds: AssetSeed[] = [
     key: "customer.customer",
     name: "客户",
     aliases: ["会员", "Customer"],
-    type: "业务实体",
+    type: "业务对象",
     status: "已发布",
     owner: "客户运营部",
     maintainer: "客户数据组",
@@ -675,12 +673,12 @@ const assetSeeds: AssetSeed[] = [
     key: "commerce.orders_model",
     name: "订单经营模型",
     aliases: ["订单主题", "Orders Model"],
-    type: "语义模型",
+    type: "分析模型",
     status: "已发布",
     owner: "经营分析组",
     maintainer: "数据建模组",
     domain: "电商经营",
-    definition: "围绕订单事实组织收入、支付、退款、客户和区域分析的公开语义模型。",
+    definition: "围绕订单事实组织收入、支付、退款、客户和区域分析的公开分析模型。",
     formula: "model(analytics.orders)",
     grain: "一行一个订单",
     defaultTime: "结算日 settlement_date",
@@ -698,7 +696,7 @@ const assetSeeds: AssetSeed[] = [
     bindings: [{ id: "BIND-ORDERS-MODEL-14", sourceRevision: "src-ecommerce@9f2e8a", dataset: "analytics.orders", expression: "public view commerce_orders", grain: "order_id", defaultTime: "settlement_date", adapter: "cube-commerce", state: "已验证" }],
     joinContracts: [{ id: "JOIN-ORDER-CUSTOMER-07", target: "客户", keys: "orders.customer_id = customer.customer_master_id", cardinality: "many_to_one", grainImpact: "保持订单粒度", guardrail: "禁止从客户侧无约束展开订单", state: "已发布" }],
     validations: [{ name: "Cube compile", state: "passed", detail: "模型、公开成员和 Join 路径编译通过" }],
-    evidence: [{ id: "EVD-2044", kind: "Cube compile", label: "公开语义模型编译通过", source: "models/commerce/orders.yml", verifiedAt: "今天 09:40", authority: "DERIVED", supports: "公开成员、Join 路径", state: "已验证" }],
+    evidence: [{ id: "EVD-2044", kind: "Cube compile", label: "公开分析模型编译通过", source: "models/commerce/orders.yml", verifiedAt: "今天 09:40", authority: "DERIVED", supports: "公开成员、Join 路径", state: "已验证" }],
     upstream: ["analytics.orders", "dim_customer", "dim_region"],
     downstream: ["净收入", "客单价", "经营日报"],
     consumers: [{ name: "经营日报", kind: "Dashboard", binding: "^2026.08", lastResolved: "18 分钟前" }],
@@ -710,7 +708,7 @@ const assetSeeds: AssetSeed[] = [
     key: "customer.high_value_customers",
     name: "高价值客户",
     aliases: ["HVC"],
-    type: "分群",
+    type: "业务口径",
     status: "需关注",
     owner: "客户运营部",
     maintainer: "客户数据组",
@@ -745,7 +743,7 @@ const assetSeeds: AssetSeed[] = [
     key: "commerce.valid_paid_order",
     name: "有效支付订单",
     aliases: ["有效订单", "Valid Paid Order"],
-    type: "业务概念",
+    type: "业务口径",
     status: "已发布",
     owner: "收入分析组",
     maintainer: "语义平台组",
@@ -754,7 +752,7 @@ const assetSeeds: AssetSeed[] = [
     formula: "term(valid_paid_order)",
     grain: "订单业务规则",
     defaultTime: "按支付完成时间解释",
-    unit: "业务概念",
+    unit: "业务口径",
     aggregation: "不适用",
     source: "Policy / commerce-order-policy",
     updatedAt: "昨天 15:10",
@@ -763,7 +761,7 @@ const assetSeeds: AssetSeed[] = [
     includes: ["支付成功且未撤销的真实客户订单", "允许部分退款但仍保留有效成交的订单"],
     excludes: ["内部测试订单", "支付撤销订单", "仅完成预授权的订单"],
     examples: ["净收入只统计有效支付订单", "有效订单与已创建订单不是同一概念"],
-    readiness: readiness({ mapping: { state: "not_applicable", detail: "纯业务概念不要求物理实现" }, compatibility: { state: "not_applicable", detail: "当前通过 LLM Wiki 和本体关系消费" } }),
+    readiness: readiness({ mapping: { state: "not_applicable", detail: "纯业务口径不要求物理实现" }, compatibility: { state: "not_applicable", detail: "当前通过 LLM Wiki 和本体关系消费" } }),
     relations: [
       { id: "REL-189", type: "narrower_than", targetId: "concept_01J4PAIDORDER7M2K8Q5N9V", targetName: "支付订单", direction: "outgoing", evidence: "EVD-1788", release: "release-2026.08.3" },
       { id: "REL-190", type: "disjoint_with", targetId: "concept_01J4VOIDORDER6X8K2M9P3Q", targetName: "已撤销订单", direction: "outgoing", evidence: "EVD-1788", release: "release-2026.08.3" },
@@ -943,7 +941,7 @@ export const assetVersionReleases: AssetVersionRelease[] = [
     assetId: "measure_01J4PAIDORDERS5X8D2N6R",
     assetKey: "commerce.paid_order_count",
     assetName: "支付订单数",
-    assetType: "度量",
+    assetType: "指标",
     revision: "@5",
     previousRevision: "@4",
     state: "Stable",
@@ -958,7 +956,7 @@ export const assetVersionReleases: AssetVersionRelease[] = [
     assetId: "model_01J4ORDERS7K8M2Q5N9P",
     assetKey: "commerce.orders_model",
     assetName: "订单经营模型",
-    assetType: "语义模型",
+    assetType: "分析模型",
     revision: "@14",
     previousRevision: "@13",
     state: "Stable",

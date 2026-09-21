@@ -14,10 +14,26 @@ import (
 var (
 	ErrInvalid       = errors.New("invalid embedding request")
 	ErrNotConfigured = errors.New("embedding is not configured")
-	ErrConflict      = errors.New("embedding state conflict")
-	ErrNotFound      = errors.New("embedding index not found")
-	ErrProvider      = errors.New("embedding provider unavailable")
-	ErrLeaseLost     = errors.New("embedding lease lost")
+	// ErrNoPublishedRelease reports that the workspace has no published release,
+	// so there is no released corpus for a new index to cover. It is deliberately
+	// distinct from ErrNotConfigured: the capability is available, the work the
+	// operator must do first (publish a release) lives in another surface.
+	ErrNoPublishedRelease = errors.New("embedding requires a published release")
+	ErrConflict           = errors.New("embedding state conflict")
+	ErrNotFound           = errors.New("embedding index not found")
+	ErrProvider           = errors.New("embedding provider unavailable")
+	ErrLeaseLost          = errors.New("embedding lease lost")
+)
+
+// Status reasons. They are machine-readable so the client can tell an operator
+// what to fix instead of reporting one opaque "unavailable" state.
+const (
+	// ReasonReady means the capability is configured and a rebuild can start.
+	ReasonReady = ""
+	// ReasonNotConfigured means pgvector, the provider, or the credential is missing.
+	ReasonNotConfigured = "not_configured"
+	// ReasonNoPublishedRelease means there is nothing released to index yet.
+	ReasonNoPublishedRelease = "no_published_release"
 )
 
 const ChunkVersion = "released-summary/v1"
@@ -81,7 +97,6 @@ type Status struct {
 	Active     *Index `json:"active"`
 	Latest     *Index `json:"latest"`
 }
-
 type SearchResult struct {
 	Mode           string      `json:"mode"`
 	FallbackReason string      `json:"fallbackReason"`

@@ -4,11 +4,26 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	d "github.com/iiwish/semlia/internal/domain/distribution"
 	e "github.com/iiwish/semlia/internal/domain/execution"
+	"github.com/iiwish/semlia/internal/domain/semantic"
 	"github.com/iiwish/semlia/pkg/identity"
 )
+
+func TestCalendarGroupingRecomputesMetricPerUTCPeriod(t *testing.T) {
+	p := executablePlan(t)
+	object, _ := identity.NewAssetID()
+	p.Assets = append(p.Assets, d.ResolvedAsset{AssetID: object, Address: "sales.order"})
+	p.Execution.Relations[0].Fields = append(p.Execution.Relations[0].Fields, d.ExecutionField{FieldID: "paid_at", Name: "paid_at", DataType: "timestamptz"})
+	p.Execution.Bindings = append(p.Execution.Bindings, d.ExecutionBinding{AssetID: object.String(), MemberID: "paid_at", DatasetID: "dataset", FieldID: "paid_at"})
+	p.TimeRange = &d.TimeRange{Selector: d.Selector{AssetID: &object, MemberID: "paid_at"}, From: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), To: time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC), Granularity: "month"}
+	compiled, err := e.Compile(p)
+	if err != nil || !strings.Contains(compiled.SQL, "date_trunc('month'") || !strings.Contains(compiled.SQL, "AT TIME ZONE 'UTC'") || len(compiled.Columns) != 2 {
+		t.Fatalf("calendar aggregation: %s %v", compiled.SQL, err)
+	}
+}
 
 func executablePlan(t *testing.T) d.ResolvedSemanticPlan {
 	t.Helper()
@@ -20,6 +35,25 @@ func executablePlan(t *testing.T) d.ResolvedSemanticPlan {
 		Measures: []d.Selector{{AssetID: &asset}}, Limit: 10,
 		Execution: &d.ExecutionProvenance{CompilerVersion: e.CompilerVersion, Bindings: []d.ExecutionBinding{{AssetID: asset.String(), DatasetID: "dataset", FieldID: "field", Aggregation: "sum"}},
 			Relations: []d.ExecutionRelation{{DatasetID: "dataset", SourceID: "source", SourceRevisionID: "revision", AdapterKind: "postgresql_catalog", Schema: "public", Relation: "sales", Fields: []d.ExecutionField{{FieldID: "field", Name: "amount", DataType: "numeric"}}}}}}
+}
+
+func TestDerivedRatioRecomputesAggregatesWithNullDenominator(t *testing.T) {
+	p := executablePlan(t)
+	numerator := p.Assets[0].AssetID
+	denominator, _ := identity.NewAssetID()
+	ratio, _ := identity.NewAssetID()
+	p.Execution.Bindings = append(p.Execution.Bindings, d.ExecutionBinding{AssetID: denominator.String(), DatasetID: "dataset", FieldID: "field", Aggregation: "count"})
+	p.Assets = append(p.Assets, d.ResolvedAsset{AssetID: denominator, Address: "sales.count"}, d.ResolvedAsset{AssetID: ratio, Address: "sales.average"})
+	p.Execution.Calculations = []d.ExecutionCalculation{{AssetID: ratio.String(), Expression: &semantic.KnowledgeExpression{Op: "divide", Left: &semantic.KnowledgeExpression{Op: "ref", Ref: &semantic.KnowledgeReference{AssetID: numerator.String()}}, Right: &semantic.KnowledgeExpression{Op: "ref", Ref: &semantic.KnowledgeReference{AssetID: denominator.String()}}}}}
+	p.Measures = []d.Selector{{AssetID: &ratio}}
+	q, err := e.Compile(p)
+	if err != nil || !strings.Contains(q.SQL, "NULLIF(COUNT(") || !strings.Contains(q.SQL, "::numeric /") {
+		t.Fatalf("ratio: %s %v", q.SQL, err)
+	}
+	p.Execution.Calculations[0].Expression.Left.Ref.AssetID = ratio.String()
+	if _, err := e.Compile(p); err == nil {
+		t.Fatal("cyclic metric executed")
+	}
 }
 
 func TestCompilerParameterizedAndLegacyClosed(t *testing.T) {
@@ -118,7 +152,12 @@ func TestCompositeJoinUsesEveryKeyAndRejectsUnsafeContracts(t *testing.T) {
 	if d.PlanDigest(p) == originalDigest {
 		t.Fatal("formal join keys absent from digest")
 	}
-	for _, cardinality := range []string{"one_to_many", "many_to_one", "many_to_many"} {
+	p.Execution.Joins[0].Cardinality = "many_to_one"
+	guarded, err := e.Compile(p)
+	if err != nil || len(guarded.Guards) != 1 || !strings.Contains(guarded.Guards[0], "HAVING COUNT(*) > 1") {
+		t.Fatal("many-to-one has no runtime uniqueness guard", err)
+	}
+	for _, cardinality := range []string{"one_to_many", "many_to_many"} {
 		p.Execution.Joins[0].Cardinality = cardinality
 		if _, err := e.Compile(p); err == nil {
 			t.Fatal("unproven aggregate grain accepted")

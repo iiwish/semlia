@@ -48,7 +48,7 @@ func TestManifestRequiresSourceFingerprintAndMarksCandidate(t *testing.T) {
 	if err := decodeJSON(path, &result); err != nil {
 		t.Fatal(err)
 	}
-	if result.MigrationVersion != 29 || !result.SourceDirty || result.ArtifactKind != "local_candidate" || result.Acceptance != "unreviewed" {
+	if result.MigrationVersion != 32 || !result.SourceDirty || result.ArtifactKind != "local_candidate" || result.Acceptance != "unreviewed" {
 		t.Fatal("candidate represented as accepted or exact HEAD")
 	}
 }

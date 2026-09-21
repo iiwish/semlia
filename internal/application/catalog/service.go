@@ -743,6 +743,18 @@ func canonicalContent(content json.RawMessage, schemaVersion string) (json.RawMe
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		return nil, "", domain.ErrInvalidArgument
 	}
+	if kind, present := object["assetType"]; present {
+		name, ok := kind.(string)
+		if !ok {
+			return nil, "", domain.ErrInvalidArgument
+		}
+		raw, _ := json.Marshal(object["spec"])
+		if _, err := semantic.ParseKnowledgeSpec(semantic.AssetType(name), raw, false); err != nil {
+			return nil, "", domain.ErrInvalidArgument
+		}
+	} else if _, present := object["spec"]; present {
+		return nil, "", domain.ErrInvalidArgument
+	}
 	encoded, err := json.Marshal(object)
 	if err != nil {
 		return nil, "", domain.ErrInvalidArgument
@@ -768,7 +780,7 @@ func validAssetType(value semantic.AssetType, optional bool) bool {
 		return optional
 	}
 	switch value {
-	case semantic.Concept, semantic.Entity, semantic.SemanticModel, semantic.Dimension, semantic.Measure, semantic.Metric, semantic.Segment:
+	case semantic.BusinessObject, semantic.BusinessTerm, semantic.AnalysisModel, semantic.DataAsset, semantic.Metric:
 		return true
 	default:
 		return false
