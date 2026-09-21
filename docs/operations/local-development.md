@@ -66,6 +66,10 @@ bash scripts/dev/account.sh reset-local-password founder@example.com
 
 SQL 证据路径相对于 `SEMLIA_SOURCE_ARTIFACT_ROOT`，禁止路径穿越与符号链接。server 和 worker 使用同一受保护内容副本。
 
+## 合成演示数据
+
+五类知识、订单与客户样本、依赖关系和客单价演算使用独立的合成演示工作区。初始化与界面入口见 [五类知识演示数据](knowledge-demo.md)。该本地种子入口只操作本仓库拥有的开发数据库，不接管真实来源或现有工作区。
+
 ## 验收与发布
 
 ```bash

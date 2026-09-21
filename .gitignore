@@ -12,6 +12,13 @@
 *.key
 *.bundle
 deploy/private/
+# Operator-specific installation files and local agent memory are not publishable.
+deploy/maco.compose.yaml
+deploy/maco.json
+docs/operations/maco-demo.md
+scripts/deploy/maco_demo_release.py
+scripts/deploy/maco_demo_verify.py
+.workbuddy/
 
 # Go
 *.test

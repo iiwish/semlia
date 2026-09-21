@@ -68,9 +68,9 @@ func TestGovernedLoopPublishesAndRollsBackWithAppendOnlyProjection(t *testing.T)
 	publisher := createPrincipal(t, store, workspace, "publisher", []string{"publisher"}, false)
 
 	created, err := catalogapp.NewService(store, catalogapp.ClockFunc(func() time.Time { return clockTime() })).CreateAsset(ctx, catalogapp.CreateAssetRequest{
-		WorkspaceID: workspace, Address: "commerce.revenue.net_revenue", AssetType: semantic.Metric,
+		WorkspaceID: workspace, Address: "commerce.revenue.net_revenue", AssetType: semantic.BusinessTerm,
 		Lifecycle: "active", SchemaVersion: "1.0.0", CreatedBy: author.String(), TraceID: traceID,
-		Content: json.RawMessage(`{"name":"Net revenue","definition":"Revenue less refunds"}`),
+		Content: json.RawMessage(`{"assetType":"business_term","name":"Net revenue","definition":"Revenue less refunds","scope":"Synthetic finance fixture","spec":{"capability":"definition"}}`),
 	})
 	if err != nil {
 		t.Fatal(err)

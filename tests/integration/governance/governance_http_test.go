@@ -187,9 +187,9 @@ func (environment *fixture) createAsset(t *testing.T, workspace identity.Workspa
 		catalogapp.ClockFunc(func() time.Time { return time.Now().UTC() }),
 	)
 	created, err := catalog.CreateAsset(context.Background(), catalogapp.CreateAssetRequest{
-		WorkspaceID: workspace, Address: "commerce.net_revenue", AssetType: semantic.Metric,
+		WorkspaceID: workspace, Address: "commerce.net_revenue", AssetType: semantic.BusinessTerm,
 		Lifecycle: "active", SchemaVersion: "1.0.0",
-		Content:   json.RawMessage(`{"name":"Net revenue","definition":"Revenue after refunds"}`),
+		Content:   json.RawMessage(`{"assetType":"business_term","name":"Net revenue","definition":"Revenue after refunds","scope":"Governance test","spec":{"capability":"definition"}}`),
 		CreatedBy: "founder", TraceID: traceID,
 	})
 	if err != nil {

@@ -47,7 +47,7 @@ describe("semantic production authority", () => {
   });
 
   it("builds a cold-start target without requiring an existing asset or approving a rule", () => {
-    const target = makeAssetTarget("orders", "销售订单", "commerce.orders", "entity", "author");
+    const target = makeAssetTarget("orders", "销售订单", "commerce.orders", "business_object", "author");
     expect(target).toMatchObject({ intent: "create", identityKey: "commerce.orders", content: { definition: null, scope: null, ownerPrincipalId: "author" }, evidenceIds: [], changes: [] });
     expect(target).not.toHaveProperty("targetId");
     expect(target).not.toHaveProperty("baseRevisionId");

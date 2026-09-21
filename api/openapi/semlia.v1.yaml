@@ -327,7 +327,7 @@ paths:
       operationId: getEmbeddingIndexStatus
       responses:
         '200':
-          description: Persistent embedding capability and generations
+          description: Persistent embedding capability, the machine-readable reason a rebuild is blocked, and generations
           content:
             application/json:
               schema: { $ref: '#/components/schemas/EmbeddingIndexStatus' }
@@ -346,7 +346,14 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/EmbeddingIndexVersion' }
         '403': { $ref: '#/components/responses/Forbidden' }
-        '409': { $ref: '#/components/responses/Conflict' }
+        '409':
+          description: >-
+            The rebuild cannot start yet. EMBEDDING_NO_PUBLISHED_RELEASE means the
+            workspace has no published release to index; VERSION_CONFLICT means the
+            request collided with current state.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /api/v1/workspaces/{workspaceId}/embedding-index/{indexId}/cancel:
     parameters:
@@ -2787,6 +2794,36 @@ paths:
         "403": {$ref: "#/components/responses/Forbidden"}
         "404": {$ref: "#/components/responses/NotFound"}
         default: {$ref: "#/components/responses/Error"}
+  /api/v1/workspaces/{workspaceId}/ingestion/artifact-sets/{artifactSetId}/members/{artifactId}/preview:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+      - name: artifactSetId
+        in: path
+        required: true
+        schema: {$ref: "#/components/schemas/ArtifactSetId"}
+      - name: artifactId
+        in: path
+        required: true
+        schema: {$ref: "#/components/schemas/ArtifactId"}
+    get:
+      operationId: previewIngestionArtifact
+      summary: Read bounded inert content of a source-authorized immutable set member
+      tags: [Ingestion]
+      responses:
+        "200":
+          description: CSV/XLSX first 100 data records and 50 columns per sheet, 1024 bytes per cell and 128 KiB aggregate cell budget. Markdown text is limited to 64 KiB and line projection to 500 lines. All truncation is explicit. Full input is validated before preview; no formula, script or external resource execution.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ArtifactPreview"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "410":
+          description: Content expired or not retained.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ErrorResponse"}
+        "422": {$ref: "#/components/responses/UnprocessableEntity"}
+        default: {$ref: "#/components/responses/Error"}
   /api/v1/workspaces/{workspaceId}/ingestion/artifact-sets:finalize:
     parameters:
       - $ref: "#/components/parameters/WorkspaceId"
@@ -4441,8 +4478,15 @@ components:
       additionalProperties: false
       required: [configured, reason, active, latest]
       properties:
-        configured: { type: boolean }
-        reason: { type: string }
+        configured:
+          type: boolean
+          description: Whether pgvector and an enabled embedding provider are both available.
+        reason:
+          type: string
+          description: >-
+            Machine-readable blocker for starting a rebuild. Empty when a rebuild can
+            start now, not_configured when pgvector or the provider is missing,
+            no_published_release when the workspace has nothing released to index.
         active:
           allOf: [{ $ref: '#/components/schemas/EmbeddingIndexVersion' }]
           nullable: true
@@ -5206,13 +5250,11 @@ components:
     SemanticAssetType:
       type: string
       enum:
-        - concept
-        - entity
-        - semantic_model
-        - dimension
-        - measure
+        - business_object
+        - business_term
         - metric
-        - segment
+        - data_asset
+        - analysis_model
     RelationPredicate:
       type: string
       enum:
@@ -6503,6 +6545,79 @@ components:
       x-go-type: identity.SourceLineageRevisionID
       x-go-type-import: {path: github.com/iiwish/semlia/pkg/identity, name: identity}
     MemberKind: {type: string, enum: [dataset, field, code, lineage]}
+    ArtifactPreview:
+      type: object
+      additionalProperties: false
+      required: [artifactId, contentDigest, kind, text, lines, blocks, datasets, sheets, truncated]
+      properties:
+        artifactId: {$ref: "#/components/schemas/ArtifactId"}
+        contentDigest: {$ref: "#/components/schemas/SnapshotDigest"}
+        kind: {type: string, enum: [csv, xlsx, markdown]}
+        text: {type: string}
+        datasets:
+          type: array
+          maxItems: 64
+          items:
+            type: object
+            required: [name, fields]
+            properties:
+              name: {type: string}
+              fields:
+                type: array
+                maxItems: 50
+                items:
+                  type: object
+                  required: [name, dataType, nullable, ordinal]
+                  properties:
+                    name: {type: string}
+                    dataType: {type: string}
+                    nullable: {type: boolean}
+                    ordinal: {type: integer}
+        truncated: {type: boolean}
+        blocks:
+          type: array
+          maxItems: 500
+          items:
+            type: object
+            required: [kind, line, text]
+            properties:
+              kind: {type: string, enum: [heading, paragraph, code]}
+              line: {type: integer, minimum: 1}
+              text: {type: string}
+        lines:
+          type: array
+          maxItems: 500
+          items:
+            type: object
+            required: [number, text]
+            properties:
+              number: {type: integer, minimum: 1}
+              text: {type: string}
+        sheets:
+          type: array
+          maxItems: 64
+          items:
+            type: object
+            required: [name, columns, rows, truncated]
+            properties:
+              name: {type: string}
+              truncated: {type: boolean}
+              columns:
+                type: array
+                maxItems: 50
+                items: {type: string}
+              rows:
+                type: array
+                maxItems: 100
+                items:
+                  type: object
+                  required: [number, cells]
+                  properties:
+                    number: {type: integer, minimum: 1}
+                    cells:
+                      type: array
+                      maxItems: 50
+                      items: {type: string}
     HistoryQuality: {type: string, enum: [verified, unverifiable]}
     SnapshotDigest: {type: string, pattern: "^sha256:[0-9a-f]{64}$"}
     SourceSnapshot:
@@ -6554,6 +6669,10 @@ components:
         coverageKey: {type: string, minLength: 1, maxLength: 256}
         parentObjectId: {$ref: "#/components/schemas/PhysicalDatasetId"}
         parentRevisionId: {$ref: "#/components/schemas/PhysicalDatasetRevisionId"}
+        datasetKind: {type: string}
+        dataType: {type: string}
+        nullable: {type: boolean}
+        ordinal: {type: integer, minimum: 1}
     Diagnostic:
       type: object
       x-go-name: SourceSnapshotDiagnostic
@@ -6634,7 +6753,7 @@ components:
         sourceRevisionId: {$ref: "#/components/schemas/SourceRevisionId"}
         discoveryRunId: {$ref: "#/components/schemas/RunId"}
         candidateKey: {type: string, minLength: 1}
-        candidateKind: {type: string, enum: [entity, dimension, metric, join]}
+        candidateKind: {type: string, enum: [data_asset, join]}
         title: {type: string, minLength: 1, maxLength: 256}
         proposalInput: {type: object, additionalProperties: true}
         evidence:
@@ -8463,6 +8582,7 @@ components:
       description: Exactly one of assetId, address or search is accepted by the service.
       additionalProperties: false
       properties:
+        memberId: { type: string, pattern: '^[a-z][a-z0-9_]{0,63}$' }
         assetId:
           $ref: "#/components/schemas/SemanticAssetId"
         address:
@@ -8524,6 +8644,7 @@ components:
       additionalProperties: false
       required: [schemaVersion, intent, context]
       properties:
+        modelId: { $ref: "#/components/schemas/SemanticAssetId" }
         schemaVersion:
           type: string
           enum: [1.0.0]
@@ -8604,6 +8725,7 @@ components:
       additionalProperties: false
       required: [id, queryId, releaseId, resolverVersion, intent, assets, objects, executionStatus, planDigest, createdAt]
       properties:
+        model: { $ref: "#/components/schemas/ResolvedSemanticAsset" }
         id:
           $ref: "#/components/schemas/ResolvedSemanticPlanId"
         queryId:
@@ -8698,6 +8820,9 @@ components:
       additionalProperties: false
       required: [run, availability, replay]
       properties:
+        sql: { type: string, description: Ephemeral authorized compiler output; not retained for replay. }
+        parameters: { type: array, items: {} }
+        dataTime: { $ref: "#/components/schemas/Timestamp" }
         run: { $ref: "#/components/schemas/QueryExecutionRun" }
         availability: { type: string, enum: [ephemeral, metadata_only, unavailable] }
         replay: { type: boolean }
@@ -8922,11 +9047,350 @@ components:
       required: [address, assetType, displayName, definition, scope, ownerPrincipalId]
       properties:
         address: { type: string, pattern: '^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$', maxLength: 512 }
-        assetType: { type: string, enum: [concept, entity, semantic_model, dimension, measure, metric, segment] }
+        assetType: { $ref: '#/components/schemas/SemanticAssetType' }
         displayName: { type: string, minLength: 1, maxLength: 256 }
         definition: { type: string, minLength: 1, maxLength: 16384, nullable: true }
         scope: { type: string, minLength: 1, maxLength: 4096, nullable: true }
         ownerPrincipalId: { $ref: '#/components/schemas/ResourceId' }
+        spec: { $ref: '#/components/schemas/KnowledgeSpec' }
+    KnowledgeSpec:
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "grain": {
+            "type": "string"
+          },
+          "keys": {
+            "type": "array",
+            "maxItems": 256,
+            "items": {
+              "type": "string"
+            }
+          },
+          "identityPolicy": {
+            "type": "string"
+          },
+          "lifecycle": {
+            "type": "string"
+          },
+          "members": {
+            "type": "array",
+            "maxItems": 256,
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeMember"
+            }
+          },
+          "capability": {
+            "type": "string",
+            "enum": [
+              "definition",
+              "predicate"
+            ]
+          },
+          "subjectRef": {
+            "$ref": "#/components/schemas/KnowledgeReference"
+          },
+          "predicate": {
+            "$ref": "#/components/schemas/KnowledgeExpression"
+          },
+          "parameters": {
+            "type": "array",
+            "maxItems": 256,
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeParameter"
+            }
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "object"
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "aggregate",
+              "derived"
+            ]
+          },
+          "inputRef": {
+            "$ref": "#/components/schemas/KnowledgeReference"
+          },
+          "aggregation": {
+            "type": "string",
+            "enum": [
+              "sum",
+              "avg",
+              "count",
+              "count_distinct",
+              "min",
+              "max"
+            ]
+          },
+          "expression": {
+            "$ref": "#/components/schemas/KnowledgeExpression"
+          },
+          "filterRefs": {
+            "type": "array",
+            "maxItems": 256,
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeReference"
+            }
+          },
+          "timeAttributeRef": {
+            "$ref": "#/components/schemas/KnowledgeReference"
+          },
+          "unit": {
+            "type": "string"
+          },
+          "nullPolicy": {
+            "type": "string",
+            "enum": [
+              "exclude",
+              "unknown_does_not_match",
+              "required"
+            ]
+          },
+          "zeroDenominator": {
+            "type": "string",
+            "enum": [
+              "null"
+            ]
+          },
+          "rollup": {
+            "type": "string",
+            "enum": [
+              "recompute_from_inputs"
+            ]
+          },
+          "datasetRef": {
+            "$ref": "#/components/schemas/PhysicalReference"
+          },
+          "coverage": {
+            "type": "string"
+          },
+          "refreshFrequency": {
+            "type": "string"
+          },
+          "sensitivity": {
+            "type": "string"
+          },
+          "baseObjectRef": {
+            "$ref": "#/components/schemas/KnowledgeReference"
+          },
+          "publicAttributeRefs": {
+            "type": "array",
+            "maxItems": 256,
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeReference"
+            }
+          },
+          "metricRefs": {
+            "type": "array",
+            "maxItems": 256,
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeReference"
+            }
+          },
+          "compatibleTermRefs": {
+            "type": "array",
+            "maxItems": 256,
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeReference"
+            }
+          },
+          "defaultTimeAttributeRef": {
+            "$ref": "#/components/schemas/KnowledgeReference"
+          },
+          "dataAssetRefs": {
+            "type": "array",
+            "maxItems": 256,
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeReference"
+            }
+          },
+          "memberBindings": {
+            "type": "array",
+            "maxItems": 256,
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeMemberBinding"
+            }
+          },
+          "joinContractIds": {
+            "type": "array",
+            "maxItems": 256,
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "description": "Type-specific knowledge contract. Drafts may be incomplete. Fields are restricted by assetType and publication validates completeness.",
+        "nullable": true
+      }
+    KnowledgeReference:
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "assetId",
+          "revisionId",
+          "releaseId"
+        ],
+        "properties": {
+          "assetId": {
+            "$ref": "#/components/schemas/ResourceId"
+          },
+          "revisionId": {
+            "$ref": "#/components/schemas/ResourceId"
+          },
+          "releaseId": {
+            "$ref": "#/components/schemas/ResourceId"
+          },
+          "memberId": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,63}$"
+          }
+        }
+      }
+    KnowledgeMember:
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,63}$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "valueType": {
+            "type": "string",
+            "enum": [
+              "string",
+              "number",
+              "integer",
+              "boolean",
+              "date",
+              "timestamp"
+            ]
+          },
+          "nullPolicy": {
+            "type": "string",
+            "enum": [
+              "required",
+              "unknown",
+              "excluded"
+            ]
+          },
+          "historyPolicy": {
+            "type": "string",
+            "enum": [
+              "stable",
+              "current_value",
+              "event_time"
+            ]
+          },
+          "sourceFieldRef": {
+            "$ref": "#/components/schemas/PhysicalReference"
+          }
+        }
+      }
+    KnowledgeExpression:
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "op"
+        ],
+        "properties": {
+          "op": {
+            "type": "string",
+            "enum": [
+              "ref",
+              "parameter",
+              "literal",
+              "add",
+              "subtract",
+              "multiply",
+              "divide",
+              "eq",
+              "neq",
+              "lt",
+              "lte",
+              "gt",
+              "gte",
+              "and",
+              "or"
+            ]
+          },
+          "ref": {
+            "$ref": "#/components/schemas/KnowledgeReference"
+          },
+          "parameter": {
+            "type": "string"
+          },
+          "value": {
+            "$ref": "#/components/schemas/JSONValue"
+          },
+          "left": {
+            "$ref": "#/components/schemas/KnowledgeExpression"
+          },
+          "right": {
+            "$ref": "#/components/schemas/KnowledgeExpression"
+          }
+        }
+      }
+    KnowledgeParameter:
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "type",
+          "required"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "string",
+              "number",
+              "integer",
+              "boolean",
+              "date",
+              "timestamp"
+            ]
+          },
+          "required": {
+            "type": "boolean"
+          }
+        }
+      }
+    KnowledgeMemberBinding:
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "semanticRef",
+          "dataRef"
+        ],
+        "properties": {
+          "semanticRef": {
+            "$ref": "#/components/schemas/KnowledgeReference"
+          },
+          "dataRef": {
+            "$ref": "#/components/schemas/KnowledgeReference"
+          }
+        }
+      }
     BindingContent:
       type: object
       additionalProperties: false
@@ -9320,7 +9784,10 @@ components:
       additionalProperties: false
       required: [id, currentVersion, createdBy, createdAt, updatedAt, frozen, progress, targetCount, releaseId]
       properties:
+        superseded: { type: boolean, description: Whether a successor operation replaces this record. Authoritative on list summaries. }
+        proposalIds: { type: array, maxItems: 32, uniqueItems: true, items: { $ref: '#/components/schemas/ResourceId' }, description: Authorized proposal references for deduplicating knowledge actions. }
         id: { $ref: '#/components/schemas/ResourceId' }
+        title: { type: string, description: Display name from the selected version's primary semantic target or first named target. }
         currentVersion: { $ref: '#/components/schemas/Version' }
         createdBy: { $ref: '#/components/schemas/ResourceId' }
         createdAt: { $ref: '#/components/schemas/Timestamp' }

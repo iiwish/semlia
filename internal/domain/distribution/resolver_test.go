@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/iiwish/semlia/internal/domain/distribution"
-	"github.com/iiwish/semlia/internal/domain/governance"
 	"github.com/iiwish/semlia/internal/domain/semantic"
+	"github.com/iiwish/semlia/internal/testsupport/knowledgecase"
 	"github.com/iiwish/semlia/pkg/identity"
 )
 
@@ -58,53 +58,37 @@ func TestMatchSelectorPrefersStableReferencesAndRefusesMaterialTie(t *testing.T)
 }
 
 func TestBuildPlanPinsObjectsAndDigestDeterministically(t *testing.T) {
-	query := validQuery(t)
-	metric := asset(t, "commerce.net_revenue", "Net revenue", semantic.Metric)
-	dimension := asset(t, "commerce.country", "Country", semantic.Entity)
-	dataset := mustID(t, identity.NewPhysicalDatasetID)
-	snapshot := releaseSnapshot(t, []distribution.ReleasedAsset{metric, dimension})
-	snapshot.Bindings = []distribution.ReleasedPhysicalBinding{
-		{ID: mustID(t, identity.NewPhysicalBindingID), Version: 2, AssetID: metric.AssetID, DatasetID: dataset},
-		{ID: mustID(t, identity.NewPhysicalBindingID), Version: 1, AssetID: dimension.AssetID, DatasetID: dataset},
-	}
-	snapshot.Keys = []distribution.ReleasedEntityKey{{ID: mustID(t, identity.NewEntityKeyID), Version: 3, AssetID: dimension.AssetID}}
+	c := knowledgecase.New()
 	queryID := mustID(t, identity.NewSemanticQueryID)
 	planID := mustID(t, identity.NewResolvedSemanticPlanID)
-	first, refusal, err := distribution.BuildPlan(query, snapshot, queryID, planID, []distribution.ReleasedAsset{metric, dimension}, time.Unix(10, 0))
+	first, refusal, err := distribution.BuildPlan(c.Query, c.Snapshot, queryID, planID, c.Snapshot.Assets, time.Unix(10, 0))
 	if err != nil || refusal != nil {
 		t.Fatalf("BuildPlan error=%v refusal=%#v", err, refusal)
 	}
-	second, refusal, err := distribution.BuildPlan(query, snapshot, mustID(t, identity.NewSemanticQueryID),
-		mustID(t, identity.NewResolvedSemanticPlanID), []distribution.ReleasedAsset{dimension, metric}, time.Unix(20, 0))
+	selected := append([]distribution.ReleasedAsset(nil), c.Snapshot.Assets...)
+	for left, right := 0, len(selected)-1; left < right; left, right = left+1, right-1 {
+		selected[left], selected[right] = selected[right], selected[left]
+	}
+	second, refusal, err := distribution.BuildPlan(c.Query, c.Snapshot, mustID(t, identity.NewSemanticQueryID),
+		mustID(t, identity.NewResolvedSemanticPlanID), selected, time.Unix(20, 0))
 	if err != nil || refusal != nil {
 		t.Fatalf("second BuildPlan error=%v refusal=%#v", err, refusal)
 	}
-	if first.PlanDigest != second.PlanDigest || first.ExecutionStatus != "not_configured" || len(first.Objects) != 3 {
+	if first.PlanDigest != second.PlanDigest || first.ExecutionStatus != "requires_execution_validation" || len(first.Objects) != 3 || first.Model == nil {
 		t.Fatalf("plans are not deterministic: first=%#v second=%#v", first, second)
 	}
 }
 
 func TestBuildPlanDigestIncludesIntentAndTimeRange(t *testing.T) {
-	metric := asset(t, "commerce.net_revenue", "Net revenue", semantic.Metric)
-	timeDimension := asset(t, "commerce.order_date", "Order date", semantic.Dimension)
-	dataset := mustID(t, identity.NewPhysicalDatasetID)
-	snapshot := releaseSnapshot(t, []distribution.ReleasedAsset{metric, timeDimension})
-	snapshot.Bindings = []distribution.ReleasedPhysicalBinding{
-		{ID: mustID(t, identity.NewPhysicalBindingID), Version: 1, AssetID: metric.AssetID, DatasetID: dataset},
-		{ID: mustID(t, identity.NewPhysicalBindingID), Version: 1, AssetID: timeDimension.AssetID, DatasetID: dataset},
-	}
-	query := distribution.SemanticQueryInput{SchemaVersion: distribution.QuerySchemaVersion, Intent: distribution.IntentAggregate,
-		Measures: []distribution.Selector{{Address: metric.Address}}, Context: distribution.ResolutionContext{Mode: distribution.ResolutionCurrent},
-		TimeRange: &distribution.TimeRange{Selector: distribution.Selector{Address: timeDimension.Address},
-			From: time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC), To: time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC), Granularity: "day"}}
-	first, refusal, err := distribution.BuildPlan(query, snapshot, mustID(t, identity.NewSemanticQueryID),
-		mustID(t, identity.NewResolvedSemanticPlanID), []distribution.ReleasedAsset{metric, timeDimension}, time.Now())
+	c := knowledgecase.New()
+	first, refusal, err := distribution.BuildPlan(c.Query, c.Snapshot, mustID(t, identity.NewSemanticQueryID),
+		mustID(t, identity.NewResolvedSemanticPlanID), c.Snapshot.Assets, time.Now())
 	if err != nil || refusal != nil {
 		t.Fatalf("first plan error=%v refusal=%#v", err, refusal)
 	}
-	query.TimeRange.From = query.TimeRange.From.AddDate(0, 0, 1)
-	second, refusal, err := distribution.BuildPlan(query, snapshot, mustID(t, identity.NewSemanticQueryID),
-		mustID(t, identity.NewResolvedSemanticPlanID), []distribution.ReleasedAsset{metric, timeDimension}, time.Now())
+	c.Query.TimeRange.From = c.Query.TimeRange.From.AddDate(0, 0, 1)
+	second, refusal, err := distribution.BuildPlan(c.Query, c.Snapshot, mustID(t, identity.NewSemanticQueryID),
+		mustID(t, identity.NewResolvedSemanticPlanID), c.Snapshot.Assets, time.Now())
 	if err != nil || refusal != nil {
 		t.Fatalf("second plan error=%v refusal=%#v", err, refusal)
 	}
@@ -113,33 +97,23 @@ func TestBuildPlanDigestIncludesIntentAndTimeRange(t *testing.T) {
 	}
 }
 
-func TestBuildPlanRefusesMissingBindingJoinAndManyToManyGrain(t *testing.T) {
-	query := validQuery(t)
-	metric := asset(t, "commerce.net_revenue", "Net revenue", semantic.Metric)
-	dimension := asset(t, "commerce.country", "Country", semantic.Dimension)
-	snapshot := releaseSnapshot(t, []distribution.ReleasedAsset{metric, dimension})
-	_, refusal, err := distribution.BuildPlan(query, snapshot, mustID(t, identity.NewSemanticQueryID),
-		mustID(t, identity.NewResolvedSemanticPlanID), []distribution.ReleasedAsset{metric, dimension}, time.Now())
-	if err != nil || refusal == nil || refusal.Code != distribution.RefusalMissingPhysicalBinding {
-		t.Fatalf("missing binding refusal=%#v error=%v", refusal, err)
-	}
-
-	left, right := mustID(t, identity.NewPhysicalDatasetID), mustID(t, identity.NewPhysicalDatasetID)
-	snapshot.Bindings = []distribution.ReleasedPhysicalBinding{
-		{ID: mustID(t, identity.NewPhysicalBindingID), Version: 1, AssetID: metric.AssetID, DatasetID: left},
-		{ID: mustID(t, identity.NewPhysicalBindingID), Version: 1, AssetID: dimension.AssetID, DatasetID: right},
-	}
-	_, refusal, err = distribution.BuildPlan(query, snapshot, mustID(t, identity.NewSemanticQueryID),
-		mustID(t, identity.NewResolvedSemanticPlanID), []distribution.ReleasedAsset{metric, dimension}, time.Now())
-	if err != nil || refusal == nil || refusal.Code != distribution.RefusalMissingJoinPath {
-		t.Fatalf("missing join refusal=%#v error=%v", refusal, err)
-	}
-	snapshot.Joins = []distribution.ReleasedJoinContract{{ID: mustID(t, identity.NewJoinContractID), Version: 1,
-		LeftDatasetID: left, RightDatasetID: right, Cardinality: governance.CardinalityManyToMany, JoinType: governance.JoinInner}}
-	_, refusal, err = distribution.BuildPlan(query, snapshot, mustID(t, identity.NewSemanticQueryID),
-		mustID(t, identity.NewResolvedSemanticPlanID), []distribution.ReleasedAsset{metric, dimension}, time.Now())
-	if err != nil || refusal == nil || refusal.Code != distribution.RefusalIncompatibleGrain {
-		t.Fatalf("grain refusal=%#v error=%v", refusal, err)
+func TestBuildPlanRefusesMissingModelOrBinding(t *testing.T) {
+	for _, test := range []string{"model", "binding", "execution"} {
+		t.Run(test, func(t *testing.T) {
+			c := knowledgecase.New()
+			switch test {
+			case "model":
+				c.Snapshot.Assets = c.Snapshot.Assets[:len(c.Snapshot.Assets)-1]
+			case "binding":
+				c.Snapshot.Bindings = nil
+			case "execution":
+				c.Snapshot.Execution = nil
+			}
+			_, refusal, err := distribution.BuildPlan(c.Query, c.Snapshot, mustID(t, identity.NewSemanticQueryID), mustID(t, identity.NewResolvedSemanticPlanID), c.Snapshot.Assets, time.Now())
+			if err != nil || refusal == nil || refusal.Code != distribution.RefusalMissingPhysicalBinding {
+				t.Fatalf("missing %s refusal=%#v error=%v", test, refusal, err)
+			}
+		})
 	}
 }
 

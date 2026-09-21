@@ -378,6 +378,9 @@ func (s *Store) getProductionOperationVersionTx(
 		CreatedAt:      row.CreatedAt.Time,
 		UpdatedAt:      row.UpdatedAt.Time,
 	}
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM production_operations WHERE workspace_id=$1 AND supersedes_operation_id=$2)`, wspUUID, opUUID).Scan(&op.Superseded); err != nil {
+		return domain.ProductionOperation{}, domain.ProductionVersion{}, nil, nil, nil, err
+	}
 
 	if requestedVersion == 0 {
 		requestedVersion = int(row.CurrentVersion)

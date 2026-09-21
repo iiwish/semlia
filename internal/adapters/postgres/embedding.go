@@ -52,6 +52,17 @@ func (s *Store) EmbeddingConfiguration(ctx context.Context, w identity.Workspace
 	return embeddingConfiguration(ctx, s.pool, w, false)
 }
 
+// EmbeddingPublishedRelease reports whether the workspace has any published
+// release. A rebuild indexes the released corpus, so without one there is
+// nothing to embed and the request is blocked before any job is queued.
+func (s *Store) EmbeddingPublishedRelease(ctx context.Context, w identity.WorkspaceID) (bool, error) {
+	var available bool
+	if err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM releases WHERE workspace_id=$1 AND state='published')`, w.UUID()).Scan(&available); err != nil {
+		return false, domain.ErrConflict
+	}
+	return available, nil
+}
+
 const embeddingColumns = `id,workspace_id,release_id,config,corpus_digest,chunk_count,vector_count,state,error_code,runtime_run_id,job_id,created_at,updated_at`
 
 func scanEmbedding(row pgx.Row) (domain.Index, error) {
@@ -141,7 +152,7 @@ func (s *Store) StartEmbedding(ctx context.Context, command app.StartCommand) (d
 	}
 	var release pgtype.UUID
 	if tx.QueryRow(ctx, `SELECT id FROM releases WHERE workspace_id=$1 AND state='published' ORDER BY sequence DESC LIMIT 1`, command.Workspace.UUID()).Scan(&release) != nil {
-		return domain.Index{}, domain.ErrNotConfigured
+		return domain.Index{}, domain.ErrNoPublishedRelease
 	}
 	rows, err := tx.Query(ctx, `SELECT a.id,r.id,a.namespace||'.'||a.key,r.content FROM release_assets e JOIN semantic_assets a ON a.workspace_id=e.workspace_id AND a.id=e.asset_id JOIN asset_revisions r ON r.workspace_id=e.workspace_id AND r.id=e.revision_id AND r.asset_id=e.asset_id WHERE e.workspace_id=$1 AND e.release_id=$2 ORDER BY e.position LIMIT 5001`, command.Workspace.UUID(), release)
 	if err != nil {

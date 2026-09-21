@@ -16,7 +16,7 @@ func productionSuggestionFixture(t *testing.T) []byte {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return []byte(`{"schemaVersion":"semlia.production-suggestions/v1","targets":[{"localKey":"orders","title":"Orders","kind":"semantic_asset","intent":"create","identityKey":"sales.orders","evidenceIds":[],"changes":[],"content":{"address":"sales.orders","assetType":"entity","displayName":"Orders","definition":null,"scope":null,"ownerPrincipalId":"` + owner.String() + `"}}]}`)
+	return []byte(`{"schemaVersion":"semlia.production-suggestions/v1","targets":[{"localKey":"orders","title":"Orders","kind":"semantic_asset","intent":"create","identityKey":"sales.orders","evidenceIds":[],"changes":[],"content":{"address":"sales.orders","assetType":"business_object","displayName":"Orders","definition":null,"scope":null,"ownerPrincipalId":"` + owner.String() + `"}}]}`)
 }
 
 func TestProductionGenerationOutputGate(t *testing.T) {

@@ -46,7 +46,7 @@ func TestRelationPoliciesValidatePlaneStateAndEndpoints(t *testing.T) {
 		Plane:          semantic.SemanticPlane,
 		AssertionState: semantic.Asserted,
 		SubjectType:    semantic.Metric,
-		ObjectType:     semantic.Entity,
+		ObjectType:     semantic.BusinessObject,
 	}
 	if err := valid.Validate(); err != nil {
 		t.Fatalf("valid relation: %v", err)
@@ -57,7 +57,7 @@ func TestRelationPoliciesValidatePlaneStateAndEndpoints(t *testing.T) {
 		mutate func(*semantic.Relation)
 	}{
 		{"wrong plane", func(relation *semantic.Relation) { relation.Plane = semantic.TaxonomyPlane }},
-		{"wrong target", func(relation *semantic.Relation) { relation.ObjectType = semantic.Segment }},
+		{"wrong target", func(relation *semantic.Relation) { relation.ObjectType = semantic.BusinessTerm }},
 		{"unknown state", func(relation *semantic.Relation) { relation.AssertionState = "approved" }},
 	}
 	for _, test := range tests {
@@ -76,8 +76,8 @@ func TestTaxonomyRelationsRequireMatchingTypes(t *testing.T) {
 		Predicate:      semantic.EquivalentTo,
 		Plane:          semantic.TaxonomyPlane,
 		AssertionState: semantic.Inferred,
-		SubjectType:    semantic.Concept,
-		ObjectType:     semantic.Concept,
+		SubjectType:    semantic.BusinessTerm,
+		ObjectType:     semantic.BusinessTerm,
 	}
 	if err := relation.Validate(); err != nil {
 		t.Fatal(err)

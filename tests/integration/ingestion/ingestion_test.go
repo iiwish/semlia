@@ -389,6 +389,14 @@ VALUES($1,$2,'file_catalog',$3,$4,'paused','{}'::jsonb,'file',1)`, id.UUID(), wo
 	if err != nil || set.SourceConnectionID != source {
 		t.Fatalf("set=%+v err=%v", set, err)
 	}
+	preview, err := service.Preview(ctx, workspace, set.ID, artifact.ID, principal.String(), "4bf92f3577b34da6a3ce929d0e0e4736")
+	if err != nil || len(preview.Sheets) != 1 || preview.Sheets[0].Rows[0].Cells[1] != "Alice" || preview.ContentDigest != artifact.ContentDigest {
+		t.Fatalf("immutable preview=%+v err=%v", preview, err)
+	}
+	foreignWorkspace := createWorkspace(t, pool, "preview-foreign")
+	if _, err := service.Preview(ctx, foreignWorkspace, set.ID, artifact.ID, principal.String(), ""); !errors.Is(err, ingestiondomain.ErrNotFound) {
+		t.Fatalf("cross workspace preview=%v", err)
+	}
 	version = 2
 	unsafe := []byte("name\n=cmd\n")
 	rejected, err := service.Stage(ctx, ingestionapp.StageRequest{WorkspaceID: workspace, SourceID: &source,

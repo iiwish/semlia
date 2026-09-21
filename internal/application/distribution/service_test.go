@@ -129,6 +129,7 @@ func TestResolveAmbiguityOnlyConsidersAuthorizedCandidates(t *testing.T) {
 		}}}
 	auth := &fakeDistributionAuthorizer{principal: principal, role: "consumer_developer", deniedAssets: map[string]bool{denied.AssetID.UUID(): true}}
 	query := serviceQuery(distribution.ResolutionContext{Mode: distribution.ResolutionCurrent})
+	query.Intent = distribution.IntentDescribe
 	query.Measures[0] = distribution.Selector{Search: "net revenue"}
 
 	result, err := distributionapp.NewService(repo, auth, serviceClock).Resolve(context.Background(), distributionapp.ResolveRequest{

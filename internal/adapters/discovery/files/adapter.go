@@ -602,7 +602,7 @@ func loadSharedStrings(ctx context.Context, file *zip.File) ([]string, error) {
 	return result, nil
 }
 
-func parseSheet(ctx context.Context, file *zip.File, shared []string, totalRows, totalCells *int) ([]string, error) {
+func parseSheet(ctx context.Context, file *zip.File, shared []string, totalRows, totalCells *int, visitors ...func(int, []string)) ([]string, error) {
 	reader, err := file.Open()
 	if err != nil {
 		return nil, ingestion.ErrUnsafeContent
@@ -612,6 +612,7 @@ func parseSheet(ctx context.Context, file *zip.File, shared []string, totalRows,
 	rowNumber, lastRowCoordinate, lastColumn := 0, 0, 0
 	insideRow := false
 	var headers []string
+	var previewRow []string
 	for {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -624,6 +625,10 @@ func parseSheet(ctx context.Context, file *zip.File, shared []string, totalRows,
 			return nil, ingestion.ErrUnsafeContent
 		}
 		if end, ok := token.(xml.EndElement); ok && end.Name.Local == "row" {
+			for _, visit := range visitors {
+				visit(rowNumber, previewRow)
+			}
+			previewRow = nil
 			insideRow = false
 			continue
 		}
@@ -692,6 +697,12 @@ func parseSheet(ctx context.Context, file *zip.File, shared []string, totalRows,
 					headers = append(headers, "")
 				}
 				headers[column-1] = value
+			}
+			if len(visitors) > 0 {
+				for len(previewRow) < column {
+					previewRow = append(previewRow, "")
+				}
+				previewRow[column-1] = value
 			}
 		}
 	}

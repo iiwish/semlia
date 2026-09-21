@@ -24,6 +24,19 @@ func (handler *Handler) routeIngestion(response http.ResponseWriter, request *ht
 		return writeIngestionError(response, ingestiondomain.ErrInvalid, traceID)
 	}
 	switch route.kind {
+	case routeIngestionArtifactPreview:
+		setID, parseErr := identity.ParseArtifactSetID(route.artifactSet)
+		artifactID, artifactErr := identity.ParseArtifactID(route.artifact)
+		if parseErr != nil || artifactErr != nil {
+			return writeIngestionError(response, ingestiondomain.ErrInvalid, traceID)
+		}
+		preview, getErr := handler.ingestion.Preview(request.Context(), workspaceID, setID, artifactID, principalRef(request), traceID)
+		if getErr != nil {
+			return writeIngestionError(response, getErr, traceID)
+		}
+		response.Header().Set("Cache-Control", "no-store")
+		writeJSON(response, http.StatusOK, preview)
+		return ""
 	case routeIngestionArtifactSet:
 		setID, parseErr := identity.ParseArtifactSetID(route.artifactSet)
 		if parseErr != nil {
@@ -460,6 +473,9 @@ func writeIngestionError(response http.ResponseWriter, err error, traceID string
 	case errors.Is(err, ingestiondomain.ErrNotFound):
 		writeError(response, http.StatusNotFound, "NOT_FOUND", "the ingestion resource was not found", traceID, false)
 		return "NOT_FOUND"
+	case errors.Is(err, ingestiondomain.ErrContentUnavailable):
+		writeError(response, http.StatusGone, "CONTENT_UNAVAILABLE", "artifact content has expired or was not retained", traceID, false)
+		return "CONTENT_UNAVAILABLE"
 	case errors.Is(err, ingestiondomain.ErrConflict):
 		writeError(response, http.StatusConflict, "CONFLICT", "the ingestion resource changed or conflicts", traceID, false)
 		return "CONFLICT"

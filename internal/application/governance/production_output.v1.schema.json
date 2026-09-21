@@ -10,13 +10,11 @@
         },
         "assetType": {
           "enum": [
-            "concept",
-            "entity",
-            "semantic_model",
-            "dimension",
-            "measure",
+            "business_object",
+            "business_term",
             "metric",
-            "segment"
+            "data_asset",
+            "analysis_model"
           ],
           "type": "string"
         },
@@ -43,6 +41,9 @@
             "string",
             "null"
           ]
+        },
+        "spec": {
+          "$ref": "#/$defs/KnowledgeSpec"
         }
       },
       "required": [
@@ -752,6 +753,344 @@
       "maximum": 2147483647,
       "minimum": 1,
       "type": "integer"
+    },
+    "KnowledgeSpec": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "grain": {
+              "type": "string"
+            },
+            "keys": {
+              "type": "array",
+              "maxItems": 256,
+              "items": {
+                "type": "string"
+              }
+            },
+            "identityPolicy": {
+              "type": "string"
+            },
+            "lifecycle": {
+              "type": "string"
+            },
+            "members": {
+              "type": "array",
+              "maxItems": 256,
+              "items": {
+                "$ref": "#/$defs/KnowledgeMember"
+              }
+            },
+            "capability": {
+              "type": "string",
+              "enum": [
+                "definition",
+                "predicate"
+              ]
+            },
+            "subjectRef": {
+              "$ref": "#/$defs/KnowledgeReference"
+            },
+            "predicate": {
+              "$ref": "#/$defs/KnowledgeExpression"
+            },
+            "parameters": {
+              "type": "array",
+              "maxItems": 256,
+              "items": {
+                "$ref": "#/$defs/KnowledgeParameter"
+              }
+            },
+            "stage": {
+              "type": "string",
+              "enum": [
+                "object"
+              ]
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "aggregate",
+                "derived"
+              ]
+            },
+            "inputRef": {
+              "$ref": "#/$defs/KnowledgeReference"
+            },
+            "aggregation": {
+              "type": "string",
+              "enum": [
+                "sum",
+                "avg",
+                "count",
+                "count_distinct",
+                "min",
+                "max"
+              ]
+            },
+            "expression": {
+              "$ref": "#/$defs/KnowledgeExpression"
+            },
+            "filterRefs": {
+              "type": "array",
+              "maxItems": 256,
+              "items": {
+                "$ref": "#/$defs/KnowledgeReference"
+              }
+            },
+            "timeAttributeRef": {
+              "$ref": "#/$defs/KnowledgeReference"
+            },
+            "unit": {
+              "type": "string"
+            },
+            "nullPolicy": {
+              "type": "string",
+              "enum": [
+                "exclude",
+                "unknown_does_not_match",
+                "required"
+              ]
+            },
+            "zeroDenominator": {
+              "type": "string",
+              "enum": [
+                "null"
+              ]
+            },
+            "rollup": {
+              "type": "string",
+              "enum": [
+                "recompute_from_inputs"
+              ]
+            },
+            "datasetRef": {
+              "$ref": "#/$defs/PhysicalReference"
+            },
+            "coverage": {
+              "type": "string"
+            },
+            "refreshFrequency": {
+              "type": "string"
+            },
+            "sensitivity": {
+              "type": "string"
+            },
+            "baseObjectRef": {
+              "$ref": "#/$defs/KnowledgeReference"
+            },
+            "publicAttributeRefs": {
+              "type": "array",
+              "maxItems": 256,
+              "items": {
+                "$ref": "#/$defs/KnowledgeReference"
+              }
+            },
+            "metricRefs": {
+              "type": "array",
+              "maxItems": 256,
+              "items": {
+                "$ref": "#/$defs/KnowledgeReference"
+              }
+            },
+            "compatibleTermRefs": {
+              "type": "array",
+              "maxItems": 256,
+              "items": {
+                "$ref": "#/$defs/KnowledgeReference"
+              }
+            },
+            "defaultTimeAttributeRef": {
+              "$ref": "#/$defs/KnowledgeReference"
+            },
+            "dataAssetRefs": {
+              "type": "array",
+              "maxItems": 256,
+              "items": {
+                "$ref": "#/$defs/KnowledgeReference"
+              }
+            },
+            "memberBindings": {
+              "type": "array",
+              "maxItems": 256,
+              "items": {
+                "$ref": "#/$defs/KnowledgeMemberBinding"
+              }
+            },
+            "joinContractIds": {
+              "type": "array",
+              "maxItems": 256,
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "description": "Type-specific knowledge contract. Drafts may be incomplete. Fields are restricted by assetType and publication validates completeness."
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "KnowledgeReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "assetId",
+        "revisionId",
+        "releaseId"
+      ],
+      "properties": {
+        "assetId": {
+          "$ref": "#/$defs/ResourceId"
+        },
+        "revisionId": {
+          "$ref": "#/$defs/ResourceId"
+        },
+        "releaseId": {
+          "$ref": "#/$defs/ResourceId"
+        },
+        "memberId": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        }
+      }
+    },
+    "KnowledgeMember": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "name": {
+          "type": "string"
+        },
+        "valueType": {
+          "type": "string",
+          "enum": [
+            "string",
+            "number",
+            "integer",
+            "boolean",
+            "date",
+            "timestamp"
+          ]
+        },
+        "nullPolicy": {
+          "type": "string",
+          "enum": [
+            "required",
+            "unknown",
+            "excluded"
+          ]
+        },
+        "historyPolicy": {
+          "type": "string",
+          "enum": [
+            "stable",
+            "current_value",
+            "event_time"
+          ]
+        },
+        "sourceFieldRef": {
+          "$ref": "#/$defs/PhysicalReference"
+        }
+      }
+    },
+    "KnowledgeExpression": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "op"
+      ],
+      "properties": {
+        "op": {
+          "type": "string",
+          "enum": [
+            "ref",
+            "parameter",
+            "literal",
+            "add",
+            "subtract",
+            "multiply",
+            "divide",
+            "eq",
+            "neq",
+            "lt",
+            "lte",
+            "gt",
+            "gte",
+            "and",
+            "or"
+          ]
+        },
+        "ref": {
+          "$ref": "#/$defs/KnowledgeReference"
+        },
+        "parameter": {
+          "type": "string"
+        },
+        "value": {
+          "$ref": "#/$defs/JSONValue"
+        },
+        "left": {
+          "$ref": "#/$defs/KnowledgeExpression"
+        },
+        "right": {
+          "$ref": "#/$defs/KnowledgeExpression"
+        }
+      }
+    },
+    "KnowledgeParameter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "type",
+        "required"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "string",
+            "number",
+            "integer",
+            "boolean",
+            "date",
+            "timestamp"
+          ]
+        },
+        "required": {
+          "type": "boolean"
+        }
+      }
+    },
+    "KnowledgeMemberBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "semanticRef",
+        "dataRef"
+      ],
+      "properties": {
+        "semanticRef": {
+          "$ref": "#/$defs/KnowledgeReference"
+        },
+        "dataRef": {
+          "$ref": "#/$defs/KnowledgeReference"
+        }
+      }
     }
   },
   "$id": "semlia.production-suggestions/v1",

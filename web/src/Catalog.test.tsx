@@ -1,9 +1,12 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, vi } from "vitest";
 
 import { App } from "./App";
 import { CatalogRuntimeProvider, useCatalogRuntime } from "./catalogRuntime";
+import { listWorkspaces } from "./catalog";
+import { getSession } from "./identity";
+import { SessionAccountControl, SessionRuntimeProvider } from "./sessionRuntime";
 
 
 const { workspace, asset, listAssetsMock, getAssetMock, listAssetRevisionsMock, listAssetAuthorityRecordsMock, createWorkspaceMock, createAssetMock, session } = vi.hoisted(() => ({
@@ -38,7 +41,7 @@ const { workspace, asset, listAssetsMock, getAssetMock, listAssetRevisionsMock, 
       displayName: "Semantic Core",
       principalId: "prn_01arz3ndektsv4rrffq69g5fav",
       roleIds: ["workspace_admin"],
-      capabilities: ["workspace.read", "workspace.manage", "asset.read"],
+      capabilities: ["workspace.read" as const, "workspace.manage" as const, "asset.read" as const],
       authorizationVersion: 1,
     }],
     expiresAt: "2026-09-04T18:00:00Z",
@@ -151,6 +154,8 @@ const defaultListAssetRevisionsImplementation = listAssetRevisionsMock.getMockIm
 const defaultListAssetAuthorityRecordsImplementation = listAssetAuthorityRecordsMock.getMockImplementation();
 
 afterEach(() => {
+  vi.mocked(getSession).mockResolvedValue(session);
+  vi.mocked(listWorkspaces).mockResolvedValue([workspace]);
   if (defaultGetAssetImplementation) getAssetMock.mockImplementation(defaultGetAssetImplementation);
   if (defaultListAssetsImplementation) listAssetsMock.mockImplementation(defaultListAssetsImplementation);
   if (defaultListAssetRevisionsImplementation) listAssetRevisionsMock.mockImplementation(defaultListAssetRevisionsImplementation);
@@ -158,6 +163,7 @@ afterEach(() => {
   createWorkspaceMock.mockReset();
   createAssetMock.mockReset();
   window.history.replaceState({}, "", "/");
+  window.sessionStorage.clear();
 });
 
 function CatalogCreationProbe() {
@@ -178,7 +184,77 @@ function CatalogProjectionProbe() {
   </div>;
 }
 
+function CatalogWorkspaceProbe() {
+  const runtime = useCatalogRuntime();
+  return <>
+    <SessionAccountControl />
+    <button onClick={() => void runtime.ensureAsset(asset.id)}>读取旧详情</button>
+    <button onClick={() => void runtime.ensureRevisions(asset.id)}>读取旧修订</button>
+    <button onClick={() => void runtime.loadMoreAssets()}>更多旧资产</button>
+    <button onClick={() => void runtime.loadMoreRevisions(asset.id)}>更多旧修订</button>
+    <button onClick={() => void runtime.loadMoreAuthorityRecords(asset.id, "validation")}>更多旧权威记录</button>
+    <output data-testid="workspace-state">{JSON.stringify({ workspaceId: runtime.workspaceId, assets: runtime.assets.map(item => item.name), ids: runtime.catalogAssetIds, details: runtime.detailStates, revisions: runtime.revisionStates, authority: runtime.authorityPageStates, cursor: runtime.nextCursor })}</output>
+  </>;
+}
+
 describe("production catalog", () => {
+  it("follows account-menu workspace selection and discards old catalog, detail and paging responses", async () => {
+    const nextWorkspace = { ...workspace, id: "wsp_01arz3ndektsv4rrffq69g5faw", displayName: "合成演示工作区" };
+    vi.mocked(getSession).mockResolvedValue({ ...session, workspaces: [...session.workspaces, { ...session.workspaces[0], ...nextWorkspace }] });
+    vi.mocked(listWorkspaces).mockResolvedValue([workspace, nextWorkspace]);
+    const detail = await defaultGetAssetImplementation!();
+    const oldDetail = { ...detail, authoritySections: detail.authoritySections.map((section: { kind: string }) => section.kind === "validation" ? { ...section, recordsPage: { limit: 1, nextCursor: "authority-next" } } : section) };
+    getAssetMock.mockResolvedValue(oldDetail);
+    listAssetRevisionsMock.mockResolvedValue({ items: [detail.currentRevision], page: { limit: 1, nextCursor: "revision-next" } });
+    const oldPage = { items: [asset], page: { limit: 1, nextCursor: "asset-next" } };
+    const deferred = () => {
+      let resolve!: (value: unknown) => void;
+      const promise = new Promise(resolvePromise => { resolve = resolvePromise; });
+      return { promise, resolve };
+    };
+    const oldAppend = deferred();
+    const oldDetailRequest = deferred();
+    const oldRevisions = deferred();
+    const oldAuthority = deferred();
+    const newPage = deferred();
+    listAssetsMock.mockImplementation((id: string, _query: string, _type: string, cursor?: string) => id === nextWorkspace.id ? newPage.promise : cursor ? oldAppend.promise : Promise.resolve(oldPage));
+    const user = userEvent.setup();
+    render(<SessionRuntimeProvider><CatalogRuntimeProvider><CatalogWorkspaceProbe /></CatalogRuntimeProvider></SessionRuntimeProvider>);
+    const state = () => JSON.parse(screen.getByTestId("workspace-state").textContent!);
+    await waitFor(() => expect(state().assets).toEqual([asset.title]));
+    await user.click(screen.getByRole("button", { name: "读取旧详情" }));
+    await waitFor(() => expect(state().details[asset.id].state).toBe("ready"));
+    await user.click(screen.getByRole("button", { name: "读取旧修订" }));
+    await waitFor(() => expect(state().revisions[asset.id].state).toBe("ready"));
+
+    getAssetMock.mockReturnValueOnce(oldDetailRequest.promise);
+    listAssetRevisionsMock.mockReturnValueOnce(oldRevisions.promise);
+    listAssetAuthorityRecordsMock.mockReturnValueOnce(oldAuthority.promise);
+    await user.click(screen.getByRole("button", { name: "读取旧详情" }));
+    await user.click(screen.getByRole("button", { name: "更多旧修订" }));
+    await user.click(screen.getByRole("button", { name: "更多旧权威记录" }));
+    await user.click(screen.getByRole("button", { name: "更多旧资产" }));
+    await user.click(screen.getByLabelText("账户 Catalog Admin"));
+    await user.click(screen.getByRole("radio", { name: "合成演示工作区" }));
+
+    const emptyState = { workspaceId: nextWorkspace.id, assets: [], ids: [], details: {}, revisions: {}, authority: {} };
+    expect(state()).toEqual(emptyState);
+    await waitFor(() => expect(listAssetsMock).toHaveBeenCalledWith(nextWorkspace.id, "", "", undefined, expect.any(AbortSignal)));
+    await act(async () => {
+      oldAppend.resolve(oldPage);
+      oldDetailRequest.resolve(oldDetail);
+      oldRevisions.resolve({ items: [detail.currentRevision], page: { limit: 1 } });
+      oldAuthority.resolve({ items: [], page: { limit: 1 } });
+    });
+    expect(state()).toEqual(emptyState);
+    await act(async () => newPage.resolve({ items: [{ ...asset, id: "ast_01arz3ndektsv4rrffq69g5faw", title: "演示订单" }], page: { limit: 100, total: 1 } }));
+    expect(state().assets).toEqual(["演示订单"]);
+    expect(state().ids).toEqual(["ast_01arz3ndektsv4rrffq69g5faw"]);
+    expect(state().details).toEqual({});
+    expect(state().revisions).toEqual({});
+    expect(state().authority).toEqual({});
+  });
+
   it("keeps the request fingerprint aligned after creating a workspace and its first asset", async () => {
     const createdWorkspace = { ...workspace, id: "wsp_01arz3ndektsv4rrffq69g5faw", slug: "new-space", displayName: "New space" };
     const implementation = getAssetMock.getMockImplementation();
@@ -261,8 +337,8 @@ describe("production catalog", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    expect(await screen.findByRole("button", { name: "知识资产" })).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "知识资产" }));
+    expect(await screen.findByRole("button", { name: "知识库" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "知识库" }));
     expect((await screen.findAllByText("Net revenue")).length).toBeGreaterThan(0);
     expect(screen.getByText("net_revenue")).toBeVisible();
     expect(screen.getByRole("button", { name: "打开语义资产 Net revenue" })).toHaveTextContent("待确认");
@@ -324,7 +400,7 @@ describe("production catalog", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(await screen.findByRole("button", { name: "知识资产" }));
+    await user.click(await screen.findByRole("button", { name: "知识库" }));
     await user.click(await screen.findByRole("button", { name: "打开语义资产 Net revenue" }));
     const assetDetail = await screen.findByRole("region", { name: "语义资产详情" });
     const authority = screen.getByRole("region", { name: "资产权威分区" });
@@ -370,7 +446,7 @@ describe("production catalog", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(await screen.findByRole("button", { name: "知识资产" }));
+    await user.click(await screen.findByRole("button", { name: "知识库" }));
     await user.click(await screen.findByRole("button", { name: "打开语义资产 Net revenue" }));
     const assetDetail = await screen.findByRole("region", { name: "语义资产详情" });
     expect(assetDetail).toHaveTextContent("生产");
@@ -401,7 +477,7 @@ describe("production catalog", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(await screen.findByRole("button", { name: "知识资产" }));
+    await user.click(await screen.findByRole("button", { name: "知识库" }));
     await user.click(await screen.findByRole("button", { name: "打开语义资产 Net revenue" }));
     await user.click(await screen.findByRole("tab", { name: "本体关系" }));
     const relations = screen.getByRole("region", { name: "权威语义关系" });
@@ -424,7 +500,7 @@ describe("production catalog", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(await screen.findByRole("button", { name: "知识资产" }));
+    await user.click(await screen.findByRole("button", { name: "知识库" }));
     await waitFor(() => expect(document.querySelector(".catalog-summary")).toHaveTextContent("已加载 1 / 2 个语义资产"));
     await user.click(screen.getByRole("button", { name: "加载更多资产" }));
     expect(await screen.findByRole("button", { name: "打开语义资产 Gross revenue" })).toBeVisible();
@@ -451,7 +527,7 @@ describe("production catalog", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(await screen.findByRole("button", { name: "知识资产" }));
+    await user.click(await screen.findByRole("button", { name: "知识库" }));
     await user.click(await screen.findByRole("button", { name: "加载更多资产" }));
     await user.type(screen.getByRole("searchbox", { name: "搜索知识目录" }), "Fresh");
     expect(await screen.findByRole("button", { name: "打开语义资产 Fresh metric" })).toBeVisible();
@@ -484,7 +560,7 @@ describe("production catalog", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(await screen.findByRole("button", { name: "知识资产" }));
+    await user.click(await screen.findByRole("button", { name: "知识库" }));
     await user.click(await screen.findByRole("button", { name: "打开语义资产 Net revenue" }));
     await user.click(await screen.findByRole("tab", { name: "实现" }));
     expect(screen.getByText("gross_amount - refunds")).toBeVisible();
@@ -509,12 +585,12 @@ describe("production catalog", () => {
     listAssetsMock.mockClear();
     render(<App />);
 
-    await user.click(await screen.findByRole("button", { name: "知识资产" }));
+    await user.click(await screen.findByRole("button", { name: "知识库" }));
     await waitFor(() => expect(listAssetsMock).toHaveBeenCalledTimes(1));
     await user.click(screen.getByRole("button", { name: "刷新知识目录" }));
 
     await waitFor(() => expect(listAssetsMock).toHaveBeenCalledTimes(2));
-    await user.click(screen.getByRole("button", { name: "知识资产" }));
+    await user.click(screen.getByRole("button", { name: "知识库" }));
     expect(screen.getByRole("button", { name: "打开语义资产 Net revenue" })).toBeVisible();
   });
 
@@ -523,7 +599,7 @@ describe("production catalog", () => {
     getAssetMock.mockRejectedValueOnce(new Error("catalog authority unavailable"));
     render(<App />);
 
-    await user.click(await screen.findByRole("button", { name: "知识资产" }));
+    await user.click(await screen.findByRole("button", { name: "知识库" }));
     await user.click(await screen.findByRole("button", { name: "打开语义资产 Net revenue" }));
     const failure = await screen.findByRole("alert");
     expect(failure).toHaveTextContent("资产详情读取失败");

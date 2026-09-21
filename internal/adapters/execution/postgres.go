@@ -88,7 +88,7 @@ func (p *Postgres) Execute(parent context.Context, w identity.WorkspaceID, q d.C
 	// A DSN must not install SQL tracing or change the compiler's search path.
 	cfg.Tracer = nil
 	cfg.DefaultQueryExecMode = pgx.QueryExecModeExec
-	cfg.RuntimeParams = map[string]string{"application_name": "semlia-execution", "default_transaction_read_only": "on", "search_path": "pg_catalog", "statement_timeout": strconv.FormatInt(l.Timeout.Milliseconds(), 10), "lock_timeout": strconv.FormatInt(l.Timeout.Milliseconds(), 10)}
+	cfg.RuntimeParams = map[string]string{"application_name": "semlia-execution", "default_transaction_read_only": "on", "search_path": "pg_catalog", "TimeZone": "UTC", "statement_timeout": strconv.FormatInt(l.Timeout.Milliseconds(), 10), "lock_timeout": strconv.FormatInt(l.Timeout.Milliseconds(), 10)}
 	cfg.ConnectTimeout = l.Timeout
 	ctx, cancel := context.WithTimeout(parent, l.Timeout)
 	defer cancel()
@@ -101,7 +101,7 @@ func (p *Postgres) Execute(parent context.Context, w identity.WorkspaceID, q d.C
 		defer c()
 		_ = conn.Close(closeCtx)
 	}()
-	tx, err := conn.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly})
+	tx, err := conn.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly, IsoLevel: pgx.RepeatableRead})
 	if err != nil {
 		return fail(classify(parent, ctx, err))
 	}
@@ -125,6 +125,15 @@ func (p *Postgres) Execute(parent context.Context, w identity.WorkspaceID, q d.C
 				return fail(classify(parent, ctx, err))
 			}
 			return fail("EXECUTION_RELATION_UNSAFE")
+		}
+	}
+	for _, guard := range q.Guards {
+		var valid bool
+		if err := tx.QueryRow(ctx, guard).Scan(&valid); err != nil || !valid {
+			if ctx.Err() != nil {
+				return fail(classify(parent, ctx, err))
+			}
+			return fail("EXECUTION_GRAIN_OR_NULL_VIOLATION")
 		}
 	}
 	rows, err := tx.Query(ctx, q.SQL, q.Args...)

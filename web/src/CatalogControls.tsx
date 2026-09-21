@@ -1,17 +1,19 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { createPortal } from "react-dom";
 import { CircleAlert, Database, LoaderCircle, Plus, RefreshCw, X } from "lucide-react";
 
 import type { SemanticAssetType } from "./catalog";
 import { useCatalogRuntime } from "./catalogRuntime";
+import { KnowledgeSpecEditor } from "./KnowledgeSpecEditor";
+import { KnowledgeSourcePicker, type KnowledgeSourceMember } from "./KnowledgeSourcePicker";
+import { initialKnowledgeSpec, type KnowledgeSpec } from "./knowledge";
 
 const assetTypes: Array<{ value: SemanticAssetType; label: string }> = [
-  { value: "concept", label: "业务概念" },
-  { value: "entity", label: "业务实体" },
-  { value: "semantic_model", label: "语义模型" },
-  { value: "dimension", label: "维度" },
-  { value: "measure", label: "度量" },
+  { value: "business_object", label: "业务对象" },
+  { value: "business_term", label: "业务口径" },
   { value: "metric", label: "指标" },
-  { value: "segment", label: "分群" },
+  { value: "data_asset", label: "数据资产" },
+  { value: "analysis_model", label: "分析模型" },
 ];
 
 export function CatalogWorkspaceControl() {
@@ -43,10 +45,10 @@ export function CatalogDataNotice() {
 export function CreateCatalogAssetButton({ onCreated, compact = true }: { onCreated?: (assetId: string) => void; compact?: boolean }) {
   const [open, setOpen] = useState(false);
   return <>
-    <button className={compact ? "icon-button catalog-create-button" : "primary-button"} type="button" title="新建语义资产" aria-label="新建语义资产" onClick={() => setOpen(true)}>
-      <Plus size={16} />{!compact && <span>新建语义资产</span>}
+    <button className={compact ? "icon-button catalog-create-button" : "primary-button"} type="button" title="新建知识" aria-label="新建知识" onClick={() => setOpen(true)}>
+      <Plus size={16} />{!compact && <span>新建知识</span>}
     </button>
-    {open && <CreateAssetDialog onClose={() => setOpen(false)} onCreated={(assetId) => { setOpen(false); onCreated?.(assetId); }} />}
+    {open && createPortal(<CreateAssetDialog onClose={() => setOpen(false)} onCreated={(assetId) => { setOpen(false); onCreated?.(assetId); }} />, document.body)}
   </>;
 }
 
@@ -108,18 +110,27 @@ function RuntimeState({ icon, title, detail, danger = false }: { icon: React.Rea
 }
 
 function CreateAssetDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (assetId: string) => void }) {
-  const { createAsset } = useCatalogRuntime();
+  const { createAsset, workspaceId } = useCatalogRuntime();
+  const [members, setMembers] = useState<KnowledgeSourceMember[]>([]);
   const [address, setAddress] = useState("commerce.");
   const [title, setTitle] = useState("");
   const [summary, setSummary] = useState("");
   const [assetType, setAssetType] = useState<SemanticAssetType>("metric");
+  const [scope, setScope] = useState("");
+  const [spec, setSpec] = useState<KnowledgeSpec>(() => initialKnowledgeSpec("metric"));
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const dialog = useRef<HTMLFormElement>(null);
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    dialog.current?.querySelector<HTMLInputElement>("input")?.focus();
+    return () => { previous?.focus(); };
+  }, []);
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setSubmitting(true);
     try {
-      const asset = await createAsset({ address: address.trim(), title: title.trim(), summary: summary.trim(), assetType });
+      const asset = await createAsset({ address: address.trim(), title: title.trim(), summary: summary.trim(), assetType, scope, spec });
       onCreated(asset.id);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "无法创建语义资产。");
@@ -128,16 +139,26 @@ function CreateAssetDialog({ onClose, onCreated }: { onClose: () => void; onCrea
     }
   };
   return (
-    <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <form className="catalog-create-dialog" role="dialog" aria-modal="true" aria-labelledby="catalog-create-title" onSubmit={(event) => void submit(event)}>
-        <header><div><span className="panel-kicker">M1 Semantic Registry</span><h2 id="catalog-create-title">新建语义资产</h2></div><button className="icon-button" type="button" aria-label="关闭" onClick={onClose}><X size={17} /></button></header>
-        <div className="catalog-persistence-notice"><Database size={16} /><span>保存后写入 PostgreSQL，并生成公开资产与修订 TypeID。</span></div>
+    <div className="dialog-backdrop catalog-create-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <form ref={dialog} className="catalog-create-dialog" role="dialog" aria-modal="true" aria-labelledby="catalog-create-title" onSubmit={(event) => void submit(event)} onKeyDown={(event) => {
+        if (!dialog.current?.contains(event.target as Node)) return;
+        if (event.key === "Escape" && !submitting) { event.stopPropagation(); onClose(); }
+        if (event.key !== "Tab") return;
+        const controls = Array.from(dialog.current.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary')).filter((item) => !item.closest("details:not([open])") || item.tagName === "SUMMARY");
+        const first = controls[0], last = controls.at(-1);
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+      }}>
+        <header><div><span className="panel-kicker">知识草稿</span><h2 id="catalog-create-title">新建知识</h2></div><button className="icon-button" type="button" aria-label="关闭" onClick={onClose}><X size={17} /></button></header>
         {error && <div className="catalog-runtime-error" role="alert"><CircleAlert size={15} />{error}</div>}
         <div className="catalog-create-fields">
           <label><span>语义地址</span><input required value={address} onChange={(event) => setAddress(event.target.value)} placeholder="commerce.net_revenue" /></label>
-          <label><span>资产类型</span><select value={assetType} onChange={(event) => setAssetType(event.target.value as SemanticAssetType)}>{assetTypes.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
+          <label><span>资产类型</span><select aria-label="资产类型" value={assetType} onChange={(event) => { const type = event.target.value as SemanticAssetType; setAssetType(type); setSpec(initialKnowledgeSpec(type)); }}>{assetTypes.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
           <label><span>显示名称</span><input required value={title} onChange={(event) => setTitle(event.target.value)} placeholder="净收入" /></label>
           <label><span>规范摘要</span><textarea required value={summary} onChange={(event) => setSummary(event.target.value)} placeholder="声明业务含义、范围与关键排除项。" /></label>
+          <label><span>适用范围</span><textarea value={scope} onChange={(event) => setScope(event.target.value)} /></label>
+          {assetType === "data_asset" && <KnowledgeSourcePicker workspaceId={workspaceId} onMembers={setMembers} />}
+          <KnowledgeSpecEditor type={assetType} value={spec} onChange={setSpec} members={members} workspaceId={workspaceId} />
         </div>
         <footer><button className="secondary-button" type="button" onClick={onClose}>取消</button><button className="primary-button" type="submit" disabled={submitting}>{submitting ? "写入中" : "创建并打开"}</button></footer>
       </form>

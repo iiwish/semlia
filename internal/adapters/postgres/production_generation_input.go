@@ -130,58 +130,25 @@ func productionGenerationFactsTx(ctx context.Context, tx pgx.Tx, w identity.Work
 	if err := json.Unmarshal(inputRaw, &input); err != nil {
 		return nil, err
 	}
-	members := []map[string]any{}
-	total := 0
-	for _, snapshot := range input.Snapshots {
-		rows, err := tx.Query(ctx, `SELECT m.kind,m.object_id,m.revision_id,m.historical_name,m.historical_locator,m.content_digest,m.parent_object_id,m.parent_revision_id,
-		CASE m.kind WHEN 'dataset' THEN jsonb_build_object('datasetKind',d.dataset_kind)
-		WHEN 'field' THEN jsonb_build_object('dataType',f.data_type,'nullable',f.nullable,'ordinal',f.ordinal)
-		WHEN 'code' THEN CASE WHEN octet_length(c.content_bytes)<=1048576 THEN jsonb_build_object('language',c.language,'content',convert_from(c.content_bytes,'UTF8')) END
-		WHEN 'lineage' THEN jsonb_build_object('kind',l.edge_kind) END
-		FROM source_snapshot_members m
-		LEFT JOIN physical_dataset_revisions d ON m.kind='dataset' AND d.workspace_id=m.workspace_id AND d.id=m.revision_id
-		LEFT JOIN physical_field_revisions f ON m.kind='field' AND f.workspace_id=m.workspace_id AND f.id=m.revision_id
-		LEFT JOIN source_code_revisions c ON m.kind='code' AND c.workspace_id=m.workspace_id AND c.id=m.revision_id
-		LEFT JOIN source_lineage_revisions l ON m.kind='lineage' AND l.workspace_id=m.workspace_id AND l.id=m.revision_id
-		WHERE m.workspace_id=$1 AND m.snapshot_id=$2 AND m.coverage_key=ANY($3::text[]) ORDER BY m.kind,m.object_id LIMIT 2001`, w.UUID(), mustSnapshotUUID(snapshot.SnapshotID), snapshot.CoverageKeys)
+	// Candidates per snapshot, so fact aggregation can be scoped to the
+	// objects the draft actually references. Coverage units on large sources
+	// (tens of thousands of members) otherwise blow the 1MB prompt budget for
+	// every generation, manual and batched alike.
+	candidateIDsBySnapshot := map[string][]string{}
+	for _, candidate := range input.Candidates {
+		id, err := identity.ParseSemanticCandidateID(candidate.CandidateID)
 		if err != nil {
 			return nil, err
 		}
-		for rows.Next() {
-			var kind, name, locator, digest string
-			var id, revision, parent, parentRevision pgtype.UUID
-			var content json.RawMessage
-			if err := rows.Scan(&kind, &id, &revision, &name, &locator, &digest, &parent, &parentRevision, &content); err != nil {
-				rows.Close()
-				return nil, err
-			}
-			prefixes := map[string][2]identity.Prefix{"dataset": {identity.PhysicalDataset, identity.PhysicalDatasetRevision}, "field": {identity.PhysicalField, identity.PhysicalFieldRevision}, "code": {identity.CodeArtifact, identity.SourceCodeRevision}, "lineage": {identity.LineageEdge, identity.SourceLineageRevision}}
-			p, ok := prefixes[kind]
-			if !ok || len(content) == 0 {
-				rows.Close()
-				return nil, domain.ErrInputIncomplete
-			}
-			entry := map[string]any{"snapshotId": snapshot.SnapshotID, "kind": kind, "objectId": snapshotWireID(p[0], id), "revisionId": snapshotWireID(p[1], revision), "name": name, "locator": locator, "digest": digest, "content": content}
-			if parent.Valid {
-				entry["parentObjectId"] = snapshotWireID(identity.PhysicalDataset, parent)
-				entry["parentRevisionId"] = snapshotWireID(identity.PhysicalDatasetRevision, parentRevision)
-			}
-			raw, err := json.Marshal(entry)
-			if err != nil {
-				rows.Close()
-				return nil, err
-			}
-			total += len(raw)
-			members = append(members, entry)
-			if total > 1<<20 || len(members) > 2000 {
-				rows.Close()
-				return nil, domain.ErrLimitExceeded
-			}
-		}
-		rows.Close()
-		if err := rows.Err(); err != nil {
+		candidateIDsBySnapshot[candidate.SnapshotID] = append(candidateIDsBySnapshot[candidate.SnapshotID], id.UUID())
+	}
+	members := []map[string]any{}
+	for _, snapshot := range input.Snapshots {
+		entries, err := snapshotGenerationMembersTx(ctx, tx, w, snapshot, candidateIDsBySnapshot[snapshot.SnapshotID])
+		if err != nil {
 			return nil, err
 		}
+		members = append(members, entries...)
 	}
 	candidates := []json.RawMessage{}
 	for _, candidate := range input.Candidates {
@@ -217,6 +184,108 @@ func productionGenerationFactsTx(ctx context.Context, tx pgx.Tx, w identity.Work
 		return nil, domain.ErrLimitExceeded
 	}
 	return raw, nil
+}
+
+// generationMembersQuery returns the member projection shared by the scoped
+// and unscoped fact aggregation paths.
+const generationMembersQuery = `SELECT m.kind,m.object_id,m.revision_id,m.historical_name,m.historical_locator,m.content_digest,m.parent_object_id,m.parent_revision_id,
+		CASE m.kind WHEN 'dataset' THEN jsonb_build_object('datasetKind',d.dataset_kind)
+		WHEN 'field' THEN jsonb_build_object('dataType',f.data_type,'nullable',f.nullable,'ordinal',f.ordinal)
+		WHEN 'code' THEN CASE WHEN octet_length(c.content_bytes)<=1048576 THEN jsonb_build_object('language',c.language,'content',convert_from(c.content_bytes,'UTF8')) END
+		WHEN 'lineage' THEN jsonb_build_object('kind',l.edge_kind) END
+		FROM source_snapshot_members m
+		LEFT JOIN physical_dataset_revisions d ON m.kind='dataset' AND d.workspace_id=m.workspace_id AND d.id=m.revision_id
+		LEFT JOIN physical_field_revisions f ON m.kind='field' AND f.workspace_id=m.workspace_id AND f.id=m.revision_id
+		LEFT JOIN source_code_revisions c ON m.kind='code' AND c.workspace_id=m.workspace_id AND c.id=m.revision_id
+		LEFT JOIN source_lineage_revisions l ON m.kind='lineage' AND l.workspace_id=m.workspace_id AND l.id=m.revision_id
+		WHERE m.workspace_id=$1 AND m.snapshot_id=$2 AND m.coverage_key=ANY($3::text[])`
+
+// snapshotGenerationMembersTx aggregates the pinned members of one snapshot.
+// When the input references candidates, aggregation is scoped to the
+// candidates' datasets and their direct fields: coverage units on large
+// sources hold tens of thousands of members and would exceed the 1MB prompt
+// budget regardless of provider. Sources whose candidates do not map to
+// members keep the previous whole-unit behavior via the fallback query.
+func snapshotGenerationMembersTx(
+	ctx context.Context, tx pgx.Tx, w identity.WorkspaceID,
+	snapshot struct {
+		SourceID     string   `json:"sourceId"`
+		SnapshotID   string   `json:"snapshotId"`
+		Digest       string   `json:"digest"`
+		CoverageKeys []string `json:"coverageKeys"`
+	},
+	candidateIDs []string,
+) ([]map[string]any, error) {
+	collect := func(rows pgx.Rows) ([]map[string]any, bool, error) {
+		defer rows.Close()
+		entries := []map[string]any{}
+		total := 0
+		for rows.Next() {
+			var kind, name, locator, digest string
+			var id, revision, parent, parentRevision pgtype.UUID
+			var content json.RawMessage
+			if err := rows.Scan(&kind, &id, &revision, &name, &locator, &digest, &parent, &parentRevision, &content); err != nil {
+				return nil, false, err
+			}
+			prefixes := map[string][2]identity.Prefix{"dataset": {identity.PhysicalDataset, identity.PhysicalDatasetRevision}, "field": {identity.PhysicalField, identity.PhysicalFieldRevision}, "code": {identity.CodeArtifact, identity.SourceCodeRevision}, "lineage": {identity.LineageEdge, identity.SourceLineageRevision}}
+			p, ok := prefixes[kind]
+			if !ok || len(content) == 0 {
+				return nil, false, domain.ErrInputIncomplete
+			}
+			entry := map[string]any{"snapshotId": snapshot.SnapshotID, "kind": kind, "objectId": snapshotWireID(p[0], id), "revisionId": snapshotWireID(p[1], revision), "name": name, "locator": locator, "digest": digest, "content": content}
+			if parent.Valid {
+				entry["parentObjectId"] = snapshotWireID(identity.PhysicalDataset, parent)
+				entry["parentRevisionId"] = snapshotWireID(identity.PhysicalDatasetRevision, parentRevision)
+			}
+			raw, err := json.Marshal(entry)
+			if err != nil {
+				return nil, false, err
+			}
+			total += len(raw)
+			entries = append(entries, entry)
+			if total > 1<<20 || len(entries) > 2000 {
+				return nil, false, domain.ErrLimitExceeded
+			}
+		}
+		return entries, len(entries) > 0, rows.Err()
+	}
+
+	if len(candidateIDs) > 0 {
+		rows, err := tx.Query(ctx, generationMembersQuery+`
+		AND (
+			m.historical_name IN (
+				SELECT split_part(c2.candidate_key, ':', 3) FROM semantic_candidates c2
+				WHERE c2.workspace_id=$1 AND c2.id=ANY($4::uuid[])
+			)
+			OR m.parent_object_id IN (
+				SELECT m2.object_id FROM source_snapshot_members m2
+				WHERE m2.workspace_id=$1 AND m2.snapshot_id=$2
+				  AND m2.historical_name IN (
+					SELECT split_part(c2.candidate_key, ':', 3) FROM semantic_candidates c2
+					WHERE c2.workspace_id=$1 AND c2.id=ANY($4::uuid[])
+				  )
+			)
+		) ORDER BY m.kind,m.object_id LIMIT 2001`,
+			w.UUID(), mustSnapshotUUID(snapshot.SnapshotID), snapshot.CoverageKeys, candidateIDs)
+		if err != nil {
+			return nil, err
+		}
+		entries, found, err := collect(rows)
+		if err != nil {
+			return nil, err
+		}
+		if found {
+			return entries, nil
+		}
+	}
+
+	rows, err := tx.Query(ctx, generationMembersQuery+` ORDER BY m.kind,m.object_id LIMIT 2001`,
+		w.UUID(), mustSnapshotUUID(snapshot.SnapshotID), snapshot.CoverageKeys)
+	if err != nil {
+		return nil, err
+	}
+	entries, _, err := collect(rows)
+	return entries, err
 }
 
 func generationRepositoryError(err error) error {

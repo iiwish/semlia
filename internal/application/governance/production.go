@@ -452,7 +452,7 @@ func (s *ProductionService) createOperation(ctx context.Context, cmd CreateOpera
 					identityKey = fmt.Sprintf("default.%s", decl.LocalKey)
 				}
 				ns, k := parseNamespaceAndKey(identityKey)
-				aType := "concept"
+				aType := "business_term"
 				if len(decl.Content) > 0 {
 					var cm map[string]any
 					if err := json.Unmarshal(decl.Content, &cm); err == nil {

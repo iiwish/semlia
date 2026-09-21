@@ -26,8 +26,8 @@ func TestAuthorizationVocabularySeedsNineSystemRolesIdempotently(t *testing.T) {
 	if err := pool.QueryRow(ctx, "SELECT count(*) FROM roles WHERE category = 'system'").Scan(&roleCount); err != nil {
 		t.Fatal(err)
 	}
-	if roleCount != 9 {
-		t.Fatalf("system role count = %d, want the nine FR-004 roles", roleCount)
+	if roleCount != 10 {
+		t.Fatalf("system role count = %d, want nine FR-004 roles plus agent_author", roleCount)
 	}
 	var humanRequired int
 	if err := pool.QueryRow(ctx, "SELECT count(*) FROM actions WHERE requires_human").Scan(&humanRequired); err != nil {

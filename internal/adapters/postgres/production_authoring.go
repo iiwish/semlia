@@ -237,7 +237,7 @@ func reserveReplacementTargets(ctx context.Context, tx pgx.Tx, workspace, operat
 				namespace, key = key[:separator], key[separator+1:]
 			}
 			_, err = tx.Exec(ctx, `INSERT INTO semantic_assets(id,workspace_id,namespace,key,asset_type,lifecycle_state,current_revision_id,created_at,updated_at)
-			VALUES($1,$2,$3,$4,COALESCE($5::jsonb->>'assetType','concept'),'draft',NULL,clock_timestamp(),clock_timestamp()) ON CONFLICT (id) DO NOTHING`, id, workspace, namespace, key, target.ContentJSON)
+			VALUES($1,$2,$3,$4,$5::jsonb->>'assetType','draft',NULL,clock_timestamp(),clock_timestamp()) ON CONFLICT (id) DO NOTHING`, id, workspace, namespace, key, target.ContentJSON)
 			if err != nil {
 				return governanceRepositoryError("insert replacement asset identity", err)
 			}

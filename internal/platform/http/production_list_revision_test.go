@@ -35,7 +35,7 @@ func (r *productionListRevisionRepo) GetProductionOperationVersion(_ context.Con
 	if version != 1 {
 		return domain.ProductionOperation{}, domain.ProductionVersion{}, nil, nil, nil, domain.ErrNotFound
 	}
-	return r.listed, domain.ProductionVersion{Version: 1}, []domain.ProductionTarget{{LocalKey: "original"}}, nil, nil, nil
+	return r.listed, domain.ProductionVersion{Version: 1}, []domain.ProductionTarget{{LocalKey: "original", Declaration: &domain.TargetDeclaration{Title: "Revenue", Kind: "semantic_asset"}}}, nil, nil, nil
 }
 
 func TestProductionListKeepsSelectedVersionDuringReplacement(t *testing.T) {
@@ -63,15 +63,21 @@ func TestProductionListKeepsSelectedVersionDuringReplacement(t *testing.T) {
 	}
 	var page struct {
 		Items []struct {
-			CurrentVersion int  `json:"currentVersion"`
-			TargetCount    int  `json:"targetCount"`
-			Frozen         bool `json:"frozen"`
+			Superseded     *bool    `json:"superseded"`
+			ProposalIDs    []string `json:"proposalIds"`
+			Title          string   `json:"title"`
+			CurrentVersion int      `json:"currentVersion"`
+			TargetCount    int      `json:"targetCount"`
+			Frozen         bool     `json:"frozen"`
 		} `json:"items"`
 	}
 	if err := json.Unmarshal(response.Body.Bytes(), &page); err != nil {
 		t.Fatal(err)
 	}
-	if len(page.Items) != 1 || page.Items[0].CurrentVersion != 1 || page.Items[0].TargetCount != 1 || page.Items[0].Frozen {
+	if len(page.Items) != 1 || page.Items[0].Title != "Revenue" || page.Items[0].CurrentVersion != 1 || page.Items[0].TargetCount != 1 || page.Items[0].Frozen {
 		t.Fatalf("list mixed selected and later version: %s", response.Body.String())
+	}
+	if page.Items[0].Superseded == nil || *page.Items[0].Superseded || page.Items[0].ProposalIDs == nil {
+		t.Fatalf("missing authoritative inbox metadata: %s", response.Body.String())
 	}
 }

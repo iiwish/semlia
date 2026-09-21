@@ -12,6 +12,7 @@ import (
 	dbgen "github.com/iiwish/semlia/internal/adapters/postgres/sqlc"
 	governanceapp "github.com/iiwish/semlia/internal/application/governance"
 	"github.com/iiwish/semlia/internal/domain/governance"
+	"github.com/iiwish/semlia/internal/domain/semantic"
 	"github.com/iiwish/semlia/pkg/identity"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -297,7 +298,7 @@ func (store *Store) PublishRelease(
 	var objects []governance.ObjectManifestEntry
 	switch proposal.TargetObjectType {
 	case governance.TargetSemanticAsset:
-		assetEntry, applyErr := store.publishAssetRevision(ctx, queries, command, proposal)
+		assetEntry, applyErr := store.publishAssetRevision(ctx, tx, queries, command, proposal)
 		if applyErr != nil {
 			return governance.Release{}, applyErr
 		}
@@ -447,6 +448,7 @@ func carryPublishedPins(ctx context.Context, q *dbgen.Queries, w pgtype.UUID, en
 
 func (store *Store) publishAssetRevision(
 	ctx context.Context,
+	tx pgx.Tx,
 	queries *dbgen.Queries,
 	command governanceapp.PublishReleaseCommand,
 	proposal governance.Proposal,
@@ -481,6 +483,9 @@ func (store *Store) publishAssetRevision(
 	}
 	newContent, err := command.Apply(current.Content)
 	if err != nil {
+		return governance.ManifestEntry{}, err
+	}
+	if err := validateKnowledgePublication(ctx, tx, command.WorkspaceID, proposal.AssetID.String(), semantic.AssetType(lockedAsset.AssetType), newContent); err != nil {
 		return governance.ManifestEntry{}, err
 	}
 	digest := sha256.Sum256(newContent)

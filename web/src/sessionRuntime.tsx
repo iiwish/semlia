@@ -173,6 +173,15 @@ export function SessionAccountControl() {
     </summary>
     <div className="session-account-menu">
       <span><strong>{runtime.session.account.displayName}</strong><small>会话至 {formatSessionTime(runtime.session.expiresAt)}</small></span>
+      {runtime.session.workspaces.length > 1 && <>
+        <span><small>当前工作区</small><strong title={runtime.activeWorkspace?.displayName}>{runtime.activeWorkspace?.displayName}</strong></span>
+        <div role="radiogroup" aria-label="切换工作区" style={{ display: "grid", gap: 7, maxHeight: 220, overflowY: "auto" }}>
+          {runtime.session.workspaces.map((workspace) => <label key={workspace.id} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 11, overflowWrap: "anywhere" }}>
+            <input type="radio" name="session-workspace" value={workspace.id} checked={runtime.activeWorkspaceId === workspace.id} onChange={() => runtime.selectWorkspace(workspace.id)} />
+            {workspace.displayName}
+          </label>)}
+        </div>
+      </>}
       <button type="button" onClick={() => void runtime.logout()}><LogOut size={15} />退出登录</button>
       {runtime.session.account.localPassword && <button type="button" onClick={() => setPasswordOpen(true)}><KeyRound size={15} />修改密码</button>}
     </div>

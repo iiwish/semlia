@@ -10,6 +10,7 @@ import (
 	authorizationapp "github.com/iiwish/semlia/internal/application/authorization"
 	"github.com/iiwish/semlia/internal/domain/authorization"
 	domain "github.com/iiwish/semlia/internal/domain/distribution"
+	"github.com/iiwish/semlia/internal/domain/semantic"
 	"github.com/iiwish/semlia/pkg/identity"
 )
 
@@ -387,6 +388,23 @@ func (service *Service) Resolve(ctx context.Context, request ResolveRequest) (Re
 	if err != nil {
 		return ResolutionResult{}, err
 	}
+	// Unreadable models must not introduce ambiguity or affect model selection.
+	if request.Input.Intent != domain.IntentDescribe {
+		visible := make([]domain.ReleasedAsset, 0, len(snapshot.Assets))
+		for _, asset := range snapshot.Assets {
+			if asset.AssetType == semantic.AnalysisModel {
+				allowed, err := service.assetAllowed(ctx, request, asset)
+				if err != nil {
+					return ResolutionResult{}, err
+				}
+				if !allowed {
+					continue
+				}
+			}
+			visible = append(visible, asset)
+		}
+		snapshot.Assets = visible
+	}
 	plan, planRefusal, err := domain.BuildPlan(request.Input, snapshot, queryID, planID, selected, now)
 	if err != nil {
 		return ResolutionResult{}, err
@@ -400,6 +418,18 @@ func (service *Service) Resolve(ctx context.Context, request ResolveRequest) (Re
 			}
 		}
 		return service.persistRefusal(ctx, query, *planRefusal, now)
+	}
+	// Model expansion adds dependencies beyond the original selectors.
+	selected = nil
+	for _, asset := range plan.Assets {
+		resolved, refusal, err := service.resolveSelector(ctx, request, domain.Selector{AssetID: &asset.AssetID}, "any", snapshot.Assets)
+		if err != nil {
+			return ResolutionResult{}, err
+		}
+		if refusal != nil {
+			return service.persistRefusal(ctx, query, *refusal, now)
+		}
+		selected = append(selected, resolved)
 	}
 	query.Outcome = "resolved"
 	validationID, err := identity.NewQueryValidationRunID()

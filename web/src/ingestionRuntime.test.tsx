@@ -26,7 +26,7 @@ describe("IngestionRuntimeProvider", () => {
       listArtifacts: vi.fn().mockResolvedValueOnce({ items: [], total: 0, limit: 50 }).mockRejectedValueOnce(new Error("artifact refresh unavailable")),
     });
     render(<IngestionRuntimeProvider workspaceId={workspaceId} access={{ read: true, manage: true, run: false }} api={api}><Probe /></IngestionRuntimeProvider>);
-    expect(await screen.findByTestId("artifact-state")).toHaveTextContent("empty:0");
+    await waitFor(() => expect(screen.getByTestId("artifact-state")).toHaveTextContent("empty:0"));
 
     await act(async () => {
       await useProbe().current?.createArtifactSource({ sourceName: "Orders CSV", files: [{ file: new File(["id\n1\n"], "orders.csv", { type: "text/csv" }), kind: "csv" }] });

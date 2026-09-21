@@ -406,7 +406,7 @@ func productionInput() map[string]any {
 func productionCreateTarget() map[string]any {
 	return map[string]any{
 		"intent": "create", "kind": "semantic_asset", "localKey": "orders", "identityKey": "sales.orders", "title": "Orders",
-		"content": map[string]any{"address": "sales.orders", "assetType": "entity", "displayName": "Orders", "definition": "One accepted order", "scope": "Synthetic orders", "ownerPrincipalId": productionID("prn")},
+		"content": map[string]any{"address": "sales.orders", "assetType": "business_object", "displayName": "Orders", "definition": "One accepted order", "scope": "Synthetic orders", "ownerPrincipalId": productionID("prn")},
 		"changes": []any{}, "evidenceIds": []any{},
 	}
 }

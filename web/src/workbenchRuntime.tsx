@@ -34,6 +34,7 @@ interface CommandStatus {
 }
 
 export interface WorkbenchRuntimeValue {
+  readInboxPage: WorkbenchApi["listItems"];
   workspaceId: string;
   access: WorkbenchAccess;
   items: WorkbenchAttentionItem[];
@@ -251,6 +252,7 @@ export function WorkbenchRuntimeProvider({ children, workspaceId, access, api: p
   }, [access.manage, api, refreshAfterMutation, selectedItem, workspaceId]);
 
   const value = useMemo<WorkbenchRuntimeValue>(() => ({
+    readInboxPage: api.listItems,
     workspaceId,
     access,
     items,
@@ -278,7 +280,7 @@ export function WorkbenchRuntimeProvider({ children, workspaceId, access, api: p
     openItem,
     closeItem,
     updateItem,
-  }), [access, appendError, applyFilter, closeItem, commandStatus, counts, countsByView, detailStatus, filter, items, listStatus, loadMore, loadingMore, nextCursor, openItem, refresh, refreshWarning, selectedItem, selectedItemId, updateItem, workspaceId]);
+  }), [api, access, appendError, applyFilter, closeItem, commandStatus, counts, countsByView, detailStatus, filter, items, listStatus, loadMore, loadingMore, nextCursor, openItem, refresh, refreshWarning, selectedItem, selectedItemId, updateItem, workspaceId]);
 
   return <WorkbenchRuntimeContext.Provider value={value}>{children}</WorkbenchRuntimeContext.Provider>;
 }

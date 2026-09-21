@@ -36,7 +36,10 @@ func TestProductionGenerationRechecksSourceAndDraft(t *testing.T) {
 							t.Error(err)
 						}
 					case "source permission revoked":
-						if _, err := g.f.pool.Exec(ctx, `UPDATE role_bindings SET revoked_at=clock_timestamp(),revoked_by=$2,revocation_reason='Generation source scope revoked',version=version+1 WHERE principal_id=$1 AND role_id='source_operator'`, g.agent.UUID(), g.actor.UUID()); err != nil {
+						// The agent holds source access through both the legacy
+						// source_operator grant and the authoring_agent system
+						// binding; revoke both so the recheck truly loses scope.
+						if _, err := g.f.pool.Exec(ctx, `UPDATE role_bindings SET revoked_at=clock_timestamp(),revoked_by=$2,revocation_reason='Generation source scope revoked',version=version+1 WHERE principal_id=$1 AND role_id IN ('source_operator','authoring_agent')`, g.agent.UUID(), g.actor.UUID()); err != nil {
 							t.Error(err)
 						}
 					case "draft replaced":

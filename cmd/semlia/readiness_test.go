@@ -55,8 +55,8 @@ func TestConfiguredReadinessProbeWithoutDatabaseIsUnavailable(t *testing.T) {
 }
 
 func TestReadinessRequiresSourceSnapshotMigration(t *testing.T) {
-	if requiredMigrationVersion != 29 {
-		t.Fatalf("required migration version = %d, want 29", requiredMigrationVersion)
+	if requiredMigrationVersion != 32 {
+		t.Fatalf("required migration version = %d, want 32", requiredMigrationVersion)
 	}
 }
 
@@ -104,12 +104,12 @@ func TestSourceSnapshotReadinessRejectsSchemaDrift(t *testing.T) {
 	t.Logf("code byte constraint: %s", codeBytesDefinition)
 	const dropCodeBytesCheck = `ALTER TABLE source_code_revisions DROP CONSTRAINT source_code_revisions_content_bytes_check; ALTER TABLE source_code_revisions ADD CONSTRAINT source_code_revisions_content_bytes_check `
 	for _, test := range []struct{ name, breakSQL, restoreSQL string }{
-		{"old source version", `UPDATE schema_migrations SET version=23`, `UPDATE schema_migrations SET version=29`},
-		{"old authoring version", `UPDATE schema_migrations SET version=24`, `UPDATE schema_migrations SET version=29`},
-		{"old publishing version", `UPDATE schema_migrations SET version=25`, `UPDATE schema_migrations SET version=29`},
-		{"old generation version", `UPDATE schema_migrations SET version=26`, `UPDATE schema_migrations SET version=29`},
-		{"old business rule version", `UPDATE schema_migrations SET version=27`, `UPDATE schema_migrations SET version=29`},
-		{"old password version", `UPDATE schema_migrations SET version=28`, `UPDATE schema_migrations SET version=29`},
+		{"old source version", `UPDATE schema_migrations SET version=23`, `UPDATE schema_migrations SET version=30`},
+		{"old authoring version", `UPDATE schema_migrations SET version=24`, `UPDATE schema_migrations SET version=30`},
+		{"old publishing version", `UPDATE schema_migrations SET version=25`, `UPDATE schema_migrations SET version=30`},
+		{"old generation version", `UPDATE schema_migrations SET version=26`, `UPDATE schema_migrations SET version=30`},
+		{"old business rule version", `UPDATE schema_migrations SET version=27`, `UPDATE schema_migrations SET version=30`},
+		{"old password version", `UPDATE schema_migrations SET version=28`, `UPDATE schema_migrations SET version=30`},
 		{"disabled business rule immutability", `ALTER TABLE production_business_rule_events DISABLE TRIGGER production_business_rule_events_immutable`, `ALTER TABLE production_business_rule_events ENABLE TRIGGER production_business_rule_events_immutable`},
 		{"disabled business rule binding", `ALTER TABLE production_business_rule_events DISABLE TRIGGER production_business_rule_event_guard`, `ALTER TABLE production_business_rule_events ENABLE TRIGGER production_business_rule_event_guard`},
 		{"missing business rule table", `ALTER TABLE production_business_rule_events RENAME TO misplaced_business_rules`, `ALTER TABLE misplaced_business_rules RENAME TO production_business_rule_events`},

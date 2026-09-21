@@ -21,7 +21,7 @@ versioned assets that people, applications, and AI agents can safely share.
 
 ## What is Semlia?
 
-Semlia is an enterprise semantic asset platform and governance control plane. It gives every important business concept and metric an authoritative, machine-readable home for its definition, calculation, owner, lineage, evidence, tests, history, consumers, and AI context.
+Semlia turns trusted semantic knowledge into answers from your data. Connect databases and documents, organize business definitions and calculation rules, confirm the knowledge, and use published semantics to constrain read-only SQL queries. Governance protects the answers without becoming the user's primary workflow.
 
 Instead of scattering meaning across SQL, dashboards, documents, and prompts, Semlia manages semantics as software assets: **discoverable, testable, reviewable, releasable, and compatibility-aware**.
 
@@ -32,7 +32,7 @@ Semlia is built around four ideas:
 - **Software-grade lifecycle**: AI may propose changes, but tests, policy, evidence, and review determine what becomes published truth.
 - **Trusted resolution**: CLI, MCP, REST, SDKs, and events resolve released semantics before an optional execution adapter runs a query.
 
-Semlia is not a BI dashboard, workbook, unrestricted ChatBI product, data warehouse, or query engine. It is the semantic control plane around those systems.
+Semlia is not a BI dashboard, workbook, unrestricted ChatBI product, data warehouse, or query engine. Its first-party question-and-answer workspace and external API consumers share the same published knowledge, permissions, and execution constraints. The current delivery contract and acceptance boundaries are in [Knowledge-to-data convergence](docs/specs/knowledge-to-data/convergence.md).
 
 ## How It Works
 
@@ -78,7 +78,7 @@ make dev
 make smoke
 ```
 
-Open `http://127.0.0.1:8080` for the Semlia product workspace. The live M1 Catalog supports
+Open the local URL printed by `make dev` for the Semlia product workspace. The live M1 Catalog supports
 workspace bootstrap, search, filtering, asset creation, immutable detail, evidence, and bounded
 relations. System diagnostics remain at `/status`.
 
@@ -88,7 +88,9 @@ Stop the stack without deleting its PostgreSQL volume:
 make dev-down
 ```
 
-The smoke test is disruptive to this checkout's local Compose stack. The full setup, port rules, and recovery paths are documented in the [quickstart](docs/quickstart.md), [local development runbook](docs/operations/local-development.md), and [troubleshooting guide](docs/operations/troubleshooting.md).
+Native development reads private overrides from `.semlia/native.env`. Knowledge confirmation requires `SEMLIA_SEMANTIC_PRODUCTION_ENABLED=true` in both server and worker environments; restart with `make dev-down` followed by `make dev` after changing it. This flag does not grant model-generation permissions, confirm business rules, publish knowledge, or configure a read-only execution source.
+
+The full setup, port rules, and recovery paths are documented in the [quickstart](docs/quickstart.md), [local development runbook](docs/operations/local-development.md), and [troubleshooting guide](docs/operations/troubleshooting.md).
 
 ## Development
 

@@ -78,6 +78,18 @@ function resolvedResponse(): AskResponse {
 describe("real Ask", () => {
   beforeEach(() => askMock.mockReset());
 
+  it("routes an empty published workspace to knowledge confirmation without calling the model", async () => {
+    const user = userEvent.setup();
+    const openKnowledge = vi.fn();
+    render(<AskView workspaceId={workspaceId} noPublishedKnowledge onOpenKnowledge={openKnowledge} onOpenEvidence={() => {}} onStartRevision={() => {}} />);
+    expect(screen.getByRole("heading", { name: "尚无已发布知识" })).toBeVisible();
+    await user.type(screen.getByRole("textbox", { name: "向 Semlia 提问" }), "收入是多少？");
+    expect(screen.getByRole("button", { name: "发送问题" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "查看待确认知识" }));
+    expect(openKnowledge).toHaveBeenCalledOnce();
+    expect(askMock).not.toHaveBeenCalled();
+  });
+
   it("renders only released definitions and an honest unexecuted plan", async () => {
     const user = userEvent.setup();
     const openEvidence = vi.fn();

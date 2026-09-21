@@ -43,11 +43,12 @@ export async function addObject(page: Page, kind: string, title: string) {
 }
 
 export async function addCompositeTargets(page: Page, name: string) {
-  for (const [suffix, type] of [["customers", "entity"], ["revenue", "metric"]]) {
+  await fillBusinessObject(page);
+  for (const suffix of ["customers", "revenue"]) {
     await addObject(page, "semantic_asset", `${name} ${suffix}`);
     await page.getByLabel("资产地址", { exact: true }).fill(`acceptance.${name}_${suffix}`);
     await page.getByLabel("显示名称", { exact: true }).fill(`${name} ${suffix}`);
-    await page.getByLabel("语义类型", { exact: true }).selectOption(type);
+    await fillBusinessObject(page);
   }
   for (const suffix of ["orders", "customers", "revenue"]) {
     await addObject(page, "physical_binding", `${suffix} binding`);
@@ -77,8 +78,23 @@ export async function addCompositeTargets(page: Page, name: string) {
   await page.getByLabel("关系依据", { exact: true }).fill("Each order references one customer by customer_id.");
 }
 
+async function fillBusinessObject(page: Page) {
+  await page.getByLabel("语义类型", { exact: true }).selectOption("business_object");
+  const spec = page.getByRole("region", { name: "类型专属知识结构", exact: true });
+  await spec.getByLabel("业务粒度", { exact: true }).fill("One synthetic record per id");
+  await spec.getByLabel("身份合并策略", { exact: true }).fill("Stable synthetic identifier");
+  await spec.getByLabel("生命周期", { exact: true }).fill("Active acceptance records");
+  await spec.getByRole("button", { name: "添加成员", exact: true }).click();
+  await spec.getByLabel("成员 1 ID", { exact: true }).fill("id");
+  await spec.getByLabel("成员 1 含义", { exact: true }).fill("Synthetic record identity");
+  await spec.getByLabel("成员 1 类型", { exact: true }).selectOption("integer");
+  await spec.getByLabel("成员 1 历史语义", { exact: true }).selectOption("stable");
+  await spec.getByLabel("成员 1 空值处理", { exact: true }).selectOption("required");
+  await spec.getByLabel("成员 1 唯一键", { exact: true }).check();
+}
+
 export async function confirmRules(page: Page, name: string) {
-  await page.getByRole("tab", { name: "建模与依据", exact: true }).click();
+  await page.getByRole("tab", { name: "知识内容", exact: true }).click();
   for (const suffix of ["orders", "customers", "revenue"]) {
     await page.getByRole("complementary", { name: "生产对象" }).getByRole("button", { name: new RegExp(`^${name} ${suffix}`) }).click();
     const rule = page.getByRole("region", { name: "业务规则确认", exact: true });
@@ -98,7 +114,7 @@ export async function openAs(page: Page, role: "author" | "reviewer" | "publishe
 
 export async function approve(page: Page, operationId: string) {
   await openAs(page, "reviewer", operationId);
-  await page.getByRole("tab", { name: "验证与审核", exact: true }).click();
+  await page.getByRole("tab", { name: "检查与确认", exact: true }).click();
   await expect(page.getByText("验证通过", { exact: true })).toBeVisible();
   await page.getByLabel("审核或重验说明", { exact: true }).fill("Independently checked every object, physical reference, and business declaration in the frozen set.");
   await page.getByRole("button", { name: "批准整个集合", exact: true }).click();

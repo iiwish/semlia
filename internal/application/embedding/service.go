@@ -30,6 +30,9 @@ type StartCommand struct {
 type Repository interface {
 	EmbeddingConfigured(context.Context) bool
 	EmbeddingConfiguration(context.Context, identity.WorkspaceID) (domain.Config, error)
+	// EmbeddingPublishedRelease reports whether the workspace has a published
+	// release, which is the corpus a rebuild would index.
+	EmbeddingPublishedRelease(context.Context, identity.WorkspaceID) (bool, error)
 	StartEmbedding(context.Context, StartCommand) (domain.Index, error)
 	EmbeddingStatus(context.Context, identity.WorkspaceID) (domain.Status, error)
 	GetEmbedding(context.Context, identity.WorkspaceID, identity.RunID) (domain.Index, error)
@@ -79,8 +82,16 @@ func (s *Service) Status(ctx context.Context, w identity.WorkspaceID, p, t strin
 	}
 	config, configErr := s.repo.EmbeddingConfiguration(ctx, w)
 	result.Configured = configErr == nil && s.repo.EmbeddingConfigured(ctx) && s.provider != nil && s.provider.Configured(config)
-	if !result.Configured {
-		result.Reason = "not_configured"
+	switch {
+	case !result.Configured:
+		result.Reason = domain.ReasonNotConfigured
+	default:
+		// The capability is usable; report the next blocking precondition, if any,
+		// so the client can point the operator at the surface that fixes it.
+		published, err := s.repo.EmbeddingPublishedRelease(ctx, w)
+		if err == nil && !published {
+			result.Reason = domain.ReasonNoPublishedRelease
+		}
 	}
 	return result, nil
 }

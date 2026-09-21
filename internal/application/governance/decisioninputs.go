@@ -167,7 +167,7 @@ var diffCategoryPrefixes = []struct {
 }{
 	{
 		prefixes: []string{
-			"expression", "formula", "computation", "calculation", "sql", "transform",
+			"spec", "expression", "formula", "computation", "calculation", "sql", "transform",
 			"grain", "join", "cardinality", "uniqueness", "key", "binding", "aggregate", "timegrain",
 		},
 		category: func(categories *DiffCategories) { categories.Computation = true },

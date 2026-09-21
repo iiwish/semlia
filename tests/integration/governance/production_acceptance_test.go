@@ -72,11 +72,14 @@ func commerceProductionPayload(t *testing.T, f *fixture, w identity.WorkspaceID,
 	input := map[string]any{"snapshots": []any{map[string]any{"sourceId": source.String(), "snapshotId": snapshotID.String(), "digest": digest, "coverageKeys": keys}}, "candidates": []any{}, "evidence": []any{}, "dependencies": []any{}}
 	targets := []any{}
 	for _, name := range []string{"orders", "customers", "revenue"} {
-		kind := "entity"
+		kind := "business_object"
+		var spec any = syntheticObjectSpec()
 		if name == "revenue" {
-			kind = "metric"
+			// This fixture proves authoring/review, not query execution.
+			kind = "business_term"
+			spec = map[string]any{"capability": "definition"}
 		}
-		targets = append(targets, map[string]any{"localKey": name, "title": name, "kind": "semantic_asset", "intent": "create", "identityKey": "commerce." + name, "changes": []any{}, "evidenceIds": []any{}, "content": map[string]any{"address": "commerce." + name, "assetType": kind, "displayName": name, "definition": nil, "scope": nil, "ownerPrincipalId": actor.String()}})
+		targets = append(targets, map[string]any{"localKey": name, "title": name, "kind": "semantic_asset", "intent": "create", "identityKey": "commerce." + name, "changes": []any{}, "evidenceIds": []any{}, "content": map[string]any{"address": "commerce." + name, "assetType": kind, "spec": spec, "displayName": name, "definition": nil, "scope": nil, "ownerPrincipalId": actor.String()}})
 	}
 	ref := func(kind, dataset, field string) map[string]any {
 		t.Helper()

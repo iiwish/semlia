@@ -3,7 +3,6 @@ import {
   ArrowRight,
   BookOpenCheck,
   Check,
-  CheckCircle2,
   CircleAlert,
   FileCheck2,
   GitPullRequestArrow,
@@ -16,6 +15,11 @@ import {
 } from "lucide-react";
 
 import { useCan } from "./authorization";
+import { KnowledgeSpecEditor } from "./KnowledgeSpecEditor";
+import { KnowledgeSpecView } from "./KnowledgeSpecView";
+import { KnowledgeSourcePicker, type KnowledgeSourceMember } from "./KnowledgeSourcePicker";
+import { useCatalogRuntime } from "./catalogRuntime";
+import { knowledgeTypes, type KnowledgeSpec, type KnowledgeType } from "./knowledge";
 import type { Asset, KnowledgeRevisionRequest, KnowledgeRevisionSubmission } from "./types";
 
 type EditableKnowledgeField = "definition" | "expression" | "includes" | "excludes" | "disambiguation" | "relations";
@@ -39,7 +43,7 @@ const knowledgeFields: KnowledgeFieldDescriptor[] = [
 ];
 
 function initialFieldFor(fieldPath: string): EditableKnowledgeField {
-  if (fieldPath.includes("expression") || fieldPath.includes("binding")) return "expression";
+  if (fieldPath.startsWith("spec") || fieldPath.includes("binding")) return "expression";
   if (fieldPath.includes("includes")) return "includes";
   if (fieldPath.includes("excludes")) return "excludes";
   if (fieldPath.includes("disambiguation")) return "disambiguation";
@@ -72,6 +76,8 @@ interface KnowledgeRevisionWorkbenchProps {
 }
 
 export function KnowledgeRevisionWorkbench({ asset, request, onCancel, onNotify, onSubmit, onStartAIGeneration }: KnowledgeRevisionWorkbenchProps) {
+  const { workspaceId } = useCatalogRuntime();
+  const [sourceMembers, setSourceMembers] = useState<KnowledgeSourceMember[]>([]);
   const canPropose = useCan("asset.propose");
   const publishedValues = useMemo(() => fieldValues(asset), [asset]);
   const [draftValues, setDraftValues] = useState(() => fieldValues(asset));
@@ -80,8 +86,17 @@ export function KnowledgeRevisionWorkbench({ asset, request, onCancel, onNotify,
   const [checksRun, setChecksRun] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const descriptor = knowledgeFields.find((field) => field.key === activeField) ?? knowledgeFields[0];
-  const changedFields = knowledgeFields.filter((field) => normalize(draftValues[field.key]) !== normalize(publishedValues[field.key]));
+  const [draftSpec, setDraftSpec] = useState<KnowledgeSpec>(asset.knowledgeSpec ?? {});
+  const canonical = asset.knowledgeSpec !== undefined;
+  const fields = canonical ? [
+    { ...knowledgeFields[0], fieldPath: "definition" },
+    { ...knowledgeFields[1], label: "类型专属知识", fieldPath: "spec", help: "" },
+  ] : knowledgeFields;
+  const descriptor = fields.find((field) => field.key === activeField) ?? fields[0];
+  const changedFields = fields.filter((field) => field.key === "expression" && canonical
+    ? JSON.stringify(draftSpec) !== JSON.stringify(asset.knowledgeSpec)
+    : normalize(draftValues[field.key]) !== normalize(publishedValues[field.key]));
+  const knowledgeType = (Object.keys(knowledgeTypes) as KnowledgeType[]).find((type) => knowledgeTypes[type] === asset.type)!;
   const selectedClaim = asset.claims.find((claim) => claim.claimId === request.claimId)
     ?? asset.claims.find((claim) => claim.fieldPath === descriptor.fieldPath)
     ?? asset.claims.find((claim) => descriptor.fieldPath.startsWith(claim.fieldPath) || claim.fieldPath.startsWith(descriptor.fieldPath))
@@ -124,8 +139,8 @@ export function KnowledgeRevisionWorkbench({ asset, request, onCancel, onNotify,
         reason: reason.trim(),
         changes: changedFields.map((field) => ({
           field: field.fieldPath,
-          before: publishedValues[field.key],
-          after: draftValues[field.key].trim(),
+          before: canonical && field.key === "expression" ? asset.knowledgeSpec as Record<string, unknown> : publishedValues[field.key],
+          after: canonical && field.key === "expression" ? draftSpec as Record<string, unknown> : draftValues[field.key].trim(),
         })),
       });
     } catch (submitError) {
@@ -150,7 +165,7 @@ export function KnowledgeRevisionWorkbench({ asset, request, onCancel, onNotify,
       <div className="knowledge-revision-layout">
         <nav className="knowledge-field-nav" aria-label="待修订知识字段">
           <span className="content-label">结构化知识</span>
-          {knowledgeFields.map((field) => {
+          {fields.map((field) => {
             const changed = changedFields.some((item) => item.key === field.key);
             return <button key={field.key} type="button" aria-current={activeField === field.key ? "page" : undefined} onClick={() => setActiveField(field.key)}><span><strong>{field.label}</strong><code>{field.fieldPath}</code></span>{changed ? <span className="knowledge-field-changed"><Check size={12} />已修改</span> : <ArrowRight size={13} />}</button>;
           })}
@@ -160,12 +175,12 @@ export function KnowledgeRevisionWorkbench({ asset, request, onCancel, onNotify,
           <header><div><span className="content-label">候选知识字段</span><h3>{descriptor.label}</h3><p>{descriptor.help}</p></div><code>{descriptor.fieldPath}</code></header>
           <section className="knowledge-published-value" aria-label={`${descriptor.label}当前发布值`}>
             <span><LockKeyhole size={13} />当前发布值 · {asset.revision}</span>
-            {descriptor.code ? <pre>{publishedValues[activeField]}</pre> : <p>{publishedValues[activeField] || "当前没有内容"}</p>}
+            {canonical && activeField === "expression" ? <KnowledgeSpecView spec={asset.knowledgeSpec} /> : descriptor.code ? <pre>{publishedValues[activeField]}</pre> : <p>{publishedValues[activeField] || "当前没有内容"}</p>}
           </section>
-          <label className="knowledge-candidate-field">
+          {canonical && activeField === "expression" ? <>{knowledgeType === "data_asset" && <KnowledgeSourcePicker workspaceId={workspaceId} onMembers={setSourceMembers} />}<KnowledgeSpecEditor type={knowledgeType} workspaceId={workspaceId} members={sourceMembers} value={draftSpec} onChange={(spec) => { setDraftSpec(spec); setChecksRun(false); }} /></> : <label className="knowledge-candidate-field">
             <span>候选值</span>
             <textarea className={descriptor.code ? "knowledge-code-input" : undefined} aria-label={`${descriptor.label}候选值`} rows={activeField === "expression" ? 5 : 7} value={draftValues[activeField]} onChange={(event) => updateDraft(event.target.value)} />
-          </label>
+          </label>}
           <label className="knowledge-revision-reason">
             <span>修订原因 <strong>必填</strong></span>
             <textarea aria-label="知识修订原因" rows={4} placeholder="说明当前知识哪里不准确、适用边界如何变化，以及审核者应重点检查什么。" value={reason} onChange={(event) => { setReason(event.target.value); setChecksRun(false); setError(""); }} />
@@ -185,8 +200,8 @@ export function KnowledgeRevisionWorkbench({ asset, request, onCancel, onNotify,
             <p><BookOpenCheck size={14} />修订只改变候选知识，不会覆盖这份来源或历史证据。</p>
           </section>
           <section className="knowledge-checks">
-            <header><span className="content-label">候选预检</span><strong>{checksRun ? "已就绪" : "等待运行"}</strong></header>
-            {["结构契约", "证据引用", "结果回归"].map((label) => <div key={label} className={checksRun ? "knowledge-check-passed" : undefined}><span>{checksRun ? <CheckCircle2 size={15} /> : <ShieldCheck size={15} />}</span><strong>{label}</strong><small>{checksRun ? "提交后由治理验证器执行" : "提交后运行"}</small></div>)}
+            <header><span className="content-label">候选预检</span><strong>{checksRun ? "提案信息完整" : "等待运行"}</strong></header>
+            {["结构契约", "证据引用", "结果回归"].map((label) => <div key={label}><span><ShieldCheck size={15} /></span><strong>{label}</strong><small>提交后由治理验证器执行</small></div>)}
             <p className="knowledge-checks-note">提交将创建真实提案并进入验证流水线；验证结果在候选版本页展示。</p>
           </section>
         </aside>

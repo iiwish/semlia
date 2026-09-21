@@ -120,7 +120,7 @@ func newProductionGenerationFixture(t *testing.T) *productionGenerationFixture {
 		t.Fatal(err)
 	}
 	input := productionFixtureInput(t, g.f, g.w, identity.SemanticCandidateID{})
-	target := map[string]any{"localKey": "orders", "title": "Orders", "kind": "semantic_asset", "intent": "create", "identityKey": "sales.orders", "changes": []any{}, "evidenceIds": []any{}, "content": map[string]any{"address": "sales.orders", "assetType": "entity", "displayName": "Orders", "definition": nil, "scope": nil, "ownerPrincipalId": g.actor.String()}}
+	target := map[string]any{"localKey": "orders", "title": "Orders", "kind": "semantic_asset", "intent": "create", "identityKey": "sales.orders", "changes": []any{}, "evidenceIds": []any{}, "content": map[string]any{"address": "sales.orders", "assetType": "business_object", "displayName": "Orders", "definition": nil, "scope": nil, "ownerPrincipalId": g.actor.String()}}
 	g.payload = map[string]any{"input": input, "targets": []any{target}}
 	body, _ := json.Marshal(g.payload)
 	created := sendProdRequest(newProductionHandler(t, g.f.store), http.MethodPost, "/api/v1/workspaces/"+g.w.String()+"/production-operations", g.actor.String(), "generation-fixture", string(body))

@@ -7,6 +7,7 @@ import (
 	authapp "github.com/iiwish/semlia/internal/application/authorization"
 	authz "github.com/iiwish/semlia/internal/domain/authorization"
 	domain "github.com/iiwish/semlia/internal/domain/governance"
+	"github.com/iiwish/semlia/internal/domain/semantic"
 	"github.com/iiwish/semlia/pkg/identity"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -30,12 +31,11 @@ func validateProductionDependencies(ctx context.Context, tx pgx.Tx, access autha
 		if err := tx.QueryRow(ctx, `SELECT id FROM releases WHERE workspace_id=$1 AND id=$2`, w.UUID(), release.UUID()).Scan(&present); err != nil {
 			return governanceRepositoryError("read dependency release", err)
 		}
-		if fresh {
-			if version.BaselineHead.ReleaseID == nil || *version.BaselineHead.ReleaseID != release {
+		checkHead := fresh || version.BaselineHead.Presence != ""
+		if checkHead {
+			if version.BaselineHead.ReleaseID == nil || (ref.Kind != domain.TargetKindSemanticAsset && *version.BaselineHead.ReleaseID != release) {
 				return domain.ErrDependencyInvalid
 			}
-		} else if version.BaselineHead.Presence != "" && (version.BaselineHead.ReleaseID == nil || *version.BaselineHead.ReleaseID != release) {
-			return domain.ErrDependencyInvalid
 		}
 		id, err := parseUUIDOrTypeID(ref.TargetID)
 		if err != nil {
@@ -49,6 +49,16 @@ func validateProductionDependencies(ctx context.Context, tx pgx.Tx, access autha
 			}
 			if !found {
 				return domain.ErrDependencyInvalid
+			}
+			// A reference keeps its original immutable release. It remains usable
+			// only while that exact revision is also present in the authoring head.
+			if checkHead {
+				if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM release_assets WHERE workspace_id=$1 AND release_id=$2 AND asset_id=$3 AND revision_id=$4)`, w.UUID(), version.BaselineHead.ReleaseID.UUID(), id, revision.UUID()).Scan(&found); err != nil {
+					return err
+				}
+				if !found {
+					return domain.ErrDependencyInvalid
+				}
 			}
 			resource, err := productionAssetResource(ctx, tx, w, ref.TargetID)
 			if err != nil {
@@ -129,6 +139,55 @@ func validateProductionDependencies(ctx context.Context, tx pgx.Tx, access autha
 		}
 		for _, ref := range refs.Published {
 			if selected[ref.Kind+"/"+ref.TargetID] != ref {
+				return domain.ErrDependencyInvalid
+			}
+		}
+		if target.Kind == domain.TargetKindSemanticAsset {
+			var content struct {
+				AssetType semantic.AssetType     `json:"assetType"`
+				Spec      semantic.KnowledgeSpec `json:"spec"`
+			}
+			if err := json.Unmarshal(target.Declaration.Content, &content); err != nil {
+				return err
+			}
+			resolvedTypes := map[string]semantic.AssetType{}
+			resolvedSpecs := map[string]semantic.KnowledgeSpec{}
+			for _, ref := range content.Spec.References() {
+				if ref.AssetID == target.TargetID {
+					return domain.ErrDependencyInvalid
+				}
+				revision, _ := identity.ParseRevisionID(ref.RevisionID)
+				var raw []byte
+				var assetType string
+				if err := tx.QueryRow(ctx, `SELECT a.asset_type,r.content FROM asset_revisions r JOIN semantic_assets a ON a.workspace_id=r.workspace_id AND a.id=r.asset_id WHERE r.workspace_id=$1 AND r.id=$2`, w.UUID(), revision.UUID()).Scan(&assetType, &raw); err != nil {
+					return governanceRepositoryError("read knowledge member", err)
+				}
+				var dependency struct {
+					Spec semantic.KnowledgeSpec `json:"spec"`
+				}
+				if json.Unmarshal(raw, &dependency) != nil {
+					return domain.ErrDependencyInvalid
+				}
+				resolvedTypes[ref.AssetID] = semantic.AssetType(assetType)
+				resolvedSpecs[ref.AssetID] = dependency.Spec
+				if ref.MemberID != "" {
+					if assetType != "business_object" && assetType != "data_asset" {
+						return domain.ErrDependencyInvalid
+					}
+					found := false
+					for _, member := range dependency.Spec.Members {
+						if member.ID == ref.MemberID {
+							found = true
+						}
+					}
+					if !found {
+						return domain.ErrDependencyInvalid
+					}
+				}
+			}
+			if err := content.Spec.ValidateReferences(func(ref semantic.KnowledgeReference) (semantic.AssetType, semantic.KnowledgeSpec, error) {
+				return resolvedTypes[ref.AssetID], resolvedSpecs[ref.AssetID], nil
+			}); err != nil {
 				return domain.ErrDependencyInvalid
 			}
 		}

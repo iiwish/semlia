@@ -526,7 +526,11 @@ func (store *Store) ReadSourceSnapshot(ctx context.Context, query application.Sn
 				return result, application.ErrSnapshotCursor
 			}
 		}
-		rows, readErr := tx.Query(ctx, `SELECT kind,object_id,revision_id,historical_name,historical_locator,content_digest,coverage_key,parent_object_id,parent_revision_id FROM source_snapshot_members WHERE workspace_id=$1 AND snapshot_id=$2 AND ($3='' OR kind=$3) AND (kind,object_id)<=($4,$5::uuid) AND (kind,object_id)>($6,$7::uuid) ORDER BY kind,object_id LIMIT $8`, workspace, snapshotID, query.Filter, upperKind, upperID, lastKind, lastID, query.Limit+1)
+		rows, readErr := tx.Query(ctx, `SELECT m.kind,m.object_id,m.revision_id,m.historical_name,m.historical_locator,m.content_digest,m.coverage_key,m.parent_object_id,m.parent_revision_id,COALESCE(d.dataset_kind,''),COALESCE(f.data_type,''),f.nullable,f.ordinal
+		FROM source_snapshot_members m
+		LEFT JOIN physical_dataset_revisions d ON m.kind='dataset' AND d.workspace_id=m.workspace_id AND d.id=m.revision_id AND d.physical_dataset_id=m.object_id
+		LEFT JOIN physical_field_revisions f ON m.kind='field' AND f.workspace_id=m.workspace_id AND f.id=m.revision_id AND f.physical_field_id=m.object_id
+		WHERE m.workspace_id=$1 AND m.snapshot_id=$2 AND ($3='' OR m.kind=$3) AND (m.kind,m.object_id)<=($4,$5::uuid) AND (m.kind,m.object_id)>($6,$7::uuid) ORDER BY m.kind,m.object_id LIMIT $8`, workspace, snapshotID, query.Filter, upperKind, upperID, lastKind, lastID, query.Limit+1)
 		if readErr != nil {
 			return result, readErr
 		}
@@ -534,7 +538,7 @@ func (store *Store) ReadSourceSnapshot(ctx context.Context, query application.Sn
 		for rows.Next() {
 			var member domain.SnapshotMember
 			var object, rev, parent, parentRev pgtype.UUID
-			if err = rows.Scan(&member.Kind, &object, &rev, &member.Name, &member.Locator, &member.ContentDigest, &member.CoverageKey, &parent, &parentRev); err != nil {
+			if err = rows.Scan(&member.Kind, &object, &rev, &member.Name, &member.Locator, &member.ContentDigest, &member.CoverageKey, &parent, &parentRev, &member.DatasetKind, &member.DataType, &member.Nullable, &member.Ordinal); err != nil {
 				return result, err
 			}
 			prefixes := map[string][2]identity.Prefix{"dataset": {identity.PhysicalDataset, identity.PhysicalDatasetRevision}, "field": {identity.PhysicalField, identity.PhysicalFieldRevision}, "code": {identity.CodeArtifact, identity.SourceCodeRevision}, "lineage": {identity.LineageEdge, identity.SourceLineageRevision}}

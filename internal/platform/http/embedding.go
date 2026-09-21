@@ -58,13 +58,15 @@ func (h *Handler) routeEmbedding(w http.ResponseWriter, r *http.Request, trace s
 }
 
 func writeEmbeddingError(w http.ResponseWriter, err error, trace string) string {
-	code, status := "EMBEDDING_UNAVAILABLE", http.StatusServiceUnavailable
+	code, status, message := "EMBEDDING_UNAVAILABLE", http.StatusServiceUnavailable, "the embedding operation is unavailable"
 	var denial *authorization.DenialError
 	switch {
 	case errors.As(err, &denial):
-		code, status = "FORBIDDEN", http.StatusForbidden
+		code, status, message = "FORBIDDEN", http.StatusForbidden, "the acting principal lacks the required capability"
+	case errors.Is(err, domain.ErrNoPublishedRelease):
+		code, status, message = "EMBEDDING_NO_PUBLISHED_RELEASE", http.StatusConflict, "no published release is available to index"
 	case errors.Is(err, domain.ErrNotConfigured):
-		code = "EMBEDDING_NOT_CONFIGURED"
+		code, message = "EMBEDDING_NOT_CONFIGURED", "the embedding provider or vector store is not configured"
 	case errors.Is(err, domain.ErrInvalid):
 		code, status = "INVALID_ARGUMENT", http.StatusBadRequest
 	case errors.Is(err, domain.ErrConflict):
@@ -72,6 +74,6 @@ func writeEmbeddingError(w http.ResponseWriter, err error, trace string) string 
 	case errors.Is(err, domain.ErrNotFound):
 		code, status = "NOT_FOUND", http.StatusNotFound
 	}
-	writeError(w, status, code, "the embedding operation is unavailable", trace, status == http.StatusServiceUnavailable)
+	writeError(w, status, code, message, trace, status == http.StatusServiceUnavailable)
 	return code
 }

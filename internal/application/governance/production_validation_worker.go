@@ -8,6 +8,7 @@ import (
 
 	"github.com/iiwish/semlia/internal/application/jobs"
 	domain "github.com/iiwish/semlia/internal/domain/governance"
+	"github.com/iiwish/semlia/internal/domain/semantic"
 	"github.com/iiwish/semlia/pkg/identity"
 )
 
@@ -137,7 +138,7 @@ func EvaluateProductionValidation(work ProductionValidationWork, now time.Time) 
 			}
 			findings := []Finding{}
 			block := func(code string) {
-				findings = append(findings, blockerFinding(digest, code, "production validation did not satisfy the required check"))
+				findings = append(findings, blockerFinding(digest, code, productionCheckMessage(code)))
 			}
 			switch id {
 			case ValidatorIDSchema:
@@ -151,8 +152,10 @@ func EvaluateProductionValidation(work ProductionValidationWork, now time.Time) 
 				} else if target.Kind == domain.TargetKindSemanticAsset {
 					// Null is valid draft content, but cannot satisfy release readiness.
 					var content struct {
-						Definition *string `json:"definition"`
-						Scope      *string `json:"scope"`
+						Definition *string            `json:"definition"`
+						Scope      *string            `json:"scope"`
+						AssetType  semantic.AssetType `json:"assetType"`
+						Spec       json.RawMessage    `json:"spec"`
 					}
 					if err := json.Unmarshal(target.Declaration.Content, &content); err != nil {
 						block("PRODUCTION_SCHEMA_INVALID")
@@ -162,6 +165,9 @@ func EvaluateProductionValidation(work ProductionValidationWork, now time.Time) 
 						}
 						if content.Scope == nil {
 							block("PRODUCTION_SCOPE_UNRESOLVED")
+						}
+						if _, err := semantic.ParseKnowledgeSpec(content.AssetType, content.Spec, true); err != nil {
+							findings = append(findings, blockerFinding(digest, "PRODUCTION_KNOWLEDGE_INCOMPLETE", "知识结构不完整："+err.Error()))
 						}
 					}
 				}
@@ -322,4 +328,26 @@ func SealProductionValidation(result ProductionValidationCompletion, now time.Ti
 	result.Attempt.ValidationDigest = &digest
 	result.Attempt.CompletedAt = &now
 	return result, nil
+}
+
+// productionCheckMessage maps blocker codes to actionable guidance so the
+// applicant knows exactly what to fix before resubmitting. Unknown codes
+// keep the neutral fallback.
+func productionCheckMessage(code string) string {
+	messages := map[string]string{
+		"PRODUCTION_BUSINESS_RULE_UNCONFIRMED":  "业务规则未确认：在「建模与依据」中为该资产确认业务规则并关联证据后再提交。AI 起稿不会代你确认业务规则，这一步必须人工完成。",
+		"PRODUCTION_SCHEMA_MISSING":             "目标声明缺失：该目标没有可校验的内容，请检查草稿是否完整后重新保存。",
+		"PRODUCTION_SCHEMA_INVALID":             "声明内容不合法：目标内容不符合 schema 约束，请检查草稿字段后重新保存。",
+		"PRODUCTION_DEFINITION_UNRESOLVED":      "业务定义未填写：请在编辑区为该资产填写业务定义后提交。AI 初稿的建议里已含草拟定义，可先「应用建议」再修改。",
+		"PRODUCTION_SCOPE_UNRESOLVED":           "统计口径未填写：请在编辑区为该资产填写统计口径后提交。AI 初稿的建议里已含草拟口径，可先「应用建议」再修改。",
+		"PRODUCTION_CONTENT_DIGEST_MISMATCH":    "内容摘要不一致：草稿在校验排队期间被修改过，请刷新页面后重新提交。",
+		"PRODUCTION_CHANGE_REPLAY_FAILED":       "变更回放失败：基于基线版本的修改链不完整，请检查修改记录或重新校正。",
+		"PRODUCTION_VALIDATION_CONTEXT_CHANGED": "校验上下文已变化：来源快照或授权在提交后发生变化，请刷新后重新提交。",
+		"PRODUCTION_AUTHORIZATION_REVOKED":      "授权已变更：当前主体不再具备提交该资产的权限，请联系工作区管理员。",
+		"PRODUCTION_INPUT_STALE":                "输入已过期：来源快照或依赖在提交后更新，请重新校正后再提交验证。",
+	}
+	if message, ok := messages[code]; ok {
+		return message
+	}
+	return "production validation did not satisfy the required check"
 }

@@ -24,3 +24,27 @@ describe("embedding model dimensions", () => {
     else expect(dialog).toBeVisible();
   });
 });
+
+describe("model provider credential env name", () => {
+  it("rejects a lowercase env name before the request is sent and explains the format", async () => {
+    const api = createGovernanceFixtureApi();
+    const createModelProvider = vi.spyOn(api, "createModelProvider");
+    const user = userEvent.setup();
+    render(<CapabilityProvider session={authorizationSession}><GovernanceRuntimeProvider workspaceId="wsp_fixture" api={api}><ModelConfigurationView onNotify={vi.fn()} /></GovernanceRuntimeProvider></CapabilityProvider>);
+    await user.click(await screen.findByRole("button", { name: "添加供应商" }));
+    const dialog = screen.getByRole("dialog", { name: "添加模型供应商" });
+    await user.type(within(dialog).getByLabelText("配置名称"), "深度Deepseek");
+    await user.selectOptions(within(dialog).getByLabelText("供应商"), "openai_compatible");
+    await user.type(within(dialog).getByLabelText("Base URL"), "https://api.deepseek.com");
+    await user.type(within(dialog).getByLabelText("凭据环境变量"), "deepseek_token");
+    await user.type(within(dialog).getByLabelText("API Key"), "sk-test");
+    expect(within(dialog).getByRole("note")).toHaveTextContent("需以大写字母开头，只能含大写字母、数字和下划线");
+    expect(within(dialog).getByRole("button", { name: "添加供应商" })).toBeDisabled();
+    expect(createModelProvider).not.toHaveBeenCalled();
+
+    await user.clear(within(dialog).getByLabelText("凭据环境变量"));
+    await user.type(within(dialog).getByLabelText("凭据环境变量"), "SEMLIA_DEEPSEEK_API_KEY");
+    expect(within(dialog).queryByRole("note")).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "添加供应商" })).toBeEnabled();
+  });
+});

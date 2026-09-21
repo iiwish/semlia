@@ -41,9 +41,9 @@ func (environment *fixture) createAssetWithAddress(
 		catalogapp.ClockFunc(func() time.Time { return time.Now().UTC() }),
 	)
 	created, err := catalog.CreateAsset(context.Background(), catalogapp.CreateAssetRequest{
-		WorkspaceID: workspace, Address: address, AssetType: semantic.Metric,
+		WorkspaceID: workspace, Address: address, AssetType: semantic.BusinessTerm,
 		Lifecycle: "active", SchemaVersion: "1.0.0",
-		Content:   json.RawMessage(`{"name":"Revenue variant","definition":"Revenue baseline"}`),
+		Content:   json.RawMessage(`{"assetType":"business_term","name":"Revenue variant","definition":"Revenue baseline","scope":"Governance test","spec":{"capability":"definition"}}`),
 		CreatedBy: "founder", TraceID: traceID,
 	})
 	if err != nil {

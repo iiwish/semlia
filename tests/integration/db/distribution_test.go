@@ -142,7 +142,7 @@ func distributionDigest(seed string) string {
 }
 
 func distributionQuery(context distribution.ResolutionContext) distribution.SemanticQueryInput {
-	return distribution.SemanticQueryInput{SchemaVersion: distribution.QuerySchemaVersion, Intent: distribution.IntentAggregate,
+	return distribution.SemanticQueryInput{SchemaVersion: distribution.QuerySchemaVersion, Intent: distribution.IntentDescribe,
 		Measures: []distribution.Selector{{Address: "commerce.gross_revenue"}}, Context: context}
 }
 
@@ -171,9 +171,8 @@ func TestSemanticDistributionPinsReleaseAndObjectSnapshots(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve current release: %v", err)
 	}
-	assertDistributionPlan(t, current, fixture.release2, fixture.revision2, fixture.bindingID.String(), 2)
-	assertResolvedObject(t, current, fixture.grainID.String(), 1)
-	assertResolvedObject(t, current, fixture.entityKeyID.String(), 1)
+	assertDistributionPlan(t, current, fixture.release2, fixture.revision2)
+	assertReleaseObjects(t, pool, fixture, fixture.release2, 2)
 
 	pinnedResult, err := service.Resolve(ctx, distributionapp.ResolveRequest{WorkspaceID: fixture.workspaceID,
 		Input: distributionQuery(distribution.ResolutionContext{Mode: distribution.ResolutionBinding, BindingID: &pinned.ID}), Channel: "agent",
@@ -181,9 +180,8 @@ func TestSemanticDistributionPinsReleaseAndObjectSnapshots(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve pinned release: %v", err)
 	}
-	assertDistributionPlan(t, pinnedResult, fixture.release1, fixture.revision1, fixture.bindingID.String(), 1)
-	assertResolvedObject(t, pinnedResult, fixture.grainID.String(), 1)
-	assertResolvedObject(t, pinnedResult, fixture.entityKeyID.String(), 1)
+	assertDistributionPlan(t, pinnedResult, fixture.release1, fixture.revision1)
+	assertReleaseObjects(t, pool, fixture, fixture.release1, 1)
 
 	replayed, err := service.Resolve(ctx, distributionapp.ResolveRequest{WorkspaceID: fixture.workspaceID,
 		Input: distributionQuery(distribution.ResolutionContext{Mode: distribution.ResolutionCurrent}), Channel: "api",
@@ -213,9 +211,8 @@ func TestSemanticDistributionPinsReleaseAndObjectSnapshots(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve immutable release after mutable updates: %v", err)
 	}
-	assertDistributionPlan(t, afterMutation, fixture.release2, fixture.revision2, fixture.bindingID.String(), 2)
-	assertResolvedObject(t, afterMutation, fixture.grainID.String(), 1)
-	assertResolvedObject(t, afterMutation, fixture.entityKeyID.String(), 1)
+	assertDistributionPlan(t, afterMutation, fixture.release2, fixture.revision2)
+	assertReleaseObjects(t, pool, fixture, fixture.release2, 2)
 
 	stored, err := service.GetQuery(ctx, fixture.workspaceID, current.Query.ID, "local:test", distributionTraceID)
 	if err != nil || stored.Plan == nil || stored.Plan.PlanDigest != current.Plan.PlanDigest {
@@ -290,13 +287,12 @@ func TestSemanticDistributionCurrentFollowsRollbackRelease(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve rollback release: %v", err)
 	}
-	assertDistributionPlan(t, result, release3, fixture.revision1, fixture.bindingID.String(), 3)
-	assertResolvedObject(t, result, fixture.grainID.String(), 1)
-	assertResolvedObject(t, result, fixture.entityKeyID.String(), 1)
+	assertDistributionPlan(t, result, release3, fixture.revision1)
+	assertReleaseObjects(t, pool, fixture, release3, 3)
 }
 
 func assertDistributionPlan(t *testing.T, result distributionapp.ResolutionResult, release identity.ReleaseID,
-	revision identity.RevisionID, objectID string, objectVersion int,
+	revision identity.RevisionID,
 ) {
 	t.Helper()
 	if result.Refusal != nil || result.Plan == nil {
@@ -309,18 +305,24 @@ func assertDistributionPlan(t *testing.T, result distributionapp.ResolutionResul
 	if len(plan.Assets) != 1 || plan.Assets[0].RevisionID != revision {
 		t.Fatalf("resolved assets = %+v, want revision %s", plan.Assets, revision)
 	}
-	assertResolvedObject(t, result, objectID, objectVersion)
+	if len(plan.Objects) != 0 || plan.Execution != nil {
+		t.Fatal("describe query unexpectedly planned execution")
+	}
 }
 
-func assertResolvedObject(t *testing.T, result distributionapp.ResolutionResult, objectID string, objectVersion int) {
+func assertReleaseObjects(t *testing.T, pool *pgstore.Pool, fixture distributionFixture, release identity.ReleaseID, bindingVersion int) {
 	t.Helper()
-	if result.Plan == nil {
-		t.Fatal("resolution plan is nil")
+	snapshot, err := pgstore.NewStore(pool).ReleaseSnapshot(context.Background(), fixture.workspaceID, release)
+	if err != nil {
+		t.Fatal(err)
 	}
-	for _, object := range result.Plan.Objects {
-		if object.ObjectID == objectID && object.Version == objectVersion {
-			return
-		}
+	if len(snapshot.Bindings) != 1 || snapshot.Bindings[0].ID != fixture.bindingID || snapshot.Bindings[0].Version != bindingVersion {
+		t.Fatalf("release binding changed: %+v", snapshot.Bindings)
 	}
-	t.Fatalf("resolved objects = %+v, want %s@%d", result.Plan.Objects, objectID, objectVersion)
+	if len(snapshot.Grains) != 1 || snapshot.Grains[0].ID != fixture.grainID || snapshot.Grains[0].Version != 1 {
+		t.Fatalf("release grain changed: %+v", snapshot.Grains)
+	}
+	if len(snapshot.Keys) != 1 || snapshot.Keys[0].ID != fixture.entityKeyID || snapshot.Keys[0].Version != 1 {
+		t.Fatalf("release key changed: %+v", snapshot.Keys)
+	}
 }

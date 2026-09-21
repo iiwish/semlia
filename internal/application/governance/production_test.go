@@ -294,7 +294,7 @@ func TestProductionServiceCreateAndIdempotency(t *testing.T) {
 	prn, _ := identity.NewPrincipalID()
 	firstIdentity := "default.orders"
 	content := func(address, name string) json.RawMessage {
-		return json.RawMessage(fmt.Sprintf(`{"address":%q,"assetType":"entity","displayName":%q,"definition":null,"scope":null,"ownerPrincipalId":%q}`, address, name, prn.String()))
+		return json.RawMessage(fmt.Sprintf(`{"address":%q,"assetType":"business_object","displayName":%q,"definition":null,"scope":null,"ownerPrincipalId":%q}`, address, name, prn.String()))
 	}
 
 	cmd := app.CreateOperationCommand{

@@ -75,6 +75,9 @@ func MatchSelector(selector Selector, expected string, assets []ReleasedAsset) (
 func BuildPlan(query SemanticQueryInput, snapshot ReleaseSnapshot, queryID identity.SemanticQueryID,
 	planID identity.ResolvedSemanticPlanID, selected []ReleasedAsset, now time.Time,
 ) (ResolvedSemanticPlan, *Refusal, error) {
+	if query.Intent != IntentDescribe {
+		return buildKnowledgePlan(query, snapshot, queryID, planID, selected, now)
+	}
 	resolvedAssets := make([]ResolvedAsset, 0, len(selected))
 	assetSeen := make(map[string]bool, len(selected))
 	for _, asset := range selected {
@@ -274,10 +277,10 @@ func PlanDigest(plan ResolvedSemanticPlan) string {
 
 func allowedType(assetType semantic.AssetType, expected string) bool {
 	if expected == "measure" {
-		return assetType == semantic.Measure || assetType == semantic.Metric
+		return assetType == semantic.Metric
 	}
 	if expected == "dimension" {
-		return assetType == semantic.Dimension || assetType == semantic.Entity || assetType == semantic.Concept
+		return assetType == semantic.BusinessObject
 	}
 	return true
 }

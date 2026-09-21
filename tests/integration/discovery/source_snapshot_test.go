@@ -293,10 +293,17 @@ func TestSourceSnapshotReadIsolationCursorsAndWatermark(t *testing.T) {
 		t.Fatalf("members=%+v err=%v", members, err)
 	}
 	memberCursor := *members.NextCursor
+	if members.Items[0].DatasetKind != "table" {
+		t.Fatalf("missing pinned dataset kind: %+v", members.Items[0])
+	}
 	request.Cursor = memberCursor
 	nextMembers, err := service.ListSnapshotMembers(ctx, request)
 	if err != nil || len(nextMembers.Items) != 1 || nextMembers.NextCursor != nil || members.Items[0].Kind != "dataset" || nextMembers.Items[0].Kind != "field" || nextMembers.Items[0].ParentRevisionID != members.Items[0].RevisionID {
 		t.Fatalf("member continuation=%+v err=%v", nextMembers, err)
+	}
+	field := nextMembers.Items[0]
+	if field.DataType != "bigint" || field.Nullable == nil || *field.Nullable || field.Ordinal == nil || *field.Ordinal != 1 {
+		t.Fatalf("missing pinned field metadata: %+v", field)
 	}
 	for _, test := range []struct {
 		name        string
@@ -372,6 +379,43 @@ func TestSourceSnapshotReadIsolationCursorsAndWatermark(t *testing.T) {
 	for _, call := range evaluator.requests {
 		if call.Action != authorization.ActionSourceRead || call.Resource.Type != authorization.ScopeSource {
 			t.Fatalf("wrong capability: %+v", call)
+		}
+	}
+}
+
+func TestSourceSnapshotMemberMetadataUsesPinnedRevision(t *testing.T) {
+	pool, store := newStore(t)
+	resetData(t, pool)
+	workspace, source := createSource(t, pool, store, "pinned-preview")
+	ctx := context.Background()
+	now := time.Now().UTC()
+	original := snapshotFixture(t, "public.orders", "complete", now)
+	first, err := store.PersistDiscoverySnapshot(ctx, workspace, source, original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed := snapshotFixture(t, "public.orders", "complete", now.Add(time.Minute))
+	changed.Datasets[0].Fields[0].DataType = "text"
+	changed.Datasets[0].Fields[0].Nullable = true
+	if err = changed.Canonicalize(); err != nil {
+		t.Fatal(err)
+	}
+	second, err := store.PersistDiscoverySnapshot(ctx, workspace, source, changed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := snapshotReadService(t, store, &snapshotEvaluator{pool: pool})
+	for _, tc := range []struct {
+		id, dataType string
+		nullable     bool
+	}{{first.SnapshotID, "bigint", false}, {second.SnapshotID, "text", true}} {
+		page, err := service.ListSnapshotMembers(ctx, application.SnapshotRequest{SourceRequest: application.SourceRequest{WorkspaceID: workspace, SourceID: source, PrincipalRef: "reader"}, SnapshotID: tc.id, Kind: "field"})
+		if err != nil || len(page.Items) != 1 {
+			t.Fatalf("page=%+v err=%v", page, err)
+		}
+		field := page.Items[0]
+		if field.DataType != tc.dataType || field.Nullable == nil || *field.Nullable != tc.nullable {
+			t.Fatalf("historical field leaked current state: %+v", field)
 		}
 	}
 }

@@ -66,8 +66,11 @@ type Config struct {
 	ArtifactRetention          time.Duration
 	ExecutionSources           string
 	ExecutionAllowPlaintext    bool
+	DiscoveryAllowUnsafeSource bool
 	SemanticProductionEnabled  bool
 	ProductionGenerationGrants []domain.ProductionGenerationGrant
+	AutoDraftSchemas           []string
+	AutoDraftLimit             int
 }
 
 type LookupEnv func(string) (string, bool)
@@ -98,6 +101,16 @@ func Load(lookup LookupEnv) (Config, error) {
 	if executionPlaintext && environment != Development && environment != Test {
 		return Config{}, fmt.Errorf("SEMLIA_EXECUTION_ALLOW_PLAINTEXT is restricted to development and test")
 	}
+	// Development-only relief for source roles that are not provably read-only.
+	// Narrower than the execution plaintext flag on purpose: it must never be
+	// reachable from a shared or acceptance environment.
+	discoveryUnsafeSource, err := booleanValue(lookup, "SEMLIA_DISCOVERY_ALLOW_UNSAFE_SOURCE")
+	if err != nil {
+		return Config{}, err
+	}
+	if discoveryUnsafeSource && environment != Development {
+		return Config{}, fmt.Errorf("SEMLIA_DISCOVERY_ALLOW_UNSAFE_SOURCE is restricted to development")
+	}
 	artifactRetention, err := durationValue(lookup, "SEMLIA_ARTIFACT_RETENTION", 30*24*time.Hour)
 	if err != nil {
 		return Config{}, err
@@ -113,10 +126,19 @@ func Load(lookup LookupEnv) (Config, error) {
 	if len(generationGrants) > 0 && !semanticProductionEnabled {
 		return Config{}, fmt.Errorf("SEMLIA_PRODUCTION_GENERATION_GRANTS requires semantic production enabled")
 	}
+	autoDraftSchemas := splitValues(value(lookup, "SEMLIA_PRODUCTION_AUTO_DRAFT_SCHEMAS"))
+	if len(autoDraftSchemas) > 0 && !semanticProductionEnabled {
+		return Config{}, fmt.Errorf("SEMLIA_PRODUCTION_AUTO_DRAFT_SCHEMAS requires semantic production enabled")
+	}
+	autoDraftLimit, err := intValue(lookup, "SEMLIA_PRODUCTION_AUTO_DRAFT_LIMIT", 500)
+	if err != nil {
+		return Config{}, err
+	}
 	authDefault := AuthPassword
 	cfg := Config{
 		Environment:      environment,
 		ExecutionSources: value(lookup, "SEMLIA_EXECUTION_SOURCES"), ExecutionAllowPlaintext: executionPlaintext,
+		DiscoveryAllowUnsafeSource: discoveryUnsafeSource,
 		HTTPAddress:                valueOrDefault(lookup, "SEMLIA_HTTP_ADDR", "127.0.0.1:8080"),
 		DatabaseURL:                value(lookup, "SEMLIA_DATABASE_URL"),
 		GitRepository:              value(lookup, "SEMLIA_GIT_REPOSITORY"),
@@ -141,6 +163,8 @@ func Load(lookup LookupEnv) (Config, error) {
 		ArtifactRetention:          artifactRetention,
 		SemanticProductionEnabled:  semanticProductionEnabled,
 		ProductionGenerationGrants: generationGrants,
+		AutoDraftSchemas:           autoDraftSchemas,
+		AutoDraftLimit:             autoDraftLimit,
 	}
 
 	if fields := invalidFields(cfg); len(fields) > 0 {
@@ -187,6 +211,18 @@ func durationValue(lookup LookupEnv, key string, fallback time.Duration) (time.D
 	}
 	parsed, err := time.ParseDuration(raw)
 	if err != nil {
+		return 0, fmt.Errorf("invalid configuration: %s", key)
+	}
+	return parsed, nil
+}
+
+func intValue(lookup LookupEnv, key string, fallback int) (int, error) {
+	raw := strings.TrimSpace(value(lookup, key))
+	if raw == "" {
+		return fallback, nil
+	}
+	parsed, err := strconv.Atoi(raw)
+	if err != nil || parsed < 1 {
 		return 0, fmt.Errorf("invalid configuration: %s", key)
 	}
 	return parsed, nil

@@ -156,7 +156,7 @@ const candidate: SemanticCandidate = {
   sourceRevisionId: "srv_01arz3ndektsv4rrffq69g5fav",
   discoveryRunId: run.id,
   candidateKey: "entity:public.orders",
-  candidateKind: "entity",
+  candidateKind: "data_asset",
   title: "public.orders",
   proposalInput: { qualifiedName: "public.orders", fields: [{ name: "order_id" }] },
   evidence: [{ locator: "postgresql://catalog/public.orders" }],
@@ -207,10 +207,10 @@ describe("real source and candidate workspace", () => {
     const user = userEvent.setup();
     const view = renderView(2);
     await openProductionCandidate(user);
-    await user.click(screen.getByRole("button", { name: "新建语义资产" }));
+    await user.click(screen.getByRole("button", { name: "整理为知识" }));
     await user.type(screen.getByLabelText("业务定义"), "Reviewed definition");
-    await user.click(screen.getByRole("button", { name: "保存生产草稿" }));
-    await screen.findByText("保存生产草稿已由服务器接收。");
+    await user.click(screen.getByRole("button", { name: "保存知识草稿" }));
+    await screen.findByText("保存知识草稿已由服务器接收。");
     view.unmount(); localStorage.clear();
     renderView(2); await openProductionCandidate(user);
     await user.click(await screen.findByRole("button", { name: /建模中 · v1/ }));
@@ -223,9 +223,9 @@ describe("real source and candidate workspace", () => {
   it("reopens a persisted production draft without resubmitting it", async () => {
     const user = userEvent.setup();
     const view = renderView(2); await openProductionCandidate(user);
-    await user.click(screen.getByRole("button", { name: "新建语义资产" }));
-    await user.click(screen.getByRole("button", { name: "保存生产草稿" }));
-    await screen.findByText("保存生产草稿已由服务器接收。");
+    await user.click(screen.getByRole("button", { name: "整理为知识" }));
+    await user.click(screen.getByRole("button", { name: "保存知识草稿" }));
+    await screen.findByText("保存知识草稿已由服务器接收。");
     view.unmount(); renderView(2); await openProductionCandidate(user);
     await user.click(await screen.findByRole("button", { name: /建模中 · v1/ }));
     await waitFor(() => expect(screen.getByLabelText("资产地址")).toHaveValue("public.orders"));
@@ -238,13 +238,13 @@ describe("real source and candidate workspace", () => {
     const user = userEvent.setup();
     mocks.productionCreate.mockImplementationOnce(async (_workspace: string, draft: ProductionDraft) => { storeProduction(draft); throw new TypeError("connection lost"); });
     const view = renderView(2); await openProductionCandidate(user);
-    await user.click(screen.getByRole("button", { name: "新建语义资产" }));
-    await user.click(screen.getByRole("button", { name: "保存生产草稿" }));
+    await user.click(screen.getByRole("button", { name: "整理为知识" }));
+    await user.click(screen.getByRole("button", { name: "保存知识草稿" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("结果尚不明确");
-    expect(screen.getByRole("button", { name: "保存生产草稿" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "保存知识草稿" })).toBeDisabled();
     view.unmount(); renderView(2); await openProductionCandidate(user);
     expect(await screen.findByRole("button", { name: /建模中 · v1/ })).toBeVisible();
-    expect(screen.queryByRole("button", { name: "新建语义资产" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "整理为知识" })).not.toBeInTheDocument();
     expect(mocks.productionCreate).toHaveBeenCalledTimes(1);
     expect(mocks.decideSemanticCandidate).not.toHaveBeenCalled();
   });
@@ -252,11 +252,11 @@ describe("real source and candidate workspace", () => {
   it("does not require browser storage to create a server-owned draft", async () => {
     const user = userEvent.setup();
     renderView(2); await openProductionCandidate(user);
-    await user.click(screen.getByRole("button", { name: "新建语义资产" }));
+    await user.click(screen.getByRole("button", { name: "整理为知识" }));
     const storage = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("quota exceeded"); });
     try {
-      await user.click(screen.getByRole("button", { name: "保存生产草稿" }));
-      expect(await screen.findByText("保存生产草稿已由服务器接收。")).toBeVisible();
+      await user.click(screen.getByRole("button", { name: "保存知识草稿" }));
+      expect(await screen.findByText("保存知识草稿已由服务器接收。")).toBeVisible();
       expect(mocks.productionCreate).toHaveBeenCalledTimes(1);
       expect(storage).not.toHaveBeenCalled();
     } finally { storage.mockRestore(); }
@@ -266,28 +266,28 @@ describe("real source and candidate workspace", () => {
     const user = userEvent.setup();
     mocks.productionCreate.mockRejectedValueOnce(new ProductionApiError("invalid input", "INVALID_ARGUMENT", 400));
     renderView(2); await openProductionCandidate(user);
-    await user.click(screen.getByRole("button", { name: "新建语义资产" }));
-    await user.click(screen.getByRole("button", { name: "保存生产草稿" }));
+    await user.click(screen.getByRole("button", { name: "整理为知识" }));
+    await user.click(screen.getByRole("button", { name: "保存知识草稿" }));
     await screen.findByRole("alert");
     expect(screen.getByLabelText("业务定义")).not.toBeDisabled();
-    expect(screen.getByRole("button", { name: "保存生产草稿" })).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: "保存知识草稿" })).not.toBeDisabled();
     await user.type(screen.getByLabelText("业务定义"), "Corrected");
-    await user.click(screen.getByRole("button", { name: "保存生产草稿" }));
-    await screen.findByText("保存生产草稿已由服务器接收。");
+    await user.click(screen.getByRole("button", { name: "保存知识草稿" }));
+    await screen.findByText("保存知识草稿已由服务器接收。");
     expect(mocks.productionCreate).toHaveBeenCalledTimes(2);
     expect(mocks.productionCreate.mock.calls[1][2]).not.toBe(mocks.productionCreate.mock.calls[0][2]);
   });
 
   it("does not turn a failed saved-detail refresh into a new draft creation", async () => {
     const user = userEvent.setup(); renderView(2); await openProductionCandidate(user);
-    await user.click(screen.getByRole("button", { name: "新建语义资产" }));
-    await user.click(screen.getByRole("button", { name: "保存生产草稿" }));
+    await user.click(screen.getByRole("button", { name: "整理为知识" }));
+    await user.click(screen.getByRole("button", { name: "保存知识草稿" }));
     await screen.findByRole("button", { name: "保存纠正版本" });
     mocks.productionGet.mockRejectedValueOnce(new ProductionApiError("detail unavailable", "REQUEST_FAILED", 500));
     await user.click(screen.getByRole("button", { name: "核对服务器状态" }));
     await screen.findByText("detail unavailable");
     expect(screen.getByLabelText("业务定义")).toBeDisabled();
-    expect(screen.getByRole("button", { name: "保存生产草稿" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "保存知识草稿" })).toBeDisabled();
     expect(mocks.productionCreate).toHaveBeenCalledTimes(1);
   });
 
@@ -351,7 +351,7 @@ describe("real source and candidate workspace", () => {
     await user.click(screen.getByRole("button", { name: "查看结果" }));
     expect(await screen.findByRole("button", { name: "返回来源" })).toBeVisible();
     view.rerender(<LiveSourcesView focusIndex={2} navigationEpoch={1} runDetailBackRequestEpoch={0} onRunDetailOpenChange={() => {}} onOpenProposal={() => {}} />);
-    expect(await screen.findByRole("region", { name: "接入运行" })).toBeVisible();
+    expect(await screen.findByRole("region", { name: "运行记录" })).toBeVisible();
     expect(screen.queryByRole("button", { name: "返回来源" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: `查看运行 ${run.id}` }));
     expect(await screen.findByRole("button", { name: "返回运行记录" })).toBeVisible();
@@ -375,7 +375,7 @@ describe("real source and candidate workspace", () => {
     const user = userEvent.setup();
     mocks.getDiscoveryRun.mockResolvedValue({ ...run, adapterVersion: "v1", findings: [] });
     render(<LiveSourcesView focusIndex={2} initialRunId={run.id} runDetailBackRequestEpoch={0} onRunDetailOpenChange={() => {}} onOpenProposal={() => {}} />);
-    expect(await screen.findByRole("region", { name: "接入运行详情" })).toBeVisible();
+    expect(await screen.findByRole("region", { name: "运行记录详情" })).toBeVisible();
     expect(await screen.findByRole("heading", { name: source.name })).toBeVisible();
     await user.click(screen.getByRole("button", { name: "返回运行记录" }));
     expect(await screen.findByRole("button", { name: `查看运行 ${run.id}` })).toBeVisible();
@@ -394,7 +394,7 @@ describe("real source and candidate workspace", () => {
 
   it("starts from the source candidate without requiring an existing asset or inventing a definition", async () => {
     const user = userEvent.setup(); renderView(2); await openProductionCandidate(user);
-    await user.click(screen.getByRole("button", { name: "新建语义资产" }));
+    await user.click(screen.getByRole("button", { name: "整理为知识" }));
     expect(screen.getByLabelText("业务定义")).toHaveValue("");
     expect(screen.getByLabelText("适用范围")).toHaveValue("");
     expect(screen.queryByLabelText("目标语义资产")).not.toBeInTheDocument();
@@ -422,7 +422,7 @@ describe("real source and candidate workspace", () => {
     await screen.findByText("忽略候选已由服务器接收。");
     expect(mocks.decideSemanticCandidate).toHaveBeenCalledWith(workspaceId, candidate.id, expect.objectContaining({ action: "dismiss", reason: "Not part of the governed scope", idempotencyKey: expect.any(String) }));
     expect(mocks.productionCreate).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "新建语义资产" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "整理为知识" })).toBeDisabled();
   });
 
   it("opens an actionable source workspace with its own history", async () => {
@@ -447,7 +447,7 @@ describe("real source and candidate workspace", () => {
     expect(await screen.findByRole("button", { name: "打开运行" })).toBeVisible();
     expect(screen.queryByRole("link", { name: "打开运行" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "打开运行" }));
-    expect(await screen.findByRole("region", { name: "接入运行详情" })).toBeVisible();
+    expect(await screen.findByRole("region", { name: "运行记录详情" })).toBeVisible();
     await user.click(screen.getByRole("button", { name: "返回计划" }));
     expect(screen.getByRole("dialog", { name: "接入计划详情" })).toBeVisible();
   });
@@ -460,7 +460,7 @@ describe("real source and candidate workspace", () => {
     expect(await screen.findByText(/发现任务已创建，排队中/)).toBeVisible();
     expect(mocks.startSourceRun).toHaveBeenCalledTimes(1);
     await user.click(screen.getByRole("button", { name: "查看运行" }));
-    expect(await screen.findByRole("region", { name: "接入运行详情" })).toBeVisible();
+    expect(await screen.findByRole("region", { name: "运行记录详情" })).toBeVisible();
   });
 
   it("shows connection-test progress and supports menu keyboard navigation", async () => {
@@ -610,16 +610,16 @@ describe("real source and candidate workspace", () => {
 
     expect(await screen.findByText("有警告")).toBeVisible();
     await user.click(screen.getByRole("button", { name: `查看运行 ${run.id}` }));
-    const view = await screen.findByRole("region", { name: "接入运行详情" });
+    const view = await screen.findByRole("region", { name: "运行记录详情" });
     expect(within(view).getByText("SQL_ARTIFACT_PARSE_WARNING")).toBeVisible();
     expect(within(view).getByText("models/orders.sql")).toBeVisible();
   });
 
   it("pins candidate and snapshot in production creation without client-side candidate conversion", async () => {
     const user = userEvent.setup(); renderView(2); await openProductionCandidate(user);
-    await user.click(screen.getByRole("button", { name: "新建语义资产" }));
-    await user.click(screen.getByRole("button", { name: "保存生产草稿" }));
-    await screen.findByText("保存生产草稿已由服务器接收。");
+    await user.click(screen.getByRole("button", { name: "整理为知识" }));
+    await user.click(screen.getByRole("button", { name: "保存知识草稿" }));
+    await screen.findByText("保存知识草稿已由服务器接收。");
     expect(mocks.productionCreate).toHaveBeenCalledWith(workspaceId, expect.objectContaining({
       input: expect.objectContaining({ candidates: [expect.objectContaining({ candidateId: candidate.id, snapshotId: "snapshot-orders", digest: candidate.contentDigest, primaryTargetKey: "primary" })] }),
       targets: [expect.objectContaining({ intent: "create", content: expect.objectContaining({ definition: null, scope: null }) })],
@@ -631,10 +631,10 @@ describe("real source and candidate workspace", () => {
   it("retries uncertain production creation with the exact same command key", async () => {
     const user = userEvent.setup(); mocks.productionCreate.mockRejectedValueOnce(new TypeError("network lost"));
     renderView(2); await openProductionCandidate(user);
-    await user.click(screen.getByRole("button", { name: "新建语义资产" }));
-    await user.click(screen.getByRole("button", { name: "保存生产草稿" }));
+    await user.click(screen.getByRole("button", { name: "整理为知识" }));
+    await user.click(screen.getByRole("button", { name: "保存知识草稿" }));
     await user.click(await screen.findByRole("button", { name: "重试同一请求" }));
-    await screen.findByText("保存生产草稿已由服务器接收。");
+    await screen.findByText("保存知识草稿已由服务器接收。");
     expect(mocks.productionCreate).toHaveBeenCalledTimes(2);
     expect(mocks.productionCreate.mock.calls[0]).toEqual(mocks.productionCreate.mock.calls[1]);
     expect(mocks.decideSemanticCandidate).not.toHaveBeenCalled();
@@ -643,17 +643,17 @@ describe("real source and candidate workspace", () => {
   it("leaves candidate conversion untouched when production storage fails", async () => {
     const user = userEvent.setup(); mocks.productionCreate.mockRejectedValue(new ProductionApiError("unavailable", "INTERNAL_ERROR", 503));
     renderView(2); await openProductionCandidate(user);
-    await user.click(screen.getByRole("button", { name: "新建语义资产" }));
-    await user.click(screen.getByRole("button", { name: "保存生产草稿" }));
+    await user.click(screen.getByRole("button", { name: "整理为知识" }));
+    await user.click(screen.getByRole("button", { name: "保存知识草稿" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("结果尚不明确");
     expect(mocks.decideSemanticCandidate).not.toHaveBeenCalled();
     expect(mocks.createAndSubmitProposal).not.toHaveBeenCalled();
-    expect(screen.getByRole("region", { name: "语义生产" })).toBeVisible();
+    expect(screen.getByRole("region", { name: "知识确认" })).toBeVisible();
   });
 
   it("exposes durable scheduling rather than prototype automation", async () => {
     renderView(1);
-    const view = screen.getByRole("region", { name: "接入自动化" });
+    const view = screen.getByRole("region", { name: "接入计划" });
     expect(within(view).queryByText("Prototype")).not.toBeInTheDocument();
     expect(within(view).queryByLabelText("计划来源")).not.toBeInTheDocument();
     expect(await within(view).findByRole("button", { name: "新建计划" })).toBeVisible();
@@ -704,7 +704,7 @@ describe("real source and candidate workspace", () => {
     const user = userEvent.setup();
     renderView();
     await screen.findByText(source.name);
-    await user.click(screen.getByRole("button", { name: "导入工件" }));
+    await user.click(screen.getByRole("button", { name: "导入文件" }));
     await user.type(screen.getByLabelText("来源名称"), "Orders CSV");
     await user.upload(screen.getByLabelText("上传工件"), new File(["id\n1\n"], "orders.csv", { type: "text/csv" }));
     expect(screen.getByText("orders.csv")).toBeVisible();
@@ -721,7 +721,7 @@ describe("real source and candidate workspace", () => {
     const user = userEvent.setup();
     renderView();
     await screen.findByText(source.name);
-    await user.click(screen.getByRole("button", { name: "导入工件" }));
+    await user.click(screen.getByRole("button", { name: "导入文件" }));
     await user.type(screen.getByLabelText("来源名称"), "SQL models");
     await user.selectOptions(screen.getByLabelText("工件类型"), "sql_bundle");
     await user.type(screen.getByLabelText("配置根目录内 SQL 路径"), "models/orders.sql\nmodels/items.sql");
@@ -736,13 +736,13 @@ describe("real source and candidate workspace", () => {
     const user = userEvent.setup();
     renderView();
     await screen.findByText(source.name);
-    await user.click(screen.getByRole("button", { name: "导入工件" }));
+    await user.click(screen.getByRole("button", { name: "导入文件" }));
     await user.type(screen.getByLabelText("来源名称"), "Unsafe CSV");
     await user.upload(screen.getByLabelText("上传工件"), new File(["id\n=NOW()\n"], "unsafe.csv", { type: "text/csv" }));
     await user.click(screen.getByRole("button", { name: "校验并保存来源" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("UNSAFE_ARTIFACT");
     expect(mocks.finalizeArtifactSet).not.toHaveBeenCalled();
-    expect(screen.getByRole("dialog", { name: "导入工件" })).toBeVisible();
+    expect(screen.getByRole("dialog", { name: "导入文件" })).toBeVisible();
   });
 
   it("does not offer schedule delegation without ingestion.run", async () => {
@@ -784,7 +784,7 @@ describe("real source and candidate workspace", () => {
     renderView();
     await user.click(await screen.findByRole("button", { name: "下一页来源" }));
     expect(await screen.findByText("Later Warehouse")).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "导入工件" }));
+    await user.click(screen.getByRole("button", { name: "导入文件" }));
     await user.type(screen.getByLabelText("来源名称"), "Typing while polling");
     await act(async () => { tick?.(); });
     await waitFor(() => expect(mocks.getDiscoveryRun).toHaveBeenCalled());

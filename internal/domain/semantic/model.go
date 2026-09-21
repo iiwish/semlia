@@ -41,16 +41,14 @@ func (address Address) String() string {
 type AssetType string
 
 const (
-	Concept       AssetType = "concept"
-	Entity        AssetType = "entity"
-	SemanticModel AssetType = "semantic_model"
-	Dimension     AssetType = "dimension"
-	Measure       AssetType = "measure"
-	Metric        AssetType = "metric"
-	Segment       AssetType = "segment"
+	BusinessObject AssetType = "business_object"
+	BusinessTerm   AssetType = "business_term"
+	AnalysisModel  AssetType = "analysis_model"
+	DataAsset      AssetType = "data_asset"
+	Metric         AssetType = "metric"
 )
 
-var assetTypes = []AssetType{Concept, Entity, SemanticModel, Dimension, Measure, Metric, Segment}
+var assetTypes = []AssetType{BusinessObject, BusinessTerm, Metric, DataAsset, AnalysisModel}
 
 func (assetType AssetType) valid() bool { return contains(assetTypes, assetType) }
 
@@ -122,13 +120,13 @@ type relationPolicy struct {
 }
 
 var relationPolicies = map[RelationPredicate]relationPolicy{
-	Measures:     {plane: SemanticPlane, sources: []AssetType{Metric, Measure}, targets: []AssetType{Entity, SemanticModel}},
-	Describes:    {plane: SemanticPlane, sources: []AssetType{Dimension, Concept}, targets: []AssetType{Entity, SemanticModel, Concept}},
-	DependsOn:    {plane: DependencyPlane, sources: assetTypes, targets: []AssetType{Metric, Measure, Dimension, SemanticModel}},
-	DerivedFrom:  {plane: DependencyPlane, sources: []AssetType{Metric, Measure, SemanticModel}, targets: []AssetType{Metric, Measure, SemanticModel}},
-	FiltersBy:    {plane: SemanticPlane, sources: []AssetType{Metric, Measure, Segment, SemanticModel}, targets: []AssetType{Dimension, Entity}},
+	Measures:     {plane: SemanticPlane, sources: []AssetType{Metric}, targets: []AssetType{BusinessObject, AnalysisModel}},
+	Describes:    {plane: SemanticPlane, sources: []AssetType{BusinessTerm, DataAsset}, targets: []AssetType{BusinessObject, AnalysisModel}},
+	DependsOn:    {plane: DependencyPlane, sources: assetTypes, targets: assetTypes},
+	DerivedFrom:  {plane: DependencyPlane, sources: []AssetType{Metric, DataAsset}, targets: []AssetType{Metric, DataAsset}},
+	FiltersBy:    {plane: SemanticPlane, sources: []AssetType{Metric, AnalysisModel}, targets: []AssetType{BusinessTerm}},
 	SynonymOf:    {plane: TaxonomyPlane, sources: assetTypes, targets: assetTypes, matched: true},
-	Contains:     {plane: SemanticPlane, sources: []AssetType{Concept, Entity, SemanticModel}, targets: []AssetType{Metric, Measure, Dimension, Concept}},
+	Contains:     {plane: SemanticPlane, sources: []AssetType{AnalysisModel}, targets: assetTypes},
 	BroaderThan:  {plane: TaxonomyPlane, sources: assetTypes, targets: assetTypes, matched: true},
 	NarrowerThan: {plane: TaxonomyPlane, sources: assetTypes, targets: assetTypes, matched: true},
 	EquivalentTo: {plane: TaxonomyPlane, sources: assetTypes, targets: assetTypes, matched: true},

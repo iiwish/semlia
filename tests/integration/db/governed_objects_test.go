@@ -569,6 +569,7 @@ func TestApplyGovernedChangeRejectsConcurrentApplication(t *testing.T) {
 // governance-objects upgrade, the downgrade back to the T002 level, and the
 // re-upgrade — with all M0/M1/T001/T002 rows preserved untouched.
 func TestPopulatedM2UpgradeAndRollbackPreserveGovernedAuthoringRows(t *testing.T) {
+	resetSchema(t)
 	migrator := newMigrator(t)
 	if err := migrator.Down(); err != nil {
 		t.Fatal(err)
