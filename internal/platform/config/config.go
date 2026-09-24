@@ -47,6 +47,7 @@ type Config struct {
 	GitRepository              string
 	SQLArtifactRoot            string
 	AllowedOrigins             []string
+	DevelopmentLANHTTP         bool
 	SecretKey                  string
 	BuildVersion               string
 	LogFormat                  LogFormat
@@ -89,6 +90,13 @@ func Load(lookup LookupEnv) (Config, error) {
 	localUATIdentities, err := booleanValue(lookup, "SEMLIA_LOCAL_UAT_IDENTITIES")
 	if err != nil {
 		return Config{}, err
+	}
+	lanHTTP, err := booleanValue(lookup, "SEMLIA_DEVELOPMENT_LAN_HTTP")
+	if err != nil {
+		return Config{}, err
+	}
+	if lanHTTP && environment != Development {
+		return Config{}, fmt.Errorf("SEMLIA_DEVELOPMENT_LAN_HTTP is restricted to development")
 	}
 	workerConfigured, err := booleanValue(lookup, "SEMLIA_WORKER_CONFIGURED")
 	if err != nil {
@@ -144,6 +152,7 @@ func Load(lookup LookupEnv) (Config, error) {
 		GitRepository:              value(lookup, "SEMLIA_GIT_REPOSITORY"),
 		SQLArtifactRoot:            value(lookup, "SEMLIA_SOURCE_ARTIFACT_ROOT"),
 		AllowedOrigins:             splitValues(value(lookup, "SEMLIA_ALLOWED_ORIGINS")),
+		DevelopmentLANHTTP:         lanHTTP,
 		SecretKey:                  value(lookup, "SEMLIA_SECRET_KEY"),
 		BuildVersion:               valueOrDefault(lookup, "SEMLIA_BUILD_VERSION", DefaultBuildVersion),
 		LogFormat:                  LogFormat(strings.ToLower(valueOrDefault(lookup, "SEMLIA_LOG_FORMAT", logDefault))),
@@ -325,7 +334,7 @@ func invalidFields(cfg Config) []string {
 	}
 
 	for _, origin := range cfg.AllowedOrigins {
-		if !validOrigin(origin, cfg.Environment == Production) {
+		if !validOrigin(origin, cfg.Environment == Production, cfg.Environment == Development && cfg.DevelopmentLANHTTP) {
 			fields = append(fields, "SEMLIA_ALLOWED_ORIGINS")
 			break
 		}
@@ -382,7 +391,7 @@ func validAddress(address string) bool {
 	return err == nil && value >= 0 && value <= 65535
 }
 
-func validOrigin(origin string, requireHTTPS bool) bool {
+func validOrigin(origin string, requireHTTPS, allowLANHTTP bool) bool {
 	if origin == "" || origin == "*" {
 		return false
 	}
@@ -401,7 +410,7 @@ func validOrigin(origin string, requireHTTPS bool) bool {
 	}
 	host := parsed.Hostname()
 	ip := net.ParseIP(host)
-	return parsed.Scheme == "http" && (host == "localhost" || ip != nil && ip.IsLoopback())
+	return parsed.Scheme == "http" && (host == "localhost" || ip != nil && (ip.IsLoopback() || allowLANHTTP && ip.IsPrivate()))
 }
 
 func validProductionDatabaseURL(raw string) bool {

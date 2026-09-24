@@ -58,7 +58,9 @@ bash scripts/dev/account.sh reset-local-password founder@example.com
 
 发布环境可设置 `SEMLIA_AUTH_MODE=oidc` 及 issuer、client ID、client secret、redirect URL。OIDC 与本地账号共用同一前端、会话和授权体系。OIDC 身份按 issuer/subject 独立关联；已验证邮箱仅用于匹配受控邀请。
 
-应用使用 HttpOnly、SameSite cookie；写请求需要明确的 Origin 和会话 CSRF 校验。密码登录要求允许的 Origin 及 JSON 请求体。非回环地址必须使用 HTTPS。生产环境还要求安全的数据库连接和产物配置。
+应用使用 HttpOnly、SameSite cookie；写请求需要明确的 Origin 和会话 CSRF 校验。密码登录要求允许的 Origin 及 JSON 请求体。非回环地址默认必须使用 HTTPS。生产环境还要求安全的数据库连接和产物配置。
+
+可信局域网临时演示可在 `.semlia/native.env` 中设置 `SEMLIA_DEVELOPMENT_LAN_HTTP=true` 和 `SEMLIA_NATIVE_LAN_IP=<本机局域网 IPv4>`，重启 `make dev` 后通过 `http://<该 IP>:<Web 端口>` 访问。Web 监听所有接口，但服务端仅接受明确列出的 Origin，API 仍绑定回环地址。此开关仅允许 development 环境的私有 IP，不允许公共 IP、域名或通配 Origin，不改变登录、授权和 CSRF 要求。HTTP 会明文传输密码和会话，仅供可信网络临时使用；恢复时删除这两个配置并重启。局域网 IP 变化后需同步配置。
 
 ## 数据来源凭据
 
