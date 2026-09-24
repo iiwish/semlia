@@ -1,3 +1,4 @@
+import { auditRunRoute } from "./routes";
 import { useCallback,useEffect,useRef,useState,type FormEvent } from "react";
 import { ArrowUpRight,CircleAlert,CheckCircle2,Info,LoaderCircle,RefreshCw,Search,Square,X } from "lucide-react";
 import { REASON_NO_PUBLISHED_RELEASE, embeddingApi,type EmbeddingApi,type EmbeddingStatus,type EmbeddingSearchResult } from "./embedding";
@@ -58,7 +59,7 @@ export function EmbeddingIndexPanel({workspaceId,canManage,onNavigate,api=embedd
 
   {latest&&<div className="embedding-index-checkpoint">
    <div className="embedding-index-checkpoint-head"><div><strong>{labels[latest.state]}</strong><code>{latest.id}</code><small>{latest.model} · {latest.dimension} 维</small></div>
-    <div className="embedding-index-checkpoint-actions"><a href={`/operations/runtime?run=${encodeURIComponent(latest.runtimeRunId)}`}>查看运行<ArrowUpRight size={14}/></a>{canManage&&building&&<button className="secondary-button" disabled={busy} type="button" onClick={()=>void cancel()}><Square size={13}/>取消重建</button>}</div></div>
+    <div className="embedding-index-checkpoint-actions"><a href={`${auditRunRoute(latest.runtimeRunId)}`}>查看运行<ArrowUpRight size={14}/></a>{canManage&&building&&<button className="secondary-button" disabled={busy} type="button" onClick={()=>void cancel()}><Square size={13}/>取消重建</button>}</div></div>
    <div className="embedding-index-progress"><progress value={latest.vectorCount} max={latest.chunkCount||1} aria-label="索引已处理知识块"/><span>{latest.vectorCount} / {latest.chunkCount}</span></div>
    {latest.errorCode&&<p className="embedding-index-notice is-danger" role="alert"><CircleAlert size={14}/><span>{latest.errorCode}</span></p>}
   </div>}

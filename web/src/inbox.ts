@@ -34,7 +34,9 @@ export function buildInbox(operations: InboxOperation[], tasks: WorkbenchAttenti
     const complete = task.state === "resolved" || task.state === "dismissed";
     if (scope === "done" ? !complete : scope === "pending" && complete) continue;
     const target = new URL(task.targetRoute, "http://semlia.local");
-    if (target.pathname === "/governance" && proposalIds.has(target.searchParams.get("proposal") ?? "")) continue;
+    const targetSegments = target.pathname.split("/").filter(Boolean);
+    const proposalId = targetSegments[0] === "changes" && targetSegments[1] ? decodeURIComponent(targetSegments[1]) : target.pathname === "/governance" ? target.searchParams.get("proposal") : null;
+    if (proposalId && proposalIds.has(proposalId)) continue;
     const [group, action] = taskKinds[task.kind];
     rows.push({ id: `task:${task.id}`, title: task.title, reason: task.summary, action: complete ? "查看记录" : action, state: taskStates[task.state], group, updatedAt: task.updatedAt, task });
   }

@@ -175,7 +175,7 @@ export function KnowledgeRevisionWorkbench({ asset, request, onCancel, onNotify,
           <header><div><span className="content-label">候选知识字段</span><h3>{descriptor.label}</h3><p>{descriptor.help}</p></div><code>{descriptor.fieldPath}</code></header>
           <section className="knowledge-published-value" aria-label={`${descriptor.label}当前发布值`}>
             <span><LockKeyhole size={13} />当前发布值 · {asset.revision}</span>
-            {canonical && activeField === "expression" ? <KnowledgeSpecView spec={asset.knowledgeSpec} /> : descriptor.code ? <pre>{publishedValues[activeField]}</pre> : <p>{publishedValues[activeField] || "当前没有内容"}</p>}
+            {canonical && activeField === "expression" ? <KnowledgeSpecView type={asset.type} spec={asset.knowledgeSpec} /> : descriptor.code ? <pre>{publishedValues[activeField]}</pre> : <p>{publishedValues[activeField] || "当前没有内容"}</p>}
           </section>
           {canonical && activeField === "expression" ? <>{knowledgeType === "data_asset" && <KnowledgeSourcePicker workspaceId={workspaceId} onMembers={setSourceMembers} />}<KnowledgeSpecEditor type={knowledgeType} workspaceId={workspaceId} members={sourceMembers} value={draftSpec} onChange={(spec) => { setDraftSpec(spec); setChecksRun(false); }} /></> : <label className="knowledge-candidate-field">
             <span>候选值</span>

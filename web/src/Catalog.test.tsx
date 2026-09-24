@@ -6,6 +6,7 @@ import { App } from "./App";
 import { CatalogRuntimeProvider, useCatalogRuntime } from "./catalogRuntime";
 import { listWorkspaces } from "./catalog";
 import { getSession } from "./identity";
+import { getRelease } from "./governance";
 import { SessionAccountControl, SessionRuntimeProvider } from "./sessionRuntime";
 
 
@@ -322,6 +323,36 @@ describe("production catalog", () => {
     const detail = await screen.findByRole("region", { name: "发布 #42 详情" });
     expect(detail).toHaveTextContent("rls_01arz3ndektsv4rrffq69g5fav");
     expect(detail).toHaveTextContent("release_manifests");
+    expect(within(detail).getByText("release_manifests")).not.toBeVisible();
+    expect(within(detail).queryByText("使用影响")).not.toBeInTheDocument();
+  });
+
+  it("uses the pinned revision name once in the release manifest and keeps provenance folded", async () => {
+    const base = await getRelease(workspace.id, "rls_01arz3ndektsv4rrffq69g5fav");
+    const oldRevisionId = "rev_01arz3ndektsv4rrffq69g5faw";
+    vi.mocked(getRelease).mockResolvedValueOnce({ ...base, manifest: { assets: [{ assetId: asset.id, revisionId: oldRevisionId, compatibility: {}, position: 0 }], objects: [] } });
+    listAssetRevisionsMock.mockResolvedValue({ items: [{ id: oldRevisionId, assetId: asset.id, sequence: 2, schemaVersion: "1.0.0", contentDigest: "c".repeat(64), content: { displayName: "历史净收入" }, createdBy: "catalog-web", createdAt: asset.updatedAt }], page: { limit: 100, total: 1 } });
+    window.history.replaceState({}, "", `/governance?release=${base.id}`);
+    render(<App />);
+    const detail = await screen.findByRole("region", { name: "发布 #42 详情" });
+    expect(await within(detail).findByText("历史净收入")).toBeVisible();
+    const contents = within(detail).getByRole("region", { name: "发布内容" });
+    expect(within(contents).getAllByText("历史净收入")).toHaveLength(1);
+    expect(within(contents).queryByText(asset.title)).not.toBeInTheDocument();
+    expect(within(contents).queryByText(asset.id)).not.toBeInTheDocument();
+    expect(within(detail).getByText(base.manifestDigest)).not.toBeVisible();
+    await userEvent.click(within(detail).getByText("发布追溯"));
+    expect(within(detail).getByText(base.manifestDigest)).toBeVisible();
+  });
+
+  it("keeps unavailable release impact visible instead of implying no consumers", async () => {
+    const base = await getRelease(workspace.id, "rls_01arz3ndektsv4rrffq69g5fav");
+    vi.mocked(getRelease).mockResolvedValueOnce({ ...base, consumerImpactAvailability: "forbidden", consumerImpact: undefined });
+    window.history.replaceState({}, "", `/governance?release=${base.id}`);
+    render(<App />);
+    const detail = await screen.findByRole("region", { name: "发布 #42 详情" });
+    expect(within(detail).getByRole("alert")).toHaveTextContent("消费影响无权访问");
+    expect(within(detail).queryByText(/当前版本使用方 0/)).not.toBeInTheDocument();
   });
 
   it("fetches an exact proposal deep link even when the target is not on the first proposal page", async () => {
@@ -341,7 +372,7 @@ describe("production catalog", () => {
     await user.click(screen.getByRole("button", { name: "知识库" }));
     expect((await screen.findAllByText("Net revenue")).length).toBeGreaterThan(0);
     expect(screen.getByText("net_revenue")).toBeVisible();
-    expect(screen.getByRole("button", { name: "打开语义资产 Net revenue" })).toHaveTextContent("待确认");
+    expect(screen.getByRole("button", { name: "打开语义资产 Net revenue" })).toHaveTextContent("未发布 @0");
 
     await user.click(screen.getByRole("button", { name: "打开语义资产 Net revenue" }));
     expect(await screen.findByRole("heading", { name: "Net revenue", level: 1 })).toBeVisible();
@@ -352,7 +383,7 @@ describe("production catalog", () => {
     expect(screen.getByRole("region", { name: "资产权威分区" })).toHaveTextContent("读取失败");
     const assetDetail = screen.getByRole("region", { name: "语义资产详情" });
     expect(assetDetail.querySelector(".asset-header-release")).toHaveTextContent("未发布");
-    expect(assetDetail).toHaveTextContent("当前 revision 状态草稿");
+    expect(assetDetail).toHaveTextContent("当前修订状态草稿");
     expect(assetDetail).toHaveTextContent("生产固定 revision尚未发布");
     await user.click(screen.getByRole("tab", { name: "本体关系" }));
     expect(screen.getByText("语义关系无权访问")).toBeVisible();
@@ -405,7 +436,7 @@ describe("production catalog", () => {
     const assetDetail = await screen.findByRole("region", { name: "语义资产详情" });
     const authority = screen.getByRole("region", { name: "资产权威分区" });
     expect(assetDetail).toHaveTextContent("当前草稿");
-    expect(assetDetail).toHaveTextContent("当前 revision 状态草稿");
+    expect(assetDetail).toHaveTextContent("当前修订状态草稿");
     expect(assetDetail).toHaveTextContent(`生产固定 revision${releasedRevisionId}`);
     expect(assetDetail).not.toHaveTextContent("生产健康");
     expect(authority).toHaveTextContent(asset.currentRevisionId);
@@ -450,7 +481,7 @@ describe("production catalog", () => {
     await user.click(await screen.findByRole("button", { name: "打开语义资产 Net revenue" }));
     const assetDetail = await screen.findByRole("region", { name: "语义资产详情" });
     expect(assetDetail).toHaveTextContent("生产");
-    expect(assetDetail).toHaveTextContent("当前 revision 状态已发布");
+    expect(assetDetail).toHaveTextContent("当前修订状态已发布");
     expect(assetDetail).toHaveTextContent("验证不完整");
     expect(assetDetail).not.toHaveTextContent("健康");
   });
@@ -482,8 +513,8 @@ describe("production catalog", () => {
     await user.click(await screen.findByRole("tab", { name: "本体关系" }));
     const relations = screen.getByRole("region", { name: "权威语义关系" });
     const lineage = screen.getByRole("region", { name: "权威数据血缘" });
-    expect(relations).toHaveTextContent("服务端未返回 revision 基准");
-    expect(lineage).toHaveTextContent("服务端未返回 revision 基准");
+    expect(relations).toHaveTextContent("版本基准未提供");
+    expect(lineage).toHaveTextContent("版本基准未提供");
     expect(relations).not.toHaveTextContent(asset.currentRevisionId);
     expect(lineage).not.toHaveTextContent(asset.currentRevisionId);
     expect(lineage).toHaveTextContent("服务端未返回 release 基准");
@@ -509,8 +540,8 @@ describe("production catalog", () => {
     await user.click(await screen.findByRole("tab", { name: "定义" }));
     const revisions = await screen.findByRole("region", { name: "不可变修订历史" });
     expect(revisions).toHaveTextContent("1 / 2 项");
-    await user.click(within(revisions).getByRole("button", { name: "加载更多修订" }));
-    expect(await within(revisions).findByText("@2")).toBeVisible();
+    await user.click(within(revisions).getByRole("button", { name: "加载更多版本" }));
+    expect(await within(revisions).findByText("版本 2")).toBeVisible();
     expect(listAssetRevisionsMock).toHaveBeenLastCalledWith(workspace.id, asset.id, "revisions-next");
   });
 
@@ -545,7 +576,7 @@ describe("production catalog", () => {
       ...detail,
       authoritySections: detail.authoritySections.map((section: { kind: string }) => {
         if (section.kind === "physical_bindings") return { ...section, availability: "available", records: [
-          { kind: "physical_binding", id: "pbd_01arz3ndektsv4rrffq69g5fav", authority: "physical_bindings", status: "active", label: "Revenue amount", version: 4, physicalBinding: { assetId: asset.id, datasetId: "pds_orders", fieldId: "pdf_revenue", transform: "gross_amount - refunds" } },
+          { kind: "physical_binding", id: "pbd_01arz3ndektsv4rrffq69g5fav", authority: "physical_bindings", status: "available", label: "01a0c33e-5619-7ec3-bf3f-3122aef695bb", version: 4, physicalBinding: { assetId: asset.id, datasetId: "pds_orders", fieldId: "pdf_revenue", transform: "gross_amount - refunds" } },
           { kind: "model_grain", id: "grn_01arz3ndektsv4rrffq69g5fav", authority: "model_grains", status: "active", label: "Order grain", version: 2, modelGrain: { assetId: asset.id, grainExpression: "one row per order", grainFieldRefs: ["pdf_order_id"], documentedBy: "evd_grain" } },
           { kind: "entity_key", id: "key_01arz3ndektsv4rrffq69g5fav", authority: "entity_keys", status: "active", label: "Order key", version: 1, entityKey: { assetId: asset.id, keyFieldRefs: ["pdf_order_id"], uniquenessSemantics: "deduplicated" } },
         ], recordsPage: { limit: 3, total: 4, nextCursor: "physical-next" } };
@@ -564,18 +595,27 @@ describe("production catalog", () => {
     await user.click(await screen.findByRole("button", { name: "打开语义资产 Net revenue" }));
     await user.click(await screen.findByRole("tab", { name: "实现" }));
     expect(screen.getByText("gross_amount - refunds")).toBeVisible();
+    expect(screen.getByText("数据绑定", { exact: true })).toBeVisible();
+    expect(screen.getByText("可用", { exact: true })).toBeVisible();
+    expect(screen.getByText("01a0c33e-5619-7ec3-bf3f-3122aef695bb")).not.toBeVisible();
     expect(screen.getByText("one row per order")).toBeVisible();
     expect(screen.getByText("deduplicated")).toBeVisible();
     expect(screen.getByText("orders.customer_id = customers.id")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "加载更多权威记录" }));
-    expect(await screen.findByText("pdf_currency")).toBeVisible();
+    expect(await screen.findByText("pdf_currency")).not.toBeVisible();
+    await user.click(within(screen.getByText("Currency").closest("article")!).getByText("记录详情"));
+    expect(screen.getByText("pdf_currency")).toBeVisible();
     expect(listAssetAuthorityRecordsMock).toHaveBeenCalledWith(workspace.id, asset.id, "physical_bindings", "physical-next");
 
     await user.click(screen.getByRole("tab", { name: "本体关系" }));
+    expect(screen.getByText("outgoing · depends_on")).not.toBeVisible();
+    for (const summary of screen.getAllByText("记录详情")) await user.click(summary);
     expect(screen.getByText("outgoing · depends_on")).toBeVisible();
     expect(screen.getByText("pds_raw_orders")).toBeVisible();
     expect(screen.getByText("car_orders_model")).toBeVisible();
     await user.click(screen.getByRole("tab", { name: "交付与影响" }));
+    expect(screen.getByText("csm_finance · pinned")).not.toBeVisible();
+    for (const summary of screen.getAllByText("记录详情")) await user.click(summary);
     expect(screen.getByText("csm_finance · pinned")).toBeVisible();
     expect(screen.getByText('{"schema":"v2"}')).toBeVisible();
   });

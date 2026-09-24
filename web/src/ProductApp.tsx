@@ -18,6 +18,7 @@ import {
   FileCheck2,
   Fingerprint,
   GitPullRequestArrow,
+  History,
   ListFilter,
   Link2,
   LockKeyhole,
@@ -41,6 +42,20 @@ import {
 import { LoaderCircle } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { components } from "@semlia/sdk-typescript";
+
+import {
+  assetRoute,
+  auditRunRoute,
+  changeRoute,
+  compatibilityRoute,
+  releaseRoute,
+  settingsRoute as settingsPath,
+  sourceRoute,
+  workOperationRoute,
+  workReviewsRoute,
+  workRoute,
+  type SourceSection,
+} from "./routes";
 
 import { apiClient } from "./apiClient";
 import { useCatalogRuntime } from "./catalogRuntime";
@@ -84,6 +99,7 @@ import { findingMessage, validatorLabel } from "./knowledgeMessages";
 import { IntegrationSettingsView } from "./IntegrationSettingsView";
 import { AskView } from "./KnowledgeViews";
 import { KnowledgeSpecView } from "./KnowledgeSpecView";
+import { knowledgeFieldLabels } from "./knowledge";
 import { KnowledgeRevisionWorkbench } from "./KnowledgeRevisionWorkbench";
 import { ModelConfigurationView } from "./ModelConfigurationView";
 import { SemanticGraph, type OntologyPerspective } from "./SemanticGraph";
@@ -233,6 +249,39 @@ function isCurrentRevisionReleased(asset: Asset) {
   return asset.deployment.state === "production" && asset.deployment.revisionId === asset.revisionRecord.revisionId;
 }
 
+type KnowledgeVersionFilter = "全部" | "正式版" | "草稿";
+
+function revisionVersionLabel(value: string) {
+  const match = value.match(/@(\d+)(?:-draft)?$/);
+  return match ? `@${match[1]}` : value;
+}
+
+function knowledgeVersionState(asset: Asset) {
+  const publishedRevisionId = asset.deployment.state === "production" ? asset.deployment.revisionId : undefined;
+  const isPublishedCurrent = publishedRevisionId === asset.revisionRecord.revisionId;
+  const hasPublishedVersion = Boolean(publishedRevisionId);
+  const hasDraftVersion = asset.revisionRecord.workflowState === "draft"
+    || asset.revisionRecord.workflowState === "proposed"
+    || asset.revisionRecord.workflowState === "in_review"
+    || Boolean(publishedRevisionId && publishedRevisionId !== asset.revisionRecord.revisionId);
+  const publishedVersion = publishedRevisionId ? revisionVersionLabel(publishedRevisionId) : "";
+  const draftVersion = revisionVersionLabel(asset.revision);
+  const label = hasPublishedVersion && hasDraftVersion
+    ? `正式版 ${publishedVersion || "已发布"} · 有草稿 ${draftVersion}`
+    : hasPublishedVersion
+      ? `正式版 ${publishedVersion || draftVersion}`
+      : hasDraftVersion
+        ? `草稿 ${draftVersion}`
+        : `未发布 ${draftVersion}`;
+  return {
+    hasPublishedVersion,
+    hasDraftVersion,
+    isPublishedCurrent,
+    label,
+    tone: hasPublishedVersion && hasDraftVersion ? "warning" : hasPublishedVersion ? "success" : hasDraftVersion ? "warning" : "neutral",
+  } as const;
+}
+
 function compatibilityLabel(state: Asset["consumerBindings"][number]["compatibility"]) {
   return ({ compatible: "兼容", conditional: "需确认", breaking: "不兼容", not_evaluated: "未评估" } as const)[state];
 }
@@ -363,7 +412,7 @@ const contextTitles: Record<ViewId, string> = {
   sources: "数据接入",
   overview: "待办",
   assets: "知识库",
-  releases: "待办",
+  releases: "发布记录",
   settings: "系统设置",
 };
 
@@ -373,9 +422,9 @@ const contextTitles: Record<ViewId, string> = {
  */
 const viewRoutes: Record<ViewId, string> = {
   ask: "/ask",
-  overview: "/?view=overview",
+  overview: "/work",
   assets: "/assets",
-  releases: "/?view=overview",
+  releases: "/releases",
   sources: "/sources",
   settings: "/settings",
 };
@@ -403,7 +452,7 @@ const contextSectionLabels: Record<ViewId, string> = {
   ask: "最近会话",
   overview: "待办",
   assets: "知识库",
-  releases: "待办",
+  releases: "发布记录",
   sources: "数据接入",
   settings: "平台管理",
 };
@@ -537,7 +586,6 @@ function ContextPanel({ view, activeIndex, width, activeWorkbenchTask, workbench
             <ChevronRight size={14} />
           </button>;
         })}
-        {view === "assets" && ["知识目录", "草稿与整理", "发布记录"].map((label, index) => <button type="button" key={label} className={index === activeIndex ? "context-item context-item-active" : "context-item"} aria-current={index === activeIndex ? "page" : undefined} onClick={() => onSelect(index)}><span className="context-dot" /><span><strong>{label}</strong></span><ChevronRight size={14} /></button>)}
         {view === "assets" ? null : view === "overview" ? workbenchItems.slice(0, 12).map((task) => (
           <button className={activeWorkbenchTask?.id === task.id ? "context-item context-workbench-task context-item-active" : "context-item context-workbench-task"} type="button" key={task.id} aria-label={`打开待办详情 ${task.title}`} aria-current={activeWorkbenchTask?.id === task.id ? "page" : undefined} onClick={() => onOpenWorkbenchTask(task)}>
             <span className={`context-task-mark context-task-mark-${task.priority}`} title={`${workbenchPriorityLabel(task.priority)} · ${workbenchPriorityLabel(task.risk)}`}>{task.priority === "critical" ? <AlertTriangle size={14} /> : <CircleAlert size={14} />}</span>
@@ -649,6 +697,11 @@ function workbenchActionLabel(action: WorkbenchAttentionItem["nextActions"][numb
   return ({ review: "进入审核", run_validation: "运行验证", manage_source: "管理数据来源", publish: "处理兼容性", assign: "分配", dismiss: "忽略", open_target: "打开目标" } as const)[action];
 }
 
+function releaseIdFromTargetRoute(value: URL) {
+  if (value.pathname.startsWith("/releases/")) return decodeURIComponent(value.pathname.split("/").at(-1) ?? "");
+  return value.pathname === "/governance" ? value.searchParams.get("release") : null;
+}
+
 function workbenchDate(value?: string) {
   if (!value) return "未设置";
   const date = new Date(value);
@@ -656,7 +709,7 @@ function workbenchDate(value?: string) {
   return new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(date);
 }
 
-function WorkbenchDetailView({ onOpenTarget }: { onOpenTarget: (item: WorkbenchAttentionItem) => void }) {
+function WorkbenchDetailView({ onOpenTarget, onOpenReleaseRecord }: { onOpenTarget: (item: WorkbenchAttentionItem) => void; onOpenReleaseRecord: (releaseId: string, origin?: "inbox" | "assets" | "audit") => void }) {
   const runtime = useWorkbenchRuntime();
   const item = runtime.selectedItem;
   const [assigneeDraft, setAssigneeDraft] = useState<{ itemId: string; value: string } | null>(null);
@@ -674,11 +727,13 @@ function WorkbenchDetailView({ onOpenTarget }: { onOpenTarget: (item: WorkbenchA
   const primaryTargetAction = targetActions.find((action) => action !== "open_target") ?? targetActions[0];
   const canAssign = runtime.access.manage && item.nextActions.includes("assign");
   const canDismiss = runtime.access.manage && item.nextActions.includes("dismiss");
+  const targetUrl = new URL(item.targetRoute, "http://semlia.local");
+  const linkedReleaseId = releaseIdFromTargetRoute(targetUrl);
 
   return <section className="view view-overview workbench-detail-view" aria-label="工作台待办详情">
     <header className="workbench-detail-header">
       <div><span className="panel-kicker">{workbenchKindLabels[item.kind]} · 服务端版本 {item.version}</span><h2>{item.title}</h2><p>{item.summary}</p></div>
-      <div className="workbench-detail-actions">{primaryTargetAction && <button className="primary-button" type="button" onClick={() => onOpenTarget(item)}><ArrowRight size={15} />{workbenchActionLabel(primaryTargetAction)}</button>}</div>
+      <div className="workbench-detail-actions">{linkedReleaseId && <button className="secondary-button" type="button" onClick={() => onOpenReleaseRecord(linkedReleaseId, "inbox")}><History size={15} />查看发布记录</button>}{primaryTargetAction && <button className="primary-button" type="button" onClick={() => onOpenTarget(item)}><ArrowRight size={15} />{workbenchActionLabel(primaryTargetAction)}</button>}</div>
     </header>
     <div className="workbench-detail-facts" role="region" aria-label="服务端待办事实">
       <article><span>状态</span><strong>{workbenchStateLabel(item.state)}</strong><small>{workbenchPriorityLabel(item.priority)}优先级 · {workbenchPriorityLabel(item.risk)}风险</small></article>
@@ -889,45 +944,61 @@ function AuthorityUnavailable({ asset, kinds, children }: { asset: Asset; kinds:
   if (!unavailable) return children;
   return <div className={`asset-authority-boundary asset-authority-${unavailable.availability}`} role={unavailable.availability === "failed" || unavailable.availability === "forbidden" ? "alert" : "status"}>
     {unavailable.availability === "forbidden" ? <LockKeyhole size={20} /> : unavailable.availability === "failed" ? <CircleAlert size={20} /> : <CircleDot size={20} />}
-    <span><strong>{assetAuthorityKindLabels[unavailable.kind]}{authorityAvailabilityLabel(unavailable.availability)}</strong><small>权威来源 <code>{unavailable.authority}</code>{unavailable.releaseId ? ` · ${unavailable.releaseId}` : ""}。页面不会使用固定数据替代该分区。</small></span>
+    <span><strong>{assetAuthorityKindLabels[unavailable.kind]}{authorityAvailabilityLabel(unavailable.availability)}</strong></span>
   </div>;
 }
 
-function AssetAuthoritativeOverview({ asset, onOpenTab }: { asset: Asset; onOpenTab: (tab: AssetTab) => void }) {
+function AssetAuthoritativeOverview({ asset }: { asset: Asset }) {
   const definition = assetAuthoritySection(asset, "definition");
   const released = assetAuthoritySection(asset, "released_state");
+  const warnings = asset.authoritySections?.filter((section) => section.availability === "failed" || section.availability === "forbidden") ?? [];
   return <div className="asset-authority-overview">
-    <section className="asset-authority-definition" aria-label="权威定义摘要">
-      <header><div><span className="content-label">当前不可变 revision</span><h2>{asset.revisionRecord.name}</h2></div><button type="button" onClick={() => onOpenTab("定义")}>查看定义<ChevronRight size={14} /></button></header>
-      <p>{asset.revisionRecord.definition}</p>
-      <p>{asset.type} · {asset.status} · 负责人 {asset.owner}</p>
-      <KnowledgeSpecView spec={asset.knowledgeSpec} />
+    <section className="asset-authority-definition" aria-label="知识内容">
+      <KnowledgeSpecView type={asset.type} spec={asset.knowledgeSpec} />
+      {warnings.length > 0 && <div className="knowledge-access-warnings" role="alert">{warnings.map((section) => <span key={section.kind}>{assetAuthorityKindLabels[section.kind]}{authorityAvailabilityLabel(section.availability)}</span>)}</div>}
       <details className="production-technical"><summary>版本与技术详情</summary>
-      <dl><div><dt>Revision ID</dt><dd><code>{definition?.revisionId ?? asset.revisionRecord.revisionId}</code></dd></div><div><dt>当前 revision 状态</dt><dd>{asset.revisionRecord.workflowState === "released" ? "已发布" : "草稿"}</dd></div><div><dt>生产固定 revision</dt><dd><code>{released?.availability === "available" ? released.revisionId ?? "服务端未返回" : "尚未发布"}</code></dd></div><div><dt>Schema</dt><dd><code>{asset.revisionRecord.schemaVersion}</code></dd></div><div><dt>内容摘要</dt><dd><code>{asset.revisionRecord.contentHash}</code></dd></div><div><dt>权威来源</dt><dd><code>{definition?.authority ?? "asset_revisions"}</code></dd></div></dl>
+        <dl><div><dt>当前修订状态</dt><dd>{{ draft: "草稿", proposed: "待确认", in_review: "审核中", released: "已发布", unknown: "未知" }[asset.revisionRecord.workflowState]}</dd></div><div><dt>Revision ID</dt><dd><code>{definition?.revisionId ?? asset.revisionRecord.revisionId}</code></dd></div><div><dt>生产固定 revision</dt><dd><code>{released?.availability === "available" ? released.revisionId ?? "服务端未返回" : "尚未发布"}</code></dd></div><div><dt>负责人</dt><dd>{asset.owner}</dd></div><div><dt>Schema</dt><dd><code>{asset.revisionRecord.schemaVersion}</code></dd></div><div><dt>内容摘要</dt><dd><code>{asset.revisionRecord.contentHash}</code></dd></div></dl>
+        <section aria-label="资产权威分区">{asset.authoritySections?.map((section) => <div key={section.kind}><strong>{assetAuthorityKindLabels[section.kind]} · {authorityAvailabilityLabel(section.availability)}</strong><pre>{JSON.stringify(section, null, 2)}</pre></div>)}</section>
       </details>
-    </section>
-    <section className="asset-authority-grid" aria-label="资产权威分区">
-      {asset.authoritySections?.map((section) => <article key={section.kind} className={`asset-authority-card authority-${section.availability}`}><header><strong>{assetAuthorityKindLabels[section.kind]}</strong><StatusBadge tone={section.availability === "available" ? "success" : section.availability === "failed" || section.availability === "forbidden" ? "danger" : "neutral"}>{authorityAvailabilityLabel(section.availability)}</StatusBadge></header><code>{section.authority}</code><small>{section.releaseId ? `${section.releaseId} · #${section.releaseSequence}` : "无 release 基准"}{section.revisionId ? ` · revision ${section.revisionId}` : " · 无 revision 基准"}</small><dl>{Object.entries(section.values).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value}</dd></div>)}</dl></article>)}
     </section>
   </div>;
 }
 
-function AssetAuthoritativeDefinition({ asset, onStartRevision }: { asset: Asset; onStartRevision: (request: KnowledgeRevisionRequest) => void }) {
-  const fields = assetContractFields(asset);
+function AssetRevisionHistory({ asset, onOpenReleaseRecord }: { asset: Asset; onOpenReleaseRecord: (releaseId?: string) => void }) {
   const { ensureRevisions, loadMoreRevisions, revisionStates } = useCatalogRuntime();
   const revisions = revisionStates[asset.id];
   useEffect(() => { void ensureRevisions(asset.id); }, [asset.id, ensureRevisions]);
+  return <section className="asset-revision-history" aria-label="不可变修订历史">
+    <header>
+      <div><h3>版本历史</h3></div>
+      <div className="asset-revision-history-actions">
+        <span>{revisions?.items.length ?? 0}{revisions?.total !== undefined ? ` / ${revisions.total}` : ""} 项</span>
+        {asset.deployment.releaseId && <button className="text-button" type="button" onClick={() => onOpenReleaseRecord(asset.deployment.releaseId)}><History size={14} />关联发布记录</button>}
+      </div>
+    </header>
+    {(!revisions || revisions.state === "loading") && <div className="empty-inline" role="status"><LoaderCircle className="spin" size={15} />正在读取版本历史</div>}
+    {revisions?.state === "error" && <div className="catalog-detail-state" role="alert"><CircleAlert size={16} /><strong>版本历史读取失败</strong><span>{revisions.error}</span><button type="button" onClick={() => void ensureRevisions(asset.id)}>重试</button></div>}
+    {revisions?.state === "ready" && revisions.items.length === 0 && <div className="empty-inline">服务端没有返回版本记录。</div>}
+    {revisions?.state === "ready" && revisions.items.length > 0 && <div className="asset-revision-history-list">{revisions.items.map((revision) => {
+      const released = asset.deployment.revisionId === revision.id;
+      return <article key={revision.id}>
+        <div><strong>版本 {revision.sequence}</strong><small>{released ? "正式版固定" : revision.id === asset.revisionRecord.revisionId ? "当前修订" : "历史修订"}</small></div>
+        <span>{governanceTimestamp(revision.createdAt)}</span>
+        <div className="asset-revision-release">{released && asset.deployment.releaseId ? <button className="text-button" type="button" onClick={() => onOpenReleaseRecord(asset.deployment.releaseId)}><History size={13} />{asset.deployment.releaseId}</button> : <small>未关联独立发布记录</small>}</div>
+        <details className="production-technical"><summary>技术详情</summary><p>{revision.createdBy}</p><code>{revision.id}</code><code>{revision.contentDigest}</code><span>Schema {revision.schemaVersion}</span></details>
+      </article>;
+    })}</div>}
+    {revisions?.state === "ready" && revisions.nextCursor && <div className="catalog-pagination"><button type="button" disabled={revisions.loadingMore} onClick={() => void loadMoreRevisions(asset.id)}>{revisions.loadingMore ? "正在读取…" : "加载更多版本"}</button>{revisions.appendError && <span role="alert">{revisions.appendError}</span>}</div>}
+    {revisions?.state === "ready" && !revisions.nextCursor && revisions.appendError && <div className="catalog-pagination"><span role="alert">{revisions.appendError}</span></div>}
+  </section>;
+}
+
+function AssetAuthoritativeDefinition({ asset, onStartRevision, onOpenReleaseRecord }: { asset: Asset; onStartRevision: (request: KnowledgeRevisionRequest) => void; onOpenReleaseRecord: (releaseId?: string) => void }) {
+  const fields = assetContractFields(asset);
   return <AuthorityUnavailable asset={asset} kinds={["definition"]}><div className="asset-authority-detail">
-    <section><header><div><span className="content-label">asset_revisions</span><h3>受治理定义</h3></div><button className="secondary-button" type="button" onClick={() => onStartRevision({ assetId: asset.id, fieldPath: "definition.boundary", origin: "definition" })}><GitPullRequestArrow size={15} />提出修订</button></header><p>{asset.revisionRecord.definition}</p>{asset.knowledgeSpec ? <KnowledgeSpecView spec={asset.knowledgeSpec} /> : <dl>{fields.map((field) => <div key={field.label}><dt>{field.label}</dt><dd><code>{field.value}</code></dd></div>)}</dl>}</section>
-    <section><h3>定义边界</h3><dl><div><dt>别名</dt><dd>{asset.aliases.join(" · ") || "未声明"}</dd></div><div><dt>包含</dt><dd>{asset.includes.join("；") || "未声明"}</dd></div><div><dt>排除</dt><dd>{asset.excludes.join("；") || "未声明"}</dd></div><div><dt>示例</dt><dd>{asset.examples.join("；") || "未声明"}</dd></div></dl></section>
-    <section className="asset-revision-history" aria-label="不可变修订历史"><header><div><span className="content-label">asset_revisions · cursor page</span><h3>不可变修订历史</h3></div><span>{revisions?.items.length ?? 0}{revisions?.total !== undefined ? ` / ${revisions.total}` : ""} 项</span></header>
-      {(!revisions || revisions.state === "loading") && <div className="empty-inline" role="status"><LoaderCircle className="spin" size={15} />正在读取修订历史</div>}
-      {revisions?.state === "error" && <div className="catalog-detail-state" role="alert"><CircleAlert size={16} /><strong>修订历史读取失败</strong><span>{revisions.error}</span><button type="button" onClick={() => void ensureRevisions(asset.id)}>重试</button></div>}
-      {revisions?.state === "ready" && revisions.items.length === 0 && <div className="empty-inline">服务端没有返回修订记录。</div>}
-      {revisions?.state === "ready" && revisions.items.length > 0 && <div className="asset-revision-history-list">{revisions.items.map((revision) => <article key={revision.id}><div><strong>@{revision.sequence}</strong><code>{revision.id}</code></div><div><span>Schema {revision.schemaVersion}</span><code>{revision.contentDigest}</code></div><small>{revision.createdBy} · {governanceTimestamp(revision.createdAt)}</small></article>)}</div>}
-      {revisions?.state === "ready" && revisions.nextCursor && <div className="catalog-pagination"><button type="button" disabled={revisions.loadingMore} onClick={() => void loadMoreRevisions(asset.id)}>{revisions.loadingMore ? "正在读取…" : "加载更多修订"}</button>{revisions.appendError && <span role="alert">{revisions.appendError}</span>}</div>}
-      {revisions?.state === "ready" && !revisions.nextCursor && revisions.appendError && <div className="catalog-pagination"><span role="alert">{revisions.appendError}</span></div>}
-    </section>
+    <section><header><div><h3>{asset.type}定义</h3></div><button className="secondary-button" type="button" onClick={() => onStartRevision({ assetId: asset.id, fieldPath: "definition.boundary", origin: "definition" })}><GitPullRequestArrow size={15} />提出修订</button></header>{asset.knowledgeSpec ? <KnowledgeSpecView type={asset.type} spec={asset.knowledgeSpec} /> : <dl>{fields.map((field) => <div key={field.label}><dt>{field.label}</dt><dd><code>{field.value}</code></dd></div>)}</dl>}</section>
+    {[asset.aliases, asset.includes, asset.excludes, asset.examples].some((items) => items.length > 0) && <section><h3>定义边界</h3><dl>{[["别名", asset.aliases], ["包含", asset.includes], ["排除", asset.excludes], ["示例", asset.examples]].map(([label, values]) => Array.isArray(values) && values.length > 0 ? <div key={String(label)}><dt>{label}</dt><dd>{values.join("；")}</dd></div> : null)}</dl></section>}
+    <AssetRevisionHistory asset={asset} onOpenReleaseRecord={onOpenReleaseRecord} />
   </div></AuthorityUnavailable>;
 }
 
@@ -939,18 +1010,30 @@ function AssetAuthoritativeRelations({ asset }: { asset: Asset }) {
   const section = assetAuthoritySection(asset, "relations");
   const lineage = assetAuthoritySection(asset, "lineage");
   return <div className="asset-authority-detail"><AuthorityUnavailable asset={asset} kinds={["relations"]}><section className="asset-authority-relations" aria-label="权威语义关系">
-    <header><div><span className="content-label">{section?.authority}</span><h3>语义关系</h3></div>{section?.revisionId ? <code>{section.revisionId}</code> : <span>服务端未返回 revision 基准</span>}</header>
-    <p>关系事实来自服务端游标分页的权威关系记录；页面不推导本体一致性、约束或影响结论。</p>
+    <header><div><h3>语义关系</h3></div>{!section?.revisionId && <span>版本基准未提供</span>}</header>
     <AuthorityRecords assetId={asset.id} section={section} empty="服务端没有返回当前资产的关系记录。" />
-  </section></AuthorityUnavailable><AuthorityUnavailable asset={asset} kinds={["lineage"]}><section aria-label="权威数据血缘"><header><div><span className="content-label">{lineage?.authority}</span><h3>数据血缘</h3></div>{lineage?.revisionId ? <code>{lineage.revisionId}</code> : <span>服务端未返回 revision 基准</span>}</header><AuthorityRecords assetId={asset.id} section={lineage} empty="服务端没有返回当前资产的血缘记录。" /></section></AuthorityUnavailable></div>;
+  </section></AuthorityUnavailable><AuthorityUnavailable asset={asset} kinds={["lineage"]}><section aria-label="权威数据血缘"><header><div><h3>数据血缘</h3></div>{!lineage?.revisionId && <span>版本基准未提供</span>}</header><AuthorityRecords assetId={asset.id} section={lineage} empty="服务端没有返回当前资产的血缘记录。" /></section></AuthorityUnavailable></div>;
 }
 
 function AuthorityCountSection({ asset, kind }: { asset: Asset; kind: AssetAuthoritySectionKind }) {
   const section = assetAuthoritySection(asset, kind);
-  return <section><header><div><span className="content-label">{section?.authority}</span><h3>{assetAuthorityKindLabels[kind]}</h3></div>{section?.releaseId && <code>{section.releaseId} · #{section.releaseSequence}</code>}</header>{section?.revisionId && <p>Revision 基准 <code>{section.revisionId}</code>{section.revisionId === asset.revisionRecord.revisionId ? " · 当前 revision" : " · 与当前 revision 不同"}</p>}<dl>{Object.entries(section?.values ?? {}).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value}</dd></div>)}</dl>{Object.keys(section?.values ?? {}).length === 0 && <p>服务端未返回该分区的计数事实。</p>}<AuthorityRecords assetId={asset.id} section={section} empty="服务端未返回该分区的记录明细。" /></section>;
+  const valueLabels: Record<string, string> = { runCount: "验证次数", blockerCount: "阻断", warningCount: "警告", evidenceCount: "证据", current: "当前版本使用方", pinned: "固定版本使用方" };
+  return <section><header><h3>{assetAuthorityKindLabels[kind]}</h3></header>
+    {section?.revisionId && section.revisionId !== asset.revisionRecord.revisionId && <p role="status">此记录基于其他修订版本</p>}
+    <dl>{Object.entries(section?.values ?? {}).filter(([key]) => key in valueLabels).map(([key, value]) => <div key={key}><dt>{valueLabels[key]}</dt><dd>{value}</dd></div>)}</dl>
+    <AuthorityRecords assetId={asset.id} section={section} empty="暂无记录" />
+  </section>;
 }
 
 const pageableAuthorityKinds = new Set<AssetAuthoritySectionKind>(["relations", "physical_bindings", "join_contracts", "validation", "lineage", "consumer_impact"]);
+
+function authorityRecordTitle(record: NonNullable<Asset["authoritySections"]>[number]["records"][number], fallback: string) {
+  const label = record.label?.trim();
+  const technical = !label || /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(label) || /^[a-z]+_[0-9a-z]{26}$/.test(label) || label === "field_pairs_equal/v1";
+  if (!technical) return label;
+  const names: Record<string, string> = { physical_binding: "数据绑定", join_contract: "连接规则", model_grain: "数据粒度", entity_key: "身份键", relation: "语义关系", lineage: "数据血缘", validation_run: "验证结果", consumer_binding: "使用方绑定" };
+  return names[record.kind] ?? fallback;
+}
 
 function AuthorityRecords({ assetId, section, empty }: { assetId: string; section?: NonNullable<Asset["authoritySections"]>[number]; empty: string }) {
   const { authorityPageStates, loadMoreAuthorityRecords } = useCatalogRuntime();
@@ -958,19 +1041,19 @@ function AuthorityRecords({ assetId, section, empty }: { assetId: string; sectio
   const pageState = authorityPageStates[`${assetId}:${section.kind}`];
   const canPage = pageableAuthorityKinds.has(section.kind);
   const recordsPage = section.recordsPage;
-  return <div className="asset-authority-records"><div className="asset-authority-record-summary">已加载 <strong>{section.records.length}</strong>{recordsPage ? ` / ${recordsPage.total}` : ""} 项</div>{section.records.length === 0 ? <div className="empty-inline">{empty}</div> : <div className="asset-authority-record-list">{section.records.map((record) => <article key={`${record.kind}:${record.id}`}><header><div><strong>{record.label || record.kind}</strong><code>{record.id}</code></div><StatusBadge tone={record.status === "active" || record.status === "passed" ? "success" : "neutral"}>{record.status || "未声明状态"}</StatusBadge></header><dl className="asset-authority-record-facts"><div><dt>权威来源</dt><dd><code>{record.authority}</code></dd></div><div><dt>版本</dt><dd>{record.version}</dd></div>{record.relatedId && <div><dt>关联对象</dt><dd><code>{record.relatedId}</code></dd></div>}{record.releaseId && <div><dt>Release</dt><dd><code>{record.releaseId}{record.releaseSequence !== undefined ? ` · #${record.releaseSequence}` : ""}</code></dd></div>}{record.relation && <><div><dt>方向 / 谓词</dt><dd><code>{record.relation.direction} · {record.relation.predicate}</code></dd></div><div><dt>关系平面 / 状态</dt><dd><code>{record.relation.plane} · {record.relation.assertionState}</code></dd></div><div><dt>左侧资产</dt><dd><code>{record.relation.subjectAssetId}</code></dd></div><div><dt>右侧资产</dt><dd><code>{record.relation.objectAssetId}</code></dd></div></>}{record.physicalBinding && <><div><dt>数据集</dt><dd><code>{record.physicalBinding.datasetId}</code></dd></div>{record.physicalBinding.fieldId && <div><dt>字段</dt><dd><code>{record.physicalBinding.fieldId}</code></dd></div>}{record.physicalBinding.transform && <div><dt>转换表达式</dt><dd><code>{record.physicalBinding.transform}</code></dd></div>}</>}{record.modelGrain && <><div><dt>粒度表达式</dt><dd><code>{record.modelGrain.grainExpression}</code></dd></div><div><dt>粒度字段</dt><dd><code>{record.modelGrain.grainFieldRefs.join(" · ") || "空集合"}</code></dd></div>{record.modelGrain.documentedBy && <div><dt>记录证据</dt><dd><code>{record.modelGrain.documentedBy}</code></dd></div>}</>}{record.entityKey && <><div><dt>实体键字段</dt><dd><code>{record.entityKey.keyFieldRefs.join(" · ") || "空集合"}</code></dd></div><div><dt>唯一性语义</dt><dd><code>{record.entityKey.uniquenessSemantics}</code></dd></div></>}{record.joinContract && <><div><dt>方向 / Join 类型</dt><dd><code>{record.joinContract.direction} · {record.joinContract.joinType}</code></dd></div><div><dt>左侧数据集 / 字段</dt><dd><code>{record.joinContract.leftDatasetId} · {record.joinContract.leftFieldRefs.join(" · ") || "空集合"}</code></dd></div><div><dt>右侧数据集 / 字段</dt><dd><code>{record.joinContract.rightDatasetId} · {record.joinContract.rightFieldRefs.join(" · ") || "空集合"}</code></dd></div><div><dt>基数</dt><dd><code>{record.joinContract.cardinality}</code></dd></div><div><dt>Join 表达式</dt><dd><code>{record.joinContract.joinExpression}</code></dd></div></>}{record.lineage && <><div><dt>方向 / 边类型</dt><dd><code>{record.lineage.direction} · {record.lineage.edgeKind}</code></dd></div><div><dt>上游数据集</dt><dd><code>{record.lineage.upstreamDatasetId}</code></dd></div><div><dt>下游数据集</dt><dd><code>{record.lineage.downstreamDatasetId}</code></dd></div><div><dt>来源修订</dt><dd><code>{record.lineage.sourceRevisionId}</code></dd></div>{record.lineage.codeArtifactId && <div><dt>代码工件</dt><dd><code>{record.lineage.codeArtifactId}</code></dd></div>}<div><dt>置信度</dt><dd>{record.lineage.confidence}</dd></div></>}{record.consumerBinding && <><div><dt>消费者 / 模式</dt><dd><code>{record.consumerBinding.consumerId} · {record.consumerBinding.mode}</code></dd></div><div><dt>生效 Release</dt><dd><code>{record.consumerBinding.effectiveReleaseId}</code></dd></div><div><dt>环境 / 用途</dt><dd>{record.consumerBinding.environment} · {record.consumerBinding.purpose}</dd></div><div><dt>状态</dt><dd><code>{record.consumerBinding.status}</code></dd></div><div><dt>兼容约束</dt><dd><code>{JSON.stringify(record.consumerBinding.compatibilityConstraint)}</code></dd></div>{record.consumerBinding.expiresAt && <div><dt>到期时间</dt><dd>{record.consumerBinding.expiresAt}</dd></div>}</>}</dl>{!record.releaseId && <small>服务端未返回 release 基准</small>}</article>)}</div>}{canPage && recordsPage?.nextCursor && <div className="catalog-pagination"><button type="button" disabled={pageState?.loadingMore} onClick={() => void loadMoreAuthorityRecords(assetId, section.kind as "relations" | "physical_bindings" | "join_contracts" | "validation" | "lineage" | "consumer_impact")}>{pageState?.loadingMore ? "正在读取…" : "加载更多权威记录"}</button>{pageState?.appendError && <span role="alert">{pageState.appendError}</span>}</div>}{canPage && !recordsPage?.nextCursor && pageState?.appendError && <div className="catalog-pagination"><span role="alert">{pageState.appendError}</span></div>}</div>;
+  return <div className="asset-authority-records"><div className="asset-authority-record-summary">已加载 <strong>{section.records.length}</strong>{recordsPage ? ` / ${recordsPage.total}` : ""} 项</div>{section.records.length === 0 ? <div className="empty-inline">{empty}</div> : <div className="asset-authority-record-list">{section.records.map((record) => <article key={`${record.kind}:${record.id}`}><header><div><strong>{authorityRecordTitle(record, assetAuthorityKindLabels[section.kind])}</strong></div><StatusBadge tone={record.status === "active" || record.status === "passed" ? "success" : "neutral"}>{{ available: "可用", active: "生效", passed: "通过", failed: "失败", asserted: "已确认", candidate: "待确认", deprecated: "已弃用" }[record.status ?? ""] ?? record.status ?? "未声明状态"}</StatusBadge></header>{record.physicalBinding?.transform && <p>{record.physicalBinding.transform}</p>}{record.modelGrain && <p>{record.modelGrain.grainExpression}</p>}{record.entityKey && <p>{record.entityKey.uniquenessSemantics}</p>}{record.joinContract && <p><span>{cardinalityLabel(record.joinContract.cardinality)}</span> · <span>{record.joinContract.joinExpression === "field_pairs_equal/v1" ? "字段等值连接" : record.joinContract.joinExpression}</span></p>}<details className="production-technical"><summary>记录详情</summary><code>{record.id}</code>{record.label && record.label !== authorityRecordTitle(record, assetAuthorityKindLabels[section.kind]) && <p>{record.label}</p>}<dl className="asset-authority-record-facts"><div><dt>权威来源</dt><dd><code>{record.authority}</code></dd></div><div><dt>版本</dt><dd>{record.version}</dd></div>{record.relatedId && <div><dt>关联对象</dt><dd><code>{record.relatedId}</code></dd></div>}{record.releaseId && <div><dt>Release</dt><dd><code>{record.releaseId}{record.releaseSequence !== undefined ? ` · #${record.releaseSequence}` : ""}</code></dd></div>}{record.relation && <><div><dt>方向 / 谓词</dt><dd><code>{record.relation.direction} · {record.relation.predicate}</code></dd></div><div><dt>关系平面 / 状态</dt><dd><code>{record.relation.plane} · {record.relation.assertionState}</code></dd></div><div><dt>左侧资产</dt><dd><code>{record.relation.subjectAssetId}</code></dd></div><div><dt>右侧资产</dt><dd><code>{record.relation.objectAssetId}</code></dd></div></>}{record.physicalBinding && <><div><dt>数据集</dt><dd><code>{record.physicalBinding.datasetId}</code></dd></div>{record.physicalBinding.fieldId && <div><dt>字段</dt><dd><code>{record.physicalBinding.fieldId}</code></dd></div>}</>}{record.modelGrain && <><div><dt>粒度字段</dt><dd><code>{record.modelGrain.grainFieldRefs.join(" · ") || "空集合"}</code></dd></div>{record.modelGrain.documentedBy && <div><dt>记录证据</dt><dd><code>{record.modelGrain.documentedBy}</code></dd></div>}</>}{record.entityKey && <><div><dt>实体键字段</dt><dd><code>{record.entityKey.keyFieldRefs.join(" · ") || "空集合"}</code></dd></div></>}{record.joinContract && <><div><dt>方向 / Join 类型</dt><dd><code>{record.joinContract.direction} · {record.joinContract.joinType}</code></dd></div><div><dt>左侧数据集 / 字段</dt><dd><code>{record.joinContract.leftDatasetId} · {record.joinContract.leftFieldRefs.join(" · ") || "空集合"}</code></dd></div><div><dt>右侧数据集 / 字段</dt><dd><code>{record.joinContract.rightDatasetId} · {record.joinContract.rightFieldRefs.join(" · ") || "空集合"}</code></dd></div><div><dt>基数</dt><dd><code>{record.joinContract.cardinality}</code></dd></div>{record.joinContract.joinExpression === "field_pairs_equal/v1" && <div><dt>表达式标识</dt><dd><code>{record.joinContract.joinExpression}</code></dd></div>}</>}{record.lineage && <><div><dt>方向 / 边类型</dt><dd><code>{record.lineage.direction} · {record.lineage.edgeKind}</code></dd></div><div><dt>上游数据集</dt><dd><code>{record.lineage.upstreamDatasetId}</code></dd></div><div><dt>下游数据集</dt><dd><code>{record.lineage.downstreamDatasetId}</code></dd></div><div><dt>来源修订</dt><dd><code>{record.lineage.sourceRevisionId}</code></dd></div>{record.lineage.codeArtifactId && <div><dt>代码工件</dt><dd><code>{record.lineage.codeArtifactId}</code></dd></div>}<div><dt>置信度</dt><dd>{record.lineage.confidence}</dd></div></>}{record.consumerBinding && <><div><dt>消费者 / 模式</dt><dd><code>{record.consumerBinding.consumerId} · {record.consumerBinding.mode}</code></dd></div><div><dt>生效 Release</dt><dd><code>{record.consumerBinding.effectiveReleaseId}</code></dd></div><div><dt>环境 / 用途</dt><dd>{record.consumerBinding.environment} · {record.consumerBinding.purpose}</dd></div><div><dt>状态</dt><dd><code>{record.consumerBinding.status}</code></dd></div><div><dt>兼容约束</dt><dd><code>{JSON.stringify(record.consumerBinding.compatibilityConstraint)}</code></dd></div>{record.consumerBinding.expiresAt && <div><dt>到期时间</dt><dd>{record.consumerBinding.expiresAt}</dd></div>}</>}</dl>{!record.releaseId && <small>服务端未返回 release 基准</small>}</details></article>)}</div>}{canPage && recordsPage?.nextCursor && <div className="catalog-pagination"><button type="button" disabled={pageState?.loadingMore} onClick={() => void loadMoreAuthorityRecords(assetId, section.kind as "relations" | "physical_bindings" | "join_contracts" | "validation" | "lineage" | "consumer_impact")}>{pageState?.loadingMore ? "正在读取…" : "加载更多权威记录"}</button>{pageState?.appendError && <span role="alert">{pageState.appendError}</span>}</div>}{canPage && !recordsPage?.nextCursor && pageState?.appendError && <div className="catalog-pagination"><span role="alert">{pageState.appendError}</span></div>}</div>;
 }
 
 function AssetAuthoritativeTrust({ asset }: { asset: Asset }) {
   const evidence = assetAuthoritySection(asset, "evidence");
-  return <div className="asset-authority-detail"><AuthorityUnavailable asset={asset} kinds={["validation"]}><AuthorityCountSection asset={asset} kind="validation" /></AuthorityUnavailable><AuthorityUnavailable asset={asset} kinds={["evidence"]}><section><header><div><span className="content-label">{evidence?.authority}</span><h3>不可变证据</h3></div><code>{evidence?.values.evidenceCount ?? asset.evidence.length} 项</code></header>{asset.evidence.length > 0 ? <div className="asset-authority-evidence">{asset.evidence.map((item) => <article key={item.id}><strong>{item.label}</strong><code>{item.id}</code><span>{item.authority} · {item.supports}</span></article>)}</div> : <p>当前 revision 没有返回证据明细。</p>}</section></AuthorityUnavailable><AuthorityUnavailable asset={asset} kinds={["trust"]}><AuthorityCountSection asset={asset} kind="trust" /></AuthorityUnavailable></div>;
+  return <div className="asset-authority-detail"><AuthorityUnavailable asset={asset} kinds={["validation"]}><AuthorityCountSection asset={asset} kind="validation" /></AuthorityUnavailable><AuthorityUnavailable asset={asset} kinds={["evidence"]}><section><header><div><h3>证据</h3></div><code>{evidence?.values.evidenceCount ?? asset.evidence.length} 项</code></header>{asset.evidence.length > 0 ? <div className="asset-authority-evidence">{asset.evidence.map((item) => <article key={item.id}><strong>{item.label}</strong><span>{item.supports}</span><details className="production-technical"><summary>技术详情</summary><code>{item.id}</code><span>{item.authority}</span></details></article>)}</div> : <p>当前 revision 没有返回证据明细。</p>}</section></AuthorityUnavailable><AuthorityUnavailable asset={asset} kinds={["trust"]}><AuthorityCountSection asset={asset} kind="trust" /></AuthorityUnavailable></div>;
 }
 
 function AssetAuthoritativeUsage({ asset }: { asset: Asset }) {
   return <div className="asset-authority-detail"><AuthorityUnavailable asset={asset} kinds={["released_state"]}><AuthorityCountSection asset={asset} kind="released_state" /></AuthorityUnavailable><AuthorityUnavailable asset={asset} kinds={["consumer_impact"]}><AuthorityCountSection asset={asset} kind="consumer_impact" /></AuthorityUnavailable></div>;
 }
 
-function AssetDefinition({ asset, onNotify, onStartRevision }: { asset: Asset; onNotify: (message: string) => void; onStartRevision: (request: KnowledgeRevisionRequest) => void }) {
+function AssetDefinition({ asset, onNotify, onStartRevision, onOpenReleaseRecord }: { asset: Asset; onNotify: (message: string) => void; onStartRevision: (request: KnowledgeRevisionRequest) => void; onOpenReleaseRecord: (releaseId?: string) => void }) {
   const contractFields = assetContractFields(asset);
   const priorRevision = `@${Math.max(asset.revisionRecord.sequence - 1, 0)}`;
   const profile = assetTypeProfileFor(asset);
@@ -1001,6 +1084,7 @@ function AssetDefinition({ asset, onNotify, onStartRevision }: { asset: Asset; o
         <div><span className="content-label">明确排除<button type="button" aria-label="修订明确排除" onClick={() => onStartRevision({ assetId: asset.id, fieldPath: "definition.excludes", origin: "definition" })}>修订</button></span><ul>{asset.excludes.map((item) => <li key={item}><X size={14} />{item}</li>)}</ul></div>
         <div><span className="content-label">典型用法</span><ul>{asset.examples.map((item) => <li key={item}><MessageSquareText size={14} />{item}</li>)}</ul></div>
       </section>
+      <AssetRevisionHistory asset={asset} onOpenReleaseRecord={onOpenReleaseRecord} />
     </div>
   );
 }
@@ -1218,7 +1302,7 @@ function KnowledgeRevisionLauncher({ asset, active, onStart }: { asset: Asset; a
   );
 }
 
-function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, requestedCatalogType, requestedRevision, focusSearchRequestEpoch, detailBackRequestEpoch, onSelect, onDetailChange, onNotify, onRevisionSubmit, onStartAIGeneration }: { selectedId: string; domainFilter: string; requestedTab: AssetTab; requestedDetail: boolean; requestedCatalogType: CatalogObjectType | "全部"; requestedRevision: KnowledgeRevisionRequest | null; focusSearchRequestEpoch: number; detailBackRequestEpoch: number; onSelect: (id: string) => void; onDetailChange: (open: boolean) => void; onNotify: (message: string) => void; onRevisionSubmit: (submission: KnowledgeRevisionSubmission) => Promise<void>; onStartAIGeneration: (assetId: string, fieldPath: string) => void }) {
+function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, requestedCatalogType, requestedVersionFilter, requestedRevision, focusSearchRequestEpoch, detailBackRequestEpoch, onSelect, onDetailChange, onNotify, onRevisionSubmit, onStartAIGeneration, onOpenReleaseHistory, onOpenReleaseRecord }: { selectedId: string; domainFilter: string; requestedTab: AssetTab; requestedDetail: boolean; requestedCatalogType: CatalogObjectType | "全部"; requestedVersionFilter: KnowledgeVersionFilter; requestedRevision: KnowledgeRevisionRequest | null; focusSearchRequestEpoch: number; detailBackRequestEpoch: number; onSelect: (id: string) => void; onDetailChange: (open: boolean) => void; onNotify: (message: string) => void; onRevisionSubmit: (submission: KnowledgeRevisionSubmission) => Promise<void>; onStartAIGeneration: (assetId: string, fieldPath: string) => void; onOpenReleaseHistory: () => void; onOpenReleaseRecord: (releaseId?: string) => void }) {
   const { assets, catalogAssetIds, detailStates, ensureAsset, error: catalogError, setQuery: setCatalogQuery, total: catalogTotal, nextCursor: catalogNextCursor, loadingMore: catalogLoadingMore, appendError: catalogAppendError, loadMoreAssets } = useCatalogRuntime();
   const catalogAssets = useMemo(() => catalogAssetIds.flatMap((assetId) => {
     const asset = assets.find((candidate) => candidate.id === assetId);
@@ -1228,7 +1312,7 @@ function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, r
   const detailKnowledgeItems = useMemo(() => knowledgeCatalogItemsFor(assets), [assets]);
   const [query, setQuery] = useState("");
   const [type, setType] = useState<CatalogObjectType | "全部">(requestedCatalogType);
-  const [assetStatus, setAssetStatus] = useState<Asset["status"] | "全部">("全部");
+  const [versionFilter, setVersionFilter] = useState<KnowledgeVersionFilter>(requestedVersionFilter);
   const [domain, setDomain] = useState(domainFilter);
   const [sort, setSort] = useState<"attention" | "name" | "type">("attention");
   const [tab, setTab] = useState<AssetTab>(requestedTab);
@@ -1252,11 +1336,14 @@ function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, r
       const matchingChildren = normalizedQuery.length > 0 ? typedChildren.filter(matchesText) : typedChildren;
       const matchesAssetType = type === "全部" || isGovernedObjectType || asset.type === type;
       const matchesGovernedType = !isGovernedObjectType || typedChildren.length > 0;
-      const matchesStatus = assetStatus === "全部" || asset.status === assetStatus;
+      const versionState = knowledgeVersionState(asset);
+      const matchesVersion = versionFilter === "全部"
+        || versionFilter === "正式版" && versionState.hasPublishedVersion
+        || versionFilter === "草稿" && versionState.hasDraftVersion;
       const matchesDomain = domain === "全部" || asset.domain === domain;
       const assetMatchesQuery = normalizedQuery.length === 0 || matchesText(assetItem);
       const matchesQuery = assetMatchesQuery || matchingChildren.length > 0;
-      if (!matchesAssetType || !matchesGovernedType || !matchesStatus || !matchesDomain || !matchesQuery) return [];
+      if (!matchesAssetType || !matchesGovernedType || !matchesVersion || !matchesDomain || !matchesQuery) return [];
       return [{ asset, assetItem, children, visibleChildren: normalizedQuery.length > 0 && !assetMatchesQuery ? matchingChildren : typedChildren }];
     });
     return groups.sort((left, right) => {
@@ -1269,11 +1356,11 @@ function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, r
       if (readinessDelta !== 0) return readinessDelta;
       return left.asset.name.localeCompare(right.asset.name, "zh-CN");
     });
-  }, [assetStatus, catalogAssets, catalogKnowledgeItems, domain, isGovernedObjectType, normalizedQuery, sort, type]);
+  }, [catalogAssets, catalogKnowledgeItems, domain, isGovernedObjectType, normalizedQuery, sort, type, versionFilter]);
   const visibleChildCount = catalogGroups.reduce((total, group) => total + group.visibleChildren.length, 0);
   const selected = assets.find((asset) => asset.id === selectedId) ?? (requestedDetail ? undefined : assets[0]);
   const focusedObject = focusedObjectId ? detailKnowledgeItems.find((item) => item.key === focusedObjectId) : undefined;
-  const hasFilters = normalizedQuery.length > 0 || type !== "全部" || assetStatus !== "全部" || domain !== "全部";
+  const hasFilters = normalizedQuery.length > 0 || type !== "全部" || versionFilter !== "全部" || domain !== "全部";
 
   useEffect(() => {
     if (focusSearchRequestEpoch > 0) catalogSearchRef.current?.focus();
@@ -1346,7 +1433,7 @@ function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, r
       <section className="view view-assets asset-detail-page">
         <section className="asset-detail" aria-label="语义资产详情">
           <header className="asset-detail-header">
-            <div className="asset-header-main"><AssetTypeMark type={selected.identity.type} size={19} /><div className="asset-title-copy"><span className="panel-kicker">{selected.identity.type} · <code>{selected.identity.key}</code></span><h1>{selected.revisionRecord.name}</h1><p>{selected.revisionRecord.definition}</p></div><div className="asset-header-side"><div className="asset-header-state"><div><span>当前 revision</span><strong>{selected.revision}</strong></div><span className="asset-header-release"><StatusBadge tone={isCurrentRevisionReleased(selected) ? "success" : "warning"}>{deploymentLabel(selected)}</StatusBadge><span className={`asset-health-state asset-health-${selected.qualitySnapshot.state}`}>{authoritativeDetail ? authoritativeQualityLabel(selected) : selected.qualitySnapshot.state === "healthy" ? "健康" : selected.qualitySnapshot.state === "blocked" ? "阻断" : "需关注"}</span><code>{selected.deployment.releaseId ?? "尚未发布"}</code></span></div><KnowledgeRevisionLauncher asset={selected} active={Boolean(revisionRequest)} onStart={setRevisionRequest} /></div></div>
+            <div className="asset-header-main"><AssetTypeMark type={selected.identity.type} size={19} /><div className="asset-title-copy"><span className="panel-kicker">{selected.identity.type} · <code>{selected.identity.key}</code></span><h1>{selected.revisionRecord.name}</h1><p>{selected.revisionRecord.definition}</p></div><div className="asset-header-side"><div className="asset-header-state"><div><span>版本</span><strong>{selected.revision}</strong></div><span className="asset-header-release"><StatusBadge tone={isCurrentRevisionReleased(selected) ? "success" : "warning"}>{deploymentLabel(selected)}</StatusBadge><span className={`asset-health-state asset-health-${selected.qualitySnapshot.state}`}>{authoritativeDetail ? authoritativeQualityLabel(selected) : selected.qualitySnapshot.state === "healthy" ? "健康" : selected.qualitySnapshot.state === "blocked" ? "阻断" : "需关注"}</span></span></div><KnowledgeRevisionLauncher asset={selected} active={Boolean(revisionRequest)} onStart={setRevisionRequest} /></div></div>
           </header>
           {revisionRequest ? <KnowledgeRevisionWorkbench key={`${revisionRequest.assetId}:${revisionRequest.fieldPath}:${revisionRequest.claimId ?? "new"}`} asset={selected} request={revisionRequest} onCancel={() => setRevisionRequest(null)} onNotify={onNotify} onSubmit={onRevisionSubmit} onStartAIGeneration={() => onStartAIGeneration(selected.id, revisionRequest.fieldPath)} /> : <>
             <div className="asset-tabs" role="tablist" aria-label="资产详情视图">
@@ -1355,8 +1442,8 @@ function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, r
               ))}
             </div>
             <div className="asset-tab-content" role="tabpanel">
-              {activeTab === "概览" && (authoritativeDetail ? <AssetAuthoritativeOverview asset={selected} onOpenTab={openAssetTab} /> : <AssetOverview asset={selected} onOpenTab={openAssetTab} />)}
-              {activeTab === "定义" && (authoritativeDetail ? <AssetAuthoritativeDefinition asset={selected} onStartRevision={setRevisionRequest} /> : <AssetDefinition asset={selected} onNotify={onNotify} onStartRevision={setRevisionRequest} />)}
+              {activeTab === "概览" && (authoritativeDetail ? <AssetAuthoritativeOverview asset={selected} /> : <AssetOverview asset={selected} onOpenTab={openAssetTab} />)}
+              {activeTab === "定义" && (authoritativeDetail ? <AssetAuthoritativeDefinition asset={selected} onStartRevision={setRevisionRequest} onOpenReleaseRecord={onOpenReleaseRecord} /> : <AssetDefinition asset={selected} onNotify={onNotify} onStartRevision={setRevisionRequest} onOpenReleaseRecord={onOpenReleaseRecord} />)}
               {activeTab === "本体关系" && (authoritativeDetail ? <AssetAuthoritativeRelations asset={selected} /> : <AssetOntology asset={selected} focusedObject={focusedObject} onNotify={onNotify} onStartRevision={setRevisionRequest} />)}
               {activeTab === "实现" && (authoritativeDetail ? <AssetAuthoritativeImplementation asset={selected} /> : <AssetExecution asset={selected} focusedObject={focusedObject} onNotify={onNotify} />)}
               {activeTab === "可信度" && (authoritativeDetail ? <AssetAuthoritativeTrust asset={selected} /> : <AssetEvidence asset={selected} onNotify={onNotify} onStartRevision={setRevisionRequest} />)}
@@ -1383,10 +1470,19 @@ function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, r
             <input ref={catalogSearchRef} type="search" aria-label="搜索知识目录" placeholder="名称、ID、资产或数据对象" value={query} onChange={(event) => setQuery(event.target.value)} />
             <kbd>⌘ K</kbd>
           </label>
+          <div className="segment-control catalog-version-filter" role="group" aria-label="知识版本筛选">
+            {(["全部", "正式版", "草稿"] as const).map((item) => {
+              const count = item === "全部" ? catalogAssets.length : catalogAssets.filter((asset) => {
+                const version = knowledgeVersionState(asset);
+                return item === "正式版" ? version.hasPublishedVersion : version.hasDraftVersion;
+              }).length;
+              return <button key={item} type="button" aria-pressed={versionFilter === item} onClick={() => setVersionFilter(item)}>{item} {count}</button>;
+            })}
+          </div>
           <label className="catalog-filter"><span>对象</span><select aria-label="筛选知识对象类型" value={type} onChange={(event) => setType(event.target.value as CatalogObjectType | "全部")}><option value="全部">全部对象</option><optgroup label="语义资产">{assetTypes.map((item) => <option key={item} value={item}>{item}</option>)}</optgroup><optgroup label="治理对象">{catalogObjectTypes.filter((item) => !assetTypes.includes(item as AssetType)).map((item) => <option key={item} value={item}>{item}</option>)}</optgroup></select></label>
-          <label className="catalog-filter"><span>资产状态</span><select aria-label="筛选资产发布状态" value={assetStatus} onChange={(event) => setAssetStatus(event.target.value as Asset["status"] | "全部")}><option value="全部">全部状态</option><option value="已发布">已发布</option><option value="需关注">需关注</option><option value="草稿">草稿</option><option value="待确认">待确认</option></select></label>
           <label className="catalog-filter"><span>语义域</span><select aria-label="筛选语义域" value={domain} onChange={(event) => setDomain(event.target.value)}><option value="全部">全部语义域</option>{domains.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
-          <button className="catalog-clear-button" type="button" aria-label="清除全部筛选" title="清除全部筛选" disabled={!hasFilters} onClick={() => { setQuery(""); setType("全部"); setAssetStatus("全部"); setDomain("全部"); }}><X size={15} /></button>
+          <button className="secondary-button catalog-release-history-button" type="button" onClick={onOpenReleaseHistory}><History size={15} />发布记录</button>
+          <button className="catalog-clear-button" type="button" aria-label="清除全部筛选" title="清除全部筛选" disabled={!hasFilters} onClick={() => { setQuery(""); setType("全部"); setVersionFilter("全部"); setDomain("全部"); }}><X size={15} /></button>
           <CreateCatalogAssetButton onCreated={(assetId) => { onSelect(assetId); void ensureAsset(assetId); onDetailChange(true); setMode("detail"); }} />
         </div>
         <div className="catalog-summary">
@@ -1394,10 +1490,11 @@ function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, r
           <CatalogRefreshButton />
           <label className="catalog-sort"><ArrowUpDown size={14} /><span className="visually-hidden">排序</span><select aria-label="知识目录排序" value={sort} onChange={(event) => setSort(event.target.value as "attention" | "name" | "type")}><option value="attention">需关注优先</option><option value="name">按名称</option><option value="type">按类型</option></select></label>
         </div>
-        <div className="asset-table-head" aria-hidden="true"><span /><span>语义资产</span><span>类型与语义域</span><span>关系与实现</span><span>负责人</span><span>就绪度</span><span>发布状态</span><span /></div>
+        <div className="asset-table-head" aria-hidden="true"><span /><span>语义资产</span><span>类型与语义域</span><span>关系与实现</span><span>负责人</span><span>就绪度</span><span>版本状态</span><span /></div>
         <div className="asset-list">
           {catalogGroups.map(({ asset, assetItem, children, visibleChildren }) => {
             const readiness = readinessSummary(asset);
+            const versionState = knowledgeVersionState(asset);
             const isAutoExpanded = isGovernedObjectType || (normalizedQuery.length > 0 && visibleChildren.length > 0);
             const isExpanded = expandedAssetIds.has(asset.id) || isAutoExpanded;
             return (
@@ -1410,7 +1507,7 @@ function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, r
                     <span className="asset-row-scope"><strong>{asset.detailLoaded === false ? "打开后加载关系" : `${asset.relations.length} 关系`} · {asset.bindings.length} 绑定</strong><small>{asset.joinContracts.length} 个 JoinContract</small></span>
                     <span className="asset-row-owner"><strong>{asset.owner}</strong><small>{asset.maintainer}</small></span>
                     <span className="asset-row-readiness"><span><b>{readiness.passed}/{readiness.total}</b><small>{readiness.warnings > 0 ? `${readiness.warnings} 项需关注` : "门禁通过"}</small></span><progress max={readiness.total} value={readiness.passed} aria-label={`${asset.name}就绪度 ${readiness.passed}/${readiness.total}`} /></span>
-                    <StatusBadge tone={statusTone(asset.status)}>{asset.status}</StatusBadge>
+                    <StatusBadge tone={versionState.tone}>{versionState.label}</StatusBadge>
                     <ChevronRight className="asset-row-chevron" size={16} />
                   </button>
                 </div>
@@ -1428,7 +1525,7 @@ function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, r
               </section>
             );
           })}
-          {catalogGroups.length === 0 && <div className="catalog-empty"><Search size={24} /><strong>{hasFilters ? "没有匹配知识资产" : "尚无知识资产"}</strong>{hasFilters ? <><span>调整关键词、对象类型、资产状态或语义域。</span><button type="button" onClick={() => { setQuery(""); setType("全部"); setAssetStatus("全部"); setDomain("全部"); }}>清除筛选</button></> : <CreateCatalogAssetButton compact={false} onCreated={(assetId) => { onSelect(assetId); void ensureAsset(assetId); onDetailChange(true); setMode("detail"); }} />}</div>}
+          {catalogGroups.length === 0 && <div className="catalog-empty"><Search size={24} /><strong>{hasFilters ? "没有匹配知识资产" : "尚无知识资产"}</strong>{hasFilters ? <><span>调整关键词、版本筛选、对象类型或语义域。</span><button type="button" onClick={() => { setQuery(""); setType("全部"); setVersionFilter("全部"); setDomain("全部"); }}>清除筛选</button></> : <CreateCatalogAssetButton compact={false} onCreated={(assetId) => { onSelect(assetId); void ensureAsset(assetId); onDetailChange(true); setMode("detail"); }} />}</div>}
         </div>
         {catalogNextCursor && <div className="catalog-pagination"><button type="button" disabled={catalogLoadingMore} onClick={() => void loadMoreAssets()}>{catalogLoadingMore ? "正在读取…" : "加载更多资产"}</button>{catalogAppendError && <span role="alert">{catalogAppendError}</span>}</div>}
         {!catalogNextCursor && catalogAppendError && <div className="catalog-pagination"><span role="alert">{catalogAppendError}</span></div>}
@@ -1512,7 +1609,13 @@ function runTone(run: GovernanceValidationRun): "success" | "warning" | "danger"
   return "success";
 }
 
-function GovernanceCandidateDetail({ candidate, publishedRelease, onReview, onPublish }: { candidate: GovernanceCandidate; publishedRelease: GovernanceReleaseDetail | null; onReview: () => void; onPublish: () => void }) {
+function releaseEventState(release: Pick<GovernanceReleaseDetail, "rolledBackToReleaseId">, rolledBackByReleaseId: string | null) {
+  if (release.rolledBackToReleaseId) return { label: "回滚事件", tone: "warning" } as const;
+  if (rolledBackByReleaseId) return { label: "已回滚", tone: "neutral" } as const;
+  return { label: "已发布", tone: "success" } as const;
+}
+
+function GovernanceCandidateDetail({ candidate, publishedRelease, onReview, onPublish, onOpenReleaseRecord }: { candidate: GovernanceCandidate; publishedRelease: GovernanceReleaseDetail | null; onReview: () => void; onPublish: () => void; onOpenReleaseRecord: (releaseId: string) => void }) {
   const governance = useGovernanceRuntime();
   const canReview = useCan("proposal.review");
   const canPublish = useCan("release.publish");
@@ -1609,7 +1712,7 @@ function GovernanceCandidateDetail({ candidate, publishedRelease, onReview, onPu
             {activeReviewTab === "diff" && <section className="candidate-review-section candidate-version-diff" aria-labelledby="candidate-version-diff-title">
               <div className="candidate-card-heading"><div><span className="panel-kicker">知识内容</span><h3 id="candidate-version-diff-title">定义与计算变化</h3><p>核对业务定义、适用范围和来源依据。</p></div><span className="candidate-card-count">{candidate.baseRevision} → {candidate.targetRevision}</span></div>
               {detailError && <div className="governance-inline-error" role="alert"><CircleAlert size={15} />{detailError}</div>}
-              {detail && !detail.changeSet?.length && <div className="empty-inline">此候选没有逐字段差异记录。请在知识确认中核对完整内容与关联规则，不能仅凭此页批准发布。<a href="/governance?productionList=1">前往知识确认</a></div>}
+              {detail && !detail.changeSet?.length && <div className="empty-inline">此候选没有逐字段差异记录。请在知识确认中核对完整内容与关联规则，不能仅凭此页批准发布。<a href={workReviewsRoute()}>前往知识确认</a></div>}
               <div className="candidate-diff-list">{(detail?.changeSet ?? []).map((change) => (
                 <article className="diff-block" key={change.id}>
                   <header><code className="diff-field">{change.fieldPath}</code><span>{change.op === "add" ? "新增字段" : change.op === "remove" ? "移除字段" : "字段变更"}</span></header>
@@ -1664,7 +1767,7 @@ function GovernanceCandidateDetail({ candidate, publishedRelease, onReview, onPu
                 <p>{decision.reasonCode === "RISK_BLOCKER" ? findingMessage(decision.reasonCode) : "请由未参与本次编辑的成员核对知识内容及来源依据。"}</p><details><summary>技术详情</summary><code>{decision.matchedRuleId} · {decision.reasonCode} · {decision.ruleVersion}</code><p>{decision.explanation}</p></details>
               </section>}
               {publishedRelease && <section className="candidate-release-record" aria-label="发布记录">
-                <header><span className="content-label">发布记录</span><code>#{publishedRelease.sequence}</code></header>
+                <header><span className="content-label">发布记录</span><div><code>#{publishedRelease.sequence}</code><button className="text-button" type="button" onClick={() => onOpenReleaseRecord(publishedRelease.id)}><History size={13} />查看记录</button></div></header>
                 <dl><div><dt>发布批次</dt><dd><code>{publishedRelease.id}</code></dd></div><div><dt>清单摘要</dt><dd><code title={publishedRelease.manifestDigest}>{publishedRelease.manifestDigest.slice(0, 18)}…</code></dd></div>{publishedRelease.rolledBackToReleaseId && <div><dt>回滚来源</dt><dd><code>{publishedRelease.rolledBackToReleaseId}</code></dd></div>}</dl>
               </section>}
               <div className="candidate-review-decision-note"><strong>{isPublished ? `${asset?.name ?? proposal.title} ${candidate.targetRevision} 已发布为不可变版本` : candidate.review?.decision === "approved" ? "审核通过，可以发布整个候选版本" : proposal.state === "rejected" ? "提案已退回" : "审核针对完整资产版本"}</strong><span>{isPublished ? publishedRelease ? `发布批次 ${publishedRelease.id} · 序列 #${publishedRelease.sequence}。` : "发布记录已由治理服务创建。" : `${asset?.owner ?? "资产负责人"} 需要基于版本差异、验证证据和消费影响完成决策。`}</span></div>
@@ -1707,66 +1810,60 @@ function ReleaseDiffEntries({ title, description, baselineLabel, entries }: { ti
 
 function ReleaseDetail({ release, originProposal, revisionLabels, isLatest, rolledBackByReleaseId, onManifest, onCompare, onRollback }: { release: GovernanceReleaseDetail; originProposal: GovernanceProposalDetail | null; revisionLabels: Record<string, string>; isLatest: boolean; rolledBackByReleaseId: string | null; onManifest: () => void; onCompare: () => void; onRollback: (releaseId: string) => void }) {
   const canRollback = useCan("release.rollback");
-  const primaryAsset = release.manifest.assets[0];
-  const assetLabel = primaryAsset ? revisionLabels[primaryAsset.revisionId] ?? primaryAsset.revisionId : release.id;
+  const { assets, ensureRevisions, revisionStates } = useCatalogRuntime();
+  useEffect(() => {
+    for (const asset of release.manifest.assets) {
+      if (!revisionStates[asset.assetId]) void ensureRevisions(asset.assetId);
+    }
+  }, [ensureRevisions, release.manifest.assets, revisionStates]);
   const isRollbackRelease = Boolean(release.rolledBackToReleaseId);
-  return (
-    <section className="release-detail governance-release-detail asset-version-detail-v2" aria-label={`发布 #${release.sequence} 详情`}>
-      <header className="release-detail-header">
-        <div className="release-seal"><PackageCheck size={24} /></div>
-        <div><span className="panel-kicker">不可变发布记录 · <code>{release.id}</code></span><h2>{originProposal?.title ?? "发布记录"} · {assetLabel}</h2><p>发布序列 #{release.sequence} · {isRollbackRelease ? "回滚发布" : "标准发布"} · 由治理服务原子提交。</p></div>
-        <div className="release-detail-header-actions"><StatusBadge tone={isLatest ? "success" : "neutral"}><BadgeCheck size={13} />{isLatest ? "当前版本" : "历史版本"}</StatusBadge><button className="text-button" type="button" onClick={onManifest}><FileCheck2 size={14} />发布清单</button><button className="text-button" type="button" onClick={onCompare}><RotateCcw size={14} />查看差异基准</button></div>
-      </header>
-      <div className="manifest-strip"><div><span>发布序列</span><strong>#{release.sequence}</strong></div><div><span>状态</span><strong>{release.state === "published" ? "已发布" : "已回滚"}</strong></div><div><span>发布批次</span><code>{release.id}</code></div><div><span>发布者 · 时间</span><strong>{release.publishedBy} · {governanceTimestamp(release.publishedAt)}</strong></div></div>
-      <div className={`release-authority-status authority-${release.availability}`} role={release.availability === "failed" || release.availability === "forbidden" ? "alert" : "status"}><ShieldCheck size={16} /><span><strong>{authorityAvailabilityLabel(release.availability)}</strong>权威来源 <code>{release.authority}</code> · 已显示清单固定 {release.manifest.assets.length + (release.objectAvailability === "available" ? release.manifest.objects.length : 0)} 项</span></div>
-      {release.availability !== "available" && <div className="asset-authority-boundary" role="alert"><CircleAlert size={20} /><span><strong>发布权威详情不可用</strong><small>服务端状态为 {release.availability}，页面不会显示推测的差异、绑定或消费方。</small></span></div>}
-      {release.availability === "available" && <>
-      {release.rolledBackToReleaseId && <div className="rollback-reference" role="status"><RotateCcw size={15} /><span>此发布回滚了 <code>{release.rolledBackToReleaseId}</code>；目标发布记录保持不变，回滚以新发布表达（P-003）。</span></div>}
-      {rolledBackByReleaseId && <div className="rollback-reference" role="status"><RotateCcw size={15} /><span>此发布已被 <code>{rolledBackByReleaseId}</code> 回滚；注册表指针已由回滚发布切回。</span></div>}
-      <div className="asset-version-detail-grid">
-        <section className="release-changes">
-          <div className="subsection-heading"><div><span className="panel-kicker">版本变更</span><h3>{originProposal ? originProposal.title : "发布清单"}</h3><p>{originProposal?.summary ?? "该发布的清单固定了以下不可变内容。"}</p></div><StatusBadge tone="success">{originProposal ? `${originProposal.changeSet?.length ?? 0} 项已验证变更` : `${release.manifest.assets.length} 项修订固定`}</StatusBadge></div>
-          {originProposal?.changeSet ? <div className="change-list">{originProposal.changeSet.map((change) => <div key={change.id}><CheckCircle2 size={16} /><span><code>{change.fieldPath}</code> · {change.op === "add" ? "新增" : change.op === "remove" ? "移除" : "更新"}</span></div>)}</div> : <div className="change-list">{release.manifest.assets.map((asset) => <div key={`${asset.assetId}:${asset.revisionId}`}><CheckCircle2 size={16} /><span><code title={asset.assetId}>{asset.assetId}</code> → <code title={asset.revisionId}>{revisionLabels[asset.revisionId] ?? asset.revisionId}</code></span></div>)}{release.manifest.objects.map((object) => <div key={`${object.objectId}:${object.version}`}><CheckCircle2 size={16} /><span><code title={object.objectId}>{object.objectId}</code> · 版本 {object.version}</span></div>)}</div>}
-        </section>
-        <section className="release-bindings">
-          <div className="subsection-heading"><div><span className="panel-kicker">清单固定</span><h3>此发布包含的不可变内容</h3><p>清单摘要 <code title={release.manifestDigest}>{release.manifestDigest.slice(0, 24)}…</code></p></div><span>{release.manifest.assets.length + release.manifest.objects.length} 项固定</span></div>
-          <div className="asset-version-consumer-list">{release.manifest.assets.map((asset) => (
-            <article key={`${asset.assetId}:${asset.revisionId}`}>
-              <span className="consumer-mark"><Box size={18} /></span>
-              <div><strong><code title={asset.assetId}>{asset.assetId}</code></strong><small>语义资产修订固定</small></div>
-              <code title={asset.revisionId}>{revisionLabels[asset.revisionId] ?? asset.revisionId}</code>
-              <StatusBadge tone="info">已固定</StatusBadge>
-            </article>
-          ))}
-          {release.objectAvailability === "available" && release.manifest.objects.map((object) => (
-            <article key={`${object.objectId}:${object.version}`}>
-              <span className="consumer-mark"><Link2 size={18} /></span>
-              <div><strong><code title={object.objectId}>{object.objectId}</code></strong><small>{object.objectType} 治理对象</small></div>
-              <code>版本 {object.version}</code>
-              <StatusBadge tone="info">已固定</StatusBadge>
-            </article>
-          ))}
-          {release.objectAvailability !== "available" && <div className={`asset-authority-boundary asset-authority-${release.objectAvailability}`} role={release.objectAvailability === "forbidden" || release.objectAvailability === "failed" ? "alert" : "status"}><CircleAlert size={17} /><span><strong>治理对象清单{authorityAvailabilityLabel(release.objectAvailability)}</strong><small>资产修订固定仍按服务端清单显示；治理对象固定不使用推测值。</small></span></div>}
-          {release.manifest.assets.length === 0 && release.objectAvailability === "available" && release.manifest.objects.length === 0 && <div className="empty-inline">该发布没有固定内容。</div>}</div>
-          {release.consumerImpactAvailability === "available" && release.consumerImpact ? <div className="release-consumer-impact"><span className="content-label">服务端消费影响</span><dl><div><dt>当前消费者</dt><dd>{release.consumerImpact.current}</dd></div><div><dt>固定版本消费者</dt><dd>{release.consumerImpact.pinned}</dd></div></dl><small>当前合同提供权威计数，不提供消费者明细。</small></div> : <div className={`asset-authority-boundary asset-authority-${release.consumerImpactAvailability}`} role={release.consumerImpactAvailability === "forbidden" || release.consumerImpactAvailability === "failed" ? "alert" : "status"}><CircleAlert size={17} /><span><strong>消费影响{authorityAvailabilityLabel(release.consumerImpactAvailability)}</strong><small>服务端没有提供可显示的消费影响计数，页面不会补零。</small></span></div>}
-        </section>
-      </div>
-      </>}
-      <footer className="release-actions"><div><strong>回滚以新发布记录表达</strong><span>目标发布保持不变；回滚会恢复其固定修订之前的注册表指针。</span></div><button className="secondary-button" type="button" onClick={() => onRollback(release.id)} disabled={!canRollback || !isLatest || isRollbackRelease || Boolean(rolledBackByReleaseId)}><RotateCcw size={16} />回滚此发布</button></footer>
-    </section>
-  );
+  const eventState = releaseEventState(release, rolledBackByReleaseId);
+  const changeSummary = release.priorPinDiff.filter((entry) => entry.change !== "unchanged").length;
+  const objectLabels: Record<string, string> = { physical_binding: "数据绑定", join_contract: "连接规则", model_grain: "数据粒度", entity_key: "身份键" };
+  const assetName = (pin: GovernanceReleaseDetail["manifest"]["assets"][number], index: number) => {
+    const revision = revisionStates[pin.assetId]?.items.find((item) => item.id === pin.revisionId);
+    const known = assets.find((item) => item.id === pin.assetId && item.revisionRecord.revisionId === pin.revisionId);
+    const content = revision?.content as Record<string, unknown> | undefined;
+    const name = content?.displayName ?? content?.name ?? content?.title;
+    return typeof name === "string" && name ? name : known?.name ?? `知识 ${index + 1}（版本名称未加载）`;
+  };
+  return <section className="release-detail governance-release-detail release-detail-compact" aria-label={`发布 #${release.sequence} 详情`}>
+    <header className="release-detail-header">
+      <div className="release-seal"><PackageCheck size={24} /></div>
+      <div><h2>{originProposal?.title ?? `发布 #${release.sequence}`}</h2><p>{governanceTimestamp(release.publishedAt)} · {release.manifest.assets.length} 项知识 · {changeSummary} 项版本变化</p></div>
+      <div className="release-detail-header-actions"><StatusBadge tone={eventState.tone}>{eventState.label}</StatusBadge><button className="text-button" type="button" onClick={onCompare}><RotateCcw size={14} />查看差异基准</button></div>
+    </header>
+    {release.availability !== "available" ? <div className="asset-authority-boundary" role="alert"><CircleAlert size={20} /><strong>发布详情{authorityAvailabilityLabel(release.availability)}</strong></div> : <>
+      {release.rolledBackToReleaseId && <div className="rollback-reference" role="status"><RotateCcw size={15} /><span>此记录为回滚发布</span></div>}
+      {rolledBackByReleaseId && <div className="rollback-reference" role="status"><RotateCcw size={15} /><span>此发布已回滚</span></div>}
+      {originProposal?.changeSet?.length ? <section className="release-changes"><h3>本次变更</h3>{originProposal.summary && <p>{originProposal.summary}</p>}<div className="change-list">{originProposal.changeSet.map((change) => <div key={change.id}><CheckCircle2 size={16} /><span>{knowledgeFieldLabels[change.fieldPath] ?? change.fieldPath} · {change.op === "add" ? "新增" : change.op === "remove" ? "移除" : "更新"}</span></div>)}</div></section> : null}
+      <section aria-label="发布内容" className="release-content-section">
+        <header><h3>发布内容</h3><span>{release.manifest.assets.length} 项知识{release.objectAvailability === "available" ? ` · ${release.manifest.objects.length} 项实现` : ""}</span></header>
+        <table className="release-content-table"><thead><tr><th>名称</th><th>类型</th><th>版本</th></tr></thead><tbody>
+          {release.manifest.assets.map((pin, index) => <tr key={pin.assetId}><td>{assetName(pin, index)}</td><td>{assets.find((item) => item.id === pin.assetId)?.type ?? "知识"}</td><td>{/^@\d+$/.test(revisionLabels[pin.revisionId] ?? "") ? revisionLabels[pin.revisionId] : "版本未加载"}</td></tr>)}
+          {release.objectAvailability === "available" && release.manifest.objects.map((object, index) => <tr key={object.objectId}><td>{objectLabels[object.objectType] ?? "治理对象"} {index + 1}</td><td>实现</td><td>{object.version}</td></tr>)}
+        </tbody></table>
+        {release.manifest.assets.length === 0 && release.objectAvailability === "available" && release.manifest.objects.length === 0 && <p className="empty-inline">该发布没有内容</p>}
+        {release.objectAvailability !== "available" && <p role={release.objectAvailability === "failed" || release.objectAvailability === "forbidden" ? "alert" : "status"}>治理对象清单{authorityAvailabilityLabel(release.objectAvailability)}</p>}
+      </section>
+      {release.consumerImpactAvailability === "available" && release.consumerImpact ? (release.consumerImpact.current > 0 || release.consumerImpact.pinned > 0) && <section><h3>使用影响</h3><p>当前版本使用方 {release.consumerImpact.current} · 固定版本使用方 {release.consumerImpact.pinned}</p></section> : <p role={release.consumerImpactAvailability === "failed" || release.consumerImpactAvailability === "forbidden" ? "alert" : "status"}>{release.consumerImpactAvailability === "available" ? "消费影响数据未提供" : `消费影响${authorityAvailabilityLabel(release.consumerImpactAvailability)}`}</p>}
+    </>}
+    <details className="production-technical release-technical"><summary>发布追溯</summary><dl><div><dt>发布标识</dt><dd>{release.id}</dd></div><div><dt>权威来源</dt><dd>{release.authority}</dd></div><div><dt>发布者</dt><dd>{release.publishedBy}</dd></div><div><dt>状态</dt><dd>{release.state === "published" ? "已发布" : "已回滚"}</dd></div><div><dt>内容摘要</dt><dd>{release.manifestDigest}</dd></div>{release.rolledBackToReleaseId && <div><dt>回滚目标</dt><dd>{release.rolledBackToReleaseId}</dd></div>}{rolledBackByReleaseId && <div><dt>回滚记录</dt><dd>{rolledBackByReleaseId}</dd></div>}</dl><button className="text-button" type="button" onClick={onManifest}><FileCheck2 size={14} />发布清单</button></details>
+    <footer className="release-actions"><div>{isLatest && !isRollbackRelease && !rolledBackByReleaseId && <span>回滚会恢复发布前版本，并生成新的发布记录。</span>}</div><button className="secondary-button" type="button" onClick={() => onRollback(release.id)} disabled={!canRollback || !isLatest || isRollbackRelease || Boolean(rolledBackByReleaseId)}><RotateCcw size={16} />回滚此发布</button></footer>
+  </section>;
 }
 
 type AssetVersionFilter = "全部" | "待处理" | "当前版本" | "历史版本";
+type ReleaseHistoryFilter = "全部" | "已发布" | "已回滚";
 
-function ReleasesView({ initialSelectedKey, initialSourceRun, detailBackRequestEpoch, rollbackNotice, onDetailOpenChange, onReview, onPublish, onRollback, onAssembleBatches, onConfirmBatch, historyOnly = false, batchOnly = false }: { initialSelectedKey: string | null; initialSourceRun: string | null; detailBackRequestEpoch: number; rollbackNotice: GovernanceReleaseDetail | null; onDetailOpenChange: (open: boolean) => void; onReview: (candidate: GovernanceCandidate) => void; onPublish: (candidate: GovernanceCandidate) => void; onRollback: (releaseId: string) => void; onAssembleBatches: () => void; onConfirmBatch: (batch: GovernanceReviewBatchDetail) => void; historyOnly?: boolean; batchOnly?: boolean }) {
+function ReleasesView({ initialSelectedKey, initialSourceRun, detailBackRequestEpoch, rollbackNotice, onDetailOpenChange, onReview, onPublish, onRollback, onAssembleBatches, onConfirmBatch, onOpenReleaseRecord, historyOnly = false, batchOnly = false, routeOrigin = "asset" }: { initialSelectedKey: string | null; initialSourceRun: string | null; detailBackRequestEpoch: number; rollbackNotice: GovernanceReleaseDetail | null; onDetailOpenChange: (open: boolean) => void; onReview: (candidate: GovernanceCandidate) => void; onPublish: (candidate: GovernanceCandidate) => void; onRollback: (releaseId: string) => void; onAssembleBatches: () => void; onConfirmBatch: (batch: GovernanceReviewBatchDetail) => void; onOpenReleaseRecord: (releaseId: string) => void; historyOnly?: boolean; batchOnly?: boolean; routeOrigin?: "asset" | "work" | "audit" }) {
   const governance = useGovernanceRuntime();
   const { assets, ensureAsset } = useCatalogRuntime();
   const canReview = useCan("proposal.review");
   const [selectedKey, setSelectedKey] = useState<string | null>(initialSelectedKey);
   const [selectedDetailBackEpoch, setSelectedDetailBackEpoch] = useState(detailBackRequestEpoch);
   const [inspector, setInspector] = useState<"compare" | "manifest" | "policy" | null>(null);
-  const [filter, setFilter] = useState<AssetVersionFilter>("全部");
+  const [filter, setFilter] = useState<AssetVersionFilter | ReleaseHistoryFilter>("全部");
   const [query, setQuery] = useState(initialSourceRun ?? "");
   const [expandedBatchId, setExpandedBatchId] = useState<string | null>(null);
   const [batchDetail, setBatchDetail] = useState<GovernanceReviewBatchDetail | null>(null);
@@ -1867,7 +1964,7 @@ function ReleasesView({ initialSelectedKey, initialSourceRun, detailBackRequestE
     const publishedRelease = publishedSummary ? governance.releaseDetails[publishedSummary.id] ?? null : null;
     return (
       <section className="view view-releases governance-detail-view">
-        <GovernanceCandidateDetail candidate={selectedCandidate} publishedRelease={publishedRelease} onReview={() => onReview(selectedCandidate)} onPublish={() => onPublish(selectedCandidate)} />
+        <GovernanceCandidateDetail candidate={selectedCandidate} publishedRelease={publishedRelease} onReview={() => onReview(selectedCandidate)} onPublish={() => onPublish(selectedCandidate)} onOpenReleaseRecord={onOpenReleaseRecord} />
       </section>
     );
   }
@@ -1900,13 +1997,17 @@ function ReleasesView({ initialSelectedKey, initialSourceRun, detailBackRequestE
   const visibleReleases = governance.releases.filter((release) => {
     const detail = governance.releaseDetails[release.id];
     const pinCount = detail ? detail.manifest.assets.length + detail.manifest.objects.length : 0;
-    const isCurrent = release.sequence === latestSequence;
-    const matchesFilter = filter === "全部" || (filter === "当前版本" && isCurrent) || (filter === "历史版本" && !isCurrent);
+    const rolledBack = Boolean(release.rolledBackToReleaseId);
+    const matchesFilter = historyOnly
+      ? filter === "全部" || filter === "已发布" && !rolledBack || filter === "已回滚" && rolledBack
+      : filter === "全部" || filter === "当前版本" && release.sequence === latestSequence || filter === "历史版本" && release.sequence !== latestSequence;
     const matchesQuery = !normalizedQuery || `${release.id} #${release.sequence} ${release.publishedBy} ${release.manifestDigest} ${pinCount}`.toLocaleLowerCase("zh-CN").includes(normalizedQuery);
     return matchesFilter && matchesQuery;
   });
   const visibleCount = visibleCandidates.length + visibleReleases.length;
   const rowCount = (historyOnly ? 0 : candidateRows.length) + governance.releases.length;
+  const historyFilters: ReleaseHistoryFilter[] = ["全部", "已发布", "已回滚"];
+  const workflowFilters: AssetVersionFilter[] = ["全部", "待处理", "当前版本", "历史版本"];
 
   return (
     <section className="view view-releases release-list-only">
@@ -1946,18 +2047,18 @@ function ReleasesView({ initialSelectedKey, initialSourceRun, detailBackRequestE
           </div>}
         </div>)}
       </section>}
-      {!batchOnly && <section className="governance-list-surface release-history-surface asset-version-registry" aria-label="语义资产版本列表">
+      {!batchOnly && <section className="governance-list-surface release-history-surface asset-version-registry" aria-label={historyOnly ? "发布记录" : "知识版本与发布"}>
         <div className="governance-list-toolbar asset-version-toolbar">
-          <div className="segment-control governance-filter" aria-label="资产版本筛选">{((historyOnly ? ["全部", "当前版本", "历史版本"] : ["全部", "待处理", "当前版本", "历史版本"]) as AssetVersionFilter[]).map((item) => <button key={item} type="button" aria-pressed={filter === item} onClick={() => setFilter(item)}>{item === "全部" ? `全部 ${rowCount}` : item === "待处理" ? `待处理 ${candidates.filter((candidate) => candidate.proposal.state !== "released" && candidate.proposal.state !== "rejected").length}` : item}</button>)}</div>
-          <label className="governance-search"><Search size={16} /><input type="search" aria-label="搜索资产版本" placeholder="搜索资产、提案、发布批次或清单摘要" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
+          <div className="segment-control governance-filter" role="group" aria-label={historyOnly ? "发布记录筛选" : "资产版本筛选"}>{(historyOnly ? historyFilters : workflowFilters).map((item) => <button key={item} type="button" aria-pressed={filter === item} onClick={() => setFilter(item)}>{item === "全部" ? `全部 ${rowCount}` : item === "待处理" ? `待处理 ${candidates.filter((candidate) => candidate.proposal.state !== "released" && candidate.proposal.state !== "rejected").length}` : item}</button>)}</div>
+          <label className="governance-search"><Search size={16} /><input type="search" aria-label={historyOnly ? "搜索发布记录" : "搜索资产版本"} placeholder={historyOnly ? "搜索知识、发布人或发布批次" : "搜索资产、提案、发布批次或清单摘要"} value={query} onChange={(event) => setQuery(event.target.value)} /></label>
         </div>
-        <div className="governance-list-summary"><span>显示 <strong>{visibleCount}</strong> / 已加载 {rowCount} 条版本{governance.releasesTotal !== undefined ? ` · 发布记录总计 ${governance.releasesTotal}` : ""}</span><span><ArrowUpDown size={14} />{historyOnly ? "按发布序列" : "待处理优先，其次按发布序列"}</span></div>
+        <div className="governance-list-summary"><span>显示 <strong>{visibleCount}</strong> / 已加载 {rowCount} 个发布事件{governance.releasesTotal !== undefined ? ` · 发布记录总计 ${governance.releasesTotal}` : ""}</span><span><ArrowUpDown size={14} />{historyOnly ? "按发布时间与发布序列" : "待处理优先，其次按发布序列"}</span></div>
         <div className="governance-table release-table">
-          <div className="governance-list-head release-compact-grid" aria-hidden="true"><span>语义资产</span><span>版本</span><span>版本内容</span><span>发布批次</span><span>状态</span><span>责任人</span><span /></div>
+          <div className="governance-list-head release-compact-grid" aria-hidden="true"><span>知识与事件</span><span>固定版本</span><span>变更摘要</span><span>发布时间与批次</span><span>事件状态</span><span>发布人</span><span /></div>
           <div className="governance-list-body">
             {visibleCandidates.map((candidate) => {
               const status = candidateStatusFor(candidate);
-              return <button key={candidate.key} type="button" className="governance-list-row release-compact-grid candidate-version-row" aria-label={`查看候选资产版本 ${candidate.asset?.name ?? candidate.proposal.title} ${candidate.targetRevision}`} onClick={() => { setSelectedKey(candidate.key); setSelectedDetailBackEpoch(detailBackRequestEpoch); writeProductRoute(`/governance?proposal=${encodeURIComponent(candidate.proposal.id)}`); }}>
+              return <button key={candidate.key} type="button" className="governance-list-row release-compact-grid candidate-version-row" aria-label={`查看候选资产版本 ${candidate.asset?.name ?? candidate.proposal.title} ${candidate.targetRevision}`} onClick={() => { setSelectedKey(candidate.key); setSelectedDetailBackEpoch(detailBackRequestEpoch); writeProductRoute(changeRoute(candidate.proposal.id, "pending")); }}>
                 <span className="governance-primary governance-primary-compact"><strong>{candidate.asset?.name ?? candidate.proposal.title}</strong><small><code>{candidate.asset?.key ?? candidate.proposal.targetObjectId}</code><span>{candidate.asset?.type ?? "治理对象"}</span></small></span>
                 <span className="governance-metric"><strong>{candidate.targetRevision}</strong><small>基于 {candidate.baseRevision}</small></span>
                 <span className="governance-context"><strong>{candidate.proposal.title}</strong><small><code>{candidate.proposal.id}</code> · {candidate.decision ? `${routingLabels[candidate.decision.routing] ?? candidate.decision.routing}` : "决策生成中"}</small></span>
@@ -1970,20 +2071,23 @@ function ReleasesView({ initialSelectedKey, initialSourceRun, detailBackRequestE
             {visibleReleases.map((release) => {
               const detail = governance.releaseDetails[release.id];
               const detailState = governance.releaseDetailStates[release.id];
-              const isCurrent = release.sequence === latestSequence;
+              const rolledBackByReleaseId = governance.releases.find((item) => item.rolledBackToReleaseId === release.id)?.id ?? null;
+              const eventState = releaseEventState(release, rolledBackByReleaseId);
               const primaryPin = detail?.manifest.assets[0];
               const label = primaryPin ? revisionLabels[primaryPin.revisionId] ?? primaryPin.revisionId : `#${release.sequence}`;
-              return <button key={release.id} type="button" className="governance-list-row release-compact-grid" aria-label={`查看发布记录 ${label} #${release.sequence}`} onClick={() => { setSelectedKey(`release:${release.id}`); setSelectedDetailBackEpoch(detailBackRequestEpoch); writeProductRoute(`/governance?release=${encodeURIComponent(release.id)}`); }}>
-                <span className="governance-primary governance-primary-compact"><strong>{primaryPin ? assets.find((asset) => asset.id === primaryPin.assetId)?.name ?? primaryPin.assetId : `发布 #${release.sequence}`}</strong><small><code>{primaryPin ? assets.find((asset) => asset.id === primaryPin.assetId)?.identity.key ?? primaryPin.assetId : release.id}</code><span>{release.rolledBackToReleaseId ? "回滚发布" : "标准发布"}</span></small></span>
+              const changedPins = detail?.priorPinDiff.filter((entry) => entry.change !== "unchanged").length ?? 0;
+              const involvedCount = detail ? detail.manifest.assets.length + (detail.objectAvailability === "available" ? detail.manifest.objects.length : 0) : 0;
+              return <button key={release.id} type="button" className="governance-list-row release-compact-grid" aria-label={`查看发布记录 ${label} #${release.sequence}`} onClick={() => { setSelectedKey(`release:${release.id}`); setSelectedDetailBackEpoch(detailBackRequestEpoch); writeProductRoute(releaseRoute(release.id, { from: routeOrigin })); }}>
+                <span className="governance-primary governance-primary-compact"><strong>{primaryPin ? assets.find((asset) => asset.id === primaryPin.assetId)?.name ?? primaryPin.assetId : `发布 #${release.sequence}`}</strong><small><code>{primaryPin ? assets.find((asset) => asset.id === primaryPin.assetId)?.identity.key ?? primaryPin.assetId : release.id}</code><span>{release.rolledBackToReleaseId ? "回滚事件" : "发布事件"}</span></small></span>
                 <span className="governance-metric"><strong>{label}</strong><small>序列 #{release.sequence}</small></span>
-                <span className="governance-context"><strong>{detail ? `${detail.manifest.assets.length + (detail.objectAvailability === "available" ? detail.manifest.objects.length : 0)} 项已显示清单固定` : detailState?.state === "error" ? "清单读取失败" : detailState?.state === "loading" ? "清单加载中" : "打开查看权威清单"}</strong><small>{detailState?.state === "error" ? detailState.error : <code title={release.manifestDigest}>{release.manifestDigest.slice(0, 16)}…</code>}</small></span>
-                <span className="governance-row-owner"><code>{release.id}</code><small>{governanceTimestamp(release.publishedAt)}</small></span>
-                <StatusBadge tone={isCurrent ? "success" : "neutral"}>{isCurrent ? "当前版本" : "历史版本"}</StatusBadge>
-                <span className="governance-row-owner"><strong>{release.publishedBy}</strong><small>已签名发布</small></span>
+                <span className="governance-context"><strong>{detail ? `${involvedCount} 项内容 · ${changedPins} 项版本变化` : detailState?.state === "error" ? "清单读取失败" : detailState?.state === "loading" ? "清单加载中" : "打开查看变更摘要"}</strong><small>{detailState?.state === "error" ? detailState.error : release.rolledBackToReleaseId ? "恢复至发布前固定版本" : governance.proposals.find((proposal) => proposal.id === release.originProposalId)?.title ?? <code title={release.manifestDigest}>{release.manifestDigest.slice(0, 16)}…</code>}</small></span>
+                <span className="governance-row-owner"><strong>{governanceTimestamp(release.publishedAt)}</strong><small><code>{release.id}</code></small></span>
+                <StatusBadge tone={eventState.tone}>{eventState.label}</StatusBadge>
+                <span className="governance-row-owner"><strong>{release.publishedBy}</strong><small>不可变发布事实</small></span>
                 <ChevronRight size={16} />
               </button>;
             })}
-            {visibleCount === 0 && governance.proposalsState === "ready" && governance.releasesState === "ready" && <div className="governance-list-empty"><PackageCheck size={22} /><strong>没有匹配的资产版本</strong><span>调整状态筛选或搜索关键词。</span></div>}
+            {visibleCount === 0 && governance.proposalsState === "ready" && governance.releasesState === "ready" && <div className="governance-list-empty"><PackageCheck size={22} /><strong>{historyOnly ? "没有匹配的发布事件" : "没有匹配的资产版本"}</strong><span>调整筛选或搜索关键词。</span></div>}
             {(governance.proposalsState === "idle" || governance.releasesState === "idle") && <div className="governance-list-empty" role="status"><LoaderCircle className="spin" size={18} />正在加载治理数据</div>}
           </div>
         </div>
@@ -2282,35 +2386,112 @@ interface ProductDeepLink {
   runId: string | null;
   assetId: string | null;
   sourceId: string | null;
+  sourceScheduleId: string | null;
+  sourceRunId: string | null;
+  sourceSection: SourceSection;
+  assetDetail: boolean;
+  assetTab: AssetTab;
   compatibility: { consumerId?: string; bindingId: string; queryId: string } | null;
   productionId?: string | null;
   productionList?: boolean;
+  catalogVersionFilter?: KnowledgeVersionFilter;
+  releaseOrigin?: "inbox" | "assets" | "audit";
+  returnTo?: string | null;
   /** Settings sub-surface to open when the view is `settings`. */
   settingsIndex: number;
 }
 
 function readProductDeepLink(): ProductDeepLink {
-  const empty = { attentionItemId: null, proposalId: null, releaseId: null, runId: null, assetId: null, sourceId: null, compatibility: null as ProductDeepLink["compatibility"], settingsIndex: 0 };
+  const empty = {
+    attentionItemId: null,
+    proposalId: null,
+    releaseId: null,
+    runId: null,
+    assetId: null,
+    sourceId: null,
+    sourceScheduleId: null,
+    sourceRunId: null,
+    sourceSection: "sources" as const,
+    assetDetail: false,
+    assetTab: "概览" as const,
+    compatibility: null as ProductDeepLink["compatibility"],
+    catalogVersionFilter: "全部" as KnowledgeVersionFilter,
+    releaseOrigin: "assets" as const,
+    returnTo: null,
+    settingsIndex: 0,
+  };
   if (typeof window === "undefined") return { view: undefined, ...empty };
   const query = new URLSearchParams(window.location.search);
   const path = window.location.pathname;
-  const compatibility = path === "/delivery/compatibility" && query.get("binding") && query.get("query")
+  const segments = path.split("/").filter(Boolean);
+  const compatibility = (path === "/compatibility" || path === "/delivery/compatibility") && query.get("binding") && query.get("query")
     ? { ...(query.get("consumer") ? { consumerId: query.get("consumer")! } : {}), bindingId: query.get("binding")!, queryId: query.get("query")! }
     : null;
   if (compatibility) return { view: "overview", ...empty, compatibility };
-  if (path === "/governance" && query.get("reviews")) return { view: "releases", reviews: true, ...empty };
-  if (path === "/governance" && query.get("production")) return { view: "releases", productionId: query.get("production"), productionList: true, ...empty };
-  if (path === "/governance" && query.get("productionList")) return { view: "overview", ...empty };
-  if (path === "/assets" && query.get("section") === "drafts") return { view: "releases", productionList: true, ...empty };
-  if (path === "/assets" && query.get("section") === "history") return { view: "releases", ...empty };
-  if (path === "/governance" && query.get("proposal")) return { view: "releases", ...empty, proposalId: query.get("proposal") };
-  if (path === "/governance" && query.get("release")) return { view: "releases", ...empty, releaseId: query.get("release") };
-  if (path === "/governance") return { view: "releases", ...empty };
-  if (path === "/sources") return { view: "sources", ...empty, sourceId: query.get("source") };
-  if (path === "/operations/runtime" && query.get("run")) return { view: "settings", ...empty, runId: query.get("run"), settingsIndex: 4 };
-  if (path === "/assets") return { view: "assets", ...empty, assetId: query.get("asset") };
   if (path === "/ask") return { view: "ask", ...empty };
-  if (path === "/settings" || path.startsWith("/settings/")) return { view: "settings", ...empty, settingsIndex: settingsIndexFromPath(path) };
+  if (path === "/work/reviews" || path === "/governance" && query.get("reviews")) {
+    return { view: "releases", ...empty, reviews: true, releaseOrigin: "inbox" };
+  }
+  if (segments[0] === "work" && segments[1] === "operations" && segments[2]) {
+    return { view: "releases", ...empty, productionId: segments[2], productionList: true, releaseOrigin: query.get("from") === "drafts" ? "assets" : "inbox" };
+  }
+  if (segments[0] === "work" && segments[1] === "reviews") {
+    return { view: "releases", ...empty, reviews: true, releaseOrigin: "inbox" };
+  }
+  if (segments[0] === "work") {
+    return { view: "overview", ...empty, attentionItemId: segments[1] ? decodeURIComponent(segments[1]) : null };
+  }
+  if (segments[0] === "assets" && segments[1]) {
+    const detail = { ...empty, view: "assets" as const, assetId: decodeURIComponent(segments[1]), assetDetail: true, ...(segments[2] === "versions" ? { assetTab: "定义" as const } : {}) };
+    return detail;
+  }
+  if (path === "/assets") {
+    const assetId = query.get("asset");
+    const section = query.get("section");
+    return {
+      view: "assets",
+      ...empty,
+      assetId: assetId ? decodeURIComponent(assetId) : null,
+      assetDetail: Boolean(assetId),
+      catalogVersionFilter: section === "drafts" || query.get("status") === "draft" ? "草稿" : query.get("status") === "released" ? "正式版" : "全部",
+    };
+  }
+  if (segments[0] === "changes" && segments[1]) {
+    return { view: "releases", ...empty, proposalId: decodeURIComponent(segments[1]), releaseOrigin: query.get("from") === "asset" ? "assets" : "inbox" };
+  }
+  if (segments[0] === "releases" && segments[1]) {
+    const from = query.get("from");
+    return { view: "releases", ...empty, releaseId: decodeURIComponent(segments[1]), releaseOrigin: from === "work" || from === "inbox" ? "inbox" : from === "audit" ? "audit" : "assets", returnTo: query.get("returnTo") };
+  }
+  if (path === "/settings/audit/releases" || segments[0] === "settings" && segments[1] === "audit" && segments[2] === "releases") {
+    return { view: "releases", ...empty, releaseId: segments[3] ? decodeURIComponent(segments[3]) : null, releaseOrigin: query.get("from") === "asset" ? "assets" : "audit", settingsIndex: 4 };
+  }
+  if (segments[0] === "settings" && segments[1] === "audit" && segments[2] === "runs" && segments[3]) {
+    return { view: "settings", ...empty, runId: decodeURIComponent(segments[3]), settingsIndex: 4 };
+  }
+  if (path === "/sources/schedules" || segments[0] === "sources" && segments[1] === "schedules") {
+    return { view: "sources", ...empty, sourceSection: "schedules", sourceScheduleId: segments[2] ? decodeURIComponent(segments[2]) : null };
+  }
+  if (path === "/sources/runs" || segments[0] === "sources" && segments[1] === "runs") {
+    return { view: "sources", ...empty, sourceSection: "runs", sourceRunId: segments[2] ? decodeURIComponent(segments[2]) : null };
+  }
+  if (segments[0] === "sources" && segments[1]) {
+    return { view: "sources", ...empty, sourceSection: "sources", sourceId: decodeURIComponent(segments[1]) };
+  }
+  if (path === "/sources") {
+    return { view: "sources", ...empty, sourceSection: "sources", sourceId: query.get("source") };
+  }
+  if (path === "/settings" || path.startsWith("/settings/")) {
+    return { view: "settings", ...empty, settingsIndex: settingsIndexFromPath(path) };
+  }
+
+  // Legacy links remain addressable so existing workbench and integration targets do not break.
+  if (path === "/governance" && query.get("productionList")) return { view: "overview", ...empty };
+  if (path === "/governance" && query.get("production")) return { view: "releases", ...empty, productionId: query.get("production"), productionList: true, releaseOrigin: query.get("from") === "drafts" ? "assets" : "inbox" };
+  if (path === "/governance" && query.get("proposal")) return { view: "releases", ...empty, proposalId: query.get("proposal"), releaseOrigin: query.get("from") === "asset" ? "assets" : "inbox" };
+  if (path === "/governance" && query.get("release")) return { view: "releases", ...empty, releaseId: query.get("release"), releaseOrigin: query.get("from") === "inbox" ? "inbox" : query.get("from") === "audit" ? "audit" : "assets" };
+  if (path === "/governance") return { view: "releases", ...empty };
+  if (path === "/operations/runtime" && query.get("run")) return { view: "settings", ...empty, runId: query.get("run"), settingsIndex: 4 };
   const attentionItemId = query.get("attentionItem");
   return { view: attentionItemId || query.get("view") === "overview" ? "overview" : undefined, ...empty, attentionItemId };
 }
@@ -2326,7 +2507,15 @@ function inboxScopeIndex() {
 }
 
 function productionEntry() {
-  return new URLSearchParams(window.location.search).get("from") === "drafts" || window.location.pathname === "/assets" ? "drafts" : "inbox";
+  return new URLSearchParams(window.location.search).get("from") === "drafts" ? "drafts" : "inbox";
+}
+
+function sourceSectionIndex(section: SourceSection) {
+  return section === "schedules" ? 1 : section === "runs" ? 2 : 0;
+}
+
+function sourceSectionForIndex(index: number): SourceSection {
+  return index === 1 ? "schedules" : index === 2 ? "runs" : "sources";
 }
 
 function ProductApplication({ session }: { session?: CapabilitySession }) {
@@ -2338,15 +2527,16 @@ function ProductApplication({ session }: { session?: CapabilitySession }) {
   const [contextPanelOpen, setContextPanelOpen] = useState(true);
   const [contextPanelWidth, setContextPanelWidth] = useState(initialContextPanelWidth);
   const [askSessionKey, setAskSessionKey] = useState(0);
-  const [contextIndex, setContextIndex] = useState(initialDeepLink.view === "settings" ? initialDeepLink.settingsIndex : initialDeepLink.reviews ? 2 : initialDeepLink.productionList ? 1 : initialDeepLink.view === "overview" ? inboxScopeIndex() : 0);
+  const [contextIndex, setContextIndex] = useState(initialDeepLink.view === "settings" ? initialDeepLink.settingsIndex : initialDeepLink.reviews ? 2 : initialDeepLink.productionList ? 1 : initialDeepLink.view === "overview" ? inboxScopeIndex() : initialDeepLink.view === "sources" ? sourceSectionIndex(initialDeepLink.sourceSection) : 0);
   const [productionId, setProductionId] = useState(initialDeepLink.productionId ?? undefined);
   const [productionOrigin, setProductionOrigin] = useState(productionEntry);
   const [productionInboxScope, setProductionInboxScope] = useState(inboxScopeIndex);
   const [contextSelectionEpoch, setContextSelectionEpoch] = useState(0);
   const [sourceRunDetailOpen, setSourceRunDetailOpen] = useState(false);
   const [sourceRunBackRequestEpoch, setSourceRunBackRequestEpoch] = useState(0);
-  const [sourceInitialRunId, setSourceInitialRunId] = useState<string | undefined>();
   const [sourceInitialSourceId, setSourceInitialSourceId] = useState<string | undefined>(initialDeepLink.sourceId ?? undefined);
+  const [sourceInitialScheduleId, setSourceInitialScheduleId] = useState<string | undefined>(initialDeepLink.sourceScheduleId ?? undefined);
+  const [sourceInitialRunId, setSourceInitialRunId] = useState<string | undefined>(initialDeepLink.sourceRunId ?? undefined);
   const [compatibilityTarget, setCompatibilityTarget] = useState(initialDeepLink.compatibility);
   const [auditRunRequestId, setAuditRunRequestId] = useState<string | undefined>(initialDeepLink.runId ?? undefined);
   const [releaseDetailOpen, setReleaseDetailOpen] = useState(false);
@@ -2358,8 +2548,11 @@ function ProductApplication({ session }: { session?: CapabilitySession }) {
   const [assetDetailBackRequestEpoch, setAssetDetailBackRequestEpoch] = useState(0);
   const [knowledgeRevisionRequest, setKnowledgeRevisionRequest] = useState<KnowledgeRevisionRequest | null>(null);
   const [assetCatalogTypeRequest, setAssetCatalogTypeRequest] = useState<CatalogObjectType | "全部">("全部");
+  const [assetCatalogVersionRequest, setAssetCatalogVersionRequest] = useState<KnowledgeVersionFilter>(initialDeepLink.catalogVersionFilter ?? "全部");
   const [askConversationTitles, setAskConversationTitles] = useState(initialAskConversationTitles);
   const [versionDetailRequest, setVersionDetailRequest] = useState<{ key: string | null; epoch: number }>({ key: initialDeepLink.proposalId ? `candidate:${initialDeepLink.proposalId}` : initialDeepLink.releaseId ? `release:${initialDeepLink.releaseId}` : null, epoch: 0 });
+  const [releaseOrigin, setReleaseOrigin] = useState<"inbox" | "assets" | "audit">(initialDeepLink.releaseOrigin ?? "assets");
+  const [releaseReturnTo, setReleaseReturnTo] = useState<string | null>(initialDeepLink.returnTo ?? null);
   const [versionSourceRun, setVersionSourceRun] = useState<string | null>(null);
   const [reviewing, setReviewing] = useState<GovernanceCandidate | null>(null);
 
@@ -2407,20 +2600,20 @@ function ProductApplication({ session }: { session?: CapabilitySession }) {
       setView("overview");
       setContextIndex(0);
       closeWorkbenchRuntimeItem();
-      writeProductRoute("/?view=overview");
+      writeProductRoute(workRoute("pending"));
     }
     setWorkbenchSearchRequestEpoch((epoch) => epoch + 1);
   }, [closeWorkbenchRuntimeItem, selectedWorkbenchItemId, view]);
 
   const openWorkbenchItem = useCallback((item: WorkbenchAttentionItem, replace = false) => {
     setView("overview");
-    writeProductRoute(`/?view=overview&attentionItem=${encodeURIComponent(item.id)}${contextIndex === 1 ? "&scope=initiated" : contextIndex === 2 ? "&scope=done" : ""}`, replace);
+    writeProductRoute(workRoute(contextIndex === 1 ? "initiated" : contextIndex === 2 ? "done" : "pending", item.id), replace);
     void openWorkbenchRuntimeItem(item.id);
   }, [contextIndex, openWorkbenchRuntimeItem]);
 
   const closeWorkbenchItem = useCallback((replace = false) => {
     closeWorkbenchRuntimeItem();
-    writeProductRoute(`/?view=overview${contextIndex === 1 ? "&scope=initiated" : contextIndex === 2 ? "&scope=done" : ""}`, replace);
+    writeProductRoute(workRoute(contextIndex === 1 ? "initiated" : contextIndex === 2 ? "done" : "pending"), replace);
   }, [contextIndex, closeWorkbenchRuntimeItem]);
 
   useEffect(() => {
@@ -2443,17 +2636,19 @@ function ProductApplication({ session }: { session?: CapabilitySession }) {
       } else if (route.view === "sources") {
         setCompatibilityTarget(null);
         closeWorkbenchRuntimeItem();
-        setSourceInitialRunId(undefined);
+        setSourceInitialRunId(route.sourceRunId ?? undefined);
+        setSourceInitialScheduleId(route.sourceScheduleId ?? undefined);
         setSourceInitialSourceId(route.sourceId ?? undefined);
         setView("sources");
-        setContextIndex(0);
+        setContextIndex(sourceSectionIndex(route.sourceSection));
       } else if (route.view === "assets") {
         setCompatibilityTarget(null);
         closeWorkbenchRuntimeItem();
         setKnowledgeRevisionRequest(null);
         setSelectedAssetId(route.assetId ?? assets[0]?.id ?? "");
-        setAssetTabRequest("概览");
-        setAssetDetailRequest(Boolean(route.assetId));
+        setAssetCatalogVersionRequest(route.catalogVersionFilter ?? "全部");
+        setAssetTabRequest(route.assetTab);
+        setAssetDetailRequest(route.assetDetail);
         setAssetTabRequestEpoch((epoch) => epoch + 1);
         setView("assets");
         setContextIndex(0);
@@ -2465,9 +2660,11 @@ function ProductApplication({ session }: { session?: CapabilitySession }) {
         setProductionId(route.productionId ?? undefined);
         setProductionOrigin(productionEntry());
         setProductionInboxScope(inboxScopeIndex());
+        setReleaseOrigin(route.releaseOrigin ?? "assets");
+        setReleaseReturnTo(route.returnTo ?? null);
         setVersionDetailRequest((current) => ({ key: route.proposalId ? `candidate:${route.proposalId}` : route.releaseId ? `release:${route.releaseId}` : null, epoch: current.epoch + 1 }));
         setView("releases");
-        setContextIndex(route.reviews ? 2 : route.productionList ? 1 : 0);
+        setContextIndex(route.reviews ? 2 : route.productionList ? 1 : route.releaseOrigin === "audit" ? 4 : 0);
       } else if (route.view === "settings") {
         setCompatibilityTarget(null);
         closeWorkbenchRuntimeItem();
@@ -2521,18 +2718,43 @@ function ProductApplication({ session }: { session?: CapabilitySession }) {
 
   const selectAsset = (id: string) => {
     setSelectedAssetId(id);
-    writeProductRoute(`/assets?asset=${encodeURIComponent(id)}`);
+    writeProductRoute(assetRoute(id));
   };
 
   const openCandidateVersionById = (proposalId: string) => {
     workbench.closeItem();
     const inboxIndex = view === "overview" ? contextIndex : view === "releases" && productionOrigin === "inbox" ? productionInboxScope : 0;
     setProductionInboxScope(inboxIndex);
-    writeProductRoute(`/governance?proposal=${encodeURIComponent(proposalId)}${inboxIndex === 1 ? "&scope=initiated" : inboxIndex === 2 ? "&scope=done" : ""}`);
+    writeProductRoute(changeRoute(proposalId, inboxIndex === 1 ? "initiated" : inboxIndex === 2 ? "done" : "pending"));
     setVersionSourceRun(null);
     setVersionDetailRequest((current) => ({ key: `candidate:${proposalId}`, epoch: current.epoch + 1 }));
     setView("releases");
     setContextIndex(0);
+  };
+
+  const openReleaseHistory = () => {
+    workbench.closeItem();
+    setCompatibilityTarget(null);
+    setVersionSourceRun(null);
+    setProductionId(undefined);
+    setReleaseOrigin("assets");
+    setVersionDetailRequest((current) => ({ key: null, epoch: current.epoch + 1 }));
+    setView("releases");
+    setContextIndex(0);
+    writeProductRoute(releaseRoute(undefined, { from: "asset" }));
+  };
+
+  const openReleaseRecord = (releaseId?: string, origin: "inbox" | "assets" | "audit" = view === "overview" || versionDetailRequest.key?.startsWith("candidate:") ? "inbox" : view === "releases" ? releaseOrigin : "assets") => {
+    workbench.closeItem();
+    setCompatibilityTarget(null);
+    setVersionSourceRun(null);
+    setProductionId(undefined);
+    setReleaseOrigin(origin);
+    setReleaseReturnTo(origin === "inbox" ? workRoute("pending") : origin === "audit" ? settingsPath("audit") : selectedAsset ? assetRoute(selectedAsset.id) : assetRoute());
+    setVersionDetailRequest((current) => ({ key: releaseId ? `release:${releaseId}` : null, epoch: current.epoch + 1 }));
+    setView("releases");
+    setContextIndex(0);
+    writeProductRoute(releaseId ? releaseRoute(releaseId, { from: origin === "inbox" ? "work" : origin === "audit" ? "audit" : "asset", returnTo: origin === "inbox" ? workRoute("pending") : origin === "audit" ? settingsPath("audit") : selectedAsset ? assetRoute(selectedAsset.id) : assetRoute() }) : origin === "inbox" ? workRoute("pending") : releaseRoute(undefined, { from: origin === "audit" ? "audit" : "asset", returnTo: origin === "audit" ? settingsPath("audit") : assetRoute() }));
   };
 
 
@@ -2557,30 +2779,39 @@ function ProductApplication({ session }: { session?: CapabilitySession }) {
       showToast("工作台目标必须是当前 Semlia 工作区内的相对路由。");
       return;
     }
-    if (target.pathname === "/governance" && target.searchParams.get("proposal")) {
-      openCandidateVersionById(target.searchParams.get("proposal")!);
+    const targetSegments = target.pathname.split("/").filter(Boolean);
+    const proposalId = targetSegments[0] === "changes" && targetSegments[1] ? decodeURIComponent(targetSegments[1]) : target.pathname === "/governance" ? target.searchParams.get("proposal") : null;
+    if (proposalId) {
+      openCandidateVersionById(proposalId);
       return;
     }
-    if (target.pathname === "/sources") {
-      const sourceId = target.searchParams.get("source");
+    const releaseId = releaseIdFromTargetRoute(target);
+    if (releaseId) {
+      openReleaseRecord(releaseId, "inbox");
+      return;
+    }
+    if (target.pathname.startsWith("/sources/") || target.pathname === "/sources") {
+      const sourceId = targetSegments[0] === "sources" && targetSegments[1] && !["schedules", "runs"].includes(targetSegments[1]) ? decodeURIComponent(targetSegments[1]) : target.searchParams.get("source");
       if (!sourceId) {
         showToast("来源目标缺少 source 标识，未执行跳转。");
         return;
       }
-      writeProductRoute(`${target.pathname}${target.search}`);
+      writeProductRoute(sourceRoute(sourceId));
       workbench.closeItem();
       setSourceInitialRunId(undefined);
+      setSourceInitialScheduleId(undefined);
       setSourceInitialSourceId(sourceId);
       setView("sources");
       setContextIndex(0);
       return;
     }
-    if (target.pathname === "/operations/runtime" && target.searchParams.get("run")) {
-      writeProductRoute(`${target.pathname}${target.search}`);
-      openGlobalRun(target.searchParams.get("run")!);
+    const auditRunId = targetSegments[0] === "settings" && targetSegments[1] === "audit" && targetSegments[2] === "runs" && targetSegments[3] ? decodeURIComponent(targetSegments[3]) : target.pathname === "/operations/runtime" ? target.searchParams.get("run") : null;
+    if (auditRunId) {
+      writeProductRoute(auditRunRoute(auditRunId));
+      openGlobalRun(auditRunId);
       return;
     }
-    if (target.pathname === "/delivery/compatibility") {
+    if (target.pathname === "/compatibility" || target.pathname === "/delivery/compatibility") {
       const consumerId = target.searchParams.get("consumer");
       const bindingId = target.searchParams.get("binding");
       const queryId = target.searchParams.get("query");
@@ -2590,7 +2821,7 @@ function ProductApplication({ session }: { session?: CapabilitySession }) {
       }
       if (contextIndex === 1) target.searchParams.set("scope", "initiated");
       else if (contextIndex === 2) target.searchParams.set("scope", "done");
-      writeProductRoute(`${target.pathname}${target.search}`);
+      writeProductRoute(compatibilityRoute(bindingId, queryId, consumerId ?? undefined));
       workbench.closeItem();
       setCompatibilityTarget({ ...(consumerId ? { consumerId } : {}), bindingId, queryId });
       setView("overview");
@@ -2669,8 +2900,9 @@ function ProductApplication({ session }: { session?: CapabilitySession }) {
     setKnowledgeRevisionRequest(null);
     workbench.closeItem();
     setCompatibilityTarget(null);
-    if (nextView === "overview") writeProductRoute(`/?view=overview${nextContextIndex === 1 ? "&scope=initiated" : nextContextIndex === 2 ? "&scope=done" : ""}`);
-    else if (nextView === "settings") writeProductRoute(settingsRoute(nextContextIndex ?? 0));
+    if (nextView === "overview") writeProductRoute(workRoute(nextContextIndex === 1 ? "initiated" : nextContextIndex === 2 ? "done" : "pending"));
+    else if (nextView === "settings") writeProductRoute(settingsPath(settingsSectionSlugs[nextContextIndex ?? 0] ?? "members"));
+    else if (nextView === "sources") writeProductRoute(sourceRoute(undefined, sourceSectionForIndex(nextContextIndex ?? 0)));
     else writeProductRoute(viewRoutes[nextView]);
     setView(nextView);
     if (nextView === "sources") setSourceInitialSourceId(undefined);
@@ -2678,6 +2910,7 @@ function ProductApplication({ session }: { session?: CapabilitySession }) {
       setAssetTabRequest("概览");
       setAssetDetailRequest(false);
       setAssetCatalogTypeRequest("全部");
+      setAssetCatalogVersionRequest("全部");
       setAssetTabRequestEpoch((epoch) => epoch + 1);
     }
     if (nextContextIndex !== undefined) setContextIndex(nextContextIndex);
@@ -2697,7 +2930,7 @@ function ProductApplication({ session }: { session?: CapabilitySession }) {
       setContextIndex(index === 1 ? 1 : 0);
       setProductionId(undefined);
       setProductionOrigin("drafts");
-      writeProductRoute(index === 1 ? "/assets?section=drafts" : "/assets?section=history");
+      writeProductRoute(index === 1 ? `${assetRoute()}?status=draft` : releaseRoute(undefined, { from: "asset", returnTo: assetRoute() }));
       setVersionDetailRequest((current) => ({ key: null, epoch: current.epoch + 1 }));
       return;
     }
@@ -2770,32 +3003,50 @@ function ProductApplication({ session }: { session?: CapabilitySession }) {
     { label: "我发起", meta: "由我发起的知识与任务" },
     { label: "已结束", meta: "完成、发布与替代记录" },
   ];
-  const navigationView = view === "releases" ? (contextIndex === 2 || contextIndex === 1 && productionId && productionOrigin === "inbox" || versionDetailRequest.key?.startsWith("candidate:") ? "overview" : "assets") : view;
-  const navigationIndex = view === "releases" ? navigationView === "overview" ? contextIndex === 1 ? productionInboxScope : 0 : contextIndex === 1 ? 1 : 2 : contextIndex;
-  const showContextPanel = contextPanelOpen && navigationView !== "overview";
-  const contextLabel = view === "overview" ? workbench.selectedItem?.title ?? (workbench.selectedItemId ? "待办详情" : "待办") : view === "assets" ? (assetDetailRequest ? selectedAsset?.name : "知识目录") : view === "releases" ? contextIndex === 1 ? productionId ? "知识确认" : "草稿与整理" : contextIndex === 2 ? "批量审核" : versionDetailRequest.key?.startsWith("candidate:") ? "知识审核" : "发布记录" : view === "ask" ? askConversationTitles[contextIndex] ?? contextItems[view][contextIndex]?.label : contextItems[view][contextIndex]?.label;
+  const navigationView = view === "releases"
+    ? releaseOrigin === "audit"
+      ? "settings"
+      : contextIndex === 2 || contextIndex === 1 && productionId && productionOrigin === "inbox" || versionDetailRequest.key?.startsWith("candidate:") || releaseOrigin === "inbox"
+      ? "overview"
+      : "assets"
+    : view;
+  const navigationIndex = view === "releases" ? releaseOrigin === "audit" ? 4 : navigationView === "overview" ? contextIndex === 1 ? productionInboxScope : 0 : contextIndex === 1 ? 1 : 2 : contextIndex;
+  const showContextPanel = contextPanelOpen && navigationView !== "overview" && navigationView !== "assets";
+  const contextLabel = view === "overview" ? workbench.selectedItem?.title ?? (workbench.selectedItemId ? "待办详情" : "待办") : view === "assets" ? (assetDetailRequest ? selectedAsset?.name : "知识目录") : view === "releases" ? releaseOrigin === "audit" ? "发布批次记录" : contextIndex === 1 ? productionId ? "知识确认" : "知识确认" : contextIndex === 2 ? "批量审核" : versionDetailRequest.key?.startsWith("candidate:") ? "知识审核" : "发布记录" : view === "ask" ? askConversationTitles[contextIndex] ?? contextItems[view][contextIndex]?.label : contextItems[view][contextIndex]?.label;
   const openKnowledgeAction = (id: string) => {
     workbench.closeItem(); setCompatibilityTarget(null); setVersionDetailRequest((current) => ({ key: null, epoch: current.epoch + 1 }));
     setProductionOrigin("inbox"); setProductionInboxScope(contextIndex);
     setProductionId(id); setContextIndex(1); setView("releases");
-    writeProductRoute(`/governance?production=${encodeURIComponent(id)}${contextIndex === 1 ? "&scope=initiated" : contextIndex === 2 ? "&scope=done" : ""}`);
+    writeProductRoute(workOperationRoute(id, contextIndex === 1 ? "initiated" : contextIndex === 2 ? "done" : "pending"));
   };
   const backFromProduction = () => {
     if (productionOrigin === "inbox") { navigate("overview", productionInboxScope); return; }
     setProductionId(undefined);
     setContextSelectionEpoch((epoch) => epoch + 1);
-    writeProductRoute("/assets?section=drafts");
+    writeProductRoute(`${assetRoute()}?status=draft`);
   };
   const selectProductionOperation = useCallback((id: string, releaseId?: string) => {
     setProductionId(id || undefined);
-    const entry = productionOrigin === "drafts" ? "&from=drafts" : productionInboxScope === 1 ? "&scope=initiated" : productionInboxScope === 2 ? "&scope=done" : "";
-    const route = id ? `/governance?production=${encodeURIComponent(id)}${entry}${releaseId ? `&productionRelease=${encodeURIComponent(releaseId)}` : ""}` : "/assets?section=drafts";
+    const operationPath = workOperationRoute(id, productionOrigin === "drafts" ? "pending" : productionInboxScope === 1 ? "initiated" : productionInboxScope === 2 ? "done" : "pending");
+    const operationQuery = new URLSearchParams();
+    if (releaseId) operationQuery.set("productionRelease", releaseId);
+    if (productionOrigin === "drafts") operationQuery.set("from", "drafts");
+    const route = id ? `${operationPath}${operationQuery.toString() ? `?${operationQuery.toString()}` : ""}` : `${assetRoute()}?status=draft`;
     if (window.location.pathname + window.location.search !== route) writeProductRoute(route, id === productionId);
   }, [productionOrigin, productionInboxScope, productionId]);
   const backFromVersionDetail = () => {
     if (versionDetailRequest.key?.startsWith("candidate:")) { navigate("overview", productionInboxScope); return; }
     setReleaseDetailBackRequestEpoch((epoch) => epoch + 1);
-    writeProductRoute("/assets?section=history");
+    if (releaseReturnTo) {
+      writeProductRoute(releaseReturnTo);
+      setReleaseReturnTo(null);
+      return;
+    }
+    if (releaseOrigin === "inbox") {
+      navigate("overview", productionInboxScope);
+      return;
+    }
+    writeProductRoute(releaseRoute(undefined, { from: releaseOrigin === "audit" ? "audit" : "asset" }));
   };
 
   return (
@@ -2804,19 +3055,19 @@ function ProductApplication({ session }: { session?: CapabilitySession }) {
       <ActivityRail view={navigationView} onChange={navigate} />
       {showContextPanel && <ContextPanel view={navigationView} activeIndex={navigationIndex} width={contextPanelWidth} activeWorkbenchTask={workbench.selectedItem} workbenchItems={[]} askConversationTitles={askConversationTitles} conversationSearchRequestEpoch={conversationSearchRequestEpoch} releasesItems={releaseContextItems} onSelect={selectContext} onOpenWorkbenchTask={openWorkbenchItem} onOpenCatalogSearch={openCatalogSearch} onOpenWorkbenchSearch={openWorkbenchSearch} onCollapse={() => setContextPanelOpen(false)} onResize={setContextPanelWidth} />}
       <div className="workspace">
-        <Topbar key={`${view}-${contextLabel ?? ""}`} view={view} contextLabel={contextLabel} onNewConversation={() => { setAskSessionKey((key) => key + 1); setContextIndex(0); }} onRenameContext={view === "ask" ? renameConversationTitle : undefined} onBack={compatibilityTarget ? () => { setCompatibilityTarget(null); closeWorkbenchItem(); } : view === "overview" && workbench.selectedItemId ? () => closeWorkbenchItem() : view === "assets" && assetDetailRequest ? () => { setKnowledgeRevisionRequest(null); setAssetDetailRequest(false); setAssetDetailBackRequestEpoch((epoch) => epoch + 1); writeProductRoute("/assets"); } : view === "sources" && contextIndex === 2 && sourceRunDetailOpen ? () => setSourceRunBackRequestEpoch((epoch) => epoch + 1) : view === "releases" && contextIndex === 2 ? () => navigate("overview", productionInboxScope) : view === "releases" && releaseDetailOpen ? backFromVersionDetail : undefined} backLabel={view === "overview" ? "返回待办" : view === "assets" ? "返回知识目录" : view === "releases" ? contextIndex === 2 || versionDetailRequest.key?.startsWith("candidate:") ? "返回待办" : "返回发布记录" : "返回运行记录"} />
+        <Topbar key={`${view}-${contextLabel ?? ""}`} view={view} contextLabel={contextLabel} onNewConversation={() => { setAskSessionKey((key) => key + 1); setContextIndex(0); }} onRenameContext={view === "ask" ? renameConversationTitle : undefined} onBack={compatibilityTarget ? () => { setCompatibilityTarget(null); closeWorkbenchItem(); } : view === "overview" && workbench.selectedItemId ? () => closeWorkbenchItem() : view === "assets" && assetDetailRequest ? () => { setKnowledgeRevisionRequest(null); setAssetDetailRequest(false); setAssetDetailBackRequestEpoch((epoch) => epoch + 1); writeProductRoute(assetRoute()); } : view === "sources" && contextIndex === 2 && sourceRunDetailOpen ? () => setSourceRunBackRequestEpoch((epoch) => epoch + 1) : view === "releases" && contextIndex === 2 ? () => navigate("overview", productionInboxScope) : view === "releases" && releaseDetailOpen ? backFromVersionDetail : undefined} backLabel={view === "overview" ? "返回待办" : view === "assets" ? "返回知识目录" : view === "releases" ? releaseOrigin === "audit" ? "返回审计与运行" : contextIndex === 2 || versionDetailRequest.key?.startsWith("candidate:") ? "返回待办" : "返回发布记录" : "返回运行记录"} />
         <main ref={workspaceRef} className="workspace-canvas">
           <SessionAuthorizationNotice />
 
           {(view === "settings") && contextIndex === 2 && <SurfaceBoundaryNotice title="持久化索引" detail="重建使用已发布知识与固定模型配置；完整校验后生效，失败或取消保留当前索引。" />}
           {view === "ask" && <AskView key={`${askSessionKey}-${contextIndex}`} workspaceId={workspaceId} noPublishedKnowledge={governance.releasesState === "ready" && governance.releases.length === 0} onOpenKnowledge={() => navigate("releases")} onOpenEvidence={openAssetEvidence} onStartRevision={(assetId, fieldPath, context) => { const target = assets.find((asset) => asset.id === assetId); if (target) openKnowledgeRevision({ assetId: target.id, fieldPath, origin: "ask", context }); }} />}
-          {view === "sources" && ((<LiveSourcesView navigationEpoch={contextSelectionEpoch} focusIndex={contextIndex} runDetailBackRequestEpoch={sourceRunBackRequestEpoch} initialRunId={sourceInitialRunId} initialSourceId={sourceInitialSourceId} onRunDetailOpenChange={setSourceRunDetailOpen} onOpenProposal={openCandidateVersionById} />))}
+          {view === "sources" && ((<LiveSourcesView navigationEpoch={contextSelectionEpoch} focusIndex={contextIndex} runDetailBackRequestEpoch={sourceRunBackRequestEpoch} initialRunId={sourceInitialRunId} initialScheduleId={sourceInitialScheduleId} initialSourceId={sourceInitialSourceId} onRoute={writeProductRoute} onRunDetailOpenChange={setSourceRunDetailOpen} onOpenProposal={openCandidateVersionById} />))}
           {view === "overview" && compatibilityTarget && <CompatibilityImpactView workspaceId={workspaceId} consumerId={compatibilityTarget.consumerId} bindingId={compatibilityTarget.bindingId} queryId={compatibilityTarget.queryId} />}
-          {view === "overview" && !compatibilityTarget && !workbench.selectedItemId && <UnifiedInbox key={inboxViewKey} initialViewState={inboxViews[inboxViewKey]} onRememberView={rememberInboxView} focusScopeRequestEpoch={inboxScopeRequestEpoch} onScopeChange={(scope) => { setInboxScopeRequestEpoch((epoch) => epoch + 1); navigate("overview", scope === "initiated" ? 1 : scope === "done" ? 2 : 0); }} workspaceId={workspaceId} principalId={session?.principalId} scope={contextIndex === 1 ? "initiated" : contextIndex === 2 ? "done" : "pending"} onOpenOperation={openKnowledgeAction} onOpenTask={openWorkbenchItem} onOpenReviews={() => { setProductionInboxScope(contextIndex); setView("releases"); setContextIndex(2); setVersionDetailRequest((current) => ({ key: null, epoch: current.epoch + 1 })); writeProductRoute(`/governance?reviews=1${contextIndex === 1 ? "&scope=initiated" : contextIndex === 2 ? "&scope=done" : ""}`); }} focusSearchRequestEpoch={workbenchSearchRequestEpoch} />}
-          {view === "overview" && !compatibilityTarget && workbench.selectedItemId && <WorkbenchDetailView onOpenTarget={openWorkbenchTarget} />}
-          {view === "assets" && <AssetsView key={assetTabRequestEpoch} selectedId={selectedAssetId} domainFilter="全部" requestedTab={assetTabRequest} requestedDetail={assetDetailRequest} requestedCatalogType={assetCatalogTypeRequest} requestedRevision={knowledgeRevisionRequest} focusSearchRequestEpoch={assetSearchRequestEpoch} detailBackRequestEpoch={assetDetailBackRequestEpoch} onSelect={selectAsset} onDetailChange={setAssetDetailRequest} onNotify={showToast} onRevisionSubmit={submitKnowledgeRevision} onStartAIGeneration={(assetId, fieldPath) => setAiGenerationRequest({ assetId, fieldPath })} />}
-          {(view === "releases" && contextIndex === 1) && <SemanticProductionWorkspace onOpenSources={() => navigate("sources", 2)} key={`${workspaceId}:${session?.principalId}:${session?.version}:${contextSelectionEpoch}`} operationId={productionId} onBack={productionId ? backFromProduction : undefined} backLabel={productionOrigin === "drafts" ? "返回草稿与整理" : "返回待办"} onOpenProposal={openCandidateVersionById} onOpenAsset={openAssetDetail} onOperationSelected={selectProductionOperation} />}
-          {view === "releases" && ((contextIndex !== 1)) && <ReleasesView historyOnly={navigationView === "assets"} batchOnly={contextIndex === 2} key={versionDetailRequest.epoch} initialSelectedKey={versionDetailRequest.key} initialSourceRun={versionSourceRun} detailBackRequestEpoch={releaseDetailBackRequestEpoch} rollbackNotice={rollbackNotice} onDetailOpenChange={setReleaseDetailOpen} onReview={setReviewing} onPublish={setPublishing} onRollback={(releaseId) => void handleRollback(releaseId)} onAssembleBatches={() => void handleAssembleBatches()} onConfirmBatch={setConfirmingBatch} />}
+          {view === "overview" && !compatibilityTarget && !workbench.selectedItemId && <UnifiedInbox key={inboxViewKey} initialViewState={inboxViews[inboxViewKey]} onRememberView={rememberInboxView} focusScopeRequestEpoch={inboxScopeRequestEpoch} onScopeChange={(scope) => { setInboxScopeRequestEpoch((epoch) => epoch + 1); navigate("overview", scope === "initiated" ? 1 : scope === "done" ? 2 : 0); }} workspaceId={workspaceId} principalId={session?.principalId} scope={contextIndex === 1 ? "initiated" : contextIndex === 2 ? "done" : "pending"} onOpenOperation={openKnowledgeAction} onOpenTask={openWorkbenchItem} onOpenReviews={() => { setProductionInboxScope(contextIndex); setView("releases"); setContextIndex(2); setVersionDetailRequest((current) => ({ key: null, epoch: current.epoch + 1 })); writeProductRoute(workReviewsRoute(contextIndex === 1 ? "initiated" : contextIndex === 2 ? "done" : "pending")); }} focusSearchRequestEpoch={workbenchSearchRequestEpoch} />}
+          {view === "overview" && !compatibilityTarget && workbench.selectedItemId && <WorkbenchDetailView onOpenTarget={openWorkbenchTarget} onOpenReleaseRecord={openReleaseRecord} />}
+          {view === "assets" && <AssetsView key={assetTabRequestEpoch} selectedId={selectedAssetId} domainFilter="全部" requestedTab={assetTabRequest} requestedDetail={assetDetailRequest} requestedCatalogType={assetCatalogTypeRequest} requestedVersionFilter={assetCatalogVersionRequest} requestedRevision={knowledgeRevisionRequest} focusSearchRequestEpoch={assetSearchRequestEpoch} detailBackRequestEpoch={assetDetailBackRequestEpoch} onSelect={selectAsset} onDetailChange={setAssetDetailRequest} onNotify={showToast} onRevisionSubmit={submitKnowledgeRevision} onStartAIGeneration={(assetId, fieldPath) => setAiGenerationRequest({ assetId, fieldPath })} onOpenReleaseHistory={openReleaseHistory} onOpenReleaseRecord={openReleaseRecord} />}
+          {(view === "releases" && contextIndex === 1) && <SemanticProductionWorkspace onOpenSources={() => navigate("sources", 2)} key={`${workspaceId}:${session?.principalId}:${session?.version}:${contextSelectionEpoch}`} operationId={productionId} onBack={productionId ? backFromProduction : undefined} backLabel={productionOrigin === "drafts" ? "返回知识目录" : "返回待办"} onOpenProposal={openCandidateVersionById} onOpenAsset={openAssetDetail} onOperationSelected={selectProductionOperation} />}
+          {view === "releases" && ((contextIndex !== 1)) && <ReleasesView historyOnly={navigationView === "assets" || releaseOrigin === "audit"} batchOnly={contextIndex === 2} routeOrigin={releaseOrigin === "audit" ? "audit" : releaseOrigin === "inbox" ? "work" : "asset"} key={versionDetailRequest.epoch} initialSelectedKey={versionDetailRequest.key} initialSourceRun={versionSourceRun} detailBackRequestEpoch={releaseDetailBackRequestEpoch} rollbackNotice={rollbackNotice} onDetailOpenChange={setReleaseDetailOpen} onReview={setReviewing} onPublish={setPublishing} onRollback={(releaseId) => void handleRollback(releaseId)} onAssembleBatches={() => void handleAssembleBatches()} onConfirmBatch={setConfirmingBatch} onOpenReleaseRecord={openReleaseRecord} />}
           {view === "settings" && <SettingsView key={`${workspaceId}:${session?.principalId}:${session?.version}`} workspaceId={workspaceId}  authorizationVersion={session?.version} focusIndex={contextIndex} auditRunRequestId={auditRunRequestId} onAuditRunRequestHandled={handleAuditRunRequest} onNotify={showToast} onNavigate={navigate} />}
         </main>
       </div>

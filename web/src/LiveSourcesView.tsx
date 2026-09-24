@@ -44,6 +44,7 @@ import {
   type SourceDiscoveryRun,
 } from "./discovery";
 import { SemanticProductionWorkspace } from "./SemanticProductionPanel";
+import { sourceRoute, sourceRunRoute, sourceScheduleRoute, workOperationRoute, workReviewsRoute } from "./routes";
 import { IngestionRuntimeProvider, useIngestionRuntime } from "./ingestionRuntime";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableOpenButton, TablePanel, TableFooter, TableRow, TableViewport } from "./components/ui/table";
 import { ActionMenu } from "./components/ui/action-menu";
@@ -55,7 +56,9 @@ interface LiveSourcesViewProps {
   navigationEpoch?: number;
   runDetailBackRequestEpoch: number;
   initialRunId?: string;
+  initialScheduleId?: string;
   initialSourceId?: string;
+  onRoute?: (path: string) => void;
   onRunDetailOpenChange: (open: boolean) => void;
   onOpenProposal: (proposalId: string) => void;
 }
@@ -87,7 +90,7 @@ export function LiveSourcesView(props: LiveSourcesViewProps) {
   return <IngestionRuntimeProvider key={`${workspaceId}:${principalId}:${read}:${manage}:${run}`} workspaceId={workspaceId} access={{ read, manage, run }}><LiveSourcesWorkspace {...props} /></IngestionRuntimeProvider>;
 }
 
-function LiveSourcesWorkspace({ focusIndex, navigationEpoch = 0, runDetailBackRequestEpoch, initialRunId, initialSourceId, onRunDetailOpenChange, onOpenProposal }: LiveSourcesViewProps) {
+function LiveSourcesWorkspace({ focusIndex, navigationEpoch = 0, runDetailBackRequestEpoch, initialRunId, initialScheduleId, initialSourceId, onRoute, onRunDetailOpenChange, onOpenProposal }: LiveSourcesViewProps) {
   const { workspaceId } = useCatalogRuntime();
   const ingestion = useIngestionRuntime();
   const canManage = useCan("source.manage");
@@ -229,7 +232,8 @@ function LiveSourcesWorkspace({ focusIndex, navigationEpoch = 0, runDetailBackRe
     backEpochRef.current = runDetailBackRequestEpoch;
     setSelectedRunId("");
     setSelectedRun(null);
-  }, [runDetailBackRequestEpoch]);
+    onRoute?.(sourceRoute(undefined, focusIndex === 2 ? "runs" : "sources"));
+  }, [focusIndex, onRoute, runDetailBackRequestEpoch]);
 
   useEffect(() => {
     onRunDetailOpenChange(Boolean(selectedRunId));
@@ -383,10 +387,10 @@ function LiveSourcesWorkspace({ focusIndex, navigationEpoch = 0, runDetailBackRe
     }
   };
 
-  if (selectedCandidate) return <CandidateDialog candidate={selectedCandidate} onClose={() => { setSelectedCandidate(null); refresh(); }} onOpenProposal={onOpenProposal} />;
-  if (focusIndex === 1) return <ScheduleWorkspace key={navigationEpoch} sources={sources} runs={runs} candidates={candidates} onOpenProposal={onOpenProposal} loading={state === "loading"} sourceError={error} onRefresh={refresh} sourceCursor={sourceCursor} loadingMoreSources={loadingMore} onLoadMoreSources={() => void loadMoreSources()} />;
+  if (selectedCandidate) return <CandidateDialog candidate={selectedCandidate} onClose={() => { setSelectedCandidate(null); refresh(); }} onOpenProposal={onOpenProposal} onRoute={onRoute} />;
+  if (focusIndex === 1) return <ScheduleWorkspace key={navigationEpoch} sources={sources} runs={runs} candidates={candidates} onOpenProposal={onOpenProposal} loading={state === "loading"} sourceError={error} onRefresh={refresh} sourceCursor={sourceCursor} loadingMoreSources={loadingMore} onLoadMoreSources={() => void loadMoreSources()} initialScheduleId={initialScheduleId} onRoute={onRoute} />;
   if (selectedRunId) return <>
-    <RunDetail detail={selectedRun?.id === selectedRunId ? selectedRun : null} error={error} sourceName={selectedRun?.id === selectedRunId ? sourceName(selectedRun.sourceConnectionId) : ""} candidates={candidates} onOpenCandidate={setSelectedCandidate} onBack={() => setSelectedRunId("")} backLabel={focusIndex === 0 ? detailSourceId ? "返回来源" : "返回数据来源" : "返回运行记录"} onRetry={() => { setSelectedRun(null); setRunDetailEpoch((value) => value + 1); }} />
+    <RunDetail detail={selectedRun?.id === selectedRunId ? selectedRun : null} error={error} sourceName={selectedRun?.id === selectedRunId ? sourceName(selectedRun.sourceConnectionId) : ""} candidates={candidates} onOpenCandidate={setSelectedCandidate} onBack={() => { setSelectedRunId(""); onRoute?.(sourceRoute(undefined, focusIndex === 2 ? "runs" : "sources")); }} backLabel={focusIndex === 0 ? detailSourceId ? "返回来源" : "返回数据来源" : "返回运行记录"} onRetry={() => { setSelectedRun(null); setRunDetailEpoch((value) => value + 1); }} />
   </>;
   if (focusIndex === 2) {
     return (
@@ -405,7 +409,7 @@ function LiveSourcesWorkspace({ focusIndex, navigationEpoch = 0, runDetailBackRe
         {state === "error" && <LoadFailure message={error} onRetry={refresh} />}
         {state === "loading" && <Loading label="正在读取运行记录" />}
         {state === "ready" && <TablePanel aria-label="接入结果列表">
-        {state === "ready" && runTab === "runs" && <RunList runs={visibleRuns} sourceName={sourceName} onOpen={setSelectedRunId} />}
+        {state === "ready" && runTab === "runs" && <RunList runs={visibleRuns} sourceName={sourceName} onOpen={(id) => { setSelectedRunId(id); onRoute?.(sourceRunRoute(id)); }} />}
         {state === "ready" && runTab === "candidates" && <CandidateList candidates={visibleCandidates} sourceName={sourceName} onOpen={setSelectedCandidate} onOpenProposal={onOpenProposal} />}
         <TableFooter><span className="source-table-summary">显示 {runTab === "runs" ? visibleRuns.length : visibleCandidates.length} 条{runTab === "runs" ? "运行记录" : "语义候选"} · 已加载 {runTab === "runs" ? runs.length : candidates.length} 条</span><div className="schedule-page-actions">
         {(runTab === "candidates" ? candidateCursor : Object.entries(runCursors).some(([id, cursor]) => cursor && (!sourceFilter || id === sourceFilter))) && <button className="secondary-button" disabled={loadingMore} onClick={() => void loadMoreResults()}>加载更多接入结果</button>}
@@ -431,7 +435,7 @@ function LiveSourcesWorkspace({ focusIndex, navigationEpoch = 0, runDetailBackRe
         </div>
       </header>
       {testingSourceId && <div className="source-action-notice" role="status"><LoaderCircle className="is-spinning" size={16} /><span>正在测试 {sourceName(testingSourceId)} 的连接…</span></div>}
-      {actionNotice && <div className={`source-action-notice${actionNotice.failed ? " is-danger" : ""}`} role={actionNotice.failed ? "alert" : "status"}>{actionNotice.failed ? <CircleAlert size={16} /> : <CheckCircle2 size={16} />}<span>{actionNotice.message}</span>{actionNotice.runId && <button type="button" className="secondary-button" onClick={() => setSelectedRunId(actionNotice.runId!)}>查看运行<ChevronRight size={14} /></button>}<button className="icon-button" type="button" aria-label="关闭操作结果" onClick={() => setActionNotice(null)}><X size={14} /></button></div>}
+      {actionNotice && <div className={`source-action-notice${actionNotice.failed ? " is-danger" : ""}`} role={actionNotice.failed ? "alert" : "status"}>{actionNotice.failed ? <CircleAlert size={16} /> : <CheckCircle2 size={16} />}<span>{actionNotice.message}</span>{actionNotice.runId && <button type="button" className="secondary-button" onClick={() => { setSelectedRunId(actionNotice.runId!); onRoute?.(sourceRunRoute(actionNotice.runId!)); }}>查看运行<ChevronRight size={14} /></button>}<button className="icon-button" type="button" aria-label="关闭操作结果" onClick={() => setActionNotice(null)}><X size={14} /></button></div>}
       {error && state !== "error" && <div className="source-inline-notice" role="status"><AlertTriangle size={15} /><span>{error}</span><button type="button" aria-label="关闭提示" onClick={() => setError("")}><X size={14} /></button></div>}
       {state === "error" && <LoadFailure message={error} onRetry={refresh} />}
       {ingestion.refreshWarning && <p role="status">服务端已保存；列表刷新失败：{ingestion.refreshWarning}</p>}
@@ -460,11 +464,11 @@ function LiveSourcesWorkspace({ focusIndex, navigationEpoch = 0, runDetailBackRe
                     tabIndex={source.id === initialSourceId ? -1 : undefined}
                     aria-current={source.id === initialSourceId ? "true" : undefined}
                     data-source-id={source.id}
-                    onOpen={() => setDetailSourceId(source.id)}
+                    onOpen={() => { setDetailSourceId(source.id); onRoute?.(sourceRoute(source.id)); }}
                   >
-                    <TableCell><span className="source-primary"><span className="source-mark">{source.sourceKind === "postgresql" ? <Server size={18} /> : <FileUp size={18} />}</span><span><TableOpenButton id={`source-open-${source.id}`} aria-label={`查看来源 ${source.name}`} title={source.name} onClick={() => setDetailSourceId(source.id)}><strong>{source.name}</strong></TableOpenButton><small title={source.sourceKind === "postgresql" ? `${source.host}:${source.port}/${source.database}` : sourceKindLabel(source)}>{sourceKindLabel(source)}{source.sourceKind === "postgresql" ? ` · ${source.database}` : ""}</small></span></span></TableCell>
+                    <TableCell><span className="source-primary"><span className="source-mark">{source.sourceKind === "postgresql" ? <Server size={18} /> : <FileUp size={18} />}</span><span><TableOpenButton id={`source-open-${source.id}`} aria-label={`查看来源 ${source.name}`} title={source.name} onClick={() => { setDetailSourceId(source.id); onRoute?.(sourceRoute(source.id)); }}><strong>{source.name}</strong></TableOpenButton><small title={source.sourceKind === "postgresql" ? `${source.host}:${source.port}/${source.database}` : sourceKindLabel(source)}>{sourceKindLabel(source)}{source.sourceKind === "postgresql" ? ` · ${source.database}` : ""}</small></span></span></TableCell>
                     <TableCell className="source-status">{source.sourceKind !== "postgresql" ? "文件来源" : testingSourceId === source.id ? "检查中" : testResult[source.id] ? <span className={testResult[source.id].ok ? "is-success" : "is-danger"}>{testResult[source.id].message}</span> : <span className="table-secondary">本次会话未检查</span>}</TableCell>
-                    <TableCell><LatestSourceRun runs={runs.filter((run) => run.sourceConnectionId === source.id)} onOpen={setSelectedRunId} /></TableCell>
+                    <TableCell><LatestSourceRun runs={runs.filter((run) => run.sourceConnectionId === source.id)} onOpen={(id) => { setSelectedRunId(id); onRoute?.(sourceRunRoute(id)); }} /></TableCell>
                     <TableCell className="source-status"><span className={`health-label source-health-${source.status}`}><i />{sourceStatusLabel(source.status)}</span></TableCell>
                     <TableCell className="source-row-actions-cell">
                       <span className="source-row-actions source-primary-actions">
@@ -504,17 +508,17 @@ function LiveSourcesWorkspace({ focusIndex, navigationEpoch = 0, runDetailBackRe
         tab={sourceDetailTab} onTabChange={setSourceDetailTab}
         runs={runs.filter((run) => run.sourceConnectionId === detailSourceId)} candidates={candidates}
         testResult={testResult[detailSourceId]} busy={Boolean(startingSourceId || testingSourceId)} canManage={canManage} canRun={canRun}
-        onClose={() => { const id = detailSourceId; setDetailSourceId(""); setSourceDetailTab("概览"); queueMicrotask(() => document.getElementById(`source-open-${id}`)?.focus()); }}
+        onClose={() => { const id = detailSourceId; setDetailSourceId(""); setSourceDetailTab("概览"); onRoute?.(sourceRoute()); queueMicrotask(() => document.getElementById(`source-open-${id}`)?.focus()); }}
         onTest={() => void handleTest(sources.find((source) => source.id === detailSourceId)!)}
         onStart={() => void handleStart(sources.find((source) => source.id === detailSourceId)!)}
         onEdit={() => setSourceDialog({ mode: "edit", source: sources.find((source) => source.id === detailSourceId) })}
-        onOpenRun={setSelectedRunId} onOpenProposal={onOpenProposal}
+        onOpenRun={(id) => { setSelectedRunId(id); onRoute?.(sourceRunRoute(id)); }} onOpenProposal={onOpenProposal}
 
         onOpenArtifact={(source) => { if (source.sourceKind !== "postgresql") void ingestion.loadArtifactSet(source.activeArtifactSetId).then(setArtifactDetail).catch((reason) => setError(messageFor(reason, "工件读取失败。"))); }}
         onUpdateArtifact={(source) => setImportTarget(source)} onRefresh={refresh}
         hasMoreRuns={Boolean(runCursors[detailSourceId])} onMoreRuns={() => void loadSourceRunsForDetail(detailSourceId)}
       />}
-      {detailSourceId && actionNotice && <div className="source-action-notice" role={actionNotice.failed ? "alert" : "status"}><span>{actionNotice.message}</span>{actionNotice.runId && <button className="secondary-button" onClick={() => setSelectedRunId(actionNotice.runId!)}>查看运行<ChevronRight size={14} /></button>}</div>}
+      {detailSourceId && actionNotice && <div className="source-action-notice" role={actionNotice.failed ? "alert" : "status"}><span>{actionNotice.message}</span>{actionNotice.runId && <button className="secondary-button" onClick={() => { setSelectedRunId(actionNotice.runId!); onRoute?.(sourceRunRoute(actionNotice.runId!)); }}>查看运行<ChevronRight size={14} /></button>}</div>}
       {detailSourceId && error && <p role="alert">{error}</p>}
       {importTarget && <ArtifactImportDialog source={importTarget === "new" ? undefined : importTarget} onClose={() => setImportTarget(null)} onSaved={(value) => { setArtifactDetail(value); setImportTarget(null); refresh(); }} />}
       {artifactDetail && <ArtifactSetDialog value={artifactDetail} onClose={() => setArtifactDetail(null)} />}
@@ -676,8 +680,13 @@ function RunCandidates({ detail, updates, onOpen }: { detail: DiscoveryRun; upda
   </section>;
 }
 
-function CandidateDialog({ candidate, onClose, onOpenProposal }: { candidate: SemanticCandidate; onClose: () => void; onOpenProposal: (proposalId: string) => void }) {
-  return <SemanticProductionWorkspace candidateId={candidate.id} onBack={() => { window.history.replaceState({}, "", "/sources"); onClose(); }} onOpenProposal={onOpenProposal} onOperationSelected={(id, releaseId) => window.history.replaceState({}, "", id ? `/governance?production=${encodeURIComponent(id)}${releaseId ? `&productionRelease=${encodeURIComponent(releaseId)}` : ""}` : "/governance?productionList=1")} />;
+function CandidateDialog({ candidate, onClose, onOpenProposal, onRoute }: { candidate: SemanticCandidate; onClose: () => void; onOpenProposal: (proposalId: string) => void; onRoute?: (path: string) => void }) {
+  const navigate = onRoute ?? ((path: string) => window.history.replaceState({}, "", path));
+  return <SemanticProductionWorkspace candidateId={candidate.id} onBack={() => { navigate(sourceRoute()); onClose(); }} onOpenProposal={onOpenProposal} onOperationSelected={(id, releaseId) => {
+    if (!id) { navigate(workReviewsRoute()); return; }
+    const query = releaseId ? `?productionRelease=${encodeURIComponent(releaseId)}` : "";
+    navigate(`${workOperationRoute(id)}${query}`);
+  }} />;
 }
 
 function ArtifactImportDialog({ source, onClose, onSaved }: { source?: SourceConnection; onClose: () => void; onSaved: (value: ArtifactSet) => void }) {
@@ -735,13 +744,13 @@ function ArtifactSetDialog({ value, onClose }: { value: ArtifactSet; onClose: ()
   </IngestionDialog>;
 }
 
-function ScheduleWorkspace({ sources, runs = [], candidates = [], loading, sourceError, onRefresh, sourceCursor, loadingMoreSources, onLoadMoreSources, embedded = false, onOpenProposal }: { sources: SourceConnection[]; runs?: SourceDiscoveryRun[]; candidates?: SemanticCandidate[]; loading: boolean; sourceError: string; onRefresh: () => void; sourceCursor?: string; loadingMoreSources: boolean; onLoadMoreSources: () => void; embedded?: boolean; onOpenProposal: (id: string) => void }) {
+function ScheduleWorkspace({ sources, runs = [], candidates = [], loading, sourceError, onRefresh, sourceCursor, loadingMoreSources, onLoadMoreSources, embedded = false, onOpenProposal, initialScheduleId, onRoute }: { sources: SourceConnection[]; runs?: SourceDiscoveryRun[]; candidates?: SemanticCandidate[]; loading: boolean; sourceError: string; onRefresh: () => void; sourceCursor?: string; loadingMoreSources: boolean; onLoadMoreSources: () => void; embedded?: boolean; onOpenProposal: (id: string) => void; initialScheduleId?: string; onRoute?: (path: string) => void }) {
   const runtime = useIngestionRuntime();
   const newSourceId = sources[0]?.id ?? "";
   const [scheduleQuery, setScheduleQuery] = useState("");
   const [editing, setEditing] = useState<SourceSchedule | "new" | null>(null);
   const [deleting, setDeleting] = useState<SourceSchedule | null>(null);
-  const [selectedId, setSelectedId] = useState("");
+  const [selectedId, setSelectedId] = useState(initialScheduleId ?? "");
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [runId, setRunId] = useState("");
@@ -751,7 +760,7 @@ function ScheduleWorkspace({ sources, runs = [], candidates = [], loading, sourc
   const { workspaceId } = useCatalogRuntime();
   const [candidate, setCandidate] = useState<SemanticCandidate | null>(null);
   const [scheduleStatus, setScheduleStatus] = useState("");
-  const openScheduleRun = (id: string) => { setRunDetail(null); setRunError(""); setRunId(id); };
+  const openScheduleRun = (id: string) => { setRunDetail(null); setRunError(""); setRunId(id); onRoute?.(sourceRunRoute(id)); };
   const sourceKey = sources.map((source) => source.id).join(",");
   const sourceIds = useMemo(() => sourceKey ? sourceKey.split(",") : [], [sourceKey]);
   const loadSchedules = runtime.loadSchedules;
@@ -799,8 +808,8 @@ function ScheduleWorkspace({ sources, runs = [], candidates = [], loading, sourc
     try { await command(); } catch (reason) { setError(messageFor(reason, "计划命令失败。")); }
     finally { setBusy(""); }
   };
-  if (candidate) return <CandidateDialog candidate={candidate} onClose={() => { setCandidate(null); onRefresh(); }} onOpenProposal={onOpenProposal} />;
-  if (runId) return <RunDetail detail={runDetail} error={runError} sourceName={sources.find((source) => source.id === runDetail?.sourceConnectionId)?.name ?? "发现运行"} candidates={candidates} onOpenCandidate={setCandidate} onRetry={() => setRetry((value) => value + 1)} onBack={() => { setRunId(""); onRefresh(); }} backLabel="返回计划" />;
+  if (candidate) return <CandidateDialog candidate={candidate} onClose={() => { setCandidate(null); onRefresh(); }} onOpenProposal={onOpenProposal} onRoute={onRoute} />;
+  if (runId) return <RunDetail detail={runDetail} error={runError} sourceName={sources.find((source) => source.id === runDetail?.sourceConnectionId)?.name ?? "发现运行"} candidates={candidates} onOpenCandidate={setCandidate} onRetry={() => setRetry((value) => value + 1)} onBack={() => { setRunId(""); onRefresh(); onRoute?.(sourceScheduleRoute(selectedId)); }} backLabel="返回计划" />;
   return <section className={`view source-live-view source-list-page schedule-list-page${embedded ? " ingestion-embedded" : ""}`} aria-label="接入计划">
     <header className="source-commandbar"><div className="source-tabs" role="tablist" aria-label="计划类型"><button type="button" role="tab" aria-selected="true"><Clock3 size={15} />全部计划 <span>{visibleSchedules.length}</span></button></div><div className="source-command-actions"><label className="connection-search"><Search size={15} /><input type="search" aria-label="搜索接入计划" placeholder="搜索来源、计划或时区" value={scheduleQuery} onChange={(event) => setScheduleQuery(event.target.value)} /></label><button className="secondary-button" title="刷新" aria-label="刷新计划" onClick={() => { onRefresh(); sourceIds.forEach((sourceId) => { void loadSchedules(sourceId).catch(() => undefined); }); if (selectedId) void loadOccurrences(selectedId).catch(() => undefined); }}><RefreshCw size={15} />刷新</button><button className="primary-button" disabled={!sources.length || !runtime.access.manage || !runtime.access.run} title={!sources.length ? "需要先创建来源" : "需要 source.manage 与 ingestion.run 权限"} onClick={() => setEditing("new")}><Plus size={15} />新建计划</button></div></header>
     {loading && <Loading label="正在读取来源" />}
@@ -813,7 +822,7 @@ function ScheduleWorkspace({ sources, runs = [], candidates = [], loading, sourc
     <TablePanel aria-label="接入计划列表"><TableViewport><Table className="source-data-table" aria-label="接入计划">
       <colgroup><col style={{ width: "27%" }} /><col style={{ width: "23%" }} /><col style={{ width: "12%" }} /><col style={{ width: "15%" }} /><col style={{ width: "23%" }} /></colgroup>
       <TableHeader><TableRow><TableHead scope="col">来源与频率</TableHead><TableHead scope="col">下次执行</TableHead><TableHead scope="col">状态</TableHead><TableHead scope="col">最近执行</TableHead><TableHead scope="col" className="source-actions-heading">操作</TableHead></TableRow></TableHeader>
-      <TableBody>{filteredSchedules.map(({ schedule, sourceName }) => <TableRow key={schedule.id} onOpen={() => setSelectedId(schedule.id)}>
+      <TableBody>{filteredSchedules.map(({ schedule, sourceName }) => <TableRow key={schedule.id} onOpen={() => { setSelectedId(schedule.id); onRoute?.(sourceScheduleRoute(schedule.id)); }}>
         <TableCell><span className="source-primary"><span className="source-mark"><Clock3 size={18} /></span><span><TableOpenButton aria-label={`查看计划 ${schedule.id}`} title={sourceName} onClick={() => setSelectedId(schedule.id)}><strong>{sourceName}</strong></TableOpenButton><small title={schedule.expression}>{scheduleSummary(schedule.expression)}</small></span></span></TableCell>
         <TableCell>{schedule.nextRunAt ? formatTime(schedule.nextRunAt) : "未安排"}<small className="table-secondary">{schedule.timezone}</small></TableCell>
         <TableCell><span className={`health-label source-health-${schedule.enabled ? "active" : "paused"}`}><i />{schedule.enabled ? "启用" : "暂停"}</span><small className="table-secondary">v{schedule.version}</small></TableCell>
@@ -823,7 +832,7 @@ function ScheduleWorkspace({ sources, runs = [], candidates = [], loading, sourc
           <ActionMenu label={`更多操作计划 ${schedule.id}`} actions={[
             { label: "编辑计划", icon: <Pencil size={15} />, disabled: !runtime.access.manage || Boolean(busy), reason: !runtime.access.manage ? "需要 source.manage 权限" : undefined, onSelect: () => setEditing(schedule) },
             { label: schedule.enabled ? "暂停计划" : "恢复计划", icon: schedule.enabled ? <Pause size={15} /> : <Play size={15} />, disabled: !runtime.access.manage || (!schedule.enabled && !runtime.access.run) || Boolean(busy), reason: !runtime.access.manage ? "需要 source.manage 权限" : !schedule.enabled && !runtime.access.run ? "需要 ingestion.run 权限" : undefined, onSelect: () => void act(schedule, () => schedule.enabled ? runtime.pauseSchedule(schedule) : runtime.resumeSchedule(schedule)) },
-            { label: "执行记录", icon: <Clock3 size={15} />, onSelect: () => setSelectedId(schedule.id) },
+            { label: "执行记录", icon: <Clock3 size={15} />, onSelect: () => { setSelectedId(schedule.id); onRoute?.(sourceScheduleRoute(schedule.id)); } },
             { label: "删除计划", icon: <Trash2 size={15} />, danger: true, disabled: !runtime.access.manage || Boolean(busy), reason: !runtime.access.manage ? "需要 source.manage 权限" : undefined, onSelect: () => setDeleting(schedule) },
           ]} />
         </div></TableCell>
@@ -833,7 +842,7 @@ function ScheduleWorkspace({ sources, runs = [], candidates = [], loading, sourc
     <TableFooter><span className="source-table-summary">显示 {filteredSchedules.length} 个计划 · 已加载 {visibleSchedules.length} 个计划</span><div className="schedule-page-actions">
     {schedulePages.map(({ sourceId, source, page }) => <div key={`${sourceId}-pagination`}>{page?.appendError && <p role="alert">{source.name}：{page.appendError}</p>}{page?.nextCursor && <button className="secondary-button" disabled={page.loadingMore} onClick={() => void runtime.loadMoreSchedules(sourceId)}>加载更多计划 · {source.name}</button>}</div>)}
     </div></TableFooter></TablePanel>
-    {selectedId && <IngestionDialog title="接入计划详情" onClose={() => setSelectedId("")}>
+    {selectedId && <IngestionDialog title="接入计划详情" onClose={() => { setSelectedId(""); onRoute?.(sourceRoute(undefined, "schedules")); }}>
       <div className="list-detail-heading"><span className="source-mark"><Clock3 size={20} /></span><div><h3>{selectedSchedule?.sourceName ?? "来源不可用"}</h3><span>{selectedSchedule ? scheduleSummary(selectedSchedule.schedule.expression) : ""} · {selectedSchedule?.schedule.timezone}</span></div></div>
       <dl className="ingestion-metadata list-detail-metadata"><dt>计划状态</dt><dd>{selectedSchedule ? selectedSchedule.schedule.enabled ? "已启用" : "已暂停" : "不可用"}</dd><dt>下次执行</dt><dd>{selectedSchedule?.schedule.nextRunAt ? formatTime(selectedSchedule.schedule.nextRunAt) : "未安排"}</dd><dt>错过执行时</dt><dd>{selectedSchedule?.schedule.misfirePolicy === "skip" ? "跳过" : "合并补跑一次"}</dd></dl>
       {selectedSchedule && <div className="ingestion-dialog-footer"><button className="secondary-button" disabled={!runtime.access.manage || Boolean(busy)} onClick={() => { setEditing(selectedSchedule.schedule); setSelectedId(""); }}><Pencil size={15} />编辑计划</button><button className="secondary-button" disabled={!runtime.access.manage || (!selectedSchedule.schedule.enabled && !runtime.access.run) || Boolean(busy)} onClick={() => void act(selectedSchedule.schedule, () => selectedSchedule.schedule.enabled ? runtime.pauseSchedule(selectedSchedule.schedule) : runtime.resumeSchedule(selectedSchedule.schedule))}>{selectedSchedule.schedule.enabled ? <Pause size={15} /> : <Play size={15} />}{selectedSchedule.schedule.enabled ? "暂停计划" : "恢复计划"}</button></div>}

@@ -51,7 +51,7 @@ describe("persistent embedding",()=>{
   const api={status:vi.fn().mockResolvedValue({configured:true,reason:"",active:null,latest:index}),start:vi.fn(),cancel:vi.fn().mockResolvedValue(undefined),search:vi.fn()} satisfies EmbeddingApi;
   const first=render(<EmbeddingIndexPanel workspaceId="wsp_test" canManage api={api}/>);await screen.findByText("3 / 10");first.unmount();
   render(<EmbeddingIndexPanel workspaceId="wsp_test" canManage api={api}/>);await screen.findByText("3 / 10");
-  expect(screen.getByRole("link",{name:"查看运行"})).toHaveAttribute("href","/operations/runtime?run=run_runtime");
+  expect(screen.getByRole("link",{name:"查看运行"})).toHaveAttribute("href","/settings/audit/runs/run_runtime");
   await userEvent.click(screen.getByRole("button",{name:"取消重建"}));await waitFor(()=>expect(api.cancel).toHaveBeenCalledWith("wsp_test","run_index"));
  });
 });
