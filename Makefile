@@ -3,6 +3,7 @@ SHELL := /usr/bin/env bash
 
 GO ?= go
 PNPM ?= pnpm
+SEMLIA_SECURITY_IMAGE ?= semlia:security
 
 .PHONY: help bootstrap build build-image server web-embed web-embed-check dev dev-down smoke contracts contracts-check doctor clean test test-contracts test-repository db-generate db-generate-check db-test db-migrate-up db-migrate-down db-migrate-version format-check lint typecheck check-source check-smoke security-check check sbom release
 
@@ -53,7 +54,7 @@ build: web-embed
 	$(GO) build -o build/semlia ./cmd/semlia
 
 build-image:
-	docker build --file deploy/local/Dockerfile --tag semlia:security .
+	docker build --file deploy/local/Dockerfile --tag "$(SEMLIA_SECURITY_IMAGE)" .
 
 server: build
 	./build/semlia server

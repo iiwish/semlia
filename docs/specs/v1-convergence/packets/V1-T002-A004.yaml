@@ -1,0 +1,37 @@
+schema_version: 1
+packet_id: V1-T002-A004
+task_id: V1-T002
+mode: Delegated Execute
+context:
+  spec: docs/specs/v1-convergence/spec.md
+  plan: docs/specs/v1-convergence/plan.md
+  approval: Approved scoped model acceptance and bounded repair; retain every actual first attempt and candidate identity.
+  failure: RC.2 final cohort is 3/4 positives and 2/2 negatives, five model calls. The old-customer average is numerically 200 with correct measure, filters and interval, but unrequested month granularity adds a period column and fails the unchanged scalar-shape contract.
+ownership:
+  prompt:
+    - internal/application/governance/ask.go
+    - internal/application/governance/ask_idempotency_test.go
+    - internal/domain/execution/compiler_test.go # Regression only; no compiler behavior changes.
+  candidate_cohort:
+    - scripts/acceptance/v1/final-candidate.mjs
+    - scripts/acceptance/v1-final-candidate.test.mjs
+    - scripts/acceptance/v1-model.mjs
+  evidence:
+    - docs/evidence/V1-T002/final-shape.md
+constraints:
+  - Prompt and candidate-ledger implementation use disjoint file boundaries; the prompt owner integrates evidence. Independent reviewer is read-only.
+  - Clarify generically that from/to filter an interval, whereas granularity requests calendar grouping. Only explicit time series, periodic breakdown or temporal comparison requests justify time buckets; fixed-window aggregates and non-time breakdowns must not acquire extra time groups.
+  - Do not hardcode acceptance questions, answers, dates or asset names into the prompt. Do not change the provider/model, schema, API query domain, compiler, golden cases, expected columns, numeric comparison or strict acceptance thresholds.
+  - Preserve the existing RC.2 final-candidate.json and all raw receipts unchanged. It remains failed and contributes all five model calls to history.
+  - A distinct verified candidate may receive one distinct fixed cohort, keyed by its verified manifest/binary identity. Same-candidate repeat or resume, missing identity, source mode, partial existing ledger or symlink/foreign ownership must be refused before a model call.
+  - Record version, source, manifest, running binary, head, model configuration and fixed case identity in the candidate ledger; check identity before and after. The legacy single ledger cannot be deleted or silently overwritten to permit another run.
+  - Keep maxAttemptsPerCase=1, all four unchanged positives, denial and natural ambiguity. No skipping prior failures, no retry-until-green, no model calls until a new full candidate build and explicit root authorization.
+  - No live V1/database/model operations, changes to applied migrations, unrelated refactoring, thresholds or further delegation.
+validation:
+  - Prompt contract test must fail before the minimal generic prompt change; retain existing half-open window, injection and privacy tests.
+  - Real filesystem ledger guards must fail before implementation: same candidate, legacy same binary, partial ledger, invalid identity, ownership/path drift and preserved prior bytes.
+  - Candidate tests retain all denominators and verify fixed question and expected-data identity. No network/provider calls in tests.
+  - Focused Go/Node tests and independent review; then complete T005 gates on new frozen inputs and a fresh candidate.
+handoff:
+  status: Needs_Review
+  next: Preserve RC.2 3/4 and 2/2 outcome; explicitly authorize one new independent cohort only after the next verified candidate passes all standard and embedded UI gates.

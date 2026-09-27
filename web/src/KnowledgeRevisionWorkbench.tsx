@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   BookOpenCheck,
@@ -21,6 +21,7 @@ import { KnowledgeSourcePicker, type KnowledgeSourceMember } from "./KnowledgeSo
 import { useCatalogRuntime } from "./catalogRuntime";
 import { knowledgeTypes, type KnowledgeSpec, type KnowledgeType } from "./knowledge";
 import type { Asset, KnowledgeRevisionRequest, KnowledgeRevisionSubmission } from "./types";
+import { KnowledgeRevisionUncertainError } from "./knowledgeProductionRevision";
 
 type EditableKnowledgeField = "definition" | "expression" | "includes" | "excludes" | "disambiguation" | "relations";
 
@@ -75,7 +76,8 @@ interface KnowledgeRevisionWorkbenchProps {
   onStartAIGeneration: () => void;
 }
 
-export function KnowledgeRevisionWorkbench({ asset, request, onCancel, onNotify, onSubmit, onStartAIGeneration }: KnowledgeRevisionWorkbenchProps) {
+export function KnowledgeRevisionWorkbench({ asset: currentAsset, request, onCancel, onNotify, onSubmit, onStartAIGeneration }: KnowledgeRevisionWorkbenchProps) {
+  const [asset] = useState(() => structuredClone(currentAsset));
   const { workspaceId } = useCatalogRuntime();
   const [sourceMembers, setSourceMembers] = useState<KnowledgeSourceMember[]>([]);
   const canPropose = useCan("asset.propose");
@@ -85,6 +87,12 @@ export function KnowledgeRevisionWorkbench({ asset, request, onCancel, onNotify,
   const [reason, setReason] = useState(request.context ?? "");
   const [checksRun, setChecksRun] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [uncertain, setUncertain] = useState(false);
+  const pending = useRef(false);
+  const frozenSubmission = useRef<KnowledgeRevisionSubmission | null>(null);
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const locked = submitting || uncertain;
   const [error, setError] = useState("");
   const [draftSpec, setDraftSpec] = useState<KnowledgeSpec>(asset.knowledgeSpec ?? {});
   const canonical = asset.knowledgeSpec !== undefined;
@@ -122,18 +130,20 @@ export function KnowledgeRevisionWorkbench({ asset, request, onCancel, onNotify,
     }
     setError("");
     setChecksRun(true);
-    onNotify(`预检通过：提交后治理服务将运行结构、引用与回归验证。`);
+    onNotify("预检通过：保存修订草稿后仍需确认业务口径并提交治理验证。");
   };
 
   const submit = async () => {
-    if (!checksRun || changedFields.length === 0 || !reason.trim() || submitting) return;
+    if (!canPropose || !checksRun || changedFields.length === 0 || !reason.trim() || pending.current) return;
+    pending.current = true;
     const labels = changedFields.map((field) => field.label);
     setSubmitting(true);
     setError("");
     try {
-      await onSubmit({
+      frozenSubmission.current ??= {
         assetId: asset.id,
         baseRevision: asset.revision,
+        baseRevisionId: asset.revisionRecord.revisionId,
         title: `修订${asset.name}的${labels.join("、")}`,
         summary: `修订${labels.join("、")}，保留来源资料与已发布 ${asset.revision} 的不可变记录。`,
         reason: reason.trim(),
@@ -142,13 +152,21 @@ export function KnowledgeRevisionWorkbench({ asset, request, onCancel, onNotify,
           before: canonical && field.key === "expression" ? asset.knowledgeSpec as Record<string, unknown> : publishedValues[field.key],
           after: canonical && field.key === "expression" ? draftSpec as Record<string, unknown> : draftValues[field.key].trim(),
         })),
-      });
+      };
+      await onSubmit(frozenSubmission.current);
+      if (!mounted.current) return;
+      frozenSubmission.current = null;
+      setUncertain(false);
     } catch (submitError) {
+      if (!mounted.current) return;
       const message = submitError instanceof Error ? submitError.message : "提案提交失败，请稍后重试。";
       setError(message);
-      setChecksRun(false);
+      const unknown = submitError instanceof KnowledgeRevisionUncertainError;
+      setUncertain(unknown);
+      if (!unknown) { frozenSubmission.current = null; setChecksRun(false); }
     } finally {
-      setSubmitting(false);
+      pending.current = false;
+      if (mounted.current) setSubmitting(false);
     }
   };
 
@@ -167,7 +185,7 @@ export function KnowledgeRevisionWorkbench({ asset, request, onCancel, onNotify,
           <span className="content-label">结构化知识</span>
           {fields.map((field) => {
             const changed = changedFields.some((item) => item.key === field.key);
-            return <button key={field.key} type="button" aria-current={activeField === field.key ? "page" : undefined} onClick={() => setActiveField(field.key)}><span><strong>{field.label}</strong><code>{field.fieldPath}</code></span>{changed ? <span className="knowledge-field-changed"><Check size={12} />已修改</span> : <ArrowRight size={13} />}</button>;
+            return <button key={field.key} type="button" disabled={locked} aria-current={activeField === field.key ? "page" : undefined} onClick={() => setActiveField(field.key)}><span><strong>{field.label}</strong><code>{field.fieldPath}</code></span>{changed ? <span className="knowledge-field-changed"><Check size={12} />已修改</span> : <ArrowRight size={13} />}</button>;
           })}
         </nav>
 
@@ -175,15 +193,15 @@ export function KnowledgeRevisionWorkbench({ asset, request, onCancel, onNotify,
           <header><div><span className="content-label">候选知识字段</span><h3>{descriptor.label}</h3><p>{descriptor.help}</p></div><code>{descriptor.fieldPath}</code></header>
           <section className="knowledge-published-value" aria-label={`${descriptor.label}当前发布值`}>
             <span><LockKeyhole size={13} />当前发布值 · {asset.revision}</span>
-            {canonical && activeField === "expression" ? <KnowledgeSpecView spec={asset.knowledgeSpec} /> : descriptor.code ? <pre>{publishedValues[activeField]}</pre> : <p>{publishedValues[activeField] || "当前没有内容"}</p>}
+            {canonical && activeField === "expression" ? <KnowledgeSpecView type={asset.type} spec={asset.knowledgeSpec} /> : descriptor.code ? <pre>{publishedValues[activeField]}</pre> : <p>{publishedValues[activeField] || "当前没有内容"}</p>}
           </section>
-          {canonical && activeField === "expression" ? <>{knowledgeType === "data_asset" && <KnowledgeSourcePicker workspaceId={workspaceId} onMembers={setSourceMembers} />}<KnowledgeSpecEditor type={knowledgeType} workspaceId={workspaceId} members={sourceMembers} value={draftSpec} onChange={(spec) => { setDraftSpec(spec); setChecksRun(false); }} /></> : <label className="knowledge-candidate-field">
+          {canonical && activeField === "expression" ? <fieldset disabled={locked} style={{ display: "contents" }}>{knowledgeType === "data_asset" && <KnowledgeSourcePicker workspaceId={workspaceId} onMembers={setSourceMembers} />}<KnowledgeSpecEditor type={knowledgeType} workspaceId={workspaceId} members={sourceMembers} value={draftSpec} onChange={(spec) => { setDraftSpec(spec); setChecksRun(false); }} /></fieldset> : <label className="knowledge-candidate-field">
             <span>候选值</span>
-            <textarea className={descriptor.code ? "knowledge-code-input" : undefined} aria-label={`${descriptor.label}候选值`} rows={activeField === "expression" ? 5 : 7} value={draftValues[activeField]} onChange={(event) => updateDraft(event.target.value)} />
+            <textarea disabled={locked} className={descriptor.code ? "knowledge-code-input" : undefined} aria-label={`${descriptor.label}候选值`} rows={activeField === "expression" ? 5 : 7} value={draftValues[activeField]} onChange={(event) => updateDraft(event.target.value)} />
           </label>}
           <label className="knowledge-revision-reason">
             <span>修订原因 <strong>必填</strong></span>
-            <textarea aria-label="知识修订原因" rows={4} placeholder="说明当前知识哪里不准确、适用边界如何变化，以及审核者应重点检查什么。" value={reason} onChange={(event) => { setReason(event.target.value); setChecksRun(false); setError(""); }} />
+            <textarea disabled={locked} aria-label="知识修订原因" rows={4} placeholder="说明当前知识哪里不准确、适用边界如何变化，以及审核者应重点检查什么。" value={reason} onChange={(event) => { setReason(event.target.value); setChecksRun(false); setError(""); }} />
           </label>
           {error && <div className="knowledge-revision-error" role="alert"><CircleAlert size={15} />{error}</div>}
         </main>
@@ -202,14 +220,14 @@ export function KnowledgeRevisionWorkbench({ asset, request, onCancel, onNotify,
           <section className="knowledge-checks">
             <header><span className="content-label">候选预检</span><strong>{checksRun ? "提案信息完整" : "等待运行"}</strong></header>
             {["结构契约", "证据引用", "结果回归"].map((label) => <div key={label}><span><ShieldCheck size={15} /></span><strong>{label}</strong><small>提交后由治理验证器执行</small></div>)}
-            <p className="knowledge-checks-note">提交将创建真实提案并进入验证流水线；验证结果在候选版本页展示。</p>
+            <p className="knowledge-checks-note">保存将创建修订草稿；确认业务口径后才能提交治理验证与独立审核。</p>
           </section>
         </aside>
       </div>
 
       <footer className="knowledge-revision-actions">
-        <div><strong>{submitting ? "正在提交治理提案" : checksRun ? "候选已经具备审核上下文" : changedFields.length > 0 ? `${changedFields.length} 项知识变化尚未检查` : "尚未修改知识"}</strong><span>{submitting ? "正在创建提案并提交验证。" : checksRun ? "提交后进入不可变版本审核，不会直接发布。" : "运行检查后才能提交审核。"}</span></div>
-        <div><button className="text-button" type="button" onClick={onCancel}>取消修订</button><button className="text-button" type="button" onClick={onStartAIGeneration} disabled={!canPropose}><Sparkles size={15} />AI 提案</button><button className="secondary-button" type="button" onClick={() => onNotify(`${asset.name} 知识草稿已保存在当前浏览器会话，不会持久化。`)} disabled={changedFields.length === 0}><Save size={15} />保存草稿</button>{checksRun ? <button className="primary-button" type="button" onClick={submit} disabled={!canPropose || submitting}>{submitting ? <LoaderCircle className="spin" size={15} /> : <GitPullRequestArrow size={15} />}提交审核</button> : <button className="primary-button" type="button" onClick={runChecks}><Play size={15} />运行检查</button>}</div>
+        <div><strong>{submitting ? "正在保存修订草稿" : uncertain ? "保存结果待核对" : checksRun ? "修订草稿可以保存" : changedFields.length > 0 ? `${changedFields.length} 项知识变化尚未检查` : "尚未修改知识"}</strong><span>{submitting ? "尚未提交验证、审核或发布。" : checksRun ? "保存后仍需确认业务口径、验证与独立审核。" : "运行检查后才能保存并继续确认。"}</span></div>
+        <div><button className="text-button" type="button" disabled={locked} onClick={onCancel}>取消修订</button><button className="text-button" type="button" onClick={onStartAIGeneration} disabled={!canPropose || locked}><Sparkles size={15} />AI 提案</button><button className="secondary-button" type="button" onClick={() => onNotify(`${asset.name} 知识草稿已保存在当前浏览器会话，不会持久化。`)} disabled={locked || changedFields.length === 0}><Save size={15} />保存草稿</button>{checksRun ? <button className="primary-button" type="button" onClick={submit} disabled={!canPropose || submitting}>{submitting ? <LoaderCircle className="spin" size={15} /> : <GitPullRequestArrow size={15} />}{uncertain ? "重试同一保存请求" : "保存修订并继续确认"}</button> : <button className="primary-button" type="button" disabled={locked} onClick={runChecks}><Play size={15} />运行检查</button>}</div>
       </footer>
     </section>
   );

@@ -519,6 +519,20 @@ func writeDistributionError(response http.ResponseWriter, err error, traceID str
 }
 
 func writeAskError(response http.ResponseWriter, err error, traceID string) string {
+	var state *governanceapp.AskStateError
+	if errors.As(err, &state) {
+		status, retryable := http.StatusConflict, false
+		message := "the Ask request cannot be reused; submit a new request key"
+		if state.Code == "ASK_IN_PROGRESS" {
+			response.Header().Set("Retry-After", "1")
+			message, retryable = "the Ask request is still running", true
+		}
+		if state.Code == "AI_OUTPUT_TRUNCATED" || state.Code == "AI_OUTPUT_INCOMPLETE" {
+			status, message = http.StatusUnprocessableEntity, "the model did not return a complete interpretation"
+		}
+		writeError(response, status, state.Code, message, traceID, retryable)
+		return state.Code
+	}
 	var validation *domain.ValidationError
 	if errors.As(err, &validation) || errors.Is(err, domain.ErrInvalidArgument) ||
 		errors.Is(err, domain.ErrNotFound) || errors.Is(err, domain.ErrConflict) || errors.Is(err, domain.ErrInvariant) {

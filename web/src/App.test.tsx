@@ -8,10 +8,29 @@ import { App as ProductEntry } from "./App";
 import type { ReactNode } from "react";
 
 const entryRuntime = vi.hoisted(() => ({ workspaceId: "wsp_empty", assets: [], loading: false, workspaces: [{ id: "wsp_empty" }], query: "", error: "" }));
-vi.mock("./catalogRuntime", () => ({ CatalogRuntimeProvider: ({ children }: { children: ReactNode }) => children, useCatalogRuntime: () => entryRuntime }));
+const identity = vi.hoisted(() => ({ accountId: "usr_first", principalId: "prn_first", version: "1" }));
+vi.mock("./catalogRuntime", () => ({ CatalogRuntimeProvider: ({ children }: { children: ReactNode }) => <><input aria-label="Synthetic revision cache" defaultValue="" />{children}</>, useCatalogRuntime: () => entryRuntime }));
 vi.mock("./CatalogControls", () => ({ CatalogEntryState: () => <div>Catalog entry</div> }));
-vi.mock("./ProductApp", () => ({ ProductApp: () => <div>Authorized product shell</div> }));
-vi.mock("./sessionRuntime", () => ({ SessionRuntimeProvider: ({ children }: { children: ReactNode }) => children, SessionEntryState: () => <div>Session entry</div>, useSessionRuntime: () => ({ phase: "authenticated", session: {}, activeWorkspace: {}, capabilitySession: {} }) }));
+vi.mock("./ProductApp", () => ({ ProductApp: () => <div>Authorized product shell<input aria-label="Synthetic answer" defaultValue="" /></div> }));
+vi.mock("./sessionRuntime", () => ({ SessionRuntimeProvider: ({ children }: { children: ReactNode }) => children, SessionEntryState: () => <div>Session entry</div>, useSessionRuntime: () => ({ phase: "authenticated", session: { account: { id: identity.accountId } }, activeWorkspace: { principalId: identity.principalId }, capabilitySession: { principalId: identity.principalId, version: identity.version } }) }));
+
+it("resets the entire catalog and answer subtree for a new identity but retains same-principal authorization refresh", async () => {
+  const view = render(<ProductEntry />);
+  await userEvent.type(screen.getByLabelText("Synthetic revision cache"), "private R1");
+  await userEvent.type(screen.getByLabelText("Synthetic answer"), "private rows");
+  identity.version = "2";
+  view.rerender(<ProductEntry />);
+  expect(screen.getByLabelText("Synthetic revision cache")).toHaveValue("private R1");
+  expect(screen.getByLabelText("Synthetic answer")).toHaveValue("private rows");
+  identity.principalId = "prn_second";
+  view.rerender(<ProductEntry />);
+  expect(screen.getByLabelText("Synthetic revision cache")).toHaveValue("");
+  expect(screen.getByLabelText("Synthetic answer")).toHaveValue("");
+  await userEvent.type(screen.getByLabelText("Synthetic answer"), "second account rows");
+  identity.accountId = "usr_second";
+  view.rerender(<ProductEntry />);
+  expect(screen.getByLabelText("Synthetic answer")).toHaveValue("");
+});
 
 it("mounts the authorized shell in an empty workspace so the first source can be created", () => {
   render(<ProductEntry />);

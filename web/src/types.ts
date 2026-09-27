@@ -140,6 +140,7 @@ export interface KnowledgeRevisionRequest {
 export interface KnowledgeRevisionSubmission {
   assetId: string;
   baseRevision: string;
+  baseRevisionId: string;
   title: string;
   summary: string;
   reason: string;

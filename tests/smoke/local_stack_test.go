@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -92,31 +91,10 @@ func Test00LocalStackContract(t *testing.T) {
 }
 
 func TestComposeProjectResolution(t *testing.T) {
-	for _, input := range []struct {
-		name        string
-		environment string
-		file        string
-		want        string
-		wantError   bool
-	}{
-		{"environment precedence", "semlia-override", "COMPOSE_PROJECT_NAME=semlia-file\n", "semlia-override", false},
-		{"file fallback", "", "COMPOSE_PROJECT_NAME=semlia-file\n", "semlia-file", false},
-		{"single character", "a", "", "a", false},
-		{"leading underscore", "_semlia", "COMPOSE_PROJECT_NAME=valid-file\n", "", true},
-		{"leading hyphen", "-semlia", "", "", true},
-		{"uppercase", "Semlia", "", "", true},
-		{"shell separator", "semlia;other", "", "", true},
-		{"missing", "", "", "", true},
-	} {
-		t.Run(input.name, func(t *testing.T) {
-			got, err := resolveComposeProject(input.environment, input.file)
-			if (err != nil) != input.wantError {
-				t.Fatalf("resolveComposeProject() error = %v, wantError %t", err, input.wantError)
-			}
-			if got != input.want {
-				t.Errorf("resolveComposeProject() = %q, want %q", got, input.want)
-			}
-		})
+	proof, _ := isolationFixture(t)
+	t.Setenv("COMPOSE_PROJECT_NAME", "unrelated-project")
+	if got := composeProject(t); got != proof["project"] {
+		t.Fatal("compose project must come only from the isolation context")
 	}
 }
 
@@ -314,7 +292,16 @@ func newUUIDv7(t *testing.T, prefix identity.Prefix) string {
 func requireRuntimeSmoke(t *testing.T) {
 	t.Helper()
 	if os.Getenv("SEMLIA_RUN_SMOKE") != "1" {
-		t.Skip("set SEMLIA_RUN_SMOKE=1 or run make smoke against the local stack")
+		t.Skip("run make check-smoke to create an isolated local stack")
+	}
+	proof, err := loadSmokeIsolation(repositoryRoot(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), smokeTimeout)
+	defer cancel()
+	if err := proof.verifyOwned(ctx); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -338,46 +325,22 @@ func readFile(t *testing.T, path string) string {
 
 func compose(t *testing.T, args ...string) string {
 	t.Helper()
-	root := repositoryRoot(t)
-	return command(t, root, filepath.Join(root, "scripts", "dev", "compose.sh"), args...)
+	ctx, cancel := context.WithTimeout(context.Background(), smokeTimeout)
+	defer cancel()
+	output, err := composeOutput(ctx, repositoryRoot(t), args...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return output
 }
 
 func composeProject(t *testing.T) string {
 	t.Helper()
-	root := repositoryRoot(t)
-	content := readFile(t, filepath.Join(root, ".semlia", "dev.env"))
-	project, err := resolveComposeProject(os.Getenv("COMPOSE_PROJECT_NAME"), content)
+	proof, err := loadSmokeIsolation(repositoryRoot(t))
 	if err != nil {
 		t.Fatal(err)
 	}
-	return project
-}
-
-func resolveComposeProject(environmentValue, fileContent string) (string, error) {
-	project := environmentValue
-	if project == "" {
-		for _, line := range strings.Split(fileContent, "\n") {
-			if value, found := strings.CutPrefix(line, "COMPOSE_PROJECT_NAME="); found {
-				project = value
-				break
-			}
-		}
-	}
-	if project == "" {
-		return "", fmt.Errorf("COMPOSE_PROJECT_NAME is missing")
-	}
-	for index, character := range []byte(project) {
-		if index == 0 {
-			if (character < 'a' || character > 'z') && (character < '0' || character > '9') {
-				return "", fmt.Errorf("COMPOSE_PROJECT_NAME %q must start with a lowercase letter or digit", project)
-			}
-			continue
-		}
-		if character != '_' && character != '-' && (character < 'a' || character > 'z') && (character < '0' || character > '9') {
-			return "", fmt.Errorf("COMPOSE_PROJECT_NAME %q contains an unsupported character", project)
-		}
-	}
-	return project, nil
+	return proof.Project
 }
 
 func composeWithoutFailure(t *testing.T, args ...string) {
@@ -385,9 +348,7 @@ func composeWithoutFailure(t *testing.T, args ...string) {
 	root := repositoryRoot(t)
 	ctx, cancel := context.WithTimeout(context.Background(), smokeTimeout)
 	defer cancel()
-	command := exec.CommandContext(ctx, filepath.Join(root, "scripts", "dev", "compose.sh"), args...)
-	command.Dir = root
-	_ = command.Run()
+	_, _ = composeOutput(ctx, root, args...)
 }
 
 func docker(t *testing.T, args ...string) string {
@@ -404,13 +365,11 @@ func command(t *testing.T, directory, name string, args ...string) string {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), smokeTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, name, args...)
-	cmd.Dir = directory
-	output, err := cmd.CombinedOutput()
+	output, err := commandOutput(ctx, directory, name, args...)
 	if err != nil {
-		t.Fatalf("%s %s: %v\n%s", name, strings.Join(args, " "), err, output)
+		t.Fatal(err)
 	}
-	return string(output)
+	return output
 }
 
 func get(t *testing.T, path string, status int) []byte {
@@ -485,7 +444,7 @@ func smokeBaseURL() string {
 	if value := strings.TrimRight(os.Getenv("SEMLIA_SMOKE_URL"), "/"); value != "" {
 		return value
 	}
-	return "http://127.0.0.1:8080"
+	return ""
 }
 
 func contains(values []string, want string) bool {

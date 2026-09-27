@@ -15,7 +15,7 @@ import { buildProductionInput, getProductionSnapshot, kindLabels, listProduction
 
 type Member = SnapshotMember & { snapshotId: string };
 type Permissions = { edit: boolean; validate: boolean; review: boolean; publish: boolean; rollback: boolean };
-type Props = { candidateId?: string; operationId?: string; onBack?: () => void; backLabel?: string; onOpenSources?: () => void; onOpenProposal: (id: string) => void; onOpenAsset?: (id: string) => void; onOperationSelected?: (id: string, releaseId?: string) => void };
+type Props = { candidateId?: string; operationId?: string; revisionContext?: string; onBack?: () => void; backLabel?: string; onOpenSources?: () => void; onOpenProposal: (id: string) => void; onOpenAsset?: (id: string) => void; onOperationSelected?: (id: string, releaseId?: string) => void };
 export function SemanticProductionWorkspace(props: Props) {
   const { workspaceId } = useCatalogRuntime();
   const actor = useResourceCan("asset.read", { type: "workspace", id: workspaceId });
@@ -23,7 +23,7 @@ export function SemanticProductionWorkspace(props: Props) {
   return <SemanticProductionPanel key={`${workspaceId}:${actor.principalId}:${actor.authorizationVersion}`} {...props} workspaceId={workspaceId} principalId={actor.principalId} identityKey={`${actor.principalId}:${actor.authorizationVersion}`} permissions={permissions} />;
 }
 
-export function SemanticProductionPanel({ workspaceId, principalId, identityKey, candidateId, operationId, permissions, onBack, backLabel = "返回来源与候选", onOpenSources, onOpenProposal, onOpenAsset, onOperationSelected }: Props & { workspaceId: string; principalId: string; identityKey: string; permissions: Permissions }) {
+export function SemanticProductionPanel({ workspaceId, principalId, identityKey, candidateId, operationId, revisionContext, permissions, onBack, backLabel = "返回来源与候选", onOpenSources, onOpenProposal, onOpenAsset, onOperationSelected }: Props & { workspaceId: string; principalId: string; identityKey: string; permissions: Permissions }) {
   const runtime = useSemanticProduction({ workspaceId, identityKey, candidateId, operationId });
   const [candidate, setCandidate] = useState<SemanticCandidate | null>(null);
   const [snapshots, setSnapshots] = useState<SourceSnapshot[]>([]);
@@ -198,6 +198,7 @@ export function SemanticProductionPanel({ workspaceId, principalId, identityKey,
     <header className="production-heading"><div>{(onBack || detail || draft) && <button ref={firstFocus} className="ingestion-back" onClick={onBack ?? backToRecords}><ArrowLeft size={15} />{onBack ? backLabel : "返回整理记录"}</button>}<h2>{candidate?.title ?? primaryTitle ?? (operationId ? "知识确认" : "草稿与整理")}</h2><span className="production-muted">{detail ? `v${detail.version} · ${progressLabels[detail.summary.progress]}` : candidate ? "来源候选 · 尚未发布" : "知识整理与审核记录"}</span></div><div className="production-actions"><button className="icon-button" title="核对服务器状态" aria-label="核对服务器状态" disabled={runtime.busy || runtime.loading} onClick={() => void runtime.refresh()}><RefreshCw size={16} /></button>{draft && <button className="primary-button" disabled={!canSave} onClick={() => void save()}><Save size={15} />{detail ? "保存纠正版本" : "保存知识草稿"}</button>}</div></header>
     {runtime.error && <div className="production-alert" role="alert">{runtime.error}{runtime.uncertain && <button className="secondary-button" disabled={runtime.busy} onClick={() => void runtime.retry()}><RotateCcw size={14} />重试同一请求</button>}</div>}
     {runtime.notice && <p role="status" className="production-notice">{runtime.notice}</p>}
+    {revisionContext && <section className="production-notice" aria-label="未确认的修订上下文"><h3>修订原因与回答依据（未确认）</h3><p>{revisionContext}</p></section>}
     {localError && <p role="alert" className="production-alert">{localError}</p>}
     {dirty && detail?.summary.frozen && <p className="production-notice">当前记录已冻结。保存会创建后继纠正记录，保留原始建议与审核历史；新记录必须重新确认、验证与审核。</p>}
     {dirty && draftKey && loadedKey && draftKey !== loadedKey && <p role="alert" className="production-alert">服务器出现新版本，本地纠正已保留。<button className="secondary-button" onClick={() => { setDirty(false); setDraftKey(""); }}>放弃本地纠正并读取新版本</button></p>}

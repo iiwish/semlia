@@ -1,0 +1,52 @@
+schema_version: 1
+packet_id: V1-T003-A005
+task_id: V1-T003
+feature_id: v1-convergence
+mode: Delegated Execute
+governance_inputs:
+  principles: [AGENTS.md, docs/SSOT.md]
+  spec: docs/specs/v1-convergence/spec.md
+  plan: docs/specs/v1-convergence/plan.md
+  tasks: docs/specs/v1-convergence/tasks.md
+  approval: User authorizes direct browser acceptance and, when passing, commit, push and PR merge on 2026-09-27; existing scoped defect-repair authorization applies.
+work_unit:
+  goal: Keep unloaded catalog summaries visibly unknown instead of falsely unpublished, zero-version, failed readiness, unassigned responsibility or zero relations/bindings; preserve authoritative detail-based classification.
+  dependencies: [RC.4 preserved browser failure]
+  parallel: false
+codebase_context:
+  evidence: .semlia/v1-acceptance/current/browser-merge/catalog-status-red.ax.txt
+  reproduction: Normal consumer login, open Knowledge catalog cold; all ten actually published assets show unpublished @0 and 0/6. Open the model detail (@5 production) and return; only that item changes to published.
+  cause: Summary projection marks deployment/workflow unknown but knowledgeVersionState and catalog readiness treat missing detail as negative facts. Summary DTO has no authoritative release pointer.
+execution_constraints:
+  allowed_files:
+    - web/src/ProductApp.tsx
+    - web/src/catalogRuntime.tsx
+    - web/src/types.ts
+    - web/src/knowledgeReadiness.ts
+    - web/src/Catalog.test.tsx
+    - web/src/ProductApp.test.tsx
+    - web/src/styles.css
+    - web/e2e-production/production.spec.ts # Align cold-directory assertion with independently observed complete catalog response; test-only follow-up.
+    - docs/evidence/V1-T003/catalog-summary-state.md
+  constraints:
+    - Do not infer publication from lifecycle/currentRevisionId, auto-fetch every detail, or broaden API/permissions.
+    - Unknown summary must not claim unpublished, revision zero, failed readiness or all-clear. Keep the existing lazy authoritative detail boundary.
+    - Only the same catalog row's unloaded owner/maintainer and relation/binding metadata also render unknown, not confirmed absent. Do not extend this into unrelated detail or global layout changes.
+    - Missing, forbidden, failed or malformed released_state detail remains unknown; only available with a revision or explicit not_released establishes a known publication state.
+    - Version filter/count UI must not present partial known counts as the complete catalog or silently discard unknown matches as a definitive empty result. Prefer a small explicit unavailable/unknown state over invented metadata.
+    - Preserve actual known published, draft, mixed-version and explicitly unreleased states, pagination/search, keyboard access, desktop-only scope.
+    - No dependencies, layout redesign, backend/schema, live models, publication, fixture/golden changes, builds or commits.
+    - No further delegation. Preserve all earlier candidate/cohort evidence.
+validation_loop:
+  - Add focused RED cases for cold summary badge/readiness/filter behavior and retain known-state cases.
+  - Minimal implementation, focused GREEN.
+  - Run full frontend tests, lint and type/build checks; report actual skips/warnings.
+  - Preserve Round 7 browser failure (compact desktop draft aria-pressed); replace the stale assertion with strict mutually exclusive empty-known versus nonempty-summary-unknown expectations grounded in the page catalog response. No timeout increases, OR assertions, fixture resets or product changes. Root reviews before the release worker runs the named corrected browser gate once.
+evidence_contract:
+  public: docs/evidence/V1-T003/catalog-summary-state.md
+  include: [RED and GREEN commands, cause, bounded changes, filter semantics, results, residual limits]
+review_contract:
+  - Independent review required before root regenerates embedded assets and a new local candidate.
+handoff:
+  status: Needs_Review
+  next: Root reviews, rebuilds and repeats actual browser acceptance on the new exact executable before Git publication.

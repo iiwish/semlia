@@ -1,4 +1,4 @@
 package schema
 
 // MigrationVersion is shared by runtime readiness and release metadata.
-const MigrationVersion = 32
+const MigrationVersion = 33

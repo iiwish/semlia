@@ -62,6 +62,22 @@ type ArtifactObjectRetention struct {
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 }
 
+type AskRequest struct {
+	WorkspaceID     pgtype.UUID        `json:"workspace_id"`
+	RequestedBy     pgtype.UUID        `json:"requested_by"`
+	IdempotencyKey  string             `json:"idempotency_key"`
+	InputDigest     string             `json:"input_digest"`
+	KnowledgeDigest string             `json:"knowledge_digest"`
+	AgentRunID      pgtype.UUID        `json:"agent_run_id"`
+	ClaimToken      pgtype.UUID        `json:"claim_token"`
+	CallDeadline    pgtype.Timestamptz `json:"call_deadline"`
+	Status          string             `json:"status"`
+	SemanticQueryID pgtype.UUID        `json:"semantic_query_id"`
+	ErrorCode       pgtype.Text        `json:"error_code"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	CompletedAt     pgtype.Timestamptz `json:"completed_at"`
+}
+
 type AssetRevision struct {
 	ID            pgtype.UUID        `json:"id"`
 	WorkspaceID   pgtype.UUID        `json:"workspace_id"`

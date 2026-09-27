@@ -355,11 +355,15 @@ func TestCommandOutputCancellationIsBounded(t *testing.T) {
 
 func TestComposeCommandUsesDirectDockerCLI(t *testing.T) {
 	root := repositoryRoot(t)
-	name, args := composeCommand(root, "ps", "--all")
+	proof, _ := isolationFixture(t)
+	name, args, err := composeCommand(root, "ps", "--all")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if name != "docker" {
 		t.Fatalf("compose executable = %q, want docker", name)
 	}
-	wantPrefix := []string{"compose", "--env-file", filepath.Join(root, ".semlia", "dev.env"), "ps", "--all"}
+	wantPrefix := []string{"compose", "--project-directory", root, "--project-name", proof["project"].(string), "--env-file", proof["envFile"].(string), "-f", filepath.Join(root, "compose.yaml"), "-f", filepath.Join(root, "compose.override.yaml"), "-f", proof["ownershipFile"].(string), "ps", "--all"}
 	if strings.Join(args, "\x00") != strings.Join(wantPrefix, "\x00") {
 		t.Fatalf("compose arguments = %q, want %q", args, wantPrefix)
 	}
@@ -726,18 +730,24 @@ func formatWorkerState(state workerContainerState) string {
 }
 
 func composeOutput(ctx context.Context, root string, args ...string) (string, error) {
-	name, commandArgs := composeCommand(root, args...)
+	name, commandArgs, err := composeCommand(root, args...)
+	if err != nil {
+		return "", err
+	}
 	return commandOutput(ctx, root, name, commandArgs...)
 }
 
-func composeCommand(root string, args ...string) (string, []string) {
-	commandArgs := []string{"compose", "--env-file", filepath.Join(root, ".semlia", "dev.env")}
-	return "docker", append(commandArgs, args...)
+func commandOutput(ctx context.Context, root, name string, args ...string) (string, error) {
+	if name == "docker" {
+		return isolatedDockerOutput(ctx, root, args...)
+	}
+	return runSmokeCommand(ctx, root, cleanSmokeEnvironment(nil), name, args...)
 }
 
-func commandOutput(ctx context.Context, root, name string, args ...string) (string, error) {
+func runSmokeCommand(ctx context.Context, root string, environment []string, name string, args ...string) (string, error) {
 	command := exec.CommandContext(ctx, name, args...)
 	command.Dir = root
+	command.Env = environment
 	command.WaitDelay = smokeCommandWaitDelay
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer

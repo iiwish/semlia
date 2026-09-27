@@ -1,19 +1,49 @@
 import { test, expect } from "@playwright/test";
 import { writeFileSync } from "node:fs";
-import { addCompositeTargets, approve, bootstrap, confirmRules, login, openAs, sourceSQL } from "./fixtures";
+import { addCompositeTargets, approve, bootstrap, confirmRules, login, openAs, productionOperationId, sourceSQL } from "./fixtures";
 
 test("isolated identity and server-owned production workspace", async ({ page, context }) => {
   const failures: string[] = [];
   page.on("response", (response) => { if (response.url().includes("/api/") && response.status() >= 400) failures.push(`${response.status()} ${response.url()}`); });
   expect(bootstrap.mode).toBe("protocol_stub");
   await login(context, "author");
+  const catalogPath = `/api/v1/workspaces/${bootstrap.workspaceId}/catalog/assets`;
+  const catalogResponse = page.waitForResponse((response) => new URL(response.url()).pathname === catalogPath && response.request().method() === "GET");
   await page.goto("/assets?section=drafts");
-  await expect(page.getByRole("region", { name: "知识确认", exact: true })).toBeVisible();
+  const response = await catalogResponse;
+  expect(response.status()).toBe(200);
+  const catalog = await response.json();
+  expect(Array.isArray(catalog.items)).toBe(true);
+  expect(catalog.page.total).toBe(catalog.items.length);
+  expect(catalog.page.nextCursor).toBeUndefined();
+  await expect(page.getByRole("region", { name: "知识目录", exact: true })).toBeVisible();
+  const versions = page.getByRole("group", { name: "知识版本筛选" });
+  const rows = page.getByRole("button", { name: /^打开语义资产 / });
+  const unavailable = page.getByText("版本筛选暂不可用，当前显示全部版本。", { exact: true });
+  await expect(rows).toHaveCount(catalog.items.length);
+  if (catalog.items.length === 0) {
+    await expect(versions.getByRole("button", { name: "草稿 0", exact: true })).toBeEnabled();
+    await expect(versions.getByRole("button", { name: "草稿 0", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(versions.getByRole("button", { name: "正式版 0", exact: true })).toBeEnabled();
+    await expect(versions.getByRole("button", { name: "全部 0", exact: true })).toHaveAttribute("aria-pressed", "false");
+    await expect(unavailable).toHaveCount(0);
+  } else {
+    await expect(versions.getByRole("button", { name: `全部 ${catalog.items.length}`, exact: true })).toHaveAttribute("aria-pressed", "true");
+    for (const name of ["草稿 待确认", "正式版 待确认"]) {
+      await expect(versions.getByRole("button", { name, exact: true })).toBeDisabled();
+      await expect(versions.getByRole("button", { name, exact: true })).toHaveAttribute("aria-pressed", "false");
+    }
+    await expect(unavailable).toBeVisible();
+    for (const row of await rows.all()) {
+      await expect(row).toContainText("发布状态待加载");
+      await expect(row).toContainText("就绪度待加载");
+      await expect(row).not.toContainText(/未发布|@0|0\/6|项需关注|门禁通过/);
+      await expect(row.getByRole("progressbar")).toHaveCount(0);
+    }
+  }
   const records = await context.request.get(`/api/v1/workspaces/${bootstrap.workspaceId}/production-operations`);
   expect(records.ok()).toBeTruthy();
-  const operations = await records.json();
-  if (!operations.items.length) await expect(page.getByText("暂无待确认知识")).toBeVisible();
-  else await expect(page.getByRole("region", { name: "可恢复的生产记录" })).toBeVisible();
+  expect(Array.isArray((await records.json()).items)).toBe(true);
   await page.waitForLoadState("networkidle");
   expect(failures).toEqual([]);
   await page.screenshot({ path: `${process.env.SEMLIA_ACCEPTANCE_ROOT}/empty-${test.info().project.name}.png` });
@@ -41,7 +71,7 @@ test("source candidate creates a server-owned semantic draft without seeded asse
   await production.getByLabel("对象名称", { exact: true }).fill(`${name} orders`);
   await production.getByLabel("资产地址", { exact: true }).fill(`acceptance.${name}_orders`);
   await production.getByRole("button", { name: "保存知识草稿" }).click();
-  await expect(page).toHaveURL(/production=/);
+  await expect(page).toHaveURL(/\/work\/operations\//);
   await expect(production.getByText("保存知识草稿已由服务器接收。", { exact: true })).toBeVisible();
   await page.evaluate(() => localStorage.clear());
   await page.reload();
@@ -50,7 +80,7 @@ test("source candidate creates a server-owned semantic draft without seeded asse
   await addCompositeTargets(page, name);
   await page.getByRole("button", { name: "保存纠正版本", exact: true }).click();
   await expect(page.getByText("保存纠正版本已由服务器接收。", { exact: true })).toBeVisible();
-  let operationId = new URL(page.url()).searchParams.get("production")!;
+  let operationId = productionOperationId(page.url());
   let operationPath = `/api/v1/workspaces/${bootstrap.workspaceId}/production-operations/${operationId}`;
   const version2 = await (await context.request.get(operationPath)).json();
   expect(version2.version).toBe(2);
@@ -90,8 +120,8 @@ test("source candidate creates a server-owned semantic draft without seeded asse
   await expect(page.getByRole("button", { name: "批准整个集合", exact: true })).toBeDisabled();
   const predecessorId = operationId;
   await page.getByRole("button", { name: "保存纠正版本", exact: true }).click();
-  await expect.poll(() => new URL(page.url()).searchParams.get("production")).not.toBe(predecessorId);
-  operationId = new URL(page.url()).searchParams.get("production")!;
+  await expect.poll(() => productionOperationId(page.url())).not.toBe(predecessorId);
+  operationId = productionOperationId(page.url());
   operationPath = `/api/v1/workspaces/${bootstrap.workspaceId}/production-operations/${operationId}`;
   const successor = await (await context.request.get(operationPath)).json();
   expect(successor.version).toBe(1);
@@ -135,11 +165,19 @@ test("source candidate creates a server-owned semantic draft without seeded asse
   expect(await (await context.request.get(releasePath + publishedId)).json()).toEqual(published);
   await page.screenshot({ path: `${process.env.SEMLIA_ACCEPTANCE_ROOT}/restored-${name}.png` });
   writeFileSync(`${process.env.SEMLIA_ACCEPTANCE_ROOT}/objects-${name}.json`, JSON.stringify({ corrected, successor, published, restored }, null, 2));
-  await page.getByRole("button", { name: "知识库", exact: true }).click();
-  await page.getByRole("button", { name: "草稿与整理", exact: true }).click();
-  await expect(page).toHaveURL(/section=drafts/);
+  await page.getByRole("button", { name: "待办", exact: true }).click();
+  await page.getByRole("button", { name: "已结束", exact: true }).click();
+  await expect(page).toHaveURL(/\/work\?scope=done/);
   await page.reload();
-  await expect(page.getByRole("region", { name: "可恢复的生产记录" })).toBeVisible();
+  const completedResponse = await context.request.get(`/api/v1/workspaces/${bootstrap.workspaceId}/production-operations`);
+  expect(completedResponse.ok()).toBeTruthy();
+  const completed = (await completedResponse.json()).items.find((item: { id: string }) => item.id === operationId);
+  expect(completed?.title).toBeTruthy();
+  await page.getByRole("searchbox", { name: "搜索待办", exact: true }).fill(completed.title);
+  await page.getByRole("button", { name: `查看知识：${completed.title}`, exact: true }).click();
+  await expect.poll(() => productionOperationId(page.url())).toBe(operationId);
+  await page.reload();
+  await expect(page.getByRole("region", { name: "知识确认", exact: true })).toBeVisible();
   await login(context, "author");
   await page.goto("/sources");
   await page.getByRole("button", { name: `查看来源 Acceptance ${name}`, exact: true }).click();
@@ -164,8 +202,8 @@ test("source candidate creates a server-owned semantic draft without seeded asse
   await page.getByLabel("业务定义", { exact: true }).fill("One customer per customer_id, matched from the published catalogue.");
   await page.getByRole("button", { name: "保存知识草稿", exact: true }).click();
   await expect(page.getByText("保存知识草稿已由服务器接收。", { exact: true })).toBeVisible();
-  await expect(page).toHaveURL(/production=/);
-  const matchedId = new URL(page.url()).searchParams.get("production")!;
+  await expect(page).toHaveURL(/\/work\/operations\//);
+  const matchedId = productionOperationId(page.url());
   const matchedResponse = await context.request.get(`/api/v1/workspaces/${bootstrap.workspaceId}/production-operations/${matchedId}`);
   expect(matchedResponse.ok()).toBeTruthy();
   const matched = await matchedResponse.json();
@@ -180,4 +218,29 @@ test("source candidate creates a server-owned semantic draft without seeded asse
   await page.screenshot({ path: `${process.env.SEMLIA_ACCEPTANCE_ROOT}/matched-${name}.png` });
   await page.getByRole("button", { name: "返回来源与候选", exact: true }).click();
   await expect(page).toHaveURL(/\/sources$/);
+
+  await page.goto("/assets");
+  const customerRow = page.getByRole("button", { name: `打开语义资产 ${name} customers`, exact: true });
+  await customerRow.click();
+  await expect(page.getByRole("heading", { name: `${name} customers`, level: 1, exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "返回知识目录", exact: true }).click();
+  const searchAddress = `acceptance.${name}_customers`;
+  const searchResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return response.request().method() === "GET" && url.pathname === `/api/v1/workspaces/${bootstrap.workspaceId}/catalog/assets` && url.searchParams.get("search") === searchAddress;
+  });
+  await page.getByRole("searchbox", { name: "搜索知识目录", exact: true }).fill(searchAddress);
+  const searchResult = await searchResponse;
+  expect(searchResult.status()).toBe(200);
+  const searchPage = await searchResult.json();
+  expect(searchPage.items).toHaveLength(1);
+  expect(searchPage.items[0].address).toBe(searchAddress);
+  expect(searchPage.page.total).toBe(1);
+  expect(searchPage.page.nextCursor).toBeUndefined();
+  await expect(customerRow).toBeVisible();
+  await expect(customerRow).toContainText("正式版");
+  await expect(page.getByRole("button", { name: /^打开语义资产 / })).toHaveCount(1);
+  await expect(page.locator(".catalog-summary")).toContainText("显示 1 · 已加载 1 / 1 个语义资产");
+  await expect(page.getByText("没有匹配知识资产", { exact: true })).toHaveCount(0);
+  await page.screenshot({ path: `${process.env.SEMLIA_ACCEPTANCE_ROOT}/catalog-search-${name}.png` });
 });

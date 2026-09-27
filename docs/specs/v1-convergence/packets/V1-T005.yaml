@@ -1,0 +1,77 @@
+schema_version: 1
+packet_id: V1-T005
+task_id: V1-T005
+feature_id: v1-convergence
+mode: Delegated Execute
+governance_inputs:
+  principles: [AGENTS.md, docs/SSOT.md]
+  spec: docs/specs/v1-convergence/spec.md
+  plan: docs/specs/v1-convergence/plan.md
+  tasks: docs/specs/v1-convergence/tasks.md
+  approval: User explicitly approved the scoped technical plan and continuous local implementation on 2026-09-26, and delegated browser acceptance followed by commit, push and PR merge on 2026-09-27 when validation passes.
+work_unit:
+  goal: Verify one frozen local release candidate and provide a truthful acceptance report with current setup and recovery documentation.
+  dependencies: [V1-T001 technical review, V1-T002 technical review, V1-T003 technical review, V1-T004 technical review]
+  requirements: [V1-FR-001, V1-FR-002, V1-FR-003, V1-FR-004, V1-FR-005, V1-FR-006, V1-FR-007, V1-NFR-001, V1-NFR-002, V1-NFR-003, V1-NFR-004]
+  parallel: false
+codebase_context:
+  documentation_findings:
+    - quickstart incorrectly describes make dev as a Docker build and make smoke as disruptive; normal development uses owned native server, worker and Vite.
+    - local-development hardcodes schema 29; the candidate requires schema 33 with supported upgrade evidence from 32.
+    - troubleshooting recommends deleting dev.env and conflates native shutdown with Compose cleanup; preserve existing credentials and data and use the correct ownership-specific entry.
+    - Self-host recovery documentation must cover database, nonempty content/artifacts, private keys, external source credentials and restore verification, not database-only backup.
+    - Public setup documentation must distinguish local scoped RC readiness from a signed hosted release and describe known scope exclusions.
+execution_constraints:
+  allowed_files:
+    - README.md
+    - README.zh-CN.md
+    - .env.example # Top-level development entry documentation comment only; no values or behavior.
+    - tests/acceptance/documentation_contract_test.go # Align obsolete M0 documentation strings with the current native contract; retain security and diagnostic requirements.
+    - docs/
+    - internal/platform/web/static/
+  generated_outputs: [build/release/, build/security/, .semlia/v1-acceptance/]
+  constraints:
+    - No new behavior changes within this task. Return a failed behavior gate to its owning task with a focused RED/GREEN attempt.
+    - Documentation states the current supported contract, not a narrative of past changes.
+    - Freeze build inputs before final gates; generate embedded assets once and verify drift after generation. For the frontend-only A006 follow-up, preserve Round 7 Go, Node and enabled performance evidence only with a complete official-input hash bridge proving unchanged backend, SQL, model, driver, dependencies and performance inputs; label inherited checks explicitly. Run fresh full frontend checks, browser, smoke, security and exact RC.6 release verification. PR CI runs the full source gate on the committed tree.
+    - Preserve all actual failures and skipped tests. Do not lower thresholds, replace real acceptance with mocks or claim formal 1.0 publication.
+    - Use an explicit local 1.0.0-rc identifier and sourceDirty metadata with source fingerprint. Root may commit, push and merge the PR after passing delegated browser acceptance and Git checks; no tag, signing, remote deployment or public release.
+    - Docker operations use owned isolated resources only; inspect any teardown before running it.
+    - Private smoke observation captures one complete live ownership snapshot, then verifies cleanup independently using the actual observed IDs, configured resource names and project labels. Do not keep inspecting removed objects after a complete snapshot. A failed observer is recorded separately from the real gate exit and is never rewritten as success.
+    - Final inventory checks may wait within a bounded window for normally retiring test-owned reapers, recording the initial and settled observations. Never delete unknown or shared resources or rerun a benchmark to obtain an inventory match.
+    - Never print secrets, environment files, DSNs, sessions, private model responses or protected browser traces.
+    - Keep baseline model failures, named repair rounds, execution failures and browser model calls as separate denominators.
+    - Report the prior private configuration disclosure and recommend credential rotation before production without repeating values.
+    - No mobile scope and no further delegation by workers.
+validation_loop:
+  - bash scripts/dev/sync-web.sh
+  - node --test scripts/acceptance/v1*.test.mjs scripts/ci/check-smoke.test.mjs scripts/ci/security-image.test.mjs deploy/examples/compose.test.mjs scripts/dev/native-environment.test.mjs scripts/dev/validate-native-isolation.test.mjs scripts/dev/production-acceptance-isolation.test.mjs
+  - make check-source
+  - make check-browser
+  - make check-smoke
+  - Run make security-check with a fresh SEMLIA_SECURITY_IMAGE owned tag; verify that the existing semlia:security tag is unchanged.
+  - SEMLIA_RUN_M1_BENCHMARK=1 go test -count=1 -v ./tests/performance/catalog ./tests/performance/distribution
+  - Build SEMLIA_VERSION=1.0.0-rc.20260927.6 with make release into a fresh owned SEMLIA_RELEASE_DIR under build/release, using the exact Go toolchain. Preserve all five earlier candidates, the original browser/model failures, RC.4 successful model cohort and subsequent delegated-browser catalog failure, RC.5 search failure without a model cohort, all per-candidate ledgers, original failed glossary preparation and separate read-only reconciliation evidence without overwriting artifacts.
+  - Verify archive, release manifest, SBOM, checksums, schema and source fingerprint with the existing release verifier.
+  - Run node scripts/acceptance/v1-browser.mjs candidate-preflight against the verified candidate executable's embedded web login and desktop workspace at the direct server URL, not the Vite development URL.
+  - Verify the retained V1 candidate runtime, exactly approved supplemental knowledge basis and original-environment preservation. The original native runtime is stopped at preflight; its stop cause is unknown and it must not be restarted or presented as continuously available.
+  - Start the owned runtime using the verified release executable without recompilation, then explicitly authorize a fresh final-candidate model cohort against the correct published head, with one attempt per fixed positive case, denial and natural ambiguity checks; report it separately from all repair rounds.
+  - Independently inspect the actual saved average-case typed query for exact canonical category equality or membership, the old-customer predicate, half-open dates and scalar shape. Numeric agreement through a contains or fuzzy category filter is not exact-category evidence.
+  - git diff --check
+  - Root performs actual browser UI acceptance on the new executable, including cold catalog unknown state, authoritative detail and version filtering, normal-role source and revision-cancel paths, and desktop screenshots. Earlier CUA model attempts remain a separate denominator.
+  - Before pushing to the public repository, inspect the staged scope and unpushed commits, verify ignored runtime artifacts stay excluded, and scan known local secrets without printing their values. Attach the created PR and await required CI without bypass before merging.
+evidence_contract:
+  public: docs/evidence/V1-T005/
+  private: .semlia/v1-acceptance/
+  include: [exact commands and exit status, candidate fingerprint, build metadata, acceptance matrix, model attempt denominators, source limitations, skipped checks, remaining risks, user-facing URLs and artifacts]
+review_contract:
+  - Independent final review covers high-risk changes and regression evidence.
+  - Root verifies that no claimed gate belongs to a different source candidate.
+  - Final handoff distinguishes technical readiness, user acceptance and public release.
+handoff:
+  status: Needs_Review
+  next: User-delegated browser acceptance, then authorized Git commit, push and PR merge. Formal signed release remains separate.
+stop_conditions:
+  - Unresolved blocking defects or failed mandatory gates.
+  - Build inputs change during candidate compilation or verification.
+  - Any required action affects an unowned environment or requires new product scope.

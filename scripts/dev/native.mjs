@@ -4,10 +4,12 @@ import { createServer, request } from "node:http";
 import { createServer as createTCPServer } from "node:net";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseEnv } from "node:util";
 import { randomBytes } from "node:crypto";
+import { networkInterfaces } from "node:os";
+import { nativeConfiguration } from "./native-environment.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+if (process.env.SEMLIA_NATIVE_ENV_FILE !== undefined && !process.env.SEMLIA_NATIVE_STATE_DIR) throw new Error("Explicit native configuration requires a state directory.");
 const state = resolve(process.env.SEMLIA_NATIVE_STATE_DIR ?? join(root, ".semlia/native"));
 if (!state.startsWith(join(root, ".semlia") + "/")) throw new Error("Native state must stay in this workspace.");
 const controlPath = join(state, "control.sock");
@@ -16,11 +18,12 @@ const command = process.argv[2] ?? "up";
 mkdirSync(state, { recursive: true, mode: 0o700 });
 
 function environment() {
-  const read = (path) => existsSync(path) ? parseEnv(readFileSync(path, "utf8")) : {};
-  const local = { ...read(join(root, ".semlia/dev.env")), ...read(process.env.SEMLIA_NATIVE_ENV_FILE ?? join(root, ".semlia/native.env")) };
+  const { local, base } = nativeConfiguration(root);
   if (!local.SEMLIA_SECRET_KEY || !local.SEMLIA_POSTGRES_PASSWORD) throw new Error("Run scripts/dev/ensure-env.sh and configure the existing PostgreSQL first.");
   const port = Number(local.SEMLIA_NATIVE_WEB_PORT ?? local.SEMLIA_HTTP_PORT ?? 18081);
   const apiPort = Number(local.SEMLIA_NATIVE_API_PORT ?? 18080);
+  const lanIP = local.SEMLIA_NATIVE_LAN_IP;
+  if (lanIP && (local.SEMLIA_DEVELOPMENT_LAN_HTTP !== "true" || !Object.values(networkInterfaces()).flat().some((address) => address?.address === lanIP && address.family === "IPv4" && !address.internal))) throw new Error("LAN sharing requires an explicit local IPv4 address and SEMLIA_DEVELOPMENT_LAN_HTTP=true.");
   for (const value of [port, apiPort]) if (!Number.isInteger(value) || value < 1024 || value > 65535) throw new Error("Invalid native port.");
   if (port === apiPort) throw new Error("Web and API ports must differ.");
   const db = new URL(local.SEMLIA_DATABASE_URL ?? "postgresql://127.0.0.1/semlia");
@@ -29,7 +32,7 @@ function environment() {
   const artifacts = join(state, "artifacts");
   mkdirSync(content, { recursive: true, mode: 0o700 });
   mkdirSync(artifacts, { recursive: true, mode: 0o700 });
-  return { ...process.env, ...local, SEMLIA_ENV: "development", SEMLIA_AUTH_MODE: "password", SEMLIA_LOCAL_UAT_IDENTITIES: "false", SEMLIA_HTTP_ADDR: `127.0.0.1:${apiPort}`, SEMLIA_DATABASE_URL: db.href, SEMLIA_ALLOWED_ORIGINS: `http://127.0.0.1:${port}`, SEMLIA_GIT_REPOSITORY: content, SEMLIA_SOURCE_ARTIFACT_ROOT: content, SEMLIA_ARTIFACT_ROOT: artifacts, SEMLIA_ARTIFACT_STORE: "local", SEMLIA_WORKER_CONFIGURED: "true", SEMLIA_MIGRATIONS_PATH: join(root, "migrations"), SEMLIA_NATIVE_WEB_PORT: String(port), SEMLIA_NATIVE_API_PORT: String(apiPort), SEMLIA_VITE_API_TARGET: `http://127.0.0.1:${apiPort}`, VITE_CATALOG_FIXTURE: "", VITE_LOCAL_UAT_IDENTITIES: "" };
+  return { ...base, ...local, SEMLIA_ENV: "development", SEMLIA_AUTH_MODE: "password", SEMLIA_LOCAL_UAT_IDENTITIES: "false", SEMLIA_HTTP_ADDR: `127.0.0.1:${apiPort}`, SEMLIA_DATABASE_URL: db.href, SEMLIA_ALLOWED_ORIGINS: [`http://127.0.0.1:${port}`, ...(lanIP ? [`http://${lanIP}:${port}`] : [])].join(","), SEMLIA_NATIVE_WEB_HOST: lanIP ? "0.0.0.0" : "127.0.0.1", SEMLIA_GIT_REPOSITORY: content, SEMLIA_SOURCE_ARTIFACT_ROOT: content, SEMLIA_ARTIFACT_ROOT: artifacts, SEMLIA_ARTIFACT_STORE: "local", SEMLIA_WORKER_CONFIGURED: "true", SEMLIA_MIGRATIONS_PATH: join(root, "migrations"), SEMLIA_NATIVE_WEB_PORT: String(port), SEMLIA_NATIVE_API_PORT: String(apiPort), SEMLIA_VITE_API_TARGET: `http://127.0.0.1:${apiPort}`, VITE_CATALOG_FIXTURE: "", VITE_LOCAL_UAT_IDENTITIES: "" };
 }
 
 function run(program, args, env, stdio = "inherit") {
@@ -108,7 +111,7 @@ async function supervise() {
     };
     launch(join(root, "build/semlia"), ["server"], "server");
     launch(join(root, "build/semlia"), ["worker"], "worker");
-    launch("pnpm", ["--dir", "web", "exec", "vite", "--host", "127.0.0.1", "--port", env.SEMLIA_NATIVE_WEB_PORT, "--strictPort"], "web");
+    launch("pnpm", ["--dir", "web", "exec", "vite", "--host", env.SEMLIA_NATIVE_WEB_HOST, "--port", env.SEMLIA_NATIVE_WEB_PORT, "--strictPort"], "web");
   } catch (error) { shutdown(); throw error; }
 }
 
@@ -137,7 +140,7 @@ try {
     run(join(root, "build/semlia"), ["doctor"], env);
     run(join(root, "build/semlia"), ["check-schema"], env);
     const log = openSync(join(state, "supervisor.log"), "a", 0o600);
-    const child = spawn(process.execPath, [fileURLToPath(import.meta.url), "supervise"], { cwd: root, detached: true, stdio: ["ignore", log, log] });
+    const child = spawn(process.execPath, [fileURLToPath(import.meta.url), "supervise"], { cwd: root, env: process.env.SEMLIA_NATIVE_ENV_FILE === undefined ? process.env : env, detached: true, stdio: ["ignore", log, log] });
     child.unref();
     let ready = false;
     for (let attempt = 0; attempt < 120; attempt++) {

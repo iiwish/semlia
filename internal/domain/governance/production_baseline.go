@@ -38,7 +38,12 @@ func ReplayProductionChanges(target TargetDeclaration, baseline json.RawMessage,
 	for i := range target.Changes {
 		for _, value := range []*json.RawMessage{&target.Changes[i].BeforeValue, &target.Changes[i].AfterValue} {
 			if *value != nil {
-				*value, err = ResolveLocalReferences(*value, localIDs)
+				if target.Changes[i].FieldPath == "spec" {
+					// Atomic knowledge specs retain their published and physical version pins.
+					*value, err = CanonicalJSON(*value)
+				} else {
+					*value, err = ResolveLocalReferences(*value, localIDs)
+				}
 				if err != nil {
 					return nil, false, err
 				}

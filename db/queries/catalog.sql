@@ -26,8 +26,13 @@ WHERE asset.workspace_id = sqlc.arg(workspace_id)
   AND (
       sqlc.arg(search)::text = ''
       OR asset.namespace || '.' || asset.key ILIKE '%' || sqlc.arg(search)::text || '%'
-      OR to_tsvector('simple', COALESCE(revision.content::text, '')) @@
-         plainto_tsquery('simple', sqlc.arg(search)::text)
+      OR asset.current_revision_id IN (
+          SELECT matched_revision.id
+          FROM asset_revisions AS matched_revision
+          WHERE matched_revision.workspace_id = sqlc.arg(workspace_id)
+            AND to_tsvector('simple', matched_revision.content::text) @@
+                plainto_tsquery('simple', sqlc.arg(search)::text)
+      )
   )
   AND (
       NOT sqlc.arg(has_cursor)::boolean
@@ -65,8 +70,13 @@ WHERE asset.workspace_id = sqlc.arg(workspace_id)
   AND (
       sqlc.arg(search)::text = ''
       OR asset.namespace || '.' || asset.key ILIKE '%' || sqlc.arg(search)::text || '%'
-      OR to_tsvector('simple', COALESCE(revision.content::text, '')) @@
-         plainto_tsquery('simple', sqlc.arg(search)::text)
+      OR asset.current_revision_id IN (
+          SELECT matched_revision.id
+          FROM asset_revisions AS matched_revision
+          WHERE matched_revision.workspace_id = sqlc.arg(workspace_id)
+            AND to_tsvector('simple', matched_revision.content::text) @@
+                plainto_tsquery('simple', sqlc.arg(search)::text)
+      )
   );
 
 -- name: GetCatalogAsset :one

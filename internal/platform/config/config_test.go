@@ -182,6 +182,39 @@ func TestLoadProductionAcceptsSecureConfiguration(t *testing.T) {
 	}
 }
 
+func TestDevelopmentLANHTTP(t *testing.T) {
+	for _, tc := range []struct {
+		name, environment, flag, origin string
+		ok                              bool
+	}{
+		{"default rejects LAN", "development", "false", "http://10.12.16.59:18081", false},
+		{"explicit LAN", "development", "true", "http://10.12.16.59:18081", true},
+		{"loopback unchanged", "development", "false", "http://127.0.0.1:18081", true},
+		{"public IP rejected", "development", "true", "http://8.8.8.8:18081", false},
+		{"hostname rejected", "development", "true", "http://app.example.com", false},
+		{"wildcard rejected", "development", "true", "*", false},
+		{"userinfo rejected", "development", "true", "http://user@10.12.16.59", false},
+		{"path rejected", "development", "true", "http://10.12.16.59/path", false},
+		{"production flag rejected", "production", "true", "https://app.example.com", false},
+		{"test flag rejected", "test", "true", "http://10.12.16.59", false},
+		{"invalid flag", "development", "invalid", "http://127.0.0.1", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := config.Load(mapLookup(map[string]string{
+				"SEMLIA_ENV":                  tc.environment,
+				"SEMLIA_AUTH_MODE":            "password",
+				"SEMLIA_DATABASE_URL":         "postgres://semlia@localhost/semlia?sslmode=disable",
+				"SEMLIA_SECRET_KEY":           strings.Repeat("s", 32),
+				"SEMLIA_ALLOWED_ORIGINS":      tc.origin,
+				"SEMLIA_DEVELOPMENT_LAN_HTTP": tc.flag,
+			}))
+			if (err == nil) != tc.ok {
+				t.Fatalf("Load error = %v, want success %v", err, tc.ok)
+			}
+		})
+	}
+}
+
 func TestLoadProductionRejectsUnsafeValuesWithoutEchoingSecrets(t *testing.T) {
 	const databaseURL = "postgres://semlia:database-secret@example.internal/semlia?sslmode=disable"
 	const secretKey = "short-secret"

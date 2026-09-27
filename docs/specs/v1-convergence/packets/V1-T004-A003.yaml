@@ -1,0 +1,71 @@
+schema_version: 1
+packet_id: V1-T004-A003
+task_id: V1-T004
+feature_id: v1-convergence
+mode: Delegated Execute
+governance_inputs:
+  principles: [AGENTS.md, docs/SSOT.md]
+  spec: docs/specs/v1-convergence/spec.md
+  plan: docs/specs/v1-convergence/plan.md
+  tasks: docs/specs/v1-convergence/tasks.md
+  approval: The user approved the scoped local technical plan and original-environment preservation. This repairs known safety defects in required local acceptance gates, without expanding product scope.
+work_unit:
+  goal: Make the complete standard browser gate use independent configuration and ownership-checked cleanup before final candidate validation.
+  dependencies: [T005 documentation batch frozen, root activation of T004-A003]
+  requirements: [V1-NFR-001, V1-NFR-004]
+  parallel: false
+codebase_context:
+  findings:
+    - production-acceptance.sh checks only project labels and can miss a same-named unlabelled configured volume or network.
+    - native.mjs merges dev.env and the parent runtime environment even when a separate SEMLIA_NATIVE_ENV_FILE is supplied.
+    - validate-native.mjs uses timestamp state and unconditional shutdown, and its PostgreSQL anonymous volume is not removed with its owned container.
+execution_constraints:
+  allowed_files:
+    - scripts/dev/native.mjs
+    - scripts/dev/native-environment.mjs
+    - scripts/dev/native-environment.test.mjs
+    - scripts/dev/validate-native.mjs
+    - scripts/dev/validate-native-isolation.test.mjs
+    - scripts/dev/production-acceptance.sh
+    - scripts/dev/production-acceptance-isolation.test.mjs
+    - tests/repository/repository_contract_test.go
+    - docs/evidence/V1-T004/browser-gate-isolation.md
+  constraints:
+    - Wait for root activation. No actual Docker/browser gate until implementation and independent review pass.
+    - An explicit native configuration path is a required independent file, with a tool-environment allowlist and explicit state/config control values. It must not import default dev.env, native.env, caller runtime/model credentials, execution mappings or LAN settings. The supervisor must retain this same boundary.
+    - Without an explicit config path, preserve the normal dev.env plus native.env merge and normal developer workflow.
+    - Use fresh private random state and an exact task marker. Verify marker and returned container ID/owner before shutdown or deletion, and propagate shutdown failures rather than claiming successful cleanup.
+    - Pin the local Docker endpoint and private anonymous configuration for every nested acceptance subprocess. Do not borrow private registry configuration or permit inherited Compose overrides.
+    - Compose preflight, mutation and cleanup inspect the union of project-label inventory and exact configured volume/network names. Unknown ownership refuses teardown. Confirm absence after cleanup.
+    - Owner, secret and port generation errors fail before resource creation; do not mask command-substitution failures with export or readonly declarations.
+    - Remove only the verified fresh container and its own anonymous volumes. No broad prune, shared database changes, remote deployment, credential rotation or unknown process takeover.
+    - Preserve all existing normal-password, member, password-change, governance, persistence and rollback browser assertions. Do not replace the real gate with a mock.
+    - Update only TestSmokeJourneyUsesActiveComposeProject to reflect the verified private smoke context rather than the removed default COMPOSE_PROJECT_NAME/dev.env fallback. Preserve the active-project isolation requirement; existing behavioral helper tests remain mandatory.
+    - Tests may use disposable fake CLI/browser fixtures to prove guard behavior, but must execute the actual launcher/helper path. Never read or print real private configuration, DSNs, cookies or credentials.
+    - No further delegation and no unrelated refactor.
+tdd_plan:
+  red:
+    - Explicit config must not inherit canary runtime/model/LAN values from dev.env or caller environment; missing explicit config must fail.
+    - Unlabelled exact-name volumes/networks and post-start ownership drift must prevent adoption or cleanup.
+    - Failed or malformed owner/password/port generation must prevent all mutation.
+    - Foreign native state marker or container labels must prevent shutdown/deletion; valid cleanup removes its anonymous volume and reports native shutdown failure.
+  green:
+    - Implement a small configuration helper and focused launcher ownership checks.
+    - Preserve the default native configuration merge and all existing browser workflow assertions.
+validation_loop:
+  - node --test scripts/dev/native-environment.test.mjs scripts/dev/validate-native-isolation.test.mjs scripts/dev/production-acceptance-isolation.test.mjs
+  - bash -n scripts/dev/production-acceptance.sh
+  - go test -count=1 ./tests/repository ./tests/contracts
+  - git diff --check
+  - Independent recursive review of all subprocess, configuration and cleanup paths.
+  - Run make check-browser only after explicit root go-ahead; compare original environment inventory and exact owned cleanup absence.
+evidence_contract:
+  public: docs/evidence/V1-T004/browser-gate-isolation.md
+  private: .semlia/v1-acceptance/
+  include: [actual RED and GREEN, default-workflow compatibility, recursive isolation review, real browser-gate result, ownership and preservation, residual limits]
+handoff:
+  status: Needs_Review
+  next: Resume T005 after technical review; final gates must use the repaired frozen source.
+stop_conditions:
+  - Unknown resource identity, missing private context or failed mandatory guard.
+  - Need for broader normal-development behavior changes, new product features or writes outside this packet.

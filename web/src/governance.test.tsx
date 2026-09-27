@@ -2,6 +2,9 @@ import { act, render, renderHook, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event";
 import { beforeEach, vi } from "vitest";
 
+import * as catalog from "./catalog";
+import type { KnowledgeSpec } from "./knowledge";
+import * as production from "./semanticProduction";
 import { CatalogRuntimeProvider } from "./testing/catalogFixture";
 import { useCatalogRuntime } from "./catalogRuntime";
 import { ProductApp } from "./ProductApp";
@@ -156,76 +159,141 @@ describe("governance API convergence", () => {
     expect(governanceMocks.getRelease).toHaveBeenCalledTimes(2);
   });
 
-  it("creates and submits real proposals from the revision workbench", async () => {
+  it("saves a pinned calculation revision as one production draft before explicit confirmation", async () => {
     const user = userEvent.setup();
-    governanceMocks.createProposal.mockResolvedValue({
-      id: "prp_test_0001",
-      targetObjectType: "semantic_asset",
-      targetObjectId: netRevenue.id,
-      state: "draft",
-      title: "修订净收入的计算表达式",
-      summary: "修订计算表达式。",
-      reason: "口径需要扣减确认退款。",
-      createdBy: "catalog-web",
-      createdAt: "2026-09-03T09:00:00Z",
-      updatedAt: "2026-09-03T09:00:00Z",
-      changeSet: [],
+    const workspaceId = "wsp_01arz3ndektsv4rrffq69g5fav";
+    const digest = `sha256:${"a".repeat(64)}`;
+    const paid = { assetId: "ast_paid", revisionId: "rev_paid", releaseId: "rls_paid" };
+    const refund = { assetId: "ast_refund", revisionId: "rev_refund", releaseId: "rls_refund" };
+    const beforeSpec: KnowledgeSpec = {
+      kind: "derived", unit: "CNY", nullPolicy: "exclude", zeroDenominator: "null", rollup: "recompute_from_inputs",
+      expression: { op: "add", left: { op: "ref", ref: paid }, right: { op: "ref", ref: refund } },
+    };
+    const afterSpec: KnowledgeSpec = { ...beforeSpec, expression: { ...beforeSpec.expression!, op: "subtract" } };
+    const asset: Asset = { ...netRevenue, knowledgeSpec: beforeSpec, revisionRecord: { ...netRevenue.revisionRecord, contentHash: digest } };
+    const content: production.AssetContent = {
+      address: asset.key, assetType: "metric", displayName: asset.name, definition: asset.definition,
+      scope: "合成财务验收", ownerPrincipalId: authorizationSession.principalId, spec: beforeSpec,
+    };
+    const revision = {
+      id: asset.revisionRecord.revisionId, assetId: asset.id, sequence: asset.revisionRecord.sequence,
+      schemaVersion: "1.0.0", contentDigest: digest, content, createdAt: "2026-09-03T09:00:00Z", createdBy: authorizationSession.principalId, evidence: [],
+    };
+    const input: production.ProductionInput = {
+      snapshots: [{ sourceId: "src_orders", snapshotId: "snp_orders", digest, coverageKeys: ["public"] }],
+      candidates: [{ candidateId: "cand_consumed", snapshotId: "snp_orders", digest, targetKeys: ["metric"], primaryTargetKey: "metric" }],
+      evidence: [{ evidenceId: "evd_orders", snapshotId: "snp_orders", digest }],
+      dependencies: [paid, refund].map((ref) => ({ kind: "semantic_asset", targetId: ref.assetId, revisionId: ref.revisionId, releaseId: ref.releaseId })),
+    };
+    const expectedDraft: production.ProductionDraft = {
+      input: { ...input, candidates: [] },
+      targets: [{ intent: "update", kind: "semantic_asset", localKey: "revision", title: asset.name,
+        targetId: asset.id, baseRevisionId: revision.id, content: { ...content, spec: afterSpec },
+        changes: [{ fieldPath: "spec", op: "update", beforeValue: beforeSpec, afterValue: afterSpec }], evidenceIds: ["evd_orders"] }],
+    };
+    const origin = {
+      summary: { id: "prodop_origin" }, version: 3, setDigest: digest, input,
+      targets: [{ localKey: "metric", targetId: asset.id, outcome: "proposal", contentDigest: digest, proposalId: "prp_origin", declaration: { kind: "semantic_asset", evidenceIds: ["evd_orders"] } }],
+    } as unknown as production.ProductionOperation;
+    const savedOperation = {
+      summary: { id: "prodop_revision", createdBy: authorizationSession.principalId, progress: "draft", frozen: false },
+      version: 1, setDigest: digest, inputDigest: digest, input: expectedDraft.input,
+      targets: [{ localKey: "revision", targetId: asset.id, outcome: "proposal", proposalId: "prp_revision", declaration: expectedDraft.targets[0] }],
+      generationRunIds: [], generationApplications: [], activeValidation: { status: "not_requested" }, unresolvedCodes: [],
+    } as unknown as production.ProductionOperation;
+    const detailFor = (currentRevision: catalog.CatalogRevision, title: string, address: string, releaseId: string): catalog.CatalogAssetDetail => ({
+      id: currentRevision.assetId, title, address, assetType: "metric", lifecycleState: "active", summary: "合成验收",
+      createdAt: revision.createdAt, updatedAt: revision.createdAt, relationCount: 0, currentRevisionId: currentRevision.id, currentRevision,
+      authoritySections: [{ kind: "released_state", authority: "release_manifests", availability: "available", releaseId, revisionId: currentRevision.id,
+        values: {}, records: [], recordsPage: { limit: 50, total: 0 } }],
     });
-    governanceMocks.listProposals.mockResolvedValue([{
-      id: "prp_test_0001",
-      targetObjectType: "semantic_asset",
-      targetObjectId: netRevenue.id,
-      assetId: netRevenue.id,
-      state: "in_review",
-      title: "修订净收入的计算表达式",
-      summary: "修订计算表达式。",
-      reason: "口径需要扣减确认退款。",
-      createdBy: "catalog-web",
-      createdAt: "2026-09-03T09:00:00Z",
-      updatedAt: "2026-09-03T09:00:00Z",
-    }]);
-    governanceMocks.submitProposal.mockResolvedValue({
-      id: "prp_test_0001",
-      targetObjectType: "semantic_asset",
-      targetObjectId: netRevenue.id,
-      assetId: netRevenue.id,
-      state: "in_review",
-      title: "修订净收入的计算表达式",
-      summary: "修订计算表达式。",
-      reason: "口径需要扣减确认退款。",
-      createdBy: "catalog-web",
-      createdAt: "2026-09-03T09:00:00Z",
-      updatedAt: "2026-09-03T09:00:00Z",
-      changeSet: [{ id: "chg_test_0001", fieldPath: "spec.expression", op: "update", beforeValue: netRevenue.revisionRecord.typeSpec.expression, afterValue: "SUM(paid_amount - confirmed_refund_amount)", createdAt: "2026-09-03T09:00:00Z" }],
+    const references = [paid, refund].map((ref, index) => {
+      const title = index === 0 ? "支付金额" : "确认退款";
+      const address = index === 0 ? "commerce.paid" : "commerce.refund";
+      return detailFor({ ...revision, id: ref.revisionId, assetId: ref.assetId,
+        content: { ...content, address, displayName: title, spec: { kind: "aggregate", aggregation: "sum", unit: "CNY", nullPolicy: "exclude",
+          inputRef: { assetId: "ast_orders", revisionId: "rev_orders", releaseId: "rls_orders", memberId: index === 0 ? "paid_amount" : "confirmed_refund_amount" } } },
+      }, title, address, ref.releaseId);
     });
-    render(<App />);
-
-    await user.click(screen.getByRole("button", { name: "知识库" }));
-    await user.click(screen.getByRole("button", { name: "打开语义资产 净收入" }));
-    await user.click(screen.getByRole("button", { name: "修订知识" }));
-    await user.click(within(screen.getByRole("dialog", { name: "选择知识修订对象" })).getByRole("button", { name: /计算表达式/ }));
-    const workbench = screen.getByRole("region", { name: "净收入 知识修订工作台" });
-    const expression = within(workbench).getByRole("textbox", { name: "计算表达式候选值" });
-    await user.clear(expression);
-    await user.type(expression, "SUM(paid_amount - confirmed_refund_amount)");
-    await user.type(within(workbench).getByRole("textbox", { name: "知识修订原因" }), "口径需要扣减确认退款。");
-    await user.click(within(workbench).getByRole("button", { name: "运行检查" }));
-    await user.click(within(workbench).getByRole("button", { name: "提交审核" }));
-
-    expect(governanceMocks.createProposal).toHaveBeenCalledTimes(1);
-    const request = governanceMocks.createProposal.mock.calls[0][1];
-    expect(request.targetObjectType).toBe("semantic_asset");
-    expect(request.targetObjectId).toBe(netRevenue.id);
-    expect(request.createdBy).toBe("catalog-web");
-    expect(request.reason).toBe("口径需要扣减确认退款。");
-    expect(request.changeSet).toEqual([expect.objectContaining({
-      fieldPath: "spec.expression",
-      op: "update",
-      beforeValue: netRevenue.revisionRecord.typeSpec.expression,
-      afterValue: "SUM(paid_amount - confirmed_refund_amount)",
-    })]);
-    expect(governanceMocks.submitProposal).toHaveBeenCalledWith(expect.any(String), "prp_test_0001");
-    expect(await screen.findByRole("region", { name: "净收入 @13 候选资产版本详情" })).toBeVisible();
+    const getAsset = vi.spyOn(catalog, "getAsset").mockImplementation(async (_workspace, id) => {
+      if (id === asset.id) return detailFor(revision, asset.name, asset.key, "rls_origin");
+      const detail = references.find((value) => value.id === id);
+      if (!detail) throw new Error(`Unexpected catalog asset ${id}`);
+      return detail;
+    });
+    vi.spyOn(catalog, "listAssets").mockResolvedValue({ items: references, page: { limit: 50, total: 2 } });
+    const getRevision = vi.spyOn(catalog, "getAssetRevision").mockResolvedValue(revision);
+    const release = vi.spyOn(production.productionAPI, "release").mockResolvedValue({
+      id: "rls_origin", attribution: { operationId: origin.summary.id, version: origin.version, setDigest: digest, role: "applied", proposalIds: ["prp_origin"] },
+      protection: { rootReleaseId: "rls_origin", rollbackDepth: 0 }, rolledBackReleaseId: null,
+      beforeHead: { presence: "absent" }, afterManifest: { assets: [{ assetId: asset.id, revisionId: revision.id }] },
+    } as production.ProductionRelease);
+    const getOperation = vi.spyOn(production.productionAPI, "get").mockImplementation(async (_workspace, id) => {
+      if (id === origin.summary.id) return origin;
+      if (id === savedOperation.summary.id) return savedOperation;
+      throw new Error(`Unexpected production operation ${id}`);
+    });
+    const getSnapshot = vi.spyOn(production, "getProductionSnapshot").mockResolvedValue({
+      id: "snp_orders", sourceId: "src_orders", sourceRevisionId: "srcv_orders", adapterVersion: "1.0", scopeDigest: digest,
+      contentDigest: digest, historyQuality: "verified", coverageStatus: "complete", memberCount: 0, diagnosticCount: 0, createdAt: revision.createdAt,
+      coverage: [{ key: "public", status: "complete", enumerationComplete: true, diagnosticCodes: [] }],
+    });
+    vi.spyOn(production, "listProductionMembers").mockResolvedValue({ snapshotId: "snp_orders", historyQuality: "verified", items: [], nextCursor: null });
+    vi.spyOn(production.productionAPI, "list").mockResolvedValue({ items: [], nextCursor: null });
+    vi.spyOn(production.productionAPI, "rules").mockResolvedValue([]);
+    const forbiddenWrites = (["recordRule", "submit", "validate", "review", "publish", "replace", "generate"] as const).map((method) =>
+      vi.spyOn(production.productionAPI, method).mockRejectedValue(new Error(`Unexpected automatic ${method}`)));
+    let finishSave!: (result: Awaited<ReturnType<typeof production.productionAPI.create>>) => void;
+    const create = vi.spyOn(production.productionAPI, "create").mockReturnValue(new Promise((resolve) => { finishSave = resolve; }));
+    const view = render(<CatalogRuntimeProvider fixtureAssets={[asset]}><ProductApp session={authorizationSession} /></CatalogRuntimeProvider>);
+    try {
+      await user.click(screen.getByRole("button", { name: "知识库" }));
+      await user.click(screen.getByRole("button", { name: "打开语义资产 净收入" }));
+      await user.click(screen.getByRole("button", { name: "修订知识" }));
+      await user.click(within(screen.getByRole("dialog", { name: "选择知识修订对象" })).getByRole("button", { name: /计算表达式/ }));
+      const workbench = screen.getByRole("region", { name: "净收入 知识修订工作台" });
+      await user.selectOptions(within(workbench).getByRole("combobox", { name: "派生计算算子" }), "subtract");
+      for (const [side, title] of [["左项", "支付金额"], ["右项", "确认退款"]]) {
+        await user.selectOptions(within(workbench).getByRole("combobox", { name: `派生计算${side}算子` }), "ref");
+        await user.click(within(workbench).getByRole("button", { name: `选择派生计算${side}引用` }));
+        const picker = screen.getByRole("dialog", { name: `选择派生计算${side}引用` });
+        await user.click(await within(picker).findByRole("button", { name: new RegExp(title) }));
+        await user.click(within(picker).getByRole("button", { name: "固定此版本" }));
+      }
+      await user.type(within(workbench).getByRole("textbox", { name: "知识修订原因" }), "口径需要扣减确认退款。");
+      await user.click(within(workbench).getByRole("button", { name: "运行检查" }));
+      const previousPath = window.location.pathname;
+      const saveButton = within(workbench).getByRole("button", { name: "保存修订并继续确认" });
+      await user.click(saveButton);
+      await vi.waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+      expect(create).toHaveBeenCalledWith(workspaceId, expectedDraft, expect.stringMatching(/^web-revision-/), expect.any(AbortSignal));
+      expect(getAsset).toHaveBeenLastCalledWith(workspaceId, asset.id, expect.any(AbortSignal));
+      expect(getRevision).toHaveBeenCalledWith(workspaceId, asset.id, revision.id, expect.any(AbortSignal));
+      expect(release).toHaveBeenCalledWith(workspaceId, "rls_origin", expect.any(AbortSignal));
+      expect(getOperation).toHaveBeenCalledWith(workspaceId, origin.summary.id, expect.any(AbortSignal), 3);
+      expect(getSnapshot).toHaveBeenCalledWith(workspaceId, "src_orders", "snp_orders", expect.any(AbortSignal));
+      expect(saveButton).toBeDisabled();
+      expect(workbench).toBeVisible();
+      expect(window.location.pathname).toBe(previousPath);
+      expect(screen.queryByRole("region", { name: "知识确认" })).not.toBeInTheDocument();
+      expect(forbiddenWrites.every((write) => write.mock.calls.length === 0)).toBe(true);
+      await act(async () => { finishSave({ operationId: "prodop_revision", version: 1 } as Awaited<ReturnType<typeof production.productionAPI.create>>); });
+      expect(await screen.findByRole("region", { name: "知识确认" })).toBeVisible();
+      expect(window.location.pathname).toBe("/work/operations/prodop_revision");
+      expect(await screen.findByRole("region", { name: "未确认的修订上下文" })).toHaveTextContent("口径需要扣减确认退款。");
+      expect(await screen.findByRole("textbox", { name: "业务规则声明" })).toHaveValue("");
+      expect(screen.getByRole("checkbox", { name: "确认声明支持当前定义与范围" })).not.toBeChecked();
+      expect(screen.getByRole("button", { name: "记录业务确认" })).toBeDisabled();
+      expect(create).toHaveBeenCalledTimes(1);
+      expect(forbiddenWrites.every((write) => write.mock.calls.length === 0)).toBe(true);
+      expect(governanceMocks.createProposal).not.toHaveBeenCalled();
+      expect(governanceMocks.submitProposal).not.toHaveBeenCalled();
+      expect(governanceMocks.createReview).not.toHaveBeenCalled();
+      expect(governanceMocks.publishRelease).not.toHaveBeenCalled();
+    } finally {
+      view.unmount();
+      vi.restoreAllMocks();
+    }
   });
 
   it("never echoes credential material when creating a model provider", async () => {

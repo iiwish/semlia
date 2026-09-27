@@ -13,7 +13,7 @@ export function App() {
 function SessionApplication() {
   const runtime = useSessionRuntime();
   if (runtime.phase !== "authenticated" || !runtime.session || !runtime.activeWorkspace) return <SessionEntryState />;
-  return <CatalogRuntimeProvider><CatalogApplication session={runtime.capabilitySession} /></CatalogRuntimeProvider>;
+  return <CatalogRuntimeProvider key={`${runtime.session.account.id}:${runtime.activeWorkspace.principalId}`}><CatalogApplication session={runtime.capabilitySession} /></CatalogRuntimeProvider>;
 }
 
 function CatalogApplication({ session }: { session?: import("./types").CapabilitySession }) {

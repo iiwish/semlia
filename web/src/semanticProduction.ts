@@ -52,8 +52,8 @@ export const productionAPI = {
   async get(workspaceId: string, operationId: string, signal?: AbortSignal, version?: number): Promise<ProductionOperation> {
     return dataOrThrow(await client.GET("/api/v1/workspaces/{workspaceId}/production-operations/{operationId}", { params: { path: pathFor(workspaceId, operationId), query: version ? { version } : {} }, signal })) as unknown as ProductionOperation;
   },
-  async create(workspaceId: string, body: ProductionDraft, key: string) {
-    return dataOrThrow(await client.POST("/api/v1/workspaces/{workspaceId}/production-operations", { params: { path: { workspaceId }, header: headersFor(key) }, body: body as unknown as Schema["CreateProductionRequest"] }));
+  async create(workspaceId: string, body: ProductionDraft, key: string, signal?: AbortSignal) {
+    return dataOrThrow(await client.POST("/api/v1/workspaces/{workspaceId}/production-operations", { params: { path: { workspaceId }, header: headersFor(key) }, body: body as unknown as Schema["CreateProductionRequest"], signal }));
   },
   async replace(workspaceId: string, operationId: string, body: ProductionDraft & { expectedVersion: number; suggestionRunId?: string }, key: string) {
     return dataOrThrow(await client.PUT("/api/v1/workspaces/{workspaceId}/production-operations/{operationId}", { params: { path: pathFor(workspaceId, operationId), header: headersFor(key) }, body: body as unknown as Schema["ReplaceProductionRequest"] }));

@@ -10,6 +10,46 @@ function result(): ExecutionResult { return { availability: "ephemeral", replay:
 
 beforeEach(() => { vi.resetAllMocks(); localStorage.clear(); });
 
+it("does not read execution history before becoming active and aborts it when hidden", () => {
+  localStorage.setItem("semlia.execution.wsp_a", "run_record");
+  vi.mocked(getExecution).mockReturnValue(new Promise(() => {}));
+  const view = render(<AskExecutionPanel workspaceId="wsp_a" active={false} />);
+  expect(getExecution).not.toHaveBeenCalled();
+  view.rerender(<AskExecutionPanel workspaceId="wsp_a" active />);
+  const signal = vi.mocked(getExecution).mock.calls[0][2]!;
+  expect(signal.aborted).toBe(false);
+  view.rerender(<AskExecutionPanel workspaceId="wsp_a" active={false} />);
+  expect(signal.aborted).toBe(true);
+});
+
+it("retains completed rows across inactivity without another execution", async () => {
+  vi.mocked(executePlan).mockResolvedValue(result());
+  const view = render(<AskExecutionPanel workspaceId="wsp_a" plan={plan} />);
+  await userEvent.setup().click(screen.getByRole("button", { name: "执行只读查询" }));
+  await screen.findByText("sensitive-exact-value");
+  view.rerender(<AskExecutionPanel workspaceId="wsp_a" plan={plan} active={false} />);
+  view.rerender(<AskExecutionPanel workspaceId="wsp_a" plan={plan} active />);
+  expect(screen.getByText("sensitive-exact-value")).toBeVisible();
+  expect(executePlan).toHaveBeenCalledTimes(1);
+  expect(getExecution).not.toHaveBeenCalled();
+});
+
+it("aborts hidden execution and fences its late response after activation", async () => {
+  let finish!: (value: ExecutionResult) => void;
+  vi.mocked(executePlan).mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+  const view = render(<AskExecutionPanel workspaceId="wsp_a" plan={plan} />);
+  await userEvent.setup().click(screen.getByRole("button", { name: "执行只读查询" }));
+  const signal = vi.mocked(executePlan).mock.calls[0][3]!;
+  view.rerender(<AskExecutionPanel workspaceId="wsp_a" plan={plan} active={false} />);
+  expect(signal.aborted).toBe(true);
+  view.rerender(<AskExecutionPanel workspaceId="wsp_a" plan={plan} active />);
+  expect(screen.getByRole("button", { name: "重试同一执行请求" })).toBeEnabled();
+  expect(screen.getByText(/执行状态待核对/)).toBeVisible();
+  await act(async () => finish(result()));
+  expect(screen.queryByText("sensitive-exact-value")).not.toBeInTheDocument();
+  expect(executePlan).toHaveBeenCalledTimes(1);
+});
+
 it("keeps result rows ephemeral and reloads metadata without automatic execution", async () => {
   vi.mocked(executePlan).mockResolvedValue(result());
   const user = userEvent.setup();

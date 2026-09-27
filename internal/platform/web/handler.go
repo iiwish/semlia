@@ -8,6 +8,8 @@ import (
 	"path"
 	"strings"
 	"time"
+
+	"github.com/iiwish/semlia/pkg/identity"
 )
 
 //go:embed static
@@ -57,7 +59,7 @@ func (handler *handler) ServeHTTP(response http.ResponseWriter, request *http.Re
 			handler.fileServer.ServeHTTP(response, request)
 			return
 		}
-		if strings.HasPrefix(name, "assets/") {
+		if strings.HasPrefix(name, "assets/") && !isAssetClientPath(request.URL.Path) {
 			http.NotFound(response, request)
 			return
 		}
@@ -71,6 +73,19 @@ func (handler *handler) ServeHTTP(response http.ResponseWriter, request *http.Re
 	response.Header().Set("Cache-Control", "no-store")
 	response.Header().Set("X-Content-Type-Options", "nosniff")
 	http.ServeContent(response, request, "index.html", time.Time{}, bytes.NewReader(index))
+}
+
+func isAssetClientPath(value string) bool {
+	suffix, ok := strings.CutPrefix(value, "/assets/")
+	if !ok {
+		return false
+	}
+	assetID, child, hasChild := strings.Cut(suffix, "/")
+	if hasChild && child != "versions" {
+		return false
+	}
+	_, err := identity.ParseAssetID(assetID)
+	return err == nil
 }
 
 func isAPIPath(value string) bool {

@@ -36,6 +36,9 @@ services:
   server:
     <<: *app
     command: [server]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     environment:
       <<: *env
       SEMLIA_WORKER_CONFIGURED: "true"
@@ -63,6 +66,9 @@ services:
   worker:
     <<: *app
     command: [worker]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     environment:
       <<: *env
       SEMLIA_GIT_REPOSITORY: /var/lib/semlia/content

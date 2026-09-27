@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -76,7 +77,7 @@ func TestAskProviderFailurePersistsHashOnlyFailedRun(t *testing.T) {
 	_, err := service.Ask(context.Background(), AskRequest{
 		WorkspaceID: repository.workspace, Question: question,
 		Context:        distributiondomain.ResolutionContext{Mode: distributiondomain.ResolutionCurrent},
-		IdempotencyKey: "ask-provider-failure", PrincipalRef: "principal", TraceID: "trace",
+		IdempotencyKey: "ask-provider-failure", PrincipalRef: repository.agent.ID.String(), TraceID: "trace",
 	})
 	var unavailable *llm.ProviderUnavailableError
 	if !errors.As(err, &unavailable) {
@@ -114,6 +115,49 @@ func TestAskAuthorizesBeforeStartingProviderWork(t *testing.T) {
 	}
 }
 
+func TestAskReplaysClarificationWithoutCallingProvider(t *testing.T) {
+	repository := newAskTestRepository(t)
+	clock := ClockFunc(time.Now)
+	calls := 0
+	service := NewAskService(repository, NewModelConfigService(repository, nil, clock), NewAgentRunService(repository, clock), distributionapp.NewService(repository, nil, distributionapp.ClockFunc(clock)), nil, WithAskProviderClientFactory(
+		func(domain.ModelProvider, llm.CredentialResolver, *http.Client) (llm.ProviderClient, error) {
+			calls++
+			return askProviderClient{content: `{"schema":"semlia.ask-interpretation/v1","outcome":"clarification","clarification":"private echoed question"}`}, nil
+		},
+	))
+	request := AskRequest{WorkspaceID: repository.workspace, Question: "private echoed question", IdempotencyKey: "repeat", PrincipalRef: repository.agent.ID.String()}
+	first, err := service.Ask(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := service.Ask(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 || first.Run.ID != second.Run.ID || len(repository.runs) != 1 {
+		t.Fatalf("provider calls=%d runs=%d same run=%v", calls, len(repository.runs), first.Run.ID == second.Run.ID)
+	}
+	request.Question = "different question"
+	if _, err := service.Ask(context.Background(), request); err == nil || calls != 1 {
+		t.Fatalf("changed question must conflict without provider: err=%v calls=%d", err, calls)
+	}
+}
+
+func TestAskRejectsMalformedContextBeforeModel(t *testing.T) {
+	repository := newAskTestRepository(t)
+	clock := ClockFunc(time.Now)
+	service := NewAskService(repository, NewModelConfigService(repository, nil, clock), NewAgentRunService(repository, clock), distributionapp.NewService(repository, nil, distributionapp.ClockFunc(clock)), nil)
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			t.Fatalf("malformed context panicked: %v", recovered)
+		}
+	}()
+	_, err := service.Ask(context.Background(), AskRequest{WorkspaceID: repository.workspace, Question: "test", IdempotencyKey: "malformed", PrincipalRef: repository.agent.ID.String(), Context: distributiondomain.ResolutionContext{Mode: distributiondomain.ResolutionExplicit}})
+	if err == nil || len(repository.runs) != 0 {
+		t.Fatalf("malformed context accepted: %v", err)
+	}
+}
+
 func TestAskUsesSharedResolverAndReturnsReleasedDefinition(t *testing.T) {
 	repository := newAskTestRepository(t)
 	assetID := askID(t, identity.NewAssetID)
@@ -136,7 +180,7 @@ func TestAskUsesSharedResolverAndReturnsReleasedDefinition(t *testing.T) {
 	result, err := service.Ask(context.Background(), AskRequest{
 		WorkspaceID: repository.workspace, Question: "What is net revenue?",
 		Context:        distributiondomain.ResolutionContext{Mode: distributiondomain.ResolutionCurrent},
-		IdempotencyKey: "ask-success", PrincipalRef: "principal", TraceID: "trace",
+		IdempotencyKey: "ask-success", PrincipalRef: repository.agent.ID.String(), TraceID: "trace",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -152,8 +196,9 @@ func TestAskUsesSharedResolverAndReturnsReleasedDefinition(t *testing.T) {
 }
 
 type askProviderClient struct {
-	content string
-	err     error
+	content      string
+	err          error
+	finishReason string
 }
 
 type askDenyAuthorizer struct{}
@@ -164,18 +209,26 @@ func (askDenyAuthorizer) Evaluate(_ context.Context, request authorizationapp.Ev
 
 func (askProviderClient) Protocol() domain.ModelProviderProtocol { return domain.ProtocolOpenAI }
 func (client askProviderClient) Complete(context.Context, llm.CompleteRequest) (llm.CompleteResponse, error) {
-	return llm.CompleteResponse{Content: client.content}, client.err
+	reason := client.finishReason
+	if reason == "" {
+		reason = "stop"
+	}
+	return llm.CompleteResponse{Content: client.content, FinishReason: reason}, client.err
 }
 
 type askTestRepository struct {
-	workspace identity.WorkspaceID
-	provider  domain.ModelProvider
-	setting   domain.ModelSetting
-	agent     authorization.Principal
-	runs      []domain.AgentRun
-	steps     []domain.AgentStep
-	current   distributiondomain.ReleaseSnapshot
-	record    distributionapp.ResolutionRecord
+	mu         sync.Mutex
+	claims     map[string]domain.AskRequestRecord
+	records    map[identity.SemanticQueryID]distributionapp.ResolutionRecord
+	expireHook func() (int, error)
+	workspace  identity.WorkspaceID
+	provider   domain.ModelProvider
+	setting    domain.ModelSetting
+	agent      authorization.Principal
+	runs       []domain.AgentRun
+	steps      []domain.AgentStep
+	current    distributiondomain.ReleaseSnapshot
+	record     distributionapp.ResolutionRecord
 }
 
 func newAskTestRepository(t *testing.T) *askTestRepository {
@@ -184,6 +237,7 @@ func newAskTestRepository(t *testing.T) *askTestRepository {
 	settingID := askID(t, identity.NewModelSettingID)
 	agentID := askID(t, identity.NewPrincipalID)
 	return &askTestRepository{
+		claims: map[string]domain.AskRequestRecord{}, records: map[identity.SemanticQueryID]distributionapp.ResolutionRecord{},
 		workspace: workspace,
 		provider: domain.ModelProvider{ID: providerID, WorkspaceID: workspace, Protocol: domain.ProtocolOpenAI,
 			DisplayName: "OpenAI", CredentialEnv: "OPENAI_API_KEY", CredentialRevision: contentDigestOf("credential"), Enabled: true},
@@ -207,10 +261,14 @@ func (repo *askTestRepository) WorkspaceAgentPrincipal(context.Context, identity
 	return repo.agent, nil
 }
 func (repo *askTestRepository) CreateAgentRun(_ context.Context, run domain.AgentRun) (domain.AgentRun, error) {
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
 	repo.runs = append(repo.runs, run)
 	return run, nil
 }
 func (repo *askTestRepository) GetAgentRun(_ context.Context, _ identity.WorkspaceID, id identity.AgentRunID) (domain.AgentRun, error) {
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
 	for _, run := range repo.runs {
 		if run.ID == id {
 			return run, nil
@@ -218,7 +276,12 @@ func (repo *askTestRepository) GetAgentRun(_ context.Context, _ identity.Workspa
 	}
 	return domain.AgentRun{}, domain.ErrNotFound
 }
-func (repo *askTestRepository) FinishAgentRun(_ context.Context, command AgentRunFinishCommand) (domain.AgentRun, error) {
+func (repo *askTestRepository) FinishAgentRun(ctx context.Context, command AgentRunFinishCommand) (domain.AgentRun, error) {
+	if err := ctx.Err(); err != nil {
+		return domain.AgentRun{}, err
+	}
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
 	for index := range repo.runs {
 		if repo.runs[index].ID == command.RunID {
 			repo.runs[index].Status = command.FinalState
@@ -232,6 +295,8 @@ func (repo *askTestRepository) FinishAgentRun(_ context.Context, command AgentRu
 	return domain.AgentRun{}, domain.ErrNotFound
 }
 func (repo *askTestRepository) CreateAgentStep(_ context.Context, step domain.AgentStep) (domain.AgentStep, error) {
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
 	repo.steps = append(repo.steps, step)
 	return step, nil
 }
@@ -297,14 +362,25 @@ func (repo *askTestRepository) CurrentReleaseSnapshot(context.Context, identity.
 	}
 	return repo.current, nil
 }
-func (repo *askTestRepository) ReleaseSnapshot(context.Context, identity.WorkspaceID, identity.ReleaseID) (distributiondomain.ReleaseSnapshot, error) {
+func (repo *askTestRepository) ReleaseSnapshot(_ context.Context, _ identity.WorkspaceID, id identity.ReleaseID) (distributiondomain.ReleaseSnapshot, error) {
+	if repo.current.ReleaseID == id {
+		return repo.current, nil
+	}
 	return distributiondomain.ReleaseSnapshot{}, distributiondomain.ErrNotFound
 }
 func (repo *askTestRepository) RecordResolution(_ context.Context, record distributionapp.ResolutionRecord) error {
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
 	repo.record = record
+	repo.records[record.Query.ID] = record
 	return nil
 }
-func (repo *askTestRepository) GetSemanticQuery(context.Context, identity.WorkspaceID, identity.SemanticQueryID) (distributionapp.ResolutionResult, error) {
+func (repo *askTestRepository) GetSemanticQuery(_ context.Context, _ identity.WorkspaceID, id identity.SemanticQueryID) (distributionapp.ResolutionResult, error) {
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
+	if r, ok := repo.records[id]; ok {
+		return distributionapp.ResolutionResult{Query: r.Query, Plan: r.Plan, Refusal: r.Refusal, Validation: r.Validation}, nil
+	}
 	return distributionapp.ResolutionResult{}, distributiondomain.ErrNotFound
 }
 func (repo *askTestRepository) GetResolutionByIdempotency(context.Context, identity.WorkspaceID, string, string) (distributionapp.ResolutionResult, error) {
@@ -312,4 +388,81 @@ func (repo *askTestRepository) GetResolutionByIdempotency(context.Context, ident
 }
 func (repo *askTestRepository) GetResolvedSemanticPlan(context.Context, identity.WorkspaceID, identity.ResolvedSemanticPlanID) (distributiondomain.ResolvedSemanticPlan, error) {
 	return distributiondomain.ResolvedSemanticPlan{}, distributiondomain.ErrNotFound
+}
+
+func askFakeKey(w identity.WorkspaceID, p identity.PrincipalID, key string) string {
+	return w.String() + ":" + p.String() + ":" + key
+}
+func (repo *askTestRepository) GetAskRequest(_ context.Context, w identity.WorkspaceID, p identity.PrincipalID, key string) (domain.AskRequestRecord, error) {
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
+	if record, ok := repo.claims[askFakeKey(w, p, key)]; ok {
+		return record, nil
+	}
+	return domain.AskRequestRecord{}, domain.ErrNotFound
+}
+func (repo *askTestRepository) ClaimAskRequest(_ context.Context, record domain.AskRequestRecord, run domain.AgentRun) (domain.AskRequestRecord, bool, error) {
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
+	key := askFakeKey(record.WorkspaceID, record.RequestedBy, record.Key)
+	if prior, ok := repo.claims[key]; ok {
+		return prior, false, nil
+	}
+	record.CreatedAt, record.Deadline = time.Now().UTC(), time.Now().UTC().Add(90*time.Second)
+	repo.claims[key] = record
+	repo.runs = append(repo.runs, run)
+	return record, true, nil
+}
+func (repo *askTestRepository) FinishAskRequest(ctx context.Context, command AskFinishCommand) (domain.AgentRun, error) {
+	if err := ctx.Err(); err != nil {
+		return domain.AgentRun{}, err
+	}
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
+	key := askFakeKey(command.Request.WorkspaceID, command.Request.RequestedBy, command.Request.Key)
+	record := repo.claims[key]
+	if record.Status != "running" || record.ClaimToken != command.Request.ClaimToken {
+		return domain.AgentRun{}, domain.ErrConflict
+	}
+	record.Status, record.ErrorCode, record.QueryID, record.CompletedAt = command.Status, command.ErrorCode, command.QueryID, &command.FinishedAt
+	repo.claims[key] = record
+	repo.steps = append(repo.steps, domain.AgentStep{AgentRunID: record.RunID, Sequence: 1, Kind: domain.AgentStepModel, InputHash: record.InputDigest, OutputHash: command.ModelOutputDigest})
+	if command.QueryID != nil {
+		repo.steps = append(repo.steps, domain.AgentStep{AgentRunID: record.RunID, Sequence: 2, Kind: domain.AgentStepTool})
+	}
+	for i := range repo.runs {
+		if repo.runs[i].ID == record.RunID {
+			r := &repo.runs[i]
+			r.Status = domain.AgentRunFailed
+			if command.Status == "succeeded" || command.Status == "clarification" {
+				r.Status = domain.AgentRunSucceeded
+				r.OutputDigest = &command.OutputDigest
+			}
+			if command.Status == "cancelled" {
+				r.Status = domain.AgentRunCancelled
+			}
+			r.FinishedAt = &command.FinishedAt
+			return *r, nil
+		}
+	}
+	return domain.AgentRun{}, domain.ErrNotFound
+}
+func (repo *askTestRepository) ExpireAskRequests(ctx context.Context, limit int) (int, error) {
+	if repo.expireHook != nil {
+		return repo.expireHook()
+	}
+	repo.mu.Lock()
+	var expired []domain.AskRequestRecord
+	for _, r := range repo.claims {
+		if r.Status == "running" && !time.Now().Before(r.Deadline) && len(expired) < limit {
+			expired = append(expired, r)
+		}
+	}
+	repo.mu.Unlock()
+	for _, r := range expired {
+		if _, err := repo.FinishAskRequest(ctx, AskFinishCommand{Request: r, Status: "outcome_unknown", ErrorCode: "ASK_OUTCOME_UNKNOWN", FinishedAt: time.Now()}); err != nil {
+			return 0, err
+		}
+	}
+	return len(expired), nil
 }

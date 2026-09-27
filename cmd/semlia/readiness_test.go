@@ -55,8 +55,8 @@ func TestConfiguredReadinessProbeWithoutDatabaseIsUnavailable(t *testing.T) {
 }
 
 func TestReadinessRequiresSourceSnapshotMigration(t *testing.T) {
-	if requiredMigrationVersion != 32 {
-		t.Fatalf("required migration version = %d, want 32", requiredMigrationVersion)
+	if requiredMigrationVersion != 33 {
+		t.Fatalf("required migration version = %d, want 33", requiredMigrationVersion)
 	}
 }
 

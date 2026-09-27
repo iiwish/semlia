@@ -1,0 +1,106 @@
+schema_version: 1
+packet_id: V1-T004
+task_id: V1-T004
+feature_id: v1-convergence
+mode: Delegated Execute
+governance_inputs:
+  principles: [AGENTS.md, docs/SSOT.md]
+  spec: docs/specs/v1-convergence/spec.md
+  plan: docs/specs/v1-convergence/plan.md
+  tasks: docs/specs/v1-convergence/tasks.md
+  approval: User explicitly approved isolated local Docker development, builds, tests and scoped 1.0 delivery. No remote deployment, push or public publication.
+work_unit:
+  goal: Verify basic machine consumption and self-host installation, upgrade and restoration without touching existing environments.
+  dependencies: [V1-T002 technical review, V1-T003 technical review]
+  requirements: [V1-FR-006, V1-FR-007, V1-NFR-001, V1-NFR-004]
+  parallel_attempts:
+    A001: Smoke isolation and deployment example ordering, including every nested Docker/Compose command in the Go smoke journey.
+    A002: Public machine-channel and restore acceptance, plus an owned-runtime entry for a verified local candidate binary.
+codebase_context:
+  read:
+    - scripts/ci/check-smoke.sh
+    - scripts/dev/compose.sh
+    - scripts/dev/ensure-env.sh
+    - deploy/examples/compose.yaml
+    - scripts/release/build.sh
+    - scripts/release/manifest.go
+    - tests/integration/governance/execution_channels_test.go
+    - scripts/acceptance/v1/
+  findings:
+    - Smoke currently consumes .semlia/dev.env and does not fix Compose inputs, so a private overlay can escape the disposable project boundary.
+    - The self-host example lacks successful-migration dependencies for server and worker.
+    - Old cutover scripts stop existing services and hardcode outdated schema; do not use them for this drill.
+    - Migration 32 rejects populated seven-type prototype upgrades; do not claim arbitrary historic upgrades are supported.
+execution_constraints:
+  A001_allowed_files:
+    - scripts/ci/check-smoke.sh
+    - scripts/ci/check-smoke*.test.mjs
+    - scripts/ci/security-image.test.mjs
+    - Makefile
+    - tests/smoke/local_stack_test.go
+    - tests/smoke/dependency_failure_test.go
+    - tests/smoke/*isolation*_test.go
+    - scripts/dev/compose.sh
+    - deploy/examples/compose.yaml
+    - deploy/examples/compose*.test.mjs
+    - docs/evidence/V1-T004/release-gates.md
+  A002_allowed_files:
+    - scripts/acceptance/v1-release*.mjs
+    - scripts/acceptance/v1/release*.mjs
+    - scripts/acceptance/v1.mjs
+    - scripts/acceptance/v1.test.mjs
+    - scripts/acceptance/v1/runtime.mjs
+    - scripts/acceptance/v1-browser.mjs
+    - scripts/acceptance/v1-browser-core.mjs
+    - scripts/acceptance/v1-browser.test.mjs
+    - tests/integration/governance/execution_channels_test.go
+    - docs/evidence/V1-T004/consumption-restore.md
+  constraints:
+    - Freeze baseline V1 production state while backing up; never stop the user's old native, Compose or unrelated services.
+    - Use fresh task-owned database names, credentials, ports, directories, project names and receipts. Verify exact ownership before every destructive cleanup or restore target write.
+    - Existing semlia database remains schema 32 and all original data/configuration is preserved. Shared PostgreSQL global settings and networking must not be changed.
+    - Smoke must use explicit repository standard compose files and freshly generated isolated secrets; do not inherit private overlays, execution sources, Docker host overrides or unrelated credentials.
+    - Nested Go smoke commands, including failure cleanup, must use the same verified local Docker endpoint, private Docker config, project, env file and explicit Compose files as the launcher. Never read the ordinary dev.env or fall back to its project. Missing or mismatched isolation identity fails before any Docker mutation.
+    - Reuse public machine credential lifecycle and exact published release; REST/MCP/CLI requests must agree on resolved semantic pins and digests, and revoked credentials must fail.
+    - Backup/restore covers the application database plus nonempty content/artifact fixtures and required private key material. Never claim database-only or empty-directory restore proves full recovery. Prefer normal source/artifact APIs for fixtures and verification.
+    - Restore into a new owned target, verify persisted release/content fingerprints and normal authenticated reads, and disclose ephemeral execution-result limitations.
+    - Verify a restored credential-dependent operation against the synthetic source so metadata-only reads cannot hide a missing encryption key; no additional real model call is needed for this drill.
+    - Upgrade evidence must name a supported baseline (schema 32 to current); use isolated migration fixtures, not the existing user's schema 32 database.
+    - No public image push, GitHub Actions deployment, remote server changes, broad Docker prune or permission relaxation.
+    - The security image build and scan must accept the same explicit SEMLIA_SECURITY_IMAGE override, preserving the semlia:security default. Final acceptance uses a fresh owned tag and must not overwrite an existing image tag. This is a scoped Makefile configuration correction, not a scanner-policy change.
+    - Do not edit embedded frontend by hand; generated synchronization and final candidate metadata belong to T005.
+    - Provide a tested entry that can run the final verified local candidate executable without silently recompiling it. Validate its release manifest/digest/schema, preserve owned shutdown and port checks, and record the executed binary identity. Ordinary source-development startup remains available and cannot claim candidate identity.
+    - Verify the local archive/manifest/SBOM/checksums before stopping an existing owned runtime, copy the verified executable atomically to owned root/server without recompilation, and recheck its digest at launch. Candidate mode runs only server and worker; status returns the direct server URL and checks embedded readiness. No Vite or extra proxy may mask the bundled frontend, and a different requested runtime mode cannot be silently claimed.
+    - Browser acceptance selects its URL from verified runtime status. Candidate preflight requires candidate mode and preserves the same binary/manifest identity before and after its read-only desktop checks; it cannot fall back to the source Vite URL.
+    - Never print secrets, session cookies, DSNs or raw private configuration. Use fixed error summaries and protected receipts.
+    - No further delegation. Coordinate any V1 stop/start with the orchestrator and the other attempt.
+tdd_plan:
+  red:
+    - Contaminated parent COMPOSE_FILE/dev.env must not affect smoke config or cleanup.
+    - Deployment server/worker must depend on successful migration, not merely process start.
+    - Unknown restore owner or existing unrelated target must be rejected before writes.
+    - A missing, mismatched or unverified candidate binary must be rejected before replacing or launching owned runtime processes.
+  green:
+    - Apply minimal explicit smoke isolation and Compose dependency fixes.
+    - Verify REST/MCP/CLI public consumption with dedicated machine credentials, including revocation.
+    - Run fresh install, supported upgrade and isolated backup/restore with fingerprint comparison.
+validation_loop:
+  - node --test scripts/ci/check-smoke*.test.mjs deploy/examples/compose*.test.mjs scripts/acceptance/v1-release*.test.mjs
+  - go test -count=1 -p=1 -timeout=20m ./tests/integration/governance ./tests/integration/db
+  - make check-smoke
+  - Run documented public-channel and backup/restore acceptance commands against owned resources.
+  - Verify original environment preservation and owned cleanup inventory; git diff --check.
+evidence_contract:
+  public: docs/evidence/V1-T004/
+  private: .semlia/v1-acceptance/
+  include: [RED/GREEN commands, source/schema identifiers, channel comparisons, revocation, backup and restore fingerprints, ownership/cleanup, residual limitations]
+review_contract:
+  - Independent review of shell environment isolation, cleanup ownership, migration ordering and restore completeness.
+  - Root verifies actual results and defers final versioned bundle build to T005 source freeze.
+handoff:
+  status: Needs_Review
+  next: V1-T005 after technical review.
+stop_conditions:
+  - Unknown resource, populated unsupported upgrade baseline, missing protected backup material or any risk to existing data.
+  - Need for edits outside the packet or a remote action.
+  - A failed gate cannot be resolved without weakening safety or fabricating evidence.

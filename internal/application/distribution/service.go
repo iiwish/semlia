@@ -262,12 +262,13 @@ func (service *Service) UpdateBinding(ctx context.Context, request UpdateBinding
 }
 
 type ResolveRequest struct {
-	WorkspaceID    identity.WorkspaceID
-	Input          domain.SemanticQueryInput
-	Channel        string
-	IdempotencyKey string
-	PrincipalRef   string
-	TraceID        string
+	WorkspaceID       identity.WorkspaceID
+	Input             domain.SemanticQueryInput
+	Channel           string
+	IdempotencyKey    string
+	PrincipalRef      string
+	TraceID           string
+	ExpectedReleaseID *identity.ReleaseID
 }
 
 func (service *Service) Resolve(ctx context.Context, request ResolveRequest) (ResolutionResult, error) {
@@ -324,6 +325,9 @@ func (service *Service) Resolve(ctx context.Context, request ResolveRequest) (Re
 	snapshot, consumer, binding, refusal, err := service.selectSnapshot(ctx, request, decision, now)
 	if err != nil {
 		return ResolutionResult{}, err
+	}
+	if request.ExpectedReleaseID != nil && snapshot.ReleaseID != *request.ExpectedReleaseID {
+		return ResolutionResult{}, domain.ErrConflict
 	}
 	if consumer != nil {
 		query.ConsumerID = &consumer.ID

@@ -40,8 +40,13 @@ WHERE asset.workspace_id = $1
   AND (
       $4::text = ''
       OR asset.namespace || '.' || asset.key ILIKE '%' || $4::text || '%'
-      OR to_tsvector('simple', COALESCE(revision.content::text, '')) @@
-         plainto_tsquery('simple', $4::text)
+      OR asset.current_revision_id IN (
+          SELECT matched_revision.id
+          FROM asset_revisions AS matched_revision
+          WHERE matched_revision.workspace_id = $1
+            AND to_tsvector('simple', matched_revision.content::text) @@
+                plainto_tsquery('simple', $4::text)
+      )
   )
 `
 
@@ -901,8 +906,13 @@ WHERE asset.workspace_id = $2
   AND (
       $1::text = ''
       OR asset.namespace || '.' || asset.key ILIKE '%' || $1::text || '%'
-      OR to_tsvector('simple', COALESCE(revision.content::text, '')) @@
-         plainto_tsquery('simple', $1::text)
+      OR asset.current_revision_id IN (
+          SELECT matched_revision.id
+          FROM asset_revisions AS matched_revision
+          WHERE matched_revision.workspace_id = $2
+            AND to_tsvector('simple', matched_revision.content::text) @@
+                plainto_tsquery('simple', $1::text)
+      )
   )
   AND (
       NOT $5::boolean

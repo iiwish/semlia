@@ -1,0 +1,116 @@
+schema_version: 1
+packet_id: V1-T002
+task_id: V1-T002
+feature_id: v1-convergence
+mode: Delegated Execute
+governance_inputs:
+  principles: [AGENTS.md, docs/SSOT.md]
+  spec: docs/specs/v1-convergence/spec.md
+  plan: docs/specs/v1-convergence/plan.md
+  tasks: docs/specs/v1-convergence/tasks.md
+  checklist: docs/specs/v1-convergence/checklists/requirements.md
+  analysis: docs/specs/v1-convergence/analysis.md
+  approval: User explicitly approved the scoped 1.0 technical plan, local isolated operations, delegation and configured synthetic model calls on 2026-09-26.
+work_unit:
+  goal: Prove and repair the released-model Ask/Execute/govern/correct/rollback loop without bypassing permissions, readonly enforcement or model interpretation.
+  dependencies: [V1-T001 technical review passes before execution]
+  requirements: [V1-FR-002, V1-FR-003, V1-FR-004, V1-FR-005, V1-NFR-001, V1-NFR-003]
+  parallel_attempts:
+    A001: Durable Ask claim/replay, cancellation and context validation; production modules and their tests only.
+    A002: Normal HTTP real-model acceptance driver; scripts/acceptance/v1* and evidence only. Do not change production modules; report defects to orchestrator.
+    A003: Structured spec change replay fix; only production_baseline.go and focused domain tests. Do not edit Ask modules or acceptance scripts.
+codebase_context:
+  read:
+    - internal/application/governance/ask.go
+    - internal/application/governance/ask_test.go
+    - internal/application/distribution/interpretation.go
+    - internal/application/distribution/service.go
+    - internal/adapters/postgres/production_generation_worker.go
+    - internal/adapters/postgres/governance.go
+    - tests/integration/governance/execution_channels_test.go
+    - scripts/acceptance/v1/
+  findings:
+    - Ask currently invokes the provider before semantic resolver idempotency and cannot replay clarification.
+    - Cancelled contexts are reused for run finalization; a cancelled request can leave running attribution.
+    - ResolutionContext explicit/binding IDs must be validated before snapshot selection to avoid nil dereference.
+    - Current model knowledge and subsequent resolver snapshot must be the same release, with current authorization rechecked.
+execution_constraints:
+  A001_allowed_files:
+    - internal/application/governance/ask*.go
+    - internal/domain/governance/ask*.go
+    - internal/application/distribution/interpretation*.go
+    - internal/application/distribution/service*.go
+    - internal/domain/distribution/model*.go
+    - internal/domain/execution/compiler*.go
+    - internal/adapters/postgres/ask*.go
+    - internal/adapters/postgres/governance.go
+    - internal/adapters/postgres/sqlc/
+    - db/queries/ask.sql
+    - db/sqlc.yaml
+    - migrations/000033_ask_request_idempotency.*.sql
+    - cmd/semlia/main.go
+    - cmd/semlia/readiness_test.go
+    - internal/platform/http/distribution*.go
+    - internal/platform/schema/version.go
+    - api/openapi/semlia.v1.yaml
+    - api/gen/go/types.gen.go
+    - sdk/typescript/src/schema.gen.ts
+    - tests/integration/governance/ask*.go
+    - tests/integration/governance/execution_browser_test.go
+    - tests/integration/db/ask*.go
+    - tests/integration/db/database_test.go
+    - scripts/release/manifest_test.go
+    - docs/evidence/V1-T002/backend.md
+  A002_allowed_files:
+    - scripts/acceptance/v1*.mjs
+    - scripts/acceptance/v1/
+    - docs/evidence/V1-T002/model-acceptance.md
+  A003_allowed_files:
+    - internal/domain/governance/production_baseline.go
+    - internal/domain/governance/production_baseline_test.go
+    - docs/evidence/V1-T002/structured-correction.md
+  constraints:
+    - Additive migration on disposable test and owned V1 databases only; preserve existing Semlia schema 32.
+    - Use existing repository/domain patterns and structured SQL/code generation. No raw prompt, question, provider response or secret in persistent request records.
+    - Claim keys are workspace plus canonical requesting principal plus key; input digest detects changed question/context.
+    - One provider call per key even under concurrency, process restart, cancellation or unknown outcome; do not re-call uncertain work automatically.
+    - Replay rechecks current permissions and release context; do not leak cached data or silently move binding provenance.
+    - Claim and run attribution have atomic durable ownership; bounded detached context is only for fenced database finalization, never continued model work.
+    - Use synthetic HTTP actors from the V1 environment and actual enabled semantic-core default model copied into it; no UAT identity or service shortcut.
+    - Preserve all unsuccessful model attempts in the denominator. Each explicitly recorded validation round permits at most two attempts per case with bounded timeouts; another round requires orchestrator diagnosis and a named code/configuration correction, never automatic retry-until-pass. Golden answers stay verifier-side.
+    - Ask output budget is bounded by min(configured TokenLimit, 16384); truncated or non-normal finish reasons fail before resolution even when content parses as JSON.
+    - A grouped time field may sort by its selected period expression; never permit ordering by an unselected raw non-grouped field. Time ranges remain half-open with explicit prompt guidance and no silent parameter rewriting.
+    - A synthetic correction drill may inject one explicitly labelled wrong model binding through normal review, correct it, demonstrate rollback, and restore the correct final state. Reusing a real Ask canonical query through public Resolve/Execute is deterministic governance evidence, not another model success.
+    - Private model/session/credential receipts stay under .semlia/v1-acceptance with protected permissions; public reports contain no secrets.
+    - Do not read raw private config, modify old demo data, push, deploy remotely or delegate further.
+tdd_plan:
+  red:
+    - Reproduce repeated/concurrent Ask provider calls, malformed context and cancelled finalization.
+    - Cover same key changed digest, different principal, restart, clarification, terminal failure and current grant/release changes.
+    - Test result comparison and negative-case no-execution assertions before implementing acceptance automation.
+    - Reproduce atomic spec change values incorrectly treated as production-local references; preserve immutable knowledge/source reference structures without relaxing declaration validation.
+  green:
+    - Add minimal persisted request claim and stable terminal replay with atomic attribution and safe timeout recovery.
+    - Use normal Ask then Execute APIs for totals, regional breakdown and time comparison against independent SQL.
+    - Verify denied and ambiguous requests do not execute, correction is independently reviewed, new result reconciles and rollback restores prior pinned result.
+  refactor: Limit helper extraction to transaction reuse and explicit context validation; avoid unrelated query planner changes.
+validation_loop:
+  - go test -count=1 ./internal/application/governance ./internal/application/distribution ./internal/domain/distribution ./internal/platform/http
+  - go test -count=1 -p=1 -timeout=20m ./tests/integration/db ./tests/integration/governance
+  - node --test scripts/acceptance/v1*.test.mjs
+  - Migrate and restart the owned V1 runtime, run documented real-model acceptance, and verify existing-environment preservation.
+  - Check generated contracts and git diff --check.
+evidence_contract:
+  public: docs/evidence/V1-T002/
+  private: .semlia/v1-acceptance/
+  include: [actual RED/GREEN commands, real provider attempt counts, comparisons, rejection and correction/rollback outcomes, changed files, review, residual risks]
+review_contract:
+  - Independent review of workspace/principal isolation, cancellation, crash replay, permission/release freshness and schema ownership.
+  - Root reconciles both subattempts and confirms evidence reflects actual normal endpoints.
+handoff:
+  status: Needs_Review
+  next: V1-T003 only after technical gates and independent review pass.
+stop_conditions:
+  - Missing ownership, unknown resources, secret disclosure risk or required edits outside this packet.
+  - Required product capability is outside approved scoped 1.0.
+  - Model credential is unavailable or repeated bounded calls fail; report actual failure, never substitute an oracle response.

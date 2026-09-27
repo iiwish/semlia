@@ -1,0 +1,47 @@
+schema_version: 1
+packet_id: V1-T002-A005
+task_id: V1-T002
+mode: Delegated Execute
+context:
+  spec: docs/specs/v1-convergence/spec.md
+  plan: docs/specs/v1-convergence/plan.md
+  approval: The approved scope includes synthetic business knowledge, ordinary governance, bounded model repairs and local acceptance. This packet uses existing definition fields, not a new member-mapping product capability.
+  failure: RC.3 fixed cohort passes 3/4 positives and 2/2 negatives with five provider calls. Average shape/window/pins are correct but an ungrounded category literal returns null. Published knowledge contains no canonical category values or aliases. RC.2 and RC.3 failures remain immutable evidence.
+ownership:
+  prompt:
+    - internal/application/governance/ask.go
+    - internal/application/governance/ask_idempotency_test.go
+  knowledge_driver:
+    - scripts/acceptance/v1/value-knowledge.mjs
+    - scripts/acceptance/v1-value-knowledge.test.mjs
+    - scripts/acceptance/v1-model.mjs
+    - scripts/acceptance/v1/correction.mjs
+    - scripts/acceptance/v1/final-candidate.mjs
+    - scripts/acceptance/v1-final-candidate.test.mjs
+    - scripts/acceptance/v1-model.test.mjs
+  evidence:
+    - docs/evidence/V1-T002/value-grounding.md
+constraints:
+  - Prompt and driver owners have disjoint files; the prompt owner integrates evidence. Independent review is read-only. No further delegation.
+  - Generic prompt uses explicitly published field-specific canonical value/alias facts for exact category filters. Do not invent suffix removal or fuzzy matching. Clarify missing or ambiguous required mappings, while preserving direct explicit literals and explicitly requested substring searches.
+  - No acceptance-specific names, questions, dates, answers or category literals in the product prompt. No domain/schema/compiler/provider change or new member mapping feature.
+  - Synthetic supplemental knowledge is limited to two existing category values and their business aliases, appended to the model definition. It includes no order/customer records, question text, dates or aggregate answers.
+  - Verify distinct categories through the dedicated synthetic source reader with read-only SQL before governance. Never print credentials or raw private responses.
+  - Preserve initial fixture.json, fixtureDigest, state.published, state.latestRelease, source rows, golden SQL, fixed questions, expected values, comparator, and every earlier candidate and cohort ledger.
+  - Driver prepare-values has the existing exclusive operation lock and a wx one-shot private ledger before mutation. It cannot repeat or resume an uncertain/partial operation. No automatic retry of create/confirm/submit/approve/publish.
+  - Use ordinary author create/confirm/submit, distinct reviewer approval and publisher expected-head publication. Zero model calls and zero query-execution API calls in this preparation. No direct governance database writes or privileged publication bypass.
+  - Validate exact original model content, fixture and head before creation. Full after manifest must differ only in model revision; all other assets and objects remain fixed. New content equals original plus the one declared definition suffix; all spec/ref/other fields are identical.
+  - The before manifest is anchored to the immutable release identified by unchanged state.latestRelease, with every initial state.published asset/object pin verified. Current before.afterManifest must equal that complete original manifest including digest and model revision, with no exceptions. Persist originalRelease and reread its fixed API identity during proof verification. Root also checks the live head against the saved RC.3 cohort before preparation; never adopt a drifted latest baseline.
+  - Record operation, version, setDigest, validation, review/proposal, independent principals, release, manifest and revision proofs. Publish the private approved supplement pointer only after normal API readback validates the complete chain.
+  - governanceHeadProof retains strict original-baseline comparison. With a supplement it accepts only the exact complete approved receipt and matching current head/revision/manifest/content. Partial, foreign, symlinked, incomplete or changed evidence fails closed; arbitrary latest definitions never become baseline.
+  - Candidate cohorts retain original fixture and fixed-case digests and additionally bind the supplemental knowledge basis before and after. Same-candidate, partial-ledger, unknown-outcome and no-resume protections stay intact.
+  - Implementation and unit tests are offline. Root separately authorizes the one live knowledge preparation after independent review; real model calls wait for a fresh complete candidate build and root authorization.
+validation:
+  - Prompt RED before implementation; GREEN preserves exact literals, declared substring semantics, clarification without query, half-open bounds, grouping, privacy and injection contracts.
+  - Driver real-filesystem RED/GREEN for exclusive claim, trusted private path/ownership, unchanged prior evidence, incomplete/unknown operation refusal and pointer drift.
+  - Proof RED/GREEN rejects non-definition changes, wrong suffix or original content, head/manifest/other-object drift, missing independent review, incomplete publication and changed source categories; complete exact proof passes.
+  - Full V1 Node tests, uncached governance/distribution/execution packages, syntax and diff checks, then independent review.
+  - After one authorized ordinary-governance preparation, root confirms exact head/content, model/execution counter stability, unchanged initial fixture/state.published and original environment. Then return to T005 fresh frozen-source gates.
+handoff:
+  status: Needs_Review
+  next: A new candidate and a new fixed cohort may be authorized only after the exact supplemental knowledge proof and all candidate gates pass. Neither glossary publication nor a prompt test proves model adherence.

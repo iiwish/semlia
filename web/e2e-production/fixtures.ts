@@ -108,8 +108,14 @@ export async function confirmRules(page: Page, name: string) {
 
 export async function openAs(page: Page, role: "author" | "reviewer" | "publisher", operationId: string) {
   await login(page.context(), role);
-  await page.goto(`/governance?production=${operationId}`);
+  await page.goto(`/work/operations/${encodeURIComponent(operationId)}?scope=pending`);
   await expect(page.getByLabel("对象名称", { exact: true })).toBeVisible();
+}
+
+export function productionOperationId(url: string) {
+  const match = new URL(url).pathname.match(/^\/work\/operations\/([^/]+)$/);
+  expect(match, "exact production operation route").not.toBeNull();
+  return decodeURIComponent(match![1]);
 }
 
 export async function approve(page: Page, operationId: string) {

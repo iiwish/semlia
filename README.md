@@ -9,7 +9,7 @@ versioned assets that people, applications, and AI agents can safely share.
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-[![Status: pre-alpha](https://img.shields.io/badge/status-pre--alpha-EA580C)](#project-status)
+[![Status: local RC evaluation](https://img.shields.io/badge/status-local_RC_evaluation-EA580C)](#project-status)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-2563EB)](LICENSE)
 [![CI](https://github.com/iiwish/semlia/actions/workflows/ci.yml/badge.svg)](https://github.com/iiwish/semlia/actions/workflows/ci.yml)
 
@@ -17,7 +17,7 @@ versioned assets that people, applications, and AI agents can safely share.
 
 ![Semlia governed semantic workspace](docs/assets/semlia-product-overview.jpg)
 
-<p align="center"><sub>The production desktop workspace combines a live PostgreSQL semantic registry with clearly marked preview surfaces for later milestones.</sub></p>
+<p align="center"><sub>Semlia's desktop knowledge and governance workspace. Delivery status and verified scope are stated below.</sub></p>
 
 ## What is Semlia?
 
@@ -28,11 +28,11 @@ Instead of scattering meaning across SQL, dashboards, documents, and prompts, Se
 Semlia is built around four ideas:
 
 - **Living LLM Wiki**: authoritative pages connect human-readable meaning with evidence, ownership, history, and context suitable for AI.
-- **Governed ontology**: concepts, entities, metrics, relationships, constraints, and physical bindings form one machine-readable model.
+- **Five knowledge types**: business objects, business rules, metrics, data assets and analysis models form a versioned, machine-readable knowledge base.
 - **Software-grade lifecycle**: AI may propose changes, but tests, policy, evidence, and review determine what becomes published truth.
 - **Trusted resolution**: CLI, MCP, REST, SDKs, and events resolve released semantics before an optional execution adapter runs a query.
 
-Semlia is not a BI dashboard, workbook, unrestricted ChatBI product, data warehouse, or query engine. Its first-party question-and-answer workspace and external API consumers share the same published knowledge, permissions, and execution constraints. The current delivery contract and acceptance boundaries are in [Knowledge-to-data convergence](docs/specs/knowledge-to-data/convergence.md).
+Semlia is not a BI dashboard, workbook, unrestricted ChatBI product, data warehouse, or query engine. Its first-party question-and-answer workspace and external consumers share published knowledge, permissions and execution constraints. The current contract is [Scoped 1.0](docs/specs/v1-convergence/spec.md); broader SSOT capabilities are not a claim of completed implementation.
 
 ## How It Works
 
@@ -53,36 +53,39 @@ For the complete product and architecture contract, read the [project SSOT](docs
 ## Project Status
 
 > [!WARNING]
-> Semlia is **pre-alpha** and under **Private incubation**. It is not production-ready and is not currently accepting public contributions.
+> Semlia is under **Private incubation**. The scoped local **1.0.0-rc.20260927.6** candidate passes technical verification and user-delegated browser acceptance; Git delivery is authorized subject to passing PR CI. This is not a signed public release, production-readiness promise or invitation for public contributions.
 
 | Surface | Current state |
 | --- | --- |
-| Production Web | One embedded desktop workspace; M1 workspace and Catalog flows use generated contracts and PostgreSQL |
-| Semantic registry | Stable TypeIDs, immutable revisions, evidence, bounded ontology relations, discovery adapters, audit, outbox, usage, and Git projection |
-| Preview surfaces | Ask, governed authoring, release orchestration, source setup, and administration preserve the accepted product experience while their backend milestones are delivered |
-| Public release | Blocked on production capabilities, self-hosting proof, security intake, compatibility, and release acceptance |
+| Knowledge and governance | Real source discovery, five knowledge types, author confirmation, independent review, publication, exact historical evidence and rollback |
+| Ask and execution | Real-model questions constrained by a published analysis model; explicit read-only execution, SQL/parameter evidence and synthetic SQL reconciliation |
+| Machine consumption | Ordinary REST/MCP/CLI credentials, identical release/model pins and digests, revocation checks |
+| Installation and recovery | Fresh install, isolated identity/workspace schema 32-to-33 upgrade, full application/files/key restore verified on synthetic data |
+| Final local candidate | Frozen-source gates, exact-binary embedded UI and one fixed real-model cohort pass: 4/4 positives, 2/2 negatives. See [T005 delivery](docs/evidence/V1-T005/summary.md) for evidence, preserved failures and limits |
 
-M1 Catalog behavior is real and suitable for local business acceptance. Preview and session-only
-surfaces do not claim persistence, authorization enforcement, or external-system effects.
+The supported product is desktop Web at **1024px or wider**, verified at 1440x900 and 1024x768. Current scope excludes planning without a published analysis model, complete independent mapping governance, long-term conversational memory, automatic publication and a broad new connector suite. Synthetic acceptance is not an enterprise SLA or a guarantee for arbitrary schemas and questions. See [T001](docs/evidence/V1-T001/summary.md), [T002](docs/evidence/V1-T002/summary.md), [T003](docs/evidence/V1-T003/summary.md) and [T004](docs/evidence/V1-T004/summary.md).
 
 ## Quick Start
 
 Install the versions pinned in `.tool-versions`: Go 1.26.6, Node.js 24.15.0, pnpm 11.1.3, plus Git and GNU Make.
 
-With Docker and Compose available:
+Follow the [complete quickstart](docs/quickstart.md) to configure an **existing PostgreSQL 18** instance, an owned database/role and protected local configuration. Explicitly migrate and create the first ordinary account before startup:
 
 ```bash
 make doctor
 make bootstrap
+./scripts/dev/ensure-env.sh
+# Configure .semlia/native.env and the owned PostgreSQL database first.
+go build -o build/semlia ./cmd/semlia
+node scripts/dev/native.mjs migrate up
+bash scripts/dev/account.sh bootstrap-local-admin semantic-core "Semantic Core" admin
 make dev
 make smoke
 ```
 
-Open the local URL printed by `make dev` for the Semlia product workspace. The live M1 Catalog supports
-workspace bootstrap, search, filtering, asset creation, immutable detail, evidence, and bounded
-relations. System diagnostics remain at `/status`.
+Open the URL printed by `make dev` and sign in with that account. `make dev` runs native server, worker and Vite; it does not provision PostgreSQL, automatically migrate or build a Docker image. `make smoke` checks the running native supervisor and readiness only. Diagnostics remain at `/status`.
 
-Stop the stack without deleting its PostgreSQL volume:
+Stop only the owned native processes, preserving PostgreSQL, containers and data:
 
 ```bash
 make dev-down
@@ -91,6 +94,8 @@ make dev-down
 Native development reads private overrides from `.semlia/native.env`. Knowledge confirmation requires `SEMLIA_SEMANTIC_PRODUCTION_ENABLED=true` in both server and worker environments; restart with `make dev-down` followed by `make dev` after changing it. This flag does not grant model-generation permissions, confirm business rules, publish knowledge, or configure a read-only execution source.
 
 The full setup, port rules, and recovery paths are documented in the [quickstart](docs/quickstart.md), [local development runbook](docs/operations/local-development.md), and [troubleshooting guide](docs/operations/troubleshooting.md).
+
+Container self-hosting uses the explicit [deployment example](deploy/examples/README.md), not `make dev`. Server and worker both require successful migration. Preserve keys and nonempty stores as described in [Backup and recovery](docs/operations/backup-recovery.md).
 
 ## Development
 
@@ -130,13 +135,15 @@ Start at the [documentation index](docs/README.md). Architecture decisions live 
 - **M2, governed authoring**: AI proposals, validation orchestration, policy, review, and publishing.
 - **M3+, distribution and continuous governance**: trusted resolution, MCP/SDK delivery, consumer bindings, feedback, drift, and an open adapter ecosystem.
 
-Milestone scope and exit criteria are canonical in the [SSOT roadmap](docs/SSOT.md#17-路线图).
+These milestone groupings describe longer-term architecture, not completion of every capability. Current acceptance follows the [scoped 1.0 plan](docs/specs/v1-convergence/plan.md); broader scope and exit criteria remain in the [SSOT roadmap](docs/SSOT.md#17-路线图).
 
 ## Contributing and Security
 
 Semlia is not yet open for public contributions. The future contribution contract is documented in [Contributing](docs/CONTRIBUTING.md), and all participation is governed by the [Code of Conduct](docs/CODE_OF_CONDUCT.md).
 
 Do not report vulnerabilities in a public issue. Read the [Security Policy](docs/SECURITY.md) for the current private-incubation limitations and future reporting process.
+
+A private-configuration disclosure occurred in development tool output. Rotate affected credentials before production through an approved procedure; do not repeat secret values or replace the encryption key without preserving access to existing ciphertext. Signing boundaries are described in [Release verification](docs/operations/release-verification.md).
 
 ## License
 

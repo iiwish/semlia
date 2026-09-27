@@ -78,6 +78,15 @@ export async function getAsset(workspaceId: string, assetId: string, signal?: Ab
   return response.data;
 }
 
+export async function getAssetRevision(workspaceId: string, assetId: string, revisionId: string, signal?: AbortSignal): Promise<CatalogRevision> {
+  const response = await client.GET("/api/v1/workspaces/{workspaceId}/catalog/assets/{assetId}/revisions/{revisionId}", {
+    params: { path: { workspaceId, assetId, revisionId } },
+    signal,
+  });
+  if (!response.data) throw new Error(errorMessage(response.error));
+  return response.data;
+}
+
 export async function listAssetRelations(workspaceId: string, assetId: string, signal?: AbortSignal): Promise<CatalogRelationPage> {
   const response = await client.GET("/api/v1/workspaces/{workspaceId}/catalog/assets/{assetId}/relations", {
     params: {

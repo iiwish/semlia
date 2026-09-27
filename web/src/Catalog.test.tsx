@@ -3,15 +3,36 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, vi } from "vitest";
 
 import { App } from "./App";
-import { CatalogRuntimeProvider, useCatalogRuntime } from "./catalogRuntime";
+import { CatalogRuntimeProvider, revisionCacheKey, useCatalogRuntime } from "./catalogRuntime";
+import type { CatalogRevision } from "./catalog";
 import { listWorkspaces } from "./catalog";
 import { getSession } from "./identity";
+import { getRelease } from "./governance";
 import { SessionAccountControl, SessionRuntimeProvider } from "./sessionRuntime";
 
+it("opens the exact historical revision without substituting the current catalog detail", async () => {
+  window.history.replaceState({}, "", `/assets/${asset.id}?revision=rev_older&release=rls_answer`);
+  getAssetRevisionMock.mockResolvedValueOnce({ id: "rev_older", assetId: asset.id, sequence: 1, schemaVersion: "1.0.0", contentDigest: `sha256:${"a".repeat(64)}`, content: { assetType: "metric", displayName: "Historical revenue", definition: "The exact answer basis", spec: { unit: "USD" } }, createdBy: "synthetic", createdAt: asset.updatedAt, evidence: [] });
+  render(<App />);
+  expect(await screen.findByRole("heading", { name: "Historical revenue" })).toBeVisible();
+  expect(screen.getByText("The exact answer basis")).toBeVisible();
+  expect(getAssetRevisionMock).toHaveBeenCalledWith(workspace.id, asset.id, "rev_older");
+  expect(screen.queryByRole("heading", { name: "Net revenue" })).not.toBeInTheDocument();
+  const historicalView = screen.getByRole("region", { name: "已发布知识依据" });
+  expect(historicalView).toHaveClass("historical-knowledge-view");
+  const header = historicalView.querySelector(".asset-header-main");
+  expect(header?.children).toHaveLength(3);
+  expect(header?.children[0]).toHaveClass("asset-type-mark", "asset-type-指标");
+  expect(header?.children[1]).toHaveClass("asset-title-copy");
+  expect(header?.children[2]).toHaveClass("asset-header-side");
+  expect(header?.children[2]).toContainElement(screen.getByRole("button", { name: "修订当前知识" }));
+});
 
-const { workspace, asset, listAssetsMock, getAssetMock, listAssetRevisionsMock, listAssetAuthorityRecordsMock, createWorkspaceMock, createAssetMock, session } = vi.hoisted(() => ({
+
+const { workspace, asset, listAssetsMock, getAssetMock, getAssetRevisionMock, listAssetRevisionsMock, listAssetAuthorityRecordsMock, createWorkspaceMock, createAssetMock, session } = vi.hoisted(() => ({
   listAssetsMock: vi.fn(),
   getAssetMock: vi.fn(),
+  getAssetRevisionMock: vi.fn(),
   listAssetRevisionsMock: vi.fn(),
   listAssetAuthorityRecordsMock: vi.fn(),
   createWorkspaceMock: vi.fn(),
@@ -57,6 +78,7 @@ vi.mock("./identity", async (importOriginal) => ({
 vi.mock("./catalog", () => ({
   listWorkspaces: vi.fn().mockResolvedValue([workspace]),
   listAssets: listAssetsMock.mockResolvedValue({ items: [asset], page: { limit: 100 } }),
+  getAssetRevision: getAssetRevisionMock,
   getAsset: getAssetMock.mockResolvedValue({
     ...asset,
     createdAt: asset.updatedAt,
@@ -162,6 +184,7 @@ afterEach(() => {
   if (defaultListAssetAuthorityRecordsImplementation) listAssetAuthorityRecordsMock.mockImplementation(defaultListAssetAuthorityRecordsImplementation);
   createWorkspaceMock.mockReset();
   createAssetMock.mockReset();
+  getAssetRevisionMock.mockReset();
   window.history.replaceState({}, "", "/");
   window.sessionStorage.clear();
 });
@@ -176,11 +199,85 @@ function CatalogCreationProbe() {
   </div>;
 }
 
+function ExactRevisionProbe() {
+  const runtime = useCatalogRuntime();
+  return <>
+    <button onClick={() => { void runtime.ensureRevision(asset.id, "rev_pinned"); void runtime.ensureRevision(asset.id, "rev_pinned"); }}>读取固定修订</button>
+    <button onClick={() => runtime.setWorkspaceId("wsp_other")}>另一个工作区</button>
+    <button onClick={() => runtime.setWorkspaceId(workspace.id)}>原工作区</button>
+    <output data-testid="exact-workspace">{runtime.workspaceId}</output>
+    <output data-testid="exact-revisions">{JSON.stringify(runtime.exactRevisionStates)}</output>
+    <output data-testid="current-assets">{JSON.stringify(runtime.assets.map(item => item.revisionRecord.revisionId))}</output>
+  </>;
+}
+
+function pinnedRevision(assetId = asset.id): CatalogRevision {
+  return { id: "rev_pinned", assetId, sequence: 1, schemaVersion: "1.0.0", contentDigest: `sha256:${"a".repeat(64)}`, content: { assetType: "metric", displayName: "Pinned knowledge", definition: "Pinned definition", spec: { unit: "USD" } }, createdBy: "synthetic", createdAt: asset.updatedAt, evidence: [] };
+}
+
+it("deduplicates immutable revision requests and ignores old responses even after switching back", async () => {
+  let resolveOld!: (revision: CatalogRevision) => void;
+  getAssetRevisionMock.mockImplementationOnce(() => new Promise<CatalogRevision>(resolve => { resolveOld = resolve; })).mockResolvedValue({ ...pinnedRevision(), content: { displayName: "Fresh workspace response" } });
+  render(<CatalogRuntimeProvider><ExactRevisionProbe /></CatalogRuntimeProvider>);
+  await waitFor(() => expect(screen.getByTestId("exact-workspace")).toHaveTextContent(workspace.id));
+  const calls = getAssetRevisionMock.mock.calls.length;
+  await userEvent.click(screen.getByText("读取固定修订"));
+  expect(getAssetRevisionMock).toHaveBeenCalledTimes(calls + 1);
+  await userEvent.click(screen.getByText("另一个工作区"));
+  await userEvent.click(screen.getByText("原工作区"));
+  await userEvent.click(screen.getByText("读取固定修订"));
+  await waitFor(() => expect(screen.getByTestId("exact-revisions")).toHaveTextContent("Fresh workspace response"));
+  await act(async () => resolveOld(pinnedRevision()));
+  expect(screen.getByTestId("exact-revisions")).not.toHaveTextContent("Pinned knowledge");
+  const state = JSON.parse(screen.getByTestId("exact-revisions").textContent!);
+  expect(state[revisionCacheKey(workspace.id, asset.id, "rev_pinned")].state).toBe("ready");
+  await userEvent.click(screen.getByText("读取固定修订"));
+  expect(getAssetRevisionMock).toHaveBeenCalledTimes(calls + 2);
+  expect(screen.getByTestId("current-assets")).not.toHaveTextContent("rev_pinned");
+});
+
+it.each(["403 forbidden", "404 not found", "mismatched revision"])("does not substitute current content when pinned lookup fails: %s", async (reason) => {
+  window.history.replaceState({}, "", `/assets/${asset.id}?revision=rev_pinned&release=rls_answer`);
+  if (reason === "mismatched revision") getAssetRevisionMock.mockResolvedValueOnce({ ...pinnedRevision(), id: "rev_wrong" });
+  else getAssetRevisionMock.mockRejectedValueOnce(new Error(reason));
+  render(<App />);
+  expect(await screen.findByRole("alert")).toHaveTextContent("指定知识修订读取失败");
+  expect(screen.queryByRole("heading", { name: "Net revenue" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "Pinned knowledge" })).not.toBeInTheDocument();
+});
+
+it("loads an uncached correction's current baseline while preserving the answer pin as context", async () => {
+  vi.mocked(getSession).mockResolvedValueOnce({ ...session, workspaces: session.workspaces.map((item) => ({ ...item, capabilities: [...item.capabilities, "asset.propose"] })) });
+  const id = "ast_uncached";
+  window.history.replaceState({}, "", `/assets/${id}?revision=rev_pinned&release=rls_answer`);
+  getAssetRevisionMock.mockResolvedValueOnce(pinnedRevision(id));
+  const detail = await defaultGetAssetImplementation!();
+  getAssetMock.mockResolvedValueOnce({ ...detail, id, currentRevisionId: "rev_current", currentRevision: { ...detail.currentRevision, id: "rev_current", assetId: id, content: { displayName: "Current off-page knowledge", definition: "Current editable baseline", spec: {} } } });
+  render(<App />);
+  await userEvent.click(await screen.findByRole("button", { name: "修订当前知识" }));
+  const workbench = await screen.findByRole("region", { name: "Current off-page knowledge 知识修订工作台" });
+  expect(within(workbench).getByLabelText("业务定义候选值")).toHaveValue("Current editable baseline");
+  expect((within(workbench).getByLabelText("知识修订原因") as HTMLTextAreaElement).value).toContain(`${id} / rev_pinned / rls_answer`);
+  expect(getAssetMock).toHaveBeenCalledWith(workspace.id, id);
+  expect(window.location.pathname).toBe(`/assets/${id}`);
+  expect(window.location.search).toBe("");
+});
+
+it("does not offer pinned correction to a consumer without proposal permission", async () => {
+  window.history.replaceState({}, "", `/assets/${asset.id}?revision=rev_pinned&release=rls_answer`);
+  getAssetRevisionMock.mockResolvedValueOnce(pinnedRevision());
+  render(<App />);
+  expect(await screen.findByRole("button", { name: "修订当前知识" })).toBeDisabled();
+  expect(screen.getByText("当前身份没有提出知识修订的权限。")).toBeVisible();
+  expect(screen.queryByRole("region", { name: "知识修订工作台" })).not.toBeInTheDocument();
+});
+
 function CatalogProjectionProbe() {
   const runtime = useCatalogRuntime();
   return <div>
     <button disabled={runtime.loading || !runtime.workspaceId} onClick={() => void runtime.ensureAsset(asset.id)}>读取生产资产</button>
     <output data-testid="production-projection">{runtime.assets.map(item => `${item.name}|${item.owner}`).join(";")}</output>
+    <output data-testid="summary-projection">{JSON.stringify(runtime.assets.map(item => ({ detailLoaded: item.detailLoaded, revision: item.revision, readiness: item.readiness, deployment: item.deployment.state, workflow: item.revisionRecord.workflowState })))}</output>
   </div>;
 }
 
@@ -322,6 +419,36 @@ describe("production catalog", () => {
     const detail = await screen.findByRole("region", { name: "发布 #42 详情" });
     expect(detail).toHaveTextContent("rls_01arz3ndektsv4rrffq69g5fav");
     expect(detail).toHaveTextContent("release_manifests");
+    expect(within(detail).getByText("release_manifests")).not.toBeVisible();
+    expect(within(detail).queryByText("使用影响")).not.toBeInTheDocument();
+  });
+
+  it("uses the pinned revision name once in the release manifest and keeps provenance folded", async () => {
+    const base = await getRelease(workspace.id, "rls_01arz3ndektsv4rrffq69g5fav");
+    const oldRevisionId = "rev_01arz3ndektsv4rrffq69g5faw";
+    vi.mocked(getRelease).mockResolvedValueOnce({ ...base, manifest: { assets: [{ assetId: asset.id, revisionId: oldRevisionId, compatibility: {}, position: 0 }], objects: [] } });
+    listAssetRevisionsMock.mockResolvedValue({ items: [{ id: oldRevisionId, assetId: asset.id, sequence: 2, schemaVersion: "1.0.0", contentDigest: "c".repeat(64), content: { displayName: "历史净收入" }, createdBy: "catalog-web", createdAt: asset.updatedAt }], page: { limit: 100, total: 1 } });
+    window.history.replaceState({}, "", `/governance?release=${base.id}`);
+    render(<App />);
+    const detail = await screen.findByRole("region", { name: "发布 #42 详情" });
+    expect(await within(detail).findByText("历史净收入")).toBeVisible();
+    const contents = within(detail).getByRole("region", { name: "发布内容" });
+    expect(within(contents).getAllByText("历史净收入")).toHaveLength(1);
+    expect(within(contents).queryByText(asset.title)).not.toBeInTheDocument();
+    expect(within(contents).queryByText(asset.id)).not.toBeInTheDocument();
+    expect(within(detail).getByText(base.manifestDigest)).not.toBeVisible();
+    await userEvent.click(within(detail).getByText("发布追溯"));
+    expect(within(detail).getByText(base.manifestDigest)).toBeVisible();
+  });
+
+  it("keeps unavailable release impact visible instead of implying no consumers", async () => {
+    const base = await getRelease(workspace.id, "rls_01arz3ndektsv4rrffq69g5fav");
+    vi.mocked(getRelease).mockResolvedValueOnce({ ...base, consumerImpactAvailability: "forbidden", consumerImpact: undefined });
+    window.history.replaceState({}, "", `/governance?release=${base.id}`);
+    render(<App />);
+    const detail = await screen.findByRole("region", { name: "发布 #42 详情" });
+    expect(within(detail).getByRole("alert")).toHaveTextContent("消费影响无权访问");
+    expect(within(detail).queryByText(/当前版本使用方 0/)).not.toBeInTheDocument();
   });
 
   it("fetches an exact proposal deep link even when the target is not on the first proposal page", async () => {
@@ -341,7 +468,13 @@ describe("production catalog", () => {
     await user.click(screen.getByRole("button", { name: "知识库" }));
     expect((await screen.findAllByText("Net revenue")).length).toBeGreaterThan(0);
     expect(screen.getByText("net_revenue")).toBeVisible();
-    expect(screen.getByRole("button", { name: "打开语义资产 Net revenue" })).toHaveTextContent("待确认");
+    const summaryRow = screen.getByRole("button", { name: "打开语义资产 Net revenue" });
+    expect(summaryRow).toHaveTextContent("发布状态待加载");
+    expect(summaryRow).toHaveTextContent("就绪度待加载");
+    expect(summaryRow).toHaveTextContent("关系与实现待加载");
+    expect(summaryRow).toHaveTextContent("责任信息待加载");
+    expect(summaryRow).not.toHaveTextContent(/未发布|@0|0\/6|项需关注|门禁通过|未分配|0 关系|0 绑定|0 个 JoinContract/);
+    expect(within(summaryRow).queryByRole("progressbar")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "打开语义资产 Net revenue" }));
     expect(await screen.findByRole("heading", { name: "Net revenue", level: 1 })).toBeVisible();
@@ -352,7 +485,7 @@ describe("production catalog", () => {
     expect(screen.getByRole("region", { name: "资产权威分区" })).toHaveTextContent("读取失败");
     const assetDetail = screen.getByRole("region", { name: "语义资产详情" });
     expect(assetDetail.querySelector(".asset-header-release")).toHaveTextContent("未发布");
-    expect(assetDetail).toHaveTextContent("当前 revision 状态草稿");
+    expect(assetDetail).toHaveTextContent("当前修订状态草稿");
     expect(assetDetail).toHaveTextContent("生产固定 revision尚未发布");
     await user.click(screen.getByRole("tab", { name: "本体关系" }));
     expect(screen.getByText("语义关系无权访问")).toBeVisible();
@@ -362,6 +495,111 @@ describe("production catalog", () => {
     expect(screen.getByText("JoinContract读取失败")).toBeVisible();
     await user.click(screen.getByRole("tab", { name: "可信度" }));
     expect(screen.getByText("Schema validation")).toBeVisible();
+  });
+
+  it("does not project missing summary details as zero-version or failed readiness", async () => {
+    const detailCalls = getAssetMock.mock.calls.length;
+    render(<CatalogRuntimeProvider><CatalogProjectionProbe /></CatalogRuntimeProvider>);
+    await waitFor(() => expect(screen.getByRole("button", { name: "读取生产资产" })).toBeEnabled());
+    expect(JSON.parse(screen.getByTestId("summary-projection").textContent!)).toEqual([{
+      detailLoaded: false, revision: "版本待加载", readiness: [], deployment: "unknown", workflow: "unknown",
+    }]);
+    expect(getAssetMock).toHaveBeenCalledTimes(detailCalls);
+  });
+
+  it.each(["draft", "released"])("keeps cold %s deep links from reporting an empty version result", async (status) => {
+    const detailCalls = getAssetMock.mock.calls.length;
+    window.history.replaceState({}, "", `/assets?status=${status}`);
+    render(<App />);
+    expect(await screen.findByRole("button", { name: "打开语义资产 Net revenue" })).toBeVisible();
+    const versions = screen.getByRole("group", { name: "知识版本筛选" });
+    expect(within(versions).getByRole("button", { name: "全部 1" })).toHaveAttribute("aria-pressed", "true");
+    for (const name of ["正式版 待确认", "草稿 待确认"]) {
+      const button = within(versions).getByRole("button", { name });
+      expect(button).toBeDisabled();
+      expect(button).toHaveAccessibleDescription("版本筛选暂不可用，当前显示全部版本。");
+      await userEvent.click(button);
+    }
+    expect(screen.getByText("版本筛选暂不可用，当前显示全部版本。")).toBeVisible();
+    expect(screen.queryByText("没有匹配知识资产")).not.toBeInTheDocument();
+    expect(getAssetMock).toHaveBeenCalledTimes(detailCalls);
+  });
+
+  it("does not turn one loaded published detail into a complete formal count", async () => {
+    const second = { ...asset, id: "ast_01arz3ndektsv4rrffq69g5faw", address: "commerce.gross_revenue", title: "Gross revenue" };
+    listAssetsMock.mockResolvedValue({ items: [asset, second], page: { limit: 100, total: 2 } });
+    const detail = await defaultGetAssetImplementation!();
+    getAssetMock.mockResolvedValue({ ...detail, authoritySections: detail.authoritySections.map((section: { kind: string }) => section.kind === "released_state" ? {
+      ...section, availability: "available", revisionId: asset.currentRevisionId, releaseId: "rls_01arz3ndektsv4rrffq69g5fav", releaseSequence: 5,
+    } : section) });
+    const detailCalls = getAssetMock.mock.calls.length;
+    window.history.replaceState({}, "", "/assets");
+    render(<App />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "打开语义资产 Net revenue" }));
+    expect(await screen.findByRole("region", { name: "语义资产详情" })).toHaveTextContent("生产");
+    await user.click(screen.getByRole("button", { name: "返回知识目录" }));
+    expect(screen.getByRole("button", { name: "打开语义资产 Net revenue" })).toHaveTextContent("正式版");
+    expect(screen.getByRole("button", { name: "打开语义资产 Gross revenue" })).toHaveTextContent("发布状态待加载");
+    expect(screen.getByRole("button", { name: "正式版 待确认" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "正式版 1" })).not.toBeInTheDocument();
+    expect(getAssetMock).toHaveBeenCalledTimes(detailCalls + 1);
+    expect(getAssetMock).toHaveBeenLastCalledWith(workspace.id, asset.id);
+  });
+
+  it("keeps version filters unavailable while an unread catalog page remains", async () => {
+    const second = { ...asset, id: "ast_01arz3ndektsv4rrffq69g5faw", address: "commerce.gross_revenue", title: "Gross revenue", currentRevisionId: "rev_01arz3ndektsv4rrffq69g5faw" };
+    listAssetsMock.mockImplementation(async (_workspaceId: string, _search: string, _assetType: string, cursor?: string) => cursor
+      ? { items: [second], page: { limit: 1, total: 2 } }
+      : { items: [asset], page: { limit: 1, total: 2, nextCursor: "assets-next" } });
+    const detailCalls = getAssetMock.mock.calls.length;
+    window.history.replaceState({}, "", `/assets/${asset.id}`);
+    render(<App />);
+    expect(await screen.findByRole("region", { name: "语义资产详情" })).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "返回知识目录" }));
+    expect(await screen.findByRole("button", { name: "打开语义资产 Net revenue" })).toHaveTextContent("草稿 @3");
+    expect(screen.getByRole("button", { name: "草稿 待确认" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "正式版 待确认" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "加载更多资产" })).toBeEnabled();
+    expect(document.querySelector(".catalog-summary")).toHaveTextContent("已加载 1 / 2 个语义资产");
+    await userEvent.click(screen.getByRole("button", { name: "加载更多资产" }));
+    expect(await screen.findByRole("button", { name: "打开语义资产 Gross revenue" })).toHaveTextContent("发布状态待加载");
+    expect(screen.getByRole("button", { name: "草稿 待确认" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "加载更多资产" })).not.toBeInTheDocument();
+    expect(getAssetMock).toHaveBeenCalledTimes(detailCalls + 1);
+
+    const detail = await defaultGetAssetImplementation!();
+    getAssetMock.mockResolvedValue({ ...detail, ...second, currentRevision: { ...detail.currentRevision, id: second.currentRevisionId, assetId: second.id, content: { title: second.title } }, authoritySections: detail.authoritySections.map((section: { kind: string }) => section.kind === "released_state" ? {
+      ...section, availability: "available", revisionId: second.currentRevisionId, releaseId: "rls_01arz3ndektsv4rrffq69g5fav", releaseSequence: 5,
+    } : section) });
+    await userEvent.click(screen.getByRole("button", { name: "打开语义资产 Gross revenue" }));
+    expect(await screen.findByRole("heading", { name: "Gross revenue", level: 1 })).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "返回知识目录" }));
+    expect(screen.getByRole("button", { name: "草稿 1" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "正式版 1" })).toBeEnabled();
+    expect(screen.queryByText("版本筛选暂不可用，当前显示全部版本。")).not.toBeInTheDocument();
+    expect(getAssetMock).toHaveBeenCalledTimes(detailCalls + 2);
+  });
+
+  it.each(["missing", "forbidden", "failed", "available-without-revision"])("does not infer draft or unpublished from unavailable release authority: %s", async (availability) => {
+    const detail = await defaultGetAssetImplementation!();
+    getAssetMock.mockResolvedValue({ ...detail, authoritySections: detail.authoritySections.flatMap((section: { kind: string }) => {
+      if (section.kind !== "released_state") return [section];
+      if (availability === "missing") return [];
+      return [{ ...section, availability: availability === "available-without-revision" ? "available" : availability, revisionId: undefined }];
+    }) });
+    window.history.replaceState({}, "", `/assets/${asset.id}`);
+    render(<App />);
+    const detailView = await screen.findByRole("region", { name: "语义资产详情" });
+    expect(detailView.querySelector(".asset-header-release")).toHaveTextContent("不可用");
+    expect(detailView.querySelector(".asset-header-release .status-badge")).toHaveClass("status-neutral");
+    expect(detailView).not.toHaveTextContent("生产固定 revision尚未发布");
+    await userEvent.click(screen.getByRole("button", { name: "返回知识目录" }));
+    const row = await screen.findByRole("button", { name: "打开语义资产 Net revenue" });
+    expect(row).toHaveTextContent("发布状态不可用");
+    expect(row).not.toHaveTextContent(/草稿|未发布|正式版/);
+    expect(screen.getByRole("button", { name: "草稿 待确认" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "正式版 待确认" })).toBeDisabled();
   });
 
   it("projects production displayName and ownerPrincipalId without losing legacy compatibility", async () => {
@@ -405,7 +643,7 @@ describe("production catalog", () => {
     const assetDetail = await screen.findByRole("region", { name: "语义资产详情" });
     const authority = screen.getByRole("region", { name: "资产权威分区" });
     expect(assetDetail).toHaveTextContent("当前草稿");
-    expect(assetDetail).toHaveTextContent("当前 revision 状态草稿");
+    expect(assetDetail).toHaveTextContent("当前修订状态草稿");
     expect(assetDetail).toHaveTextContent(`生产固定 revision${releasedRevisionId}`);
     expect(assetDetail).not.toHaveTextContent("生产健康");
     expect(authority).toHaveTextContent(asset.currentRevisionId);
@@ -450,7 +688,7 @@ describe("production catalog", () => {
     await user.click(await screen.findByRole("button", { name: "打开语义资产 Net revenue" }));
     const assetDetail = await screen.findByRole("region", { name: "语义资产详情" });
     expect(assetDetail).toHaveTextContent("生产");
-    expect(assetDetail).toHaveTextContent("当前 revision 状态已发布");
+    expect(assetDetail).toHaveTextContent("当前修订状态已发布");
     expect(assetDetail).toHaveTextContent("验证不完整");
     expect(assetDetail).not.toHaveTextContent("健康");
   });
@@ -482,8 +720,8 @@ describe("production catalog", () => {
     await user.click(await screen.findByRole("tab", { name: "本体关系" }));
     const relations = screen.getByRole("region", { name: "权威语义关系" });
     const lineage = screen.getByRole("region", { name: "权威数据血缘" });
-    expect(relations).toHaveTextContent("服务端未返回 revision 基准");
-    expect(lineage).toHaveTextContent("服务端未返回 revision 基准");
+    expect(relations).toHaveTextContent("版本基准未提供");
+    expect(lineage).toHaveTextContent("版本基准未提供");
     expect(relations).not.toHaveTextContent(asset.currentRevisionId);
     expect(lineage).not.toHaveTextContent(asset.currentRevisionId);
     expect(lineage).toHaveTextContent("服务端未返回 release 基准");
@@ -509,9 +747,95 @@ describe("production catalog", () => {
     await user.click(await screen.findByRole("tab", { name: "定义" }));
     const revisions = await screen.findByRole("region", { name: "不可变修订历史" });
     expect(revisions).toHaveTextContent("1 / 2 项");
-    await user.click(within(revisions).getByRole("button", { name: "加载更多修订" }));
-    expect(await within(revisions).findByText("@2")).toBeVisible();
+    await user.click(within(revisions).getByRole("button", { name: "加载更多版本" }));
+    expect(await within(revisions).findByText("版本 2")).toBeVisible();
     expect(listAssetRevisionsMock).toHaveBeenLastCalledWith(workspace.id, asset.id, "revisions-next");
+  });
+
+  it.each([false, true])("keeps qualified-address server matches visible with cached detail: %s", async (loadDetail) => {
+    const other = { ...asset, id: "ast_01arz3ndektsv4rrffq69g5faw", address: "commerce.gross_revenue", title: "Gross revenue" };
+    listAssetsMock.mockImplementation(async (_workspaceId: string, search: string) => {
+      const items = search === asset.address ? [asset] : search ? [] : [asset, other];
+      return { items, page: { limit: 100, total: items.length } };
+    });
+    const detail = await defaultGetAssetImplementation!();
+    getAssetMock.mockResolvedValue({ ...detail, authoritySections: detail.authoritySections.map((section: { kind: string }) => section.kind === "released_state" ? {
+      ...section, availability: "available", revisionId: asset.currentRevisionId, releaseId: "rls_01arz3ndektsv4rrffq69g5fav", releaseSequence: 5,
+    } : section) });
+    const detailCalls = getAssetMock.mock.calls.length;
+    window.history.replaceState({}, "", "/assets");
+    render(<App />);
+    const user = userEvent.setup();
+    await screen.findByRole("button", { name: "打开语义资产 Net revenue" });
+    if (loadDetail) {
+      await user.click(screen.getByRole("button", { name: "打开语义资产 Net revenue" }));
+      await screen.findByRole("region", { name: "语义资产详情" });
+      await user.click(screen.getByRole("button", { name: "返回知识目录" }));
+    }
+    await user.type(screen.getByRole("searchbox", { name: "搜索知识目录" }), asset.address);
+    await waitFor(() => expect(listAssetsMock).toHaveBeenLastCalledWith(workspace.id, asset.address, "", undefined, expect.any(AbortSignal)));
+    const row = await screen.findByRole("button", { name: "打开语义资产 Net revenue" });
+    expect(row).toHaveTextContent(loadDetail ? "正式版" : "发布状态待加载");
+    expect(screen.queryByRole("button", { name: "打开语义资产 Gross revenue" })).not.toBeInTheDocument();
+    expect(document.querySelector(".catalog-summary")).toHaveTextContent("显示 1 · 已加载 1 / 1 个语义资产");
+    expect(screen.queryByText("没有匹配知识资产")).not.toBeInTheDocument();
+
+    await user.clear(screen.getByRole("searchbox", { name: "搜索知识目录" }));
+    await user.type(screen.getByRole("searchbox", { name: "搜索知识目录" }), "no-catalog-match");
+    await waitFor(() => expect(listAssetsMock).toHaveBeenLastCalledWith(workspace.id, "no-catalog-match", "", undefined, expect.any(AbortSignal)));
+    await waitFor(() => expect(document.querySelector(".catalog-summary")).toHaveTextContent("显示 0 · 已加载 0 / 0 个语义资产"));
+    expect(screen.queryByRole("button", { name: /^打开语义资产 / })).not.toBeInTheDocument();
+    expect(getAssetMock).toHaveBeenCalledTimes(detailCalls + Number(loadDetail));
+  });
+
+  it("keeps server-only content matches across search pages without reintroducing cached off-page assets", async () => {
+    const first = { ...asset, id: "ast_01arz3ndektsv4rrffq69g5faw", address: "commerce.accounts", title: "Accounts", summary: "Synthetic account definition." };
+    const second = { ...asset, id: "ast_01arz3ndektsv4rrffq69g5fax", address: "commerce.loyalty", title: "Loyalty", summary: "Synthetic loyalty definition." };
+    const search = "customer retained";
+    // The API has matched revision content that is absent from these summaries.
+    listAssetsMock.mockImplementation(async (_workspaceId: string, query: string, _type: string, cursor?: string) => query === search
+      ? cursor ? { items: [second], page: { limit: 1, total: 2 } } : { items: [first], page: { limit: 1, total: 2, nextCursor: "content-next" } }
+      : { items: [asset], page: { limit: 100, total: 1 } });
+    const detailCalls = getAssetMock.mock.calls.length;
+    window.history.replaceState({}, "", "/assets");
+    render(<App />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "打开语义资产 Net revenue" }));
+    await screen.findByRole("region", { name: "语义资产详情" });
+    await user.click(screen.getByRole("button", { name: "返回知识目录" }));
+    await user.type(screen.getByRole("searchbox", { name: "搜索知识目录" }), search);
+    expect(await screen.findByRole("button", { name: "打开语义资产 Accounts" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "打开语义资产 Net revenue" })).not.toBeInTheDocument();
+    expect(document.querySelector(".catalog-summary")).toHaveTextContent("显示 1 · 已加载 1 / 2 个语义资产");
+    await user.click(screen.getByRole("button", { name: "加载更多资产" }));
+    expect(await screen.findByRole("button", { name: "打开语义资产 Loyalty" })).toBeVisible();
+    expect(screen.getAllByRole("button", { name: /^打开语义资产 / })).toHaveLength(2);
+    expect(listAssetsMock).toHaveBeenLastCalledWith(workspace.id, search, "", "content-next");
+    expect(document.querySelector(".catalog-summary")).toHaveTextContent("显示 2 · 已加载 2 / 2 个语义资产");
+    expect(getAssetMock).toHaveBeenCalledTimes(detailCalls + 1);
+  });
+
+  it("keeps the latest server search membership when an older first page resolves late", async () => {
+    const current = { ...asset, id: "ast_01arz3ndektsv4rrffq69g5faw", address: "commerce.current", title: "Current model" };
+    const stale = { ...asset, id: "ast_01arz3ndektsv4rrffq69g5fax", address: "commerce.stale", title: "Stale model" };
+    let finishOld!: (value: { items: typeof asset[]; page: { limit: number; total: number } }) => void;
+    const oldPage = new Promise(resolve => { finishOld = resolve; });
+    listAssetsMock.mockImplementation(async (_workspaceId: string, query: string) => query === "old tokens" ? oldPage
+      : { items: query === "new tokens" ? [current] : [asset], page: { limit: 100, total: 1 } });
+    window.history.replaceState({}, "", "/assets");
+    render(<App />);
+    const user = userEvent.setup();
+    await screen.findByRole("button", { name: "打开语义资产 Net revenue" });
+    const searchbox = screen.getByRole("searchbox", { name: "搜索知识目录" });
+    await user.type(searchbox, "old tokens");
+    await waitFor(() => expect(listAssetsMock).toHaveBeenLastCalledWith(workspace.id, "old tokens", "", undefined, expect.any(AbortSignal)));
+    await user.clear(searchbox);
+    await user.type(searchbox, "new tokens");
+    expect(await screen.findByRole("button", { name: "打开语义资产 Current model" })).toBeVisible();
+    await act(async () => finishOld({ items: [stale], page: { limit: 100, total: 1 } }));
+    expect(screen.queryByRole("button", { name: "打开语义资产 Stale model" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "打开语义资产 Current model" })).toBeVisible();
+    expect(document.querySelector(".catalog-summary")).toHaveTextContent("显示 1 · 已加载 1 / 1 个语义资产");
   });
 
   it("discards a pending catalog page when the server search fingerprint changes", async () => {
@@ -545,7 +869,7 @@ describe("production catalog", () => {
       ...detail,
       authoritySections: detail.authoritySections.map((section: { kind: string }) => {
         if (section.kind === "physical_bindings") return { ...section, availability: "available", records: [
-          { kind: "physical_binding", id: "pbd_01arz3ndektsv4rrffq69g5fav", authority: "physical_bindings", status: "active", label: "Revenue amount", version: 4, physicalBinding: { assetId: asset.id, datasetId: "pds_orders", fieldId: "pdf_revenue", transform: "gross_amount - refunds" } },
+          { kind: "physical_binding", id: "pbd_01arz3ndektsv4rrffq69g5fav", authority: "physical_bindings", status: "available", label: "01a0c33e-5619-7ec3-bf3f-3122aef695bb", version: 4, physicalBinding: { assetId: asset.id, datasetId: "pds_orders", fieldId: "pdf_revenue", transform: "gross_amount - refunds" } },
           { kind: "model_grain", id: "grn_01arz3ndektsv4rrffq69g5fav", authority: "model_grains", status: "active", label: "Order grain", version: 2, modelGrain: { assetId: asset.id, grainExpression: "one row per order", grainFieldRefs: ["pdf_order_id"], documentedBy: "evd_grain" } },
           { kind: "entity_key", id: "key_01arz3ndektsv4rrffq69g5fav", authority: "entity_keys", status: "active", label: "Order key", version: 1, entityKey: { assetId: asset.id, keyFieldRefs: ["pdf_order_id"], uniquenessSemantics: "deduplicated" } },
         ], recordsPage: { limit: 3, total: 4, nextCursor: "physical-next" } };
@@ -564,18 +888,27 @@ describe("production catalog", () => {
     await user.click(await screen.findByRole("button", { name: "打开语义资产 Net revenue" }));
     await user.click(await screen.findByRole("tab", { name: "实现" }));
     expect(screen.getByText("gross_amount - refunds")).toBeVisible();
+    expect(screen.getByText("数据绑定", { exact: true })).toBeVisible();
+    expect(screen.getByText("可用", { exact: true })).toBeVisible();
+    expect(screen.getByText("01a0c33e-5619-7ec3-bf3f-3122aef695bb")).not.toBeVisible();
     expect(screen.getByText("one row per order")).toBeVisible();
     expect(screen.getByText("deduplicated")).toBeVisible();
     expect(screen.getByText("orders.customer_id = customers.id")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "加载更多权威记录" }));
-    expect(await screen.findByText("pdf_currency")).toBeVisible();
+    expect(await screen.findByText("pdf_currency")).not.toBeVisible();
+    await user.click(within(screen.getByText("Currency").closest("article")!).getByText("记录详情"));
+    expect(screen.getByText("pdf_currency")).toBeVisible();
     expect(listAssetAuthorityRecordsMock).toHaveBeenCalledWith(workspace.id, asset.id, "physical_bindings", "physical-next");
 
     await user.click(screen.getByRole("tab", { name: "本体关系" }));
+    expect(screen.getByText("outgoing · depends_on")).not.toBeVisible();
+    for (const summary of screen.getAllByText("记录详情")) await user.click(summary);
     expect(screen.getByText("outgoing · depends_on")).toBeVisible();
     expect(screen.getByText("pds_raw_orders")).toBeVisible();
     expect(screen.getByText("car_orders_model")).toBeVisible();
     await user.click(screen.getByRole("tab", { name: "交付与影响" }));
+    expect(screen.getByText("csm_finance · pinned")).not.toBeVisible();
+    for (const summary of screen.getAllByText("记录详情")) await user.click(summary);
     expect(screen.getByText("csm_finance · pinned")).toBeVisible();
     expect(screen.getByText('{"schema":"v2"}')).toBeVisible();
   });

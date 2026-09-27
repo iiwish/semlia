@@ -5,6 +5,7 @@ import {
   createAsset as createCatalogAsset,
   createWorkspace as createCatalogWorkspace,
   getAsset,
+  getAssetRevision,
   listAssetAuthorityRecords,
   listAssetRevisions,
   listAssets,
@@ -77,10 +78,12 @@ interface CatalogRuntimeValue {
   appendError: string;
   detailStates: Record<string, { state: "idle" | "loading" | "ready" | "error"; error: string }>;
   revisionStates: Record<string, CatalogRevisionState>;
+  exactRevisionStates: Record<string, { state: "loading" | "ready" | "error"; error: string; revision?: CatalogRevision }>;
   authorityPageStates: Record<string, CatalogAuthorityPageState>;
   setWorkspaceId: (workspaceId: string) => void;
   setQuery: (query: string, assetType: SemanticAssetType | "") => void;
-  ensureAsset: (assetId: string) => Promise<void>;
+  ensureAsset: (assetId: string) => Promise<Asset | undefined>;
+  ensureRevision: (assetId: string, revisionId: string) => Promise<CatalogRevision | undefined>;
   ensureRevisions: (assetId: string) => Promise<void>;
   loadMoreAssets: () => Promise<void>;
   loadMoreRevisions: (assetId: string) => Promise<void>;
@@ -91,6 +94,10 @@ interface CatalogRuntimeValue {
 }
 
 export const CatalogRuntimeContext = createContext<CatalogRuntimeValue | null>(null);
+
+export function revisionCacheKey(workspaceId: string, assetId: string, revisionId: string) {
+  return JSON.stringify([workspaceId, assetId, revisionId]);
+}
 
 export function CatalogRuntimeProvider({ children }: { children: ReactNode }) {
   const sessionRuntime = useOptionalSessionRuntime();
@@ -106,6 +113,10 @@ export function CatalogRuntimeProvider({ children }: { children: ReactNode }) {
   const [refreshVersion, setRefreshVersion] = useState(0);
   const [detailStates, setDetailStates] = useState<Record<string, { state: "idle" | "loading" | "ready" | "error"; error: string }>>({});
   const [revisionStates, setRevisionStates] = useState<Record<string, CatalogRevisionState>>({});
+  const [exactRevisionStates, setExactRevisionStates] = useState<CatalogRuntimeValue["exactRevisionStates"]>({});
+  const exactRevisionsRef = useRef<Record<string, CatalogRevision>>({});
+  const revisionRequestsRef = useRef(new Map<string, Promise<CatalogRevision | undefined>>());
+  const detailRequestsRef = useRef(new Map<string, Promise<Asset | undefined>>());
   const [authorityPageStates, setAuthorityPageStates] = useState<Record<string, CatalogAuthorityPageState>>({});
   const workspaceRef = useRef(workspaceId);
   const workspaceGenerationRef = useRef(0);
@@ -120,11 +131,15 @@ export function CatalogRuntimeProvider({ children }: { children: ReactNode }) {
     catalogRequestRef.current = { ...catalogRequestRef.current, workspaceId: nextWorkspaceId, generation: catalogRequestRef.current.generation + 1 };
     assetsRef.current = [];
     revisionStatesRef.current = {};
+    exactRevisionsRef.current = {};
+    revisionRequestsRef.current.clear();
+    detailRequestsRef.current.clear();
     setWorkspaceIdState(nextWorkspaceId);
     setAssets([]);
     setCatalogAssetIds([]);
     setDetailStates({});
     setRevisionStates({});
+    setExactRevisionStates({});
     setAuthorityPageStates({});
     setPageState({ loadingMore: false, appendError: "" });
     setLoading(Boolean(nextWorkspaceId));
@@ -345,27 +360,66 @@ export function CatalogRuntimeProvider({ children }: { children: ReactNode }) {
     }
   }, [assets, authorityPageStates, workspaceId]);
 
-  const ensureAsset = useCallback(async (assetId: string) => {
-    if (!workspaceId) return;
-    const requestWorkspaceId = workspaceId;
-    const requestGeneration = workspaceGenerationRef.current;
-    setDetailStates((current) => ({ ...current, [assetId]: { state: "loading", error: "" } }));
-    try {
-      const detail = await getAsset(workspaceId, assetId);
-      if (workspaceRef.current !== requestWorkspaceId || workspaceGenerationRef.current !== requestGeneration) return;
-      const projected = projectDetail(workspaceId, detail);
-      setAssets((current) => current.some((item) => item.id === assetId)
-        ? current.map((item) => item.id === assetId ? projected : item)
-        : [projected, ...current]);
-      setRevisionStates((current) => Object.fromEntries(Object.entries(current).filter(([key]) => key !== assetId)));
-      setAuthorityPageStates((current) => Object.fromEntries(Object.entries(current).filter(([key]) => !key.startsWith(`${assetId}:`))));
-      setDetailStates((current) => ({ ...current, [assetId]: { state: "ready", error: "" } }));
-      setError("");
-    } catch (reason) {
-      if (workspaceRef.current !== requestWorkspaceId || workspaceGenerationRef.current !== requestGeneration) return;
-      const message = reason instanceof Error ? reason.message : "无法加载资产详情。";
-      setDetailStates((current) => ({ ...current, [assetId]: { state: "error", error: message } }));
-    }
+  const ensureRevision = useCallback((assetId: string, revisionId: string): Promise<CatalogRevision | undefined> => {
+    if (!workspaceId) return Promise.resolve(undefined);
+    const key = revisionCacheKey(workspaceId, assetId, revisionId);
+    const cached = exactRevisionsRef.current[key];
+    if (cached) return Promise.resolve(cached);
+    const pending = revisionRequestsRef.current.get(key);
+    if (pending) return pending;
+    const generation = workspaceGenerationRef.current;
+    const currentRequest = () => workspaceRef.current === workspaceId && workspaceGenerationRef.current === generation;
+    setExactRevisionStates((current) => ({ ...current, [key]: { state: "loading", error: "" } }));
+    const request = getAssetRevision(workspaceId, assetId, revisionId).then((revision) => {
+      if (!currentRequest()) return;
+      if (revision.assetId !== assetId || revision.id !== revisionId) throw new Error("服务端返回了不匹配的知识修订。");
+      exactRevisionsRef.current[key] = revision;
+      setExactRevisionStates((current) => ({ ...current, [key]: { state: "ready", error: "", revision } }));
+      return revision;
+    }).catch((reason: unknown) => {
+      if (!currentRequest()) return undefined;
+      setExactRevisionStates((current) => ({ ...current, [key]: { state: "error", error: reason instanceof Error ? reason.message : "无法读取指定知识修订。" } }));
+      return undefined;
+    }).finally(() => {
+      if (revisionRequestsRef.current.get(key) === request) revisionRequestsRef.current.delete(key);
+    });
+    revisionRequestsRef.current.set(key, request);
+    return request;
+  }, [workspaceId]);
+
+  const ensureAsset = useCallback((assetId: string): Promise<Asset | undefined> => {
+    const key = `${workspaceId}:${assetId}`;
+    const pending = detailRequestsRef.current.get(key);
+    if (pending) return pending;
+    const load = async () => {
+      if (!workspaceId) return;
+      const requestWorkspaceId = workspaceId;
+      const requestGeneration = workspaceGenerationRef.current;
+      setDetailStates((current) => ({ ...current, [assetId]: { state: "loading", error: "" } }));
+      try {
+        const detail = await getAsset(workspaceId, assetId);
+        if (workspaceRef.current !== requestWorkspaceId || workspaceGenerationRef.current !== requestGeneration) return;
+        if (detail.id !== assetId || detail.currentRevision && detail.currentRevision.assetId !== assetId) throw new Error("服务端返回了不匹配的知识对象。");
+        const projected = projectDetail(workspaceId, detail);
+        setAssets((current) => current.some((item) => item.id === assetId)
+          ? current.map((item) => item.id === assetId ? projected : item)
+          : [projected, ...current]);
+        setRevisionStates((current) => Object.fromEntries(Object.entries(current).filter(([key]) => key !== assetId)));
+        setAuthorityPageStates((current) => Object.fromEntries(Object.entries(current).filter(([key]) => !key.startsWith(`${assetId}:`))));
+        setDetailStates((current) => ({ ...current, [assetId]: { state: "ready", error: "" } }));
+        setError("");
+        return projected;
+      } catch (reason) {
+        if (workspaceRef.current !== requestWorkspaceId || workspaceGenerationRef.current !== requestGeneration) return;
+        const message = reason instanceof Error ? reason.message : "无法加载资产详情。";
+        setDetailStates((current) => ({ ...current, [assetId]: { state: "error", error: message } }));
+      }
+    };
+    const request = load().finally(() => {
+      if (detailRequestsRef.current.get(key) === request) detailRequestsRef.current.delete(key);
+    });
+    detailRequestsRef.current.set(key, request);
+    return request;
   }, [workspaceId]);
 
   const createWorkspace = useCallback(async (slug: string, displayName: string) => {
@@ -415,10 +469,12 @@ export function CatalogRuntimeProvider({ children }: { children: ReactNode }) {
     appendError: pageState.appendError,
     detailStates,
     revisionStates,
+    exactRevisionStates,
     authorityPageStates,
     setWorkspaceId,
     setQuery,
     ensureAsset,
+    ensureRevision,
     ensureRevisions,
     loadMoreAssets,
     loadMoreRevisions,
@@ -426,7 +482,7 @@ export function CatalogRuntimeProvider({ children }: { children: ReactNode }) {
     createWorkspace,
     createAsset,
     refresh,
-  }), [assetType, assets, authorityPageStates, catalogAssetIds, createAsset, createWorkspace, detailStates, ensureAsset, ensureRevisions, error, loadMoreAssets, loadMoreAuthorityRecords, loadMoreRevisions, loading, pageState, query, refresh, revisionStates, setQuery, setWorkspaceId, workspaceId, workspaces]);
+  }), [assetType, assets, authorityPageStates, catalogAssetIds, createAsset, createWorkspace, detailStates, ensureAsset, ensureRevision, ensureRevisions, error, exactRevisionStates, loadMoreAssets, loadMoreAuthorityRecords, loadMoreRevisions, loading, pageState, query, refresh, revisionStates, setQuery, setWorkspaceId, workspaceId, workspaces]);
 
   return <CatalogRuntimeContext.Provider value={value}>{children}</CatalogRuntimeContext.Provider>;
 }
@@ -502,10 +558,10 @@ function projectAsset(workspaceId: string, summary: CatalogAsset, detail: Catalo
   const domain = stringValue(content.domain) || namespace || "未分域";
 
   const authoritySections = detail?.authoritySections.map((section): AssetAuthoritySection => ({ ...section, values: { ...section.values }, records: section.records.map((record) => ({ ...record })) }));
-  const releaseKnown = Boolean(detail);
   const releasedState = authoritySections?.find((section) => section.kind === "released_state");
   const validationAuthority = authoritySections?.find((section) => section.kind === "validation");
   const hasReleasedBasis = releasedState?.availability === "available" && Boolean(releasedState.revisionId);
+  const releaseKnown = hasReleasedBasis || releasedState?.availability === "not_released";
   const currentRevisionReleased = hasReleasedBasis && releasedState?.revisionId === revisionId;
   const validationRunCount = authorityCount(validationAuthority, "runCount");
   const validationBlockingCount = authorityCount(validationAuthority, "blockerCount");
@@ -523,14 +579,14 @@ function projectAsset(workspaceId: string, summary: CatalogAsset, detail: Catalo
   const validationBasis = validationAuthority?.availability === "available"
     ? validationComplete ? `${validationAuthority.authority} · ${validationRunCount} 次运行` : `${validationAuthority.authority} · 结果不完整`
     : `${validationAuthority?.authority ?? "validation_runs"} · ${validationAuthority?.availability ?? "未返回"}`;
-  const readiness = knowledgeReadiness({ assetType: summary.assetType, revisionId, content, sections: detail?.authoritySections });
+  const readiness = detail ? knowledgeReadiness({ assetType: summary.assetType, revisionId, content, sections: detail.authoritySections }) : [];
 
   return {
     id: summary.id,
     knowledgeSpec: (content.spec ?? {}) as Asset["knowledgeSpec"],
     detailLoaded: Boolean(detail),
     authoritySections,
-    revision: revision?.sequence ? `@${revision.sequence}` : "@0",
+    revision: !detail ? "版本待加载" : revision?.sequence ? `@${revision.sequence}` : "@0",
     namespace,
     key,
     name,
@@ -548,7 +604,7 @@ function projectAsset(workspaceId: string, summary: CatalogAsset, detail: Catalo
     aggregation: typeSpec.aggregation,
     source: evidence[0]?.locator ?? "Semlia Catalog API",
     updatedAt: formatTimestamp(summary.updatedAt),
-    release: !releaseKnown ? "发布状态待加载" : hasReleasedBasis ? releasedState.releaseId ?? `release #${releasedState.releaseSequence ?? "?"}` : "尚未发布",
+    release: !releaseKnown ? detail ? "发布状态不可用" : "发布状态待加载" : hasReleasedBasis ? releasedState.releaseId ?? `release #${releasedState.releaseSequence ?? "?"}` : "尚未发布",
     tags: stringArray(content.tags),
     includes,
     excludes,

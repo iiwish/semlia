@@ -1,0 +1,28 @@
+schema_version: 1
+packet_id: V1-T003-A004
+task_id: V1-T003
+mode: Delegated Execute
+context:
+  contract: docs/specs/v1-convergence/spec.md
+  plan: docs/specs/v1-convergence/plan.md
+  approval: Approved scoped delivery; align a stale test with the already reviewed production-draft workflow without changing product behavior.
+  failure: Final check-source failed deterministically in governance.test.tsx at the removed submit-review button; the case still asserts legacy proposal APIs. The correct UI saves a revision then requires business confirmation.
+allowed_files:
+  - web/src/governance.test.tsx
+  - docs/evidence/V1-T003/final-regression.md
+constraints:
+  - No product code, timing thresholds, worker configuration, skips or retries-until-green.
+  - Preserve the two legacy GovernanceRuntime hook tests and all unrelated governance cases.
+  - Exercise the real Workbench and ProductApp command path, mocking API boundaries only.
+  - Use the canonical five-type contract and exact revision/evidence context. Assert the exact changed field and before/after values, one draft creation, preserved pins and source evidence, and operation navigation only after success.
+  - Assert no automatic business confirmation, validation, review submission or publish. Do not substitute a click-only success assertion.
+  - Existing focused tests retain unknown-result idempotency and double-submit coverage; do not duplicate them without need.
+  - No live database, Docker, browser, model or further delegation.
+validation:
+  - Reproduce the existing named case failure and retain it as RED.
+  - Run the complete governance test file, related revision helper/workbench/ProductApp tests, typecheck and lint.
+  - Independent review and focused regression by a different worker.
+  - The final T005 source gate must rerun from the new frozen inputs.
+handoff:
+  status: Needs_Review
+  evidence: Record the original failure, updated contract, commands/results and unchanged behavior boundary.
