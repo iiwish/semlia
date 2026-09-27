@@ -198,10 +198,19 @@ func TestSmokeJourneyUsesActiveComposeProject(t *testing.T) {
 	if strings.Contains(smoke, "com.docker.compose.project=semlia-local") {
 		t.Error("smoke cleanup must not target the default Compose project literally")
 	}
-	for _, fragment := range []string{"composeProject(t)", `os.Getenv("COMPOSE_PROJECT_NAME")`, "COMPOSE_PROJECT_NAME=", `"label=com.docker.compose.project="+project`} {
+	for _, fragment := range []string{"composeProject(t)", "loadSmokeIsolation(repositoryRoot(t))", "return proof.Project", `"label=com.docker.compose.project="+project`} {
 		if !strings.Contains(smoke, fragment) {
 			t.Errorf("smoke journey missing active-project contract %q", fragment)
 		}
+	}
+	isolation := read(t, "tests/smoke/runtime_isolation_test.go")
+	for _, fragment := range []string{`os.Getenv("SEMLIA_SMOKE_CONTEXT")`, `"--project-name", proof.Project`, `"--env-file", proof.EnvFile`, "proof.verifyOwned(ctx)", "smoke Compose context override refused"} {
+		if !strings.Contains(isolation, fragment) {
+			t.Errorf("smoke isolation missing verified-context contract %q", fragment)
+		}
+	}
+	if strings.Contains(smoke, `".semlia", "dev.env"`) || strings.Contains(isolation, `os.Getenv("COMPOSE_PROJECT_NAME")`) {
+		t.Error("smoke journey must not fall back to an ordinary development project")
 	}
 }
 

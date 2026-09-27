@@ -54,11 +54,17 @@ func TestM0DocumentationContract(t *testing.T) {
 			"make bootstrap",
 			"make dev",
 			"make smoke",
-			"http://127.0.0.1:8080/health/ready",
-			"http://127.0.0.1:8080/api/v1/system/info",
+			"http://127.0.0.1:18081/health/ready",
+			"http://127.0.0.1:18080/api/v1/system/info",
 			"make dev-down",
-			"preview",
-			"disruptive",
+			"existing PostgreSQL 18",
+			"./scripts/dev/ensure-env.sh",
+			"node scripts/dev/native.mjs migrate up",
+			"bootstrap-local-admin",
+			"does **not** migrate automatically",
+			"does not recreate containers or inject an outage",
+			"stops only owned native processes",
+			"independently review/publish an analysis model",
 		},
 		"docs/operations/local-development.md": {
 			"migrate",
@@ -96,5 +102,13 @@ func TestM0DocumentationContract(t *testing.T) {
 	}
 	if strings.Contains(security, "Dependabot monitors") {
 		t.Error("docs/SECURITY.md must distinguish version updates from disabled vulnerability alerts")
+	}
+	for _, path := range []string{"docs/quickstart.md", "docs/operations/troubleshooting.md"} {
+		content := readRepositoryFile(t, path)
+		for _, unsafe := range []string{"rm .semlia/dev.env", "`make smoke` is disruptive", "Stop the other listener"} {
+			if strings.Contains(content, unsafe) {
+				t.Errorf("%s contains obsolete unsafe instruction %q", path, unsafe)
+			}
+		}
 	}
 }

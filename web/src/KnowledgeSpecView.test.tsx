@@ -91,6 +91,12 @@ describe("knowledge detail content", () => {
     expect(screen.getByText(/rev_older/, { selector: "pre" })).not.toBeVisible();
   });
 
+  it("uses historical member names when the current object's definition has advanced", () => {
+    render(<CatalogRuntimeProvider fixtureAssets={[order]} fixtureRevisions={[{ id: "rev_older", assetId: order.id, sequence: 1, schemaVersion: "1.0.0", contentDigest: "synthetic", createdAt: "2026-09-01T00:00:00Z", createdBy: "synthetic", evidence: [], content: { displayName: "历史订单", spec: { members: [{ id: "amount", name: "历史结算金额" }] } } }]}><KnowledgeSpecView type="指标" spec={{ kind: "aggregate", inputRef: { ...ref, revisionId: "rev_older", memberId: "amount" }, aggregation: "sum", unit: "元", nullPolicy: "exclude" }} /></CatalogRuntimeProvider>);
+    expect(screen.getByText("历史订单 · 历史结算金额")).toBeVisible();
+    expect(screen.queryByText("订单 · 支付金额")).not.toBeInTheDocument();
+  });
+
   it("shows incomplete knowledge honestly", () => {
     show("指标");
     expect(screen.getByText("尚未定义指标内容")).toBeVisible();

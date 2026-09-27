@@ -1,0 +1,83 @@
+schema_version: 1
+packet_id: V1-T001-A001
+task_id: V1-T001
+feature_id: v1-convergence
+mode: Delegated Execute
+governance_inputs:
+  principles: [AGENTS.md, docs/SSOT.md]
+  spec: docs/specs/v1-convergence/spec.md
+  plan: docs/specs/v1-convergence/plan.md
+  tasks: docs/specs/v1-convergence/tasks.md
+  checklist: docs/specs/v1-convergence/checklists/requirements.md
+  analysis: docs/specs/v1-convergence/analysis.md
+  approval: User explicitly approved the technical plan on 2026-09-26 and authorized continuous local delivery, synthetic acceptance, subagents and configured model calls.
+work_unit:
+  goal: Build a reproducible isolated normal-runtime acceptance lane with generated commerce data, real login, five-type governed knowledge and independent expected answers; expose real failures without weakening production contracts.
+  requirements: [V1-FR-001, V1-FR-002, V1-FR-003, V1-FR-004, V1-FR-005, V1-NFR-001, V1-NFR-003]
+  dependencies: [approved technical plan]
+  conflicts: [other environment initialization or acceptance script writers]
+codebase_context:
+  read:
+    - internal/demodata/scenario.go
+    - cmd/demo-seed/main.go
+    - scripts/demo/environment.mjs
+    - scripts/demo/provision.mjs
+    - scripts/demo/runtime.mjs
+    - scripts/demo/client.mjs
+    - scripts/dev/native.mjs
+    - internal/testsupport/productionacceptance/main.go
+    - tests/integration/governance/execution_test.go
+    - docs/operations/local-development.md
+  patterns:
+    - Reuse five-type demodata and normal application services; never insert released governance state directly.
+    - Existing demo-seed is tied to the old demo database and must not run against the current workspace.
+    - Existing resume-demo payloads use obsolete entity contracts and cannot be treated as current acceptance.
+    - Governance integration fixtures truncate their own disposable database; never point them at the existing Semlia database.
+execution_constraints:
+  allowed_files:
+    - scripts/acceptance/v1*.mjs
+    - scripts/acceptance/v1/
+    - cmd/v1-acceptance/
+    - tests/acceptance/v1*
+    - docs/evidence/V1-T001/
+  runtime_root: .semlia/v1-acceptance/
+  database:
+    container: semlia-local-postgres-1
+    constraints:
+      - Verify repository ownership and loopback binding before any write.
+      - Create new run-scoped application and source databases and dedicated roles with ownership receipts.
+      - Preserve existing semlia database, accounts, model configuration, source connections, files and native environment.
+      - Use random available loopback ports and protected per-run configuration.
+  secrets:
+    - Parse private env files internally; never print values, complete environment, connection strings or raw child errors containing them.
+    - Reuse configured model endpoint/model/credential only for synthetic inputs and bounded calls; do not mutate source configuration.
+    - Golden answers are verifier-side only and must not be included in knowledge sent to the model.
+  forbidden:
+    - Changes outside allowed files without notifying orchestrator.
+    - Production behavior fixes, remote operations, pushes, public publishing, broad Docker pruning or existing database resets.
+    - Further delegation or reverting other work.
+tdd_plan:
+  red: Add failing tests for resource ownership rejection, secret-safe environment, deterministic expected answers and resumable initialization before implementation.
+  green: Implement the smallest normal-runtime launcher and isolated five-type scenario setup.
+  refactor: Reuse existing helpers where compatible without modifying unrelated demo behavior.
+validation_loop:
+  - node --test scripts/acceptance/v1*.test.mjs
+  - go test -count=1 ./cmd/v1-acceptance
+  - Run owned environment initialization and repeat it to verify non-duplication.
+  - Verify source schema and governed publication through normal services and real login; record startup failures without hiding them.
+  - Return documented commands for later Ask, Execute, browser, correction and restore acceptance.
+evidence_contract:
+  public: docs/evidence/V1-T001/summary.md
+  private: .semlia/v1-acceptance/
+  include: [files changed, actual RED and GREEN commands, baseline results, owned resources, runnable entry points, residual risks]
+review_contract:
+  - Orchestrator reviews scope, privacy, ownership, normal-service semantics and test evidence.
+  - No synthetic identity bypass or direct release-state injection.
+handoff:
+  status: Needs_Review
+  next: V1-T002 after technical review; never claim final acceptance.
+stop_conditions:
+  - Unknown or preexisting resource ownership.
+  - Missing configured credential material; report variable name only.
+  - Need to modify core production behavior or unapproved files.
+  - Any command could print existing private configuration or affect another project.

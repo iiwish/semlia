@@ -1,0 +1,45 @@
+schema_version: 1
+packet_id: V1-T002-A007
+task_id: V1-T002
+mode: Delegated Execute
+context:
+  spec: docs/specs/v1-convergence/spec.md
+  plan: docs/specs/v1-convergence/plan.md
+  approval: Approved existing performance gates and bounded repairs within the scoped local candidate. No new search feature or changed acceptance threshold.
+  failure: T005 round 5 first enabled uncached catalog benchmark failed exact-address search p95 340.854583ms against 250ms; page p95 16.967083ms and resolver p95 6.010458ms passed. No RC.4 was built. The original gate and supplemental Docker observer failures remain immutable.
+ownership:
+  query_implementation:
+    - db/queries/catalog.sql
+    - internal/adapters/postgres/catalog.go
+    - internal/adapters/postgres/sqlc/catalog.sql.go
+    - internal/adapters/postgres/sqlc/querier.go
+  behavior_tests:
+    - tests/integration/catalog/
+  diagnostic_outputs:
+    - .semlia/v1-acceptance/current/catalog-performance-diagnostic/
+  evidence:
+    - docs/evidence/V1-T002/catalog-performance.md
+constraints:
+  - Phase 1 is a single bounded isolated diagnostic, not a benchmark retry. Phase 2 product edits require root approval of the concrete finding and minimal implementation.
+  - Use a fresh exactly owned local PostgreSQL test fixture with the benchmark's 10000 synthetic assets, migration schema and data distribution. No original database, V1 application/source data, model, credentials, runtime or publication may change.
+  - Record exact original ListCatalogAssets and CountCatalogAssets EXPLAIN ANALYZE BUFFERS plans, index definitions and supported prepared-plan state. Session-only custom/generic-plan diagnostics are permitted solely in this owned fixture; do not change cluster settings or production query modes.
+  - A bounded comparison may test an alternative index-matching search predicate or candidate query in the same fixture, with identical results. It is diagnostic evidence, not a passed release benchmark or proof of broad semantics.
+  - Private scripts, plans and logs use 0700/0600. Never print DSNs, credentials, raw environment or unrelated process command arguments. Capture failures, do not retry until a favorable sample.
+  - Clean up only the exact owned fixture after independently checking its labels and identity. Verify original environment and V1 runtime/knowledge evidence preservation.
+  - Preserve all search semantics including workspace isolation, type and lifecycle filters, current revision selection, address substring/SQL wildcard behavior, full-text results, rank ordering, cursor pagination, totals and assets without revisions. An exact-address hit must not suppress other matching results.
+  - Do not change benchmark thresholds, fixture size, warmup, sample count, golden search, concurrency flags or skip conditions to obtain a pass. No special fixture/address fast path, hardcoded names or search-result cache.
+  - Prefer query-only optimization using existing indexes and SQLC generation. A schema/index migration or wider API/service change requires a new concrete decision before implementation.
+  - Query owner and integration-test owner have disjoint files; the test owner maintains evidence. Independent review is read-only; no further delegation. Only one owner runs heavy tests at a time.
+validation:
+  - Actual failing round 5 performance receipt is the performance RED. New equivalence tests run once against the original query before the SQL edit, then against the optimized query; their baseline pass is not represented as a RED. The product contract is unchanged.
+  - Focused real PostgreSQL integration covers equivalent result sets/rank/cursors/totals for exact, prefix, substring, full-text, mixed matches, filters, missing/current/old revisions and cross-workspace boundaries.
+  - SQLC generation check, relevant uncached Go packages and independent review before one focused unchanged performance test. Preserve every result, including failures.
+  - A subsequent frozen-source final gate attempt must run the complete existing gates; neither the diagnostic comparison nor a focused performance pass replaces final candidate verification.
+handoff:
+  status: Running
+  next: Phase 2 is authorized by the root after A002 diagnosis. Keep the exact two-predicate optimization and unchanged acceptance gate; return to T005 only after integration, focused performance and independent technical review.
+phase_2_decision:
+  diagnostic: A001 private helper failed at second-page column mapping before search or plans, then preserved and cleaned up. Root authorized A002 with named-column access. A002 completed once with all original-environment checks passing.
+  finding: Both original queries hash-join 10000 assets and revisions, reject 9999 joined rows, hit 590 shared buffers and never use the existing GIN. All 12 plans have no JIT section; this is not a proven JIT failure.
+  comparison: Original auto List/Count take 71.300/59.580ms. One current-revision IN-subquery candidate takes 8.202/5.933ms and uses the existing GIN; complete row digest and total match in the diagnostic fixture. This is not a release benchmark pass.
+  change: Only replace the two full-text matching predicates with a workspace-scoped current_revision_id IN query using the existing index expression. Keep original rank, address pattern, cursor, filtering and total behavior. Regenerate SQLC; no schema, global session setting, adapter/API or empty-search optimization.

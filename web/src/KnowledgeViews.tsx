@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
   BadgeCheck,
@@ -15,13 +15,16 @@ import {
 
 import { AskApiError, askReleasedSemantics, type AskResponse } from "./ask";
 import { AskExecutionPanel } from "./AskExecutionPanel";
+import { useCan } from "./authorization";
+import type { KnowledgeReference } from "./knowledge";
 
 interface AskViewProps {
   workspaceId: string;
+  hidden?: boolean;
   noPublishedKnowledge?: boolean;
   onOpenKnowledge?: () => void;
-  onOpenEvidence: (assetId?: string) => void;
-  onStartRevision: (assetId: string | undefined, fieldPath: string, context: string) => void;
+  onOpenEvidence: (reference: KnowledgeReference) => void;
+  onStartRevision: (reference: KnowledgeReference, fieldPath: string, context: string) => void;
 }
 
 const answerIssueOptions = [
@@ -46,12 +49,13 @@ function AskResultView({ result, question, reportingIssue, selectedIssue, onOpen
   question: string;
   reportingIssue: boolean;
   selectedIssue: (typeof answerIssueOptions)[number]["id"];
-  onOpenEvidence: (assetId?: string) => void;
+  onOpenEvidence: AskViewProps["onOpenEvidence"];
   onReportingIssue: (open: boolean) => void;
   onSelectIssue: (issue: (typeof answerIssueOptions)[number]["id"]) => void;
-  onStartRevision: (assetId: string | undefined, fieldPath: string, context: string) => void;
+  onStartRevision: AskViewProps["onStartRevision"];
   onRefineQuestion: () => void;
 }) {
+  const canPropose = useCan("asset.propose");
   const resolution = result.resolution;
   const plan = resolution?.plan;
   const refusal = resolution?.refusal;
@@ -93,19 +97,24 @@ function AskResultView({ result, question, reportingIssue, selectedIssue, onOpen
     </section>}
     {result.definitions.length > 0 && <div className="answer-evidence">
       <span className="content-label">已发布定义</span>
-      {result.definitions.map((definition) => <button type="button" key={definition.assetId} onClick={() => onOpenEvidence(definition.assetId)}><span><strong>{definition.name || definition.address}</strong><small>{definition.assetType} · {definition.revisionId} · {definition.address}</small></span><ChevronRight size={14} /></button>)}
+      {result.definitions.map((definition) => <button type="button" key={definition.assetId} disabled={!resolution?.releaseId} onClick={() => onOpenEvidence({ assetId: definition.assetId, revisionId: definition.revisionId, releaseId: resolution!.releaseId! })}><span><strong>{definition.name || definition.address}</strong><small>{definition.assetType} · {definition.revisionId} · {definition.address}</small></span><ChevronRight size={14} /></button>)}
     </div>}
     {reportingIssue && <section className="answer-issue-panel" aria-label="指出回答中的知识问题">
       <header><span><CircleAlert size={16} /></span><div><strong>哪类知识需要修订？</strong><p>系统会定位已发布定义；当前发布版本保持只读。</p></div></header>
       <div role="radiogroup" aria-label="知识问题类型">{answerIssueOptions.map((option) => <label key={option.id}><input type="radio" name="answer-issue" value={option.id} checked={selectedIssue === option.id} onChange={() => onSelectIssue(option.id)} /><span><strong>{option.label}</strong><small>{option.detail}</small></span></label>)}</div>
       {selectedIssue !== "disambiguation" && <><label className="production-field"><span>修订对象</span><select aria-label="修订对象" value={targetId} onChange={(event) => { setTargetId(event.target.value); setMemberId(""); }}><option value="">选择涉及的知识</option>{result.definitions.map((definition) => <option key={definition.assetId} value={definition.assetId}>{definition.name || definition.address} · {definition.revisionId}</option>)}</select></label>{memberIds.length > 0 && <label className="production-field"><span>涉及成员</span><select aria-label="涉及成员" value={memberId} onChange={(event) => setMemberId(event.target.value)}><option value="">整个知识定义</option>{memberIds.map((id) => <option key={id}>{id}</option>)}</select></label>}</>}
-      <footer><button className="text-button" type="button" onClick={() => onReportingIssue(false)}>取消</button>{selectedIssue === "disambiguation" ? <button className="primary-button" type="button" onClick={onRefineQuestion}>修改本次问题</button> : <button className="primary-button" type="button" disabled={!result.definitions.some((definition) => definition.assetId === targetId)} onClick={() => { const issue = answerIssueOptions.find((option) => option.id === selectedIssue) ?? answerIssueOptions[0]; onStartRevision(targetId, memberId ? `spec.members.${memberId}` : issue.fieldPath, `来自问答“${question}”：${issue.label}。${memberId ? `涉及成员：${memberId}。` : ""}`); }}><MessageSquareWarning size={15} />修订相关知识</button>}</footer>
+      {!canPropose && selectedIssue !== "disambiguation" && <p>当前身份没有提出知识修订的权限。</p>}
+      <footer><button className="text-button" type="button" onClick={() => onReportingIssue(false)}>取消</button>{selectedIssue === "disambiguation" ? <button className="primary-button" type="button" onClick={onRefineQuestion}>修改本次问题</button> : <button className="primary-button" type="button" title={!canPropose ? "需要 asset.propose 权限" : undefined} disabled={!canPropose || !resolution?.releaseId || !result.definitions.some((definition) => definition.assetId === targetId)} onClick={() => { const definition = result.definitions.find((item) => item.assetId === targetId); if (!canPropose || !definition || !resolution?.releaseId) return; const issue = answerIssueOptions.find((option) => option.id === selectedIssue) ?? answerIssueOptions[0]; onStartRevision({ assetId: targetId, revisionId: definition.revisionId, releaseId: resolution.releaseId, ...(memberId ? { memberId } : {}) }, memberId ? `spec.members.${memberId}` : issue.fieldPath, `来自问答“${question}”：${issue.label}。${memberId ? `涉及成员：${memberId}。` : ""}`); }}><MessageSquareWarning size={15} />修订相关知识</button>}</footer>
     </section>}
     <footer><div><ShieldCheck size={14} /><span>原始问题不持久化；仅记录输入哈希、模型版本、发布版本和解析结果。</span></div>{result.definitions.length > 0 && <button className="secondary-button" type="button" aria-expanded={reportingIssue} onClick={() => onReportingIssue(!reportingIssue)}><MessageSquareWarning size={15} />指出问题</button>}</footer>
   </article>;
 }
 
-export function AskView({ workspaceId, noPublishedKnowledge = false, onOpenKnowledge, onOpenEvidence, onStartRevision }: AskViewProps) {
+export function AskView(props: AskViewProps) {
+  return <ScopedAskView key={props.workspaceId} {...props} />;
+}
+
+function ScopedAskView({ workspaceId, hidden = false, noPublishedKnowledge = false, onOpenKnowledge, onOpenEvidence, onStartRevision }: AskViewProps) {
   const [question, setQuestion] = useState("");
   const [submittedQuestion, setSubmittedQuestion] = useState("");
   const [state, setState] = useState<"ready" | "running" | "answered" | "error">("ready");
@@ -113,10 +122,23 @@ export function AskView({ workspaceId, noPublishedKnowledge = false, onOpenKnowl
   const [failure, setFailure] = useState<{ code: string; title: string; detail: string } | null>(null);
   const [reportingIssue, setReportingIssue] = useState(false);
   const [selectedIssue, setSelectedIssue] = useState<(typeof answerIssueOptions)[number]["id"]>("definition");
+  const request = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    if (hidden && request.current) {
+      request.current.abort();
+      request.current = null;
+      setState("error");
+      setFailure({ code: "REQUEST_CANCELLED", title: "请求已取消", detail: "已停止等待此回答；服务端处理状态未确认。" });
+    }
+    return () => request.current?.abort();
+  }, [hidden]);
 
   const ask = (nextQuestion?: string) => {
     const value = (nextQuestion ?? question).trim();
-    if (!value || !workspaceId || noPublishedKnowledge || state === "running") return;
+    if (!value || !workspaceId || hidden || noPublishedKnowledge || state === "running") return;
+    const controller = new AbortController();
+    request.current = controller;
     setQuestion("");
     setSubmittedQuestion(value);
     setState("running");
@@ -127,18 +149,22 @@ export function AskView({ workspaceId, noPublishedKnowledge = false, onOpenKnowl
         question: value,
         context: { mode: "current" },
         idempotencyKey: `web-ask-${globalThis.crypto.randomUUID()}`,
-      })
+      }, controller.signal)
       .then((response) => {
+        if (controller.signal.aborted || request.current !== controller) return;
+        request.current = null;
         setResult(response);
         setState("answered");
       })
       .catch((error: unknown) => {
+        if (controller.signal.aborted || request.current !== controller) return;
+        request.current = null;
         setFailure(errorMessage(error));
         setState("error");
       });
   };
 
-  return <section className="view view-ask">
+  return <section className="view view-ask" hidden={hidden} style={hidden ? { display: "none" } : undefined}>
     <div className="ask-layout">
       <section className="conversation-panel" aria-label="语义问答会话">
         {state === "ready" ? <div className="ask-empty">
@@ -151,7 +177,7 @@ export function AskView({ workspaceId, noPublishedKnowledge = false, onOpenKnowl
           {state === "running" ? <div className="answer-loading" role="status"><LoaderCircle size={18} /><div><strong>正在解释并验证语义请求</strong><span>模型只负责结构化解释；发布版本选择与计划验证由 Semlia 执行。</span></div></div> : state === "error" && failure ? <article className="assistant-answer ask-error" role="alert"><header><span className="assistant-mark ask-mark-warning"><CircleAlert size={17} /></span><div><strong>{failure.title}</strong><small>{failure.code}</small></div><span className="grounded-badge ask-badge-warning">未回退</span></header><div className="answer-copy"><p>{failure.detail}</p></div></article> : result ? <AskResultView key={result.agentRun.id} onRefineQuestion={() => { setQuestion(submittedQuestion + "\n补充："); setReportingIssue(false); }} result={result} question={submittedQuestion} reportingIssue={reportingIssue} selectedIssue={selectedIssue} onOpenEvidence={onOpenEvidence} onReportingIssue={setReportingIssue} onSelectIssue={setSelectedIssue} onStartRevision={onStartRevision} /> : null}
         </div>}
       </section>
-      <AskExecutionPanel key={`${workspaceId}:${result?.resolution?.plan?.id ?? "history"}`} workspaceId={workspaceId} plan={result?.resolution?.plan?.executionStatus === "requires_execution_validation" ? result.resolution.plan : undefined} />
+      <AskExecutionPanel key={`${workspaceId}:${result?.resolution?.plan?.id ?? "history"}`} active={!hidden} workspaceId={workspaceId} plan={result?.resolution?.plan?.executionStatus === "requires_execution_validation" ? result.resolution.plan : undefined} />
       <form className="ask-composer" onSubmit={(event) => { event.preventDefault(); ask(); }}>
         <textarea aria-label="向 Semlia 提问" value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="询问已发布的指标口径、维度或语义计划..." rows={2} />
         <div><span><ShieldCheck size={13} />仅使用已发布知识 · 查询需单独确认</span><button type="submit" aria-label="发送问题" disabled={noPublishedKnowledge || !question.trim() || state === "running"}><Send size={16} /></button></div>

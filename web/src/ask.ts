@@ -16,10 +16,11 @@ export class AskApiError extends Error {
   }
 }
 
-export async function askReleasedSemantics(workspaceId: string, input: AskRequest): Promise<AskResponse> {
+export async function askReleasedSemantics(workspaceId: string, input: AskRequest, signal?: AbortSignal): Promise<AskResponse> {
   const response = await client.POST("/api/v1/workspaces/{workspaceId}/ask", {
     params: { path: { workspaceId }, header: { "X-Semlia-CSRF": sessionCSRFToken() } },
     body: input,
+    signal,
   });
   if (response.data) return response.data;
   const error = response.error as { code?: string; message?: string } | undefined;

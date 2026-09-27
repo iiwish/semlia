@@ -1118,7 +1118,7 @@ export interface paths {
         put?: never;
         /**
          * Interpret a natural-language question and resolve released semantics
-         * @description The configured model emits only a schema-constrained semantic interpretation. Semlia then uses the same immutable-release resolver as direct SemanticQuery. Raw questions and prompts are represented in persistence only by hashes, and no execution result is fabricated.
+         * @description The configured model emits only a schema-constrained semantic interpretation. Semlia then uses the same immutable-release resolver as direct SemanticQuery. Raw questions and prompts are represented in persistence only by hashes, and no execution result is fabricated. Idempotency keys are isolated by workspace and requesting principal. A key invokes the model at most once; terminal failures and uncertain outcomes require a new key for an explicit retry. Completed replies recheck current permissions and the original release context. Clarifications use fixed server-owned text rather than persisted model prose.
          */
         post: operations["askReleasedSemantics"];
         delete?: never;
@@ -4350,6 +4350,7 @@ export interface components {
             operator: "eq" | "neq" | "gt" | "gte" | "lt" | "lte" | "in" | "not_in" | "contains";
             value: unknown;
         };
+        /** @description Half-open time interval [from, to): from is inclusive and to is exclusive. Granularity selects calendar time buckets for grouping, comparison, and ordering by the same time selector. A full calendar month ends at the first instant of the next month, not at the last second of its final day. */
         SemanticTimeRange: {
             selector: components["schemas"]["SemanticSelector"];
             from: components["schemas"]["Timestamp"];

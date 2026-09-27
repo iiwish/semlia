@@ -22,8 +22,9 @@ export const productRoutes = {
   status: "/status",
 } as const;
 
-export function assetRoute(assetId?: string) {
-  return assetId ? `${productRoutes.assets}/${encode(assetId)}` : productRoutes.assets;
+export function assetRoute(assetId?: string, pin?: { revisionId: string; releaseId: string }) {
+  const path = assetId ? `${productRoutes.assets}/${encode(assetId)}` : productRoutes.assets;
+  return pin && assetId ? `${path}?${new URLSearchParams({ revision: pin.revisionId, release: pin.releaseId })}` : path;
 }
 
 export function assetVersionRoute(assetId: string) {
@@ -40,9 +41,12 @@ export function workReviewsRoute(scope: WorkScope = "pending") {
   return `${productRoutes.work}/reviews${query}`;
 }
 
-export function workOperationRoute(operationId: string, scope: WorkScope = "pending") {
-  const query = scope === "pending" ? "" : `?scope=${scope}`;
-  return `${productRoutes.work}/operations/${encode(operationId)}${query}`;
+export function workOperationRoute(operationId: string, scope: WorkScope = "pending", options: { productionRelease?: string; from?: "drafts" } = {}) {
+  const query = new URLSearchParams();
+  if (scope !== "pending") query.set("scope", scope);
+  if (options.productionRelease) query.set("productionRelease", options.productionRelease);
+  if (options.from) query.set("from", options.from);
+  return `${productRoutes.work}/operations/${encode(operationId)}${query.size ? `?${query}` : ""}`;
 }
 
 export function changeRoute(proposalId: string, scope: WorkScope = "pending") {

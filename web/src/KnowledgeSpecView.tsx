@@ -1,5 +1,5 @@
 import { useContext, useEffect, useMemo } from "react";
-import { CatalogRuntimeContext } from "./catalogRuntime";
+import { CatalogRuntimeContext, revisionCacheKey } from "./catalogRuntime";
 import { knowledgeFieldLabels, knowledgeReferences, type KnowledgeExpression, type KnowledgeReference, type KnowledgeSpec } from "./knowledge";
 import type { AssetType } from "./types";
 
@@ -22,19 +22,23 @@ const hasValue = (value: unknown) => value !== undefined && value !== null && va
 export function KnowledgeSpecView({ spec, type }: { spec?: KnowledgeSpec; type: AssetType }) {
   const runtime = useContext(CatalogRuntimeContext);
   const refs = useMemo(() => knowledgeReferences(spec), [spec]);
-  const ensureAsset = runtime?.ensureAsset;
-  const detailStates = runtime?.detailStates;
+  const ensureRevision = runtime?.ensureRevision;
+  const exactRevisionStates = runtime?.exactRevisionStates;
+  const workspaceId = runtime?.workspaceId ?? "";
   useEffect(() => {
-    if (ensureAsset) for (const id of new Set(refs.map((ref) => ref.assetId))) {
-      if (!detailStates?.[id] || detailStates[id].state === "idle") void ensureAsset(id);
+    if (ensureRevision) for (const ref of refs) {
+      if (!exactRevisionStates?.[revisionCacheKey(workspaceId, ref.assetId, ref.revisionId)]) void ensureRevision(ref.assetId, ref.revisionId);
     }
-  }, [detailStates, ensureAsset, refs]);
+  }, [exactRevisionStates, ensureRevision, refs, workspaceId]);
   if (!spec || !Object.keys(spec).length) return <p className="empty-inline">尚未定义{type}内容</p>;
   const reference = (ref: KnowledgeReference): string => {
-    const asset = runtime?.assets.find((item) => item.id === ref.assetId && item.revisionRecord.revisionId === ref.revisionId);
-    if (!asset) return runtime?.detailStates[ref.assetId]?.state === "error" ? "关联知识（读取失败）" : "关联知识（版本未加载）";
-    const member = ref.memberId ? asset.knowledgeSpec?.members?.find((item) => item.id === ref.memberId) : undefined;
-    return `${asset.name}${ref.memberId ? ` · ${member?.name || "属性名称未加载"}` : ""}`;
+    const state = exactRevisionStates?.[revisionCacheKey(workspaceId, ref.assetId, ref.revisionId)];
+    const revision = state?.revision;
+    if (!revision) return state?.state === "error" ? "关联知识（读取失败）" : "关联知识（版本未加载）";
+    const content = revision.content;
+    const name = [content.displayName, content.name, content.title].find((value) => typeof value === "string" && value) ?? "未命名知识";
+    const member = ref.memberId ? (content.spec as KnowledgeSpec | undefined)?.members?.find((item) => item.id === ref.memberId) : undefined;
+    return `${name}${ref.memberId ? ` · ${member?.name || "属性名称未加载"}` : ""}`;
   };
   const expression = (value: KnowledgeExpression): string => {
     if (value.op === "ref") return value.ref ? reference(value.ref) : "引用未定义";

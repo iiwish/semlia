@@ -2,6 +2,7 @@ package execution_test
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -22,6 +23,104 @@ func TestCalendarGroupingRecomputesMetricPerUTCPeriod(t *testing.T) {
 	compiled, err := e.Compile(p)
 	if err != nil || !strings.Contains(compiled.SQL, "date_trunc('month'") || !strings.Contains(compiled.SQL, "AT TIME ZONE 'UTC'") || len(compiled.Columns) != 2 {
 		t.Fatalf("calendar aggregation: %s %v", compiled.SQL, err)
+	}
+}
+
+func TestFixedTimeWindowGroupingIsExplicit(t *testing.T) {
+	for _, test := range []struct {
+		name        string
+		intent      d.Intent
+		category    bool
+		granularity string
+	}{
+		{name: "scalar", intent: d.IntentAggregate},
+		{name: "non-time breakdown", intent: d.IntentBreakdown, category: true},
+		{name: "non-time comparison", intent: d.IntentCompare, category: true},
+		{name: "monthly comparison", intent: d.IntentCompare, granularity: "month"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			p := executablePlan(t)
+			p.Intent = test.intent
+			object, _ := identity.NewAssetID()
+			p.Assets = append(p.Assets, d.ResolvedAsset{AssetID: object, Address: "sales.order"})
+			for _, field := range []d.ExecutionField{{FieldID: "paid_at", Name: "paid_at", DataType: "timestamptz"}, {FieldID: "category", Name: "category", DataType: "text"}} {
+				p.Execution.Relations[0].Fields = append(p.Execution.Relations[0].Fields, field)
+				p.Execution.Bindings = append(p.Execution.Bindings, d.ExecutionBinding{AssetID: object.String(), MemberID: field.FieldID, DatasetID: "dataset", FieldID: field.FieldID})
+			}
+			p.TimeRange = &d.TimeRange{Selector: d.Selector{AssetID: &object, MemberID: "paid_at"}, From: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC), To: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), Granularity: test.granularity}
+			category := d.Selector{AssetID: &object, MemberID: "category"}
+			p.Filters = []d.Filter{{Selector: category, Operator: "eq", Value: json.RawMessage(`"retained"`)}}
+			expectedColumns := []string{"sales.total"}
+			if test.category {
+				p.Grouping = []d.Selector{category}
+				expectedColumns = append(expectedColumns, "sales.order.category")
+			}
+			if test.granularity != "" {
+				expectedColumns = append(expectedColumns, "sales.order.paid_at.period")
+			}
+			compiled, err := e.Compile(p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(compiled.Columns, expectedColumns) || strings.Contains(compiled.SQL, "date_trunc(") != (test.granularity != "") || strings.Contains(compiled.SQL, "GROUP BY") != (test.category || test.granularity != "") || strings.Contains(compiled.SQL, "ORDER BY") {
+				t.Fatalf("unrequested grouping or order: columns = %v, SQL = %s", compiled.Columns, compiled.SQL)
+			}
+			if !strings.Contains(compiled.SQL, `"category" = $1::text`) || !strings.Contains(compiled.SQL, `"paid_at" >= $2::timestamptz`) || !strings.Contains(compiled.SQL, `"paid_at" < $3::timestamptz`) || !reflect.DeepEqual(compiled.Args, []any{"retained", p.TimeRange.From, p.TimeRange.To}) {
+				t.Fatalf("time window or filter changed: SQL = %s, args = %v", compiled.SQL, compiled.Args)
+			}
+		})
+	}
+}
+
+func TestCompareAndBreakdownCompileTimeBucketsWithoutDimensions(t *testing.T) {
+	for _, intent := range []d.Intent{d.IntentCompare, d.IntentBreakdown} {
+		t.Run(string(intent), func(t *testing.T) {
+			p := executablePlan(t)
+			p.Intent = intent
+			object, _ := identity.NewAssetID()
+			p.Assets = append(p.Assets, d.ResolvedAsset{AssetID: object, Address: "sales.order"})
+			p.Execution.Relations[0].Fields = append(p.Execution.Relations[0].Fields, d.ExecutionField{FieldID: "paid_at", Name: "paid_at", DataType: "timestamptz"})
+			p.Execution.Bindings = append(p.Execution.Bindings, d.ExecutionBinding{AssetID: object.String(), MemberID: "paid_at", DatasetID: "dataset", FieldID: "paid_at"})
+			p.TimeRange = &d.TimeRange{Selector: d.Selector{AssetID: &object, MemberID: "paid_at"}, From: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), To: time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC), Granularity: "month"}
+			q := d.SemanticQueryInput{SchemaVersion: d.QuerySchemaVersion, Intent: intent, Measures: p.Measures, TimeRange: p.TimeRange, Context: d.ResolutionContext{Mode: d.ResolutionCurrent}}
+			if err := q.Validate(); err != nil {
+				t.Fatal(err)
+			}
+			compiled, err := e.Compile(p)
+			if err != nil || !strings.Contains(compiled.SQL, "date_trunc('month'") || !strings.Contains(compiled.SQL, "GROUP BY") || !strings.Contains(compiled.SQL, "AT TIME ZONE 'UTC'") || len(compiled.Columns) != 2 || len(compiled.Args) != 2 {
+				t.Fatalf("calendar comparison: %s %v", compiled.SQL, err)
+			}
+		})
+	}
+}
+
+func TestCalendarOrderingUsesOnlySelectedPeriod(t *testing.T) {
+	for _, direction := range []string{"asc", "desc"} {
+		t.Run(direction, func(t *testing.T) {
+			p := executablePlan(t)
+			object, _ := identity.NewAssetID()
+			p.Assets = append(p.Assets, d.ResolvedAsset{AssetID: object, Address: "sales.order"})
+			for _, field := range []string{"paid_at", "other_at"} {
+				p.Execution.Relations[0].Fields = append(p.Execution.Relations[0].Fields, d.ExecutionField{FieldID: field, Name: field, DataType: "timestamptz"})
+				p.Execution.Bindings = append(p.Execution.Bindings, d.ExecutionBinding{AssetID: object.String(), MemberID: field, DatasetID: "dataset", FieldID: field})
+			}
+			p.TimeRange = &d.TimeRange{Selector: d.Selector{AssetID: &object, MemberID: "paid_at"}, From: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), To: time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC), Granularity: "month"}
+			p.Order = []d.Order{{Selector: p.TimeRange.Selector, Direction: direction}}
+			compiled, err := e.Compile(p)
+			period := `date_trunc('month', "t0"."paid_at" AT TIME ZONE 'UTC')`
+			if err != nil || !strings.Contains(compiled.SQL, "GROUP BY "+period) || !strings.Contains(compiled.SQL, "ORDER BY "+period+" "+strings.ToUpper(direction)) || !strings.Contains(compiled.SQL, `"paid_at" < $2`) {
+				t.Fatalf("calendar ordering: %s %v", compiled.SQL, err)
+			}
+			p.Order[0].Selector.MemberID = "other_at"
+			if _, err := e.Compile(p); err == nil {
+				t.Fatal("unselected time field accepted for ordering")
+			}
+			p.Order[0].Selector = p.TimeRange.Selector
+			p.TimeRange.Granularity = ""
+			if _, err := e.Compile(p); err == nil {
+				t.Fatal("ungrouped time field accepted for ordering")
+			}
+		})
 	}
 }
 

@@ -14171,6 +14171,14 @@ body.context-panel-resizing {
   box-shadow: var(--shadow);
 }
 
+.historical-knowledge-view > .asset-detail,
+.historical-knowledge-view .asset-authority-detail > section {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
 .asset-detail-page .asset-detail-header {
   min-height: 0;
   padding: 0 24px;
@@ -22357,6 +22365,18 @@ select:focus-visible { box-shadow: var(--focus); outline: none; }
 .catalog-version-filter button {
   min-width: 70px;
   padding: 0 10px;
+}
+
+.catalog-version-filter button:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.catalog-version-notice {
+  margin: 0;
+  padding: 0 14px 8px;
+  color: var(--muted);
+  font-size: 11px;
 }
 
 .asset-directory .catalog-toolbar .catalog-filter {

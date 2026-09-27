@@ -215,6 +215,24 @@ type ResolutionContext struct {
 	BindingID *identity.ConsumerBindingID `json:"bindingId,omitempty"`
 }
 
+func (resolution ResolutionContext) Validate() error {
+	switch resolution.Mode {
+	case ResolutionCurrent:
+		if resolution.ReleaseID == nil && resolution.BindingID == nil {
+			return nil
+		}
+	case ResolutionExplicit:
+		if resolution.ReleaseID != nil && !resolution.ReleaseID.IsZero() && resolution.BindingID == nil {
+			return nil
+		}
+	case ResolutionBinding:
+		if resolution.BindingID != nil && !resolution.BindingID.IsZero() && resolution.ReleaseID == nil {
+			return nil
+		}
+	}
+	return &ValidationError{Code: RefusalInvalidQuery, Message: "invalid resolution context"}
+}
+
 type SemanticQueryInput struct {
 	ModelID       *identity.AssetID `json:"modelId,omitempty"`
 	SchemaVersion string            `json:"schemaVersion"`
@@ -232,6 +250,15 @@ func (query SemanticQueryInput) Validate() error {
 	if query.SchemaVersion != QuerySchemaVersion {
 		return &ValidationError{Code: RefusalInvalidQuery, Message: "unsupported SemanticQuery schema version"}
 	}
+	hasTimeBuckets := false
+	if query.TimeRange != nil {
+		validGranularity := map[string]bool{"": true, "day": true, "week": true, "month": true, "quarter": true, "year": true}
+		if !query.TimeRange.Selector.validate() || query.TimeRange.From.IsZero() || query.TimeRange.To.IsZero() ||
+			!query.TimeRange.From.Before(query.TimeRange.To) || !validGranularity[query.TimeRange.Granularity] {
+			return &ValidationError{Code: RefusalInvalidTimeRange, Message: "time range semantics are invalid"}
+		}
+		hasTimeBuckets = query.TimeRange.Granularity != ""
+	}
 	switch query.Intent {
 	case IntentDescribe:
 		if len(query.Measures)+len(query.Dimensions) == 0 {
@@ -242,11 +269,11 @@ func (query SemanticQueryInput) Validate() error {
 			return &ValidationError{Code: RefusalInvalidQuery, Message: "aggregate requires a measure"}
 		}
 	case IntentBreakdown:
-		if len(query.Measures) == 0 || len(query.Dimensions) == 0 {
-			return &ValidationError{Code: RefusalInvalidQuery, Message: "breakdown requires a measure and dimension"}
+		if len(query.Measures) == 0 || (len(query.Dimensions) == 0 && !hasTimeBuckets) {
+			return &ValidationError{Code: RefusalInvalidQuery, Message: "breakdown requires a measure and grouping selector"}
 		}
 	case IntentCompare:
-		if len(query.Measures) == 0 || len(query.Dimensions)+len(query.Filters) == 0 {
+		if len(query.Measures) == 0 || (len(query.Dimensions)+len(query.Filters) == 0 && !hasTimeBuckets) {
 			return &ValidationError{Code: RefusalInvalidQuery, Message: "compare requires a measure and comparison selector"}
 		}
 	default:
@@ -266,13 +293,6 @@ func (query SemanticQueryInput) Validate() error {
 			return &ValidationError{Code: RefusalInvalidFilter, Message: "filter semantics are invalid"}
 		}
 	}
-	if query.TimeRange != nil {
-		validGranularity := map[string]bool{"": true, "day": true, "week": true, "month": true, "quarter": true, "year": true}
-		if !query.TimeRange.Selector.validate() || query.TimeRange.From.IsZero() || query.TimeRange.To.IsZero() ||
-			!query.TimeRange.From.Before(query.TimeRange.To) || !validGranularity[query.TimeRange.Granularity] {
-			return &ValidationError{Code: RefusalInvalidTimeRange, Message: "time range semantics are invalid"}
-		}
-	}
 	for _, order := range query.Order {
 		if !order.Selector.validate() || (order.Direction != "asc" && order.Direction != "desc") {
 			return &ValidationError{Code: RefusalInvalidOrdering, Message: "ordering semantics are invalid"}
@@ -281,23 +301,7 @@ func (query SemanticQueryInput) Validate() error {
 	if query.Limit < 0 || query.Limit > 10000 {
 		return &ValidationError{Code: RefusalInvalidLimit, Message: "limit must be between 0 and 10000"}
 	}
-	switch query.Context.Mode {
-	case ResolutionCurrent:
-		if query.Context.ReleaseID != nil || query.Context.BindingID != nil {
-			return &ValidationError{Code: RefusalInvalidQuery, Message: "current context cannot name a release or binding"}
-		}
-	case ResolutionExplicit:
-		if query.Context.ReleaseID == nil || query.Context.ReleaseID.IsZero() || query.Context.BindingID != nil {
-			return &ValidationError{Code: RefusalInvalidQuery, Message: "explicit context requires one release"}
-		}
-	case ResolutionBinding:
-		if query.Context.BindingID == nil || query.Context.BindingID.IsZero() || query.Context.ReleaseID != nil {
-			return &ValidationError{Code: RefusalInvalidQuery, Message: "binding context requires one binding"}
-		}
-	default:
-		return &ValidationError{Code: RefusalInvalidQuery, Message: "unknown resolution context"}
-	}
-	return nil
+	return query.Context.Validate()
 }
 
 func (query SemanticQueryInput) Canonical() (json.RawMessage, string, error) {

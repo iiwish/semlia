@@ -282,7 +282,7 @@ func Compile(p d.ResolvedSemanticPlan) (Compiled, error) {
 		return fmt.Sprintf("$%d::%s", len(q.Args), typ)
 	}
 	where, having := excludedFields, []string{}
-	periodSQL := ""
+	periodSQL, periodFieldSQL := "", ""
 	if p.TimeRange != nil && p.TimeRange.Granularity != "" {
 		f, name, ok := lookup(p.TimeRange.Selector)
 		if !ok || f.aggregate != "" || (f.typ != "date" && f.typ != "timestamp" && f.typ != "timestamptz") {
@@ -300,9 +300,11 @@ func Compile(p d.ResolvedSemanticPlan) (Compiled, error) {
 			value += "::timestamp"
 		}
 		periodSQL = "date_trunc('" + p.TimeRange.Granularity + "', " + value + ")"
+		periodFieldSQL = f.sql
 		selectSQL = append(selectSQL, periodSQL+" AS "+pgx.Identifier{name + ".period"}.Sanitize())
 		groupSQL = append(groupSQL, periodSQL)
 		q.Columns = append(q.Columns, name+".period")
+		selected[periodSQL] = true
 	}
 	var predicate func(*semantic.KnowledgeExpression, int) (string, error)
 	predicate = func(e *semantic.KnowledgeExpression, depth int) (string, error) {
@@ -445,6 +447,9 @@ func Compile(p d.ResolvedSemanticPlan) (Compiled, error) {
 	ordering := []string{}
 	for _, o := range p.Order {
 		f, _, ok := lookup(o.Selector)
+		if periodSQL != "" && f.sql == periodFieldSQL {
+			f.sql = periodSQL
+		}
 		if !ok || !selected[f.sql] || (o.Direction != "asc" && o.Direction != "desc") {
 			return q, ErrInvalidPlan
 		}

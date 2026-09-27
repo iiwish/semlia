@@ -58,7 +58,8 @@ import {
 } from "./routes";
 
 import { apiClient } from "./apiClient";
-import { useCatalogRuntime } from "./catalogRuntime";
+import { revisionCacheKey, useCatalogRuntime } from "./catalogRuntime";
+import type { KnowledgeReference, KnowledgeSpec } from "./knowledge";
 import { CatalogDataNotice, CatalogRefreshButton, CreateCatalogAssetButton } from "./CatalogControls";
 import { CapabilityProvider, useCan } from "./authorization";
 import { AIProposalDialog } from "./AIProposalDialog";
@@ -98,6 +99,7 @@ import { UnifiedInbox, type InboxViewState } from "./UnifiedInbox";
 import { findingMessage, validatorLabel } from "./knowledgeMessages";
 import { IntegrationSettingsView } from "./IntegrationSettingsView";
 import { AskView } from "./KnowledgeViews";
+import { createKnowledgeRevisionCommand, KnowledgeRevisionUncertainError, sameRevisionSubmission } from "./knowledgeProductionRevision";
 import { KnowledgeSpecView } from "./KnowledgeSpecView";
 import { knowledgeFieldLabels } from "./knowledge";
 import { KnowledgeRevisionWorkbench } from "./KnowledgeRevisionWorkbench";
@@ -238,7 +240,7 @@ function assetContractFields(asset: Asset) {
 }
 
 function deploymentLabel(asset: Asset) {
-  if (asset.deployment.state === "unknown") return "待加载";
+  if (asset.deployment.state === "unknown") return asset.detailLoaded === false ? "待加载" : "不可用";
   if (asset.deployment.revisionId && asset.deployment.revisionId !== asset.revisionRecord.revisionId) return "当前草稿";
   if (asset.deployment.state === "production") return "生产";
   if (asset.deployment.state === "staging") return "预发布";
@@ -257,6 +259,9 @@ function revisionVersionLabel(value: string) {
 }
 
 function knowledgeVersionState(asset: Asset) {
+  if (asset.detailLoaded === false || asset.deployment.state === "unknown" || asset.revisionRecord.workflowState === "unknown") {
+    return { known: false, hasPublishedVersion: false, hasDraftVersion: false, isPublishedCurrent: false, label: asset.detailLoaded === false ? "发布状态待加载" : "发布状态不可用", tone: "neutral" } as const;
+  }
   const publishedRevisionId = asset.deployment.state === "production" ? asset.deployment.revisionId : undefined;
   const isPublishedCurrent = publishedRevisionId === asset.revisionRecord.revisionId;
   const hasPublishedVersion = Boolean(publishedRevisionId);
@@ -274,6 +279,7 @@ function knowledgeVersionState(asset: Asset) {
         ? `草稿 ${draftVersion}`
         : `未发布 ${draftVersion}`;
   return {
+    known: true,
     hasPublishedVersion,
     hasDraftVersion,
     isPublishedCurrent,
@@ -353,9 +359,10 @@ function knowledgeCatalogItemsFor(assets: Asset[]): KnowledgeCatalogItem[] {
 }
 
 function readinessSummary(asset: Asset) {
+  if (!knowledgeVersionState(asset).known) return { known: false, passed: 0, total: 0, warnings: 0 };
   const applicable = asset.readiness.filter((gate) => gate.state !== "not_applicable");
   const passed = applicable.filter((gate) => gate.state === "passed").length;
-  return { passed, total: applicable.length, warnings: applicable.length - passed };
+  return { known: true, passed, total: applicable.length, warnings: applicable.length - passed };
 }
 
 function statusTone(status: CatalogStatus) {
@@ -957,7 +964,7 @@ function AssetAuthoritativeOverview({ asset }: { asset: Asset }) {
       <KnowledgeSpecView type={asset.type} spec={asset.knowledgeSpec} />
       {warnings.length > 0 && <div className="knowledge-access-warnings" role="alert">{warnings.map((section) => <span key={section.kind}>{assetAuthorityKindLabels[section.kind]}{authorityAvailabilityLabel(section.availability)}</span>)}</div>}
       <details className="production-technical"><summary>版本与技术详情</summary>
-        <dl><div><dt>当前修订状态</dt><dd>{{ draft: "草稿", proposed: "待确认", in_review: "审核中", released: "已发布", unknown: "未知" }[asset.revisionRecord.workflowState]}</dd></div><div><dt>Revision ID</dt><dd><code>{definition?.revisionId ?? asset.revisionRecord.revisionId}</code></dd></div><div><dt>生产固定 revision</dt><dd><code>{released?.availability === "available" ? released.revisionId ?? "服务端未返回" : "尚未发布"}</code></dd></div><div><dt>负责人</dt><dd>{asset.owner}</dd></div><div><dt>Schema</dt><dd><code>{asset.revisionRecord.schemaVersion}</code></dd></div><div><dt>内容摘要</dt><dd><code>{asset.revisionRecord.contentHash}</code></dd></div></dl>
+        <dl><div><dt>当前修订状态</dt><dd>{{ draft: "草稿", proposed: "待确认", in_review: "审核中", released: "已发布", unknown: "未知" }[asset.revisionRecord.workflowState]}</dd></div><div><dt>Revision ID</dt><dd><code>{definition?.revisionId ?? asset.revisionRecord.revisionId}</code></dd></div><div><dt>生产固定 revision</dt><dd><code>{released?.availability === "available" ? released.revisionId ?? "服务端未返回" : released?.availability === "not_released" ? "尚未发布" : "发布状态不可用"}</code></dd></div><div><dt>负责人</dt><dd>{asset.owner}</dd></div><div><dt>Schema</dt><dd><code>{asset.revisionRecord.schemaVersion}</code></dd></div><div><dt>内容摘要</dt><dd><code>{asset.revisionRecord.contentHash}</code></dd></div></dl>
         <section aria-label="资产权威分区">{asset.authoritySections?.map((section) => <div key={section.kind}><strong>{assetAuthorityKindLabels[section.kind]} · {authorityAvailabilityLabel(section.availability)}</strong><pre>{JSON.stringify(section, null, 2)}</pre></div>)}</section>
       </details>
     </section>
@@ -1303,7 +1310,7 @@ function KnowledgeRevisionLauncher({ asset, active, onStart }: { asset: Asset; a
 }
 
 function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, requestedCatalogType, requestedVersionFilter, requestedRevision, focusSearchRequestEpoch, detailBackRequestEpoch, onSelect, onDetailChange, onNotify, onRevisionSubmit, onStartAIGeneration, onOpenReleaseHistory, onOpenReleaseRecord }: { selectedId: string; domainFilter: string; requestedTab: AssetTab; requestedDetail: boolean; requestedCatalogType: CatalogObjectType | "全部"; requestedVersionFilter: KnowledgeVersionFilter; requestedRevision: KnowledgeRevisionRequest | null; focusSearchRequestEpoch: number; detailBackRequestEpoch: number; onSelect: (id: string) => void; onDetailChange: (open: boolean) => void; onNotify: (message: string) => void; onRevisionSubmit: (submission: KnowledgeRevisionSubmission) => Promise<void>; onStartAIGeneration: (assetId: string, fieldPath: string) => void; onOpenReleaseHistory: () => void; onOpenReleaseRecord: (releaseId?: string) => void }) {
-  const { assets, catalogAssetIds, detailStates, ensureAsset, error: catalogError, setQuery: setCatalogQuery, total: catalogTotal, nextCursor: catalogNextCursor, loadingMore: catalogLoadingMore, appendError: catalogAppendError, loadMoreAssets } = useCatalogRuntime();
+  const { assets, catalogAssetIds, detailStates, ensureAsset, loading: catalogLoading, error: catalogError, setQuery: setCatalogQuery, total: catalogTotal, nextCursor: catalogNextCursor, loadingMore: catalogLoadingMore, appendError: catalogAppendError, loadMoreAssets } = useCatalogRuntime();
   const catalogAssets = useMemo(() => catalogAssetIds.flatMap((assetId) => {
     const asset = assets.find((candidate) => candidate.id === assetId);
     return asset ? [asset] : [];
@@ -1313,6 +1320,10 @@ function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, r
   const [query, setQuery] = useState("");
   const [type, setType] = useState<CatalogObjectType | "全部">(requestedCatalogType);
   const [versionFilter, setVersionFilter] = useState<KnowledgeVersionFilter>(requestedVersionFilter);
+  const versionsComplete = !catalogLoading && !catalogError && !catalogNextCursor
+    && (catalogTotal === undefined || catalogAssets.length >= catalogTotal)
+    && catalogAssets.every((asset) => knowledgeVersionState(asset).known);
+  const effectiveVersionFilter = versionsComplete ? versionFilter : "全部";
   const [domain, setDomain] = useState(domainFilter);
   const [sort, setSort] = useState<"attention" | "name" | "type">("attention");
   const [tab, setTab] = useState<AssetTab>(requestedTab);
@@ -1328,6 +1339,7 @@ function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, r
   const normalizedQuery = query.trim().toLowerCase();
   const isGovernedObjectType = type === "语义关系" || type === "物理绑定" || type === "JoinContract";
   const catalogGroups = useMemo(() => {
+    // The server page owns asset search membership; text only narrows child presentation.
     const matchesText = (item: KnowledgeCatalogItem) => `${item.name} ${item.key} ${item.aliases.join(" ")} ${item.domain} ${item.scope} ${item.detail}`.toLowerCase().includes(normalizedQuery);
     const groups = catalogAssets.flatMap((asset) => {
       const assetItem = catalogKnowledgeItems.find((item) => item.id === asset.id)!;
@@ -1337,14 +1349,13 @@ function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, r
       const matchesAssetType = type === "全部" || isGovernedObjectType || asset.type === type;
       const matchesGovernedType = !isGovernedObjectType || typedChildren.length > 0;
       const versionState = knowledgeVersionState(asset);
-      const matchesVersion = versionFilter === "全部"
-        || versionFilter === "正式版" && versionState.hasPublishedVersion
-        || versionFilter === "草稿" && versionState.hasDraftVersion;
+      const matchesVersion = effectiveVersionFilter === "全部"
+        || effectiveVersionFilter === "正式版" && versionState.hasPublishedVersion
+        || effectiveVersionFilter === "草稿" && versionState.hasDraftVersion;
       const matchesDomain = domain === "全部" || asset.domain === domain;
       const assetMatchesQuery = normalizedQuery.length === 0 || matchesText(assetItem);
-      const matchesQuery = assetMatchesQuery || matchingChildren.length > 0;
-      if (!matchesAssetType || !matchesGovernedType || !matchesVersion || !matchesDomain || !matchesQuery) return [];
-      return [{ asset, assetItem, children, visibleChildren: normalizedQuery.length > 0 && !assetMatchesQuery ? matchingChildren : typedChildren }];
+      if (!matchesAssetType || !matchesGovernedType || !matchesVersion || !matchesDomain) return [];
+      return [{ asset, assetItem, children, visibleChildren: normalizedQuery.length > 0 && !assetMatchesQuery && matchingChildren.length > 0 ? matchingChildren : typedChildren }];
     });
     return groups.sort((left, right) => {
       if (sort === "name") return left.asset.name.localeCompare(right.asset.name, "zh-CN");
@@ -1356,7 +1367,7 @@ function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, r
       if (readinessDelta !== 0) return readinessDelta;
       return left.asset.name.localeCompare(right.asset.name, "zh-CN");
     });
-  }, [catalogAssets, catalogKnowledgeItems, domain, isGovernedObjectType, normalizedQuery, sort, type, versionFilter]);
+  }, [catalogAssets, catalogKnowledgeItems, domain, effectiveVersionFilter, isGovernedObjectType, normalizedQuery, sort, type]);
   const visibleChildCount = catalogGroups.reduce((total, group) => total + group.visibleChildren.length, 0);
   const selected = assets.find((asset) => asset.id === selectedId) ?? (requestedDetail ? undefined : assets[0]);
   const focusedObject = focusedObjectId ? detailKnowledgeItems.find((item) => item.key === focusedObjectId) : undefined;
@@ -1426,14 +1437,14 @@ function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, r
     const visibleAssetTabs = assetTabsFor(selected);
     const activeTab = visibleAssetTabs.includes(tab) ? tab : "概览";
     const detailState = detailStates[selected.id];
-    if (selected.detailLoaded === false && detailState?.state === "error") return <section className="view view-assets asset-detail-page"><div className="catalog-detail-state" role="alert"><CircleAlert size={20} /><strong>资产详情读取失败</strong><span>{detailState.error}</span><button type="button" onClick={() => void ensureAsset(selected.id)}>重试</button></div></section>;
-    if (selected.detailLoaded === false) return <section className="view view-assets asset-detail-page"><div className="catalog-detail-state" role="status"><LoaderCircle className="spin" size={20} /><strong>正在读取资产权威详情</strong><span>定义、发布状态和各分区可用性均由服务端返回。</span></div></section>;
+    if (detailState?.state === "error") return <section className="view view-assets asset-detail-page"><div className="catalog-detail-state" role="alert"><CircleAlert size={20} /><strong>资产详情读取失败</strong><span>{detailState.error}</span><button type="button" onClick={() => void ensureAsset(selected.id)}>重试</button></div></section>;
+    if (selected.detailLoaded === false || detailState?.state === "loading") return <section className="view view-assets asset-detail-page"><div className="catalog-detail-state" role="status"><LoaderCircle className="spin" size={20} /><strong>正在读取资产权威详情</strong><span>定义、发布状态和各分区可用性均由服务端返回。</span></div></section>;
     const authoritativeDetail = Boolean(selected.authoritySections);
     return (
       <section className="view view-assets asset-detail-page">
         <section className="asset-detail" aria-label="语义资产详情">
           <header className="asset-detail-header">
-            <div className="asset-header-main"><AssetTypeMark type={selected.identity.type} size={19} /><div className="asset-title-copy"><span className="panel-kicker">{selected.identity.type} · <code>{selected.identity.key}</code></span><h1>{selected.revisionRecord.name}</h1><p>{selected.revisionRecord.definition}</p></div><div className="asset-header-side"><div className="asset-header-state"><div><span>版本</span><strong>{selected.revision}</strong></div><span className="asset-header-release"><StatusBadge tone={isCurrentRevisionReleased(selected) ? "success" : "warning"}>{deploymentLabel(selected)}</StatusBadge><span className={`asset-health-state asset-health-${selected.qualitySnapshot.state}`}>{authoritativeDetail ? authoritativeQualityLabel(selected) : selected.qualitySnapshot.state === "healthy" ? "健康" : selected.qualitySnapshot.state === "blocked" ? "阻断" : "需关注"}</span></span></div><KnowledgeRevisionLauncher asset={selected} active={Boolean(revisionRequest)} onStart={setRevisionRequest} /></div></div>
+            <div className="asset-header-main"><AssetTypeMark type={selected.identity.type} size={19} /><div className="asset-title-copy"><span className="panel-kicker">{selected.identity.type} · <code>{selected.identity.key}</code></span><h1>{selected.revisionRecord.name}</h1><p>{selected.revisionRecord.definition}</p></div><div className="asset-header-side"><div className="asset-header-state"><div><span>版本</span><strong>{selected.revision}</strong></div><span className="asset-header-release"><StatusBadge tone={selected.deployment.state === "unknown" ? "neutral" : isCurrentRevisionReleased(selected) ? "success" : "warning"}>{deploymentLabel(selected)}</StatusBadge><span className={`asset-health-state asset-health-${selected.qualitySnapshot.state}`}>{authoritativeDetail ? authoritativeQualityLabel(selected) : selected.qualitySnapshot.state === "healthy" ? "健康" : selected.qualitySnapshot.state === "blocked" ? "阻断" : "需关注"}</span></span></div><KnowledgeRevisionLauncher asset={selected} active={Boolean(revisionRequest)} onStart={setRevisionRequest} /></div></div>
           </header>
           {revisionRequest ? <KnowledgeRevisionWorkbench key={`${revisionRequest.assetId}:${revisionRequest.fieldPath}:${revisionRequest.claimId ?? "new"}`} asset={selected} request={revisionRequest} onCancel={() => setRevisionRequest(null)} onNotify={onNotify} onSubmit={onRevisionSubmit} onStartAIGeneration={() => onStartAIGeneration(selected.id, revisionRequest.fieldPath)} /> : <>
             <div className="asset-tabs" role="tablist" aria-label="资产详情视图">
@@ -1472,11 +1483,12 @@ function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, r
           </label>
           <div className="segment-control catalog-version-filter" role="group" aria-label="知识版本筛选">
             {(["全部", "正式版", "草稿"] as const).map((item) => {
-              const count = item === "全部" ? catalogAssets.length : catalogAssets.filter((asset) => {
+              const unavailable = item !== "全部" && !versionsComplete;
+              const count = item === "全部" ? catalogAssets.length : unavailable ? "待确认" : catalogAssets.filter((asset) => {
                 const version = knowledgeVersionState(asset);
                 return item === "正式版" ? version.hasPublishedVersion : version.hasDraftVersion;
               }).length;
-              return <button key={item} type="button" aria-pressed={versionFilter === item} onClick={() => setVersionFilter(item)}>{item} {count}</button>;
+              return <button key={item} type="button" aria-pressed={effectiveVersionFilter === item} disabled={unavailable} aria-describedby={unavailable ? "catalog-version-unavailable" : undefined} onClick={() => setVersionFilter(item)}>{item} {count}</button>;
             })}
           </div>
           <label className="catalog-filter"><span>对象</span><select aria-label="筛选知识对象类型" value={type} onChange={(event) => setType(event.target.value as CatalogObjectType | "全部")}><option value="全部">全部对象</option><optgroup label="语义资产">{assetTypes.map((item) => <option key={item} value={item}>{item}</option>)}</optgroup><optgroup label="治理对象">{catalogObjectTypes.filter((item) => !assetTypes.includes(item as AssetType)).map((item) => <option key={item} value={item}>{item}</option>)}</optgroup></select></label>
@@ -1485,6 +1497,7 @@ function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, r
           <button className="catalog-clear-button" type="button" aria-label="清除全部筛选" title="清除全部筛选" disabled={!hasFilters} onClick={() => { setQuery(""); setType("全部"); setVersionFilter("全部"); setDomain("全部"); }}><X size={15} /></button>
           <CreateCatalogAssetButton onCreated={(assetId) => { onSelect(assetId); void ensureAsset(assetId); onDetailChange(true); setMode("detail"); }} />
         </div>
+        {!versionsComplete && <p id="catalog-version-unavailable" className="catalog-version-notice" role="status">版本筛选暂不可用，当前显示全部版本。</p>}
         <div className="catalog-summary">
           <span>显示 <strong>{catalogGroups.length}</strong> · 已加载 {catalogAssetIds.length}{catalogTotal !== undefined ? ` / ${catalogTotal}` : ""} 个语义资产{isGovernedObjectType && <> · {visibleChildCount} 个{type}</>}</span>
           <CatalogRefreshButton />
@@ -1504,9 +1517,9 @@ function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, r
                   <button className="asset-row-open" type="button" aria-label={`打开语义资产 ${asset.name}`} onClick={() => openDetail(assetItem)}>
                     <span className="asset-row-identity"><AssetTypeMark type={asset.type} /><span className="asset-row-copy"><strong>{asset.name}</strong><code>{asset.key}</code></span></span>
                     <span className="asset-row-taxonomy"><strong>{asset.type}</strong><small>{asset.domain}</small></span>
-                    <span className="asset-row-scope"><strong>{asset.detailLoaded === false ? "打开后加载关系" : `${asset.relations.length} 关系`} · {asset.bindings.length} 绑定</strong><small>{asset.joinContracts.length} 个 JoinContract</small></span>
-                    <span className="asset-row-owner"><strong>{asset.owner}</strong><small>{asset.maintainer}</small></span>
-                    <span className="asset-row-readiness"><span><b>{readiness.passed}/{readiness.total}</b><small>{readiness.warnings > 0 ? `${readiness.warnings} 项需关注` : "门禁通过"}</small></span><progress max={readiness.total} value={readiness.passed} aria-label={`${asset.name}就绪度 ${readiness.passed}/${readiness.total}`} /></span>
+                    <span className="asset-row-scope">{asset.detailLoaded === false ? <strong>关系与实现待加载</strong> : <><strong>{asset.relations.length} 关系 · {asset.bindings.length} 绑定</strong><small>{asset.joinContracts.length} 个 JoinContract</small></>}</span>
+                    <span className="asset-row-owner">{asset.detailLoaded === false ? <strong>责任信息待加载</strong> : <><strong>{asset.owner}</strong><small>{asset.maintainer}</small></>}</span>
+                    <span className="asset-row-readiness">{readiness.known ? <><span><b>{readiness.passed}/{readiness.total}</b><small>{readiness.warnings > 0 ? `${readiness.warnings} 项需关注` : "门禁通过"}</small></span><progress max={readiness.total} value={readiness.passed} aria-label={`${asset.name}就绪度 ${readiness.passed}/${readiness.total}`} /></> : <span><b>{asset.detailLoaded === false ? "就绪度待加载" : "就绪度不可用"}</b></span>}</span>
                     <StatusBadge tone={versionState.tone}>{versionState.label}</StatusBadge>
                     <ChevronRight className="asset-row-chevron" size={16} />
                   </button>
@@ -2377,7 +2390,41 @@ export function ProductApp({ session }: { session?: CapabilitySession }) {
   );
 }
 
+function PinnedKnowledgeEvidence({ reference, onCorrect }: { reference: KnowledgeReference; onCorrect: (reference: KnowledgeReference) => void }) {
+  const canPropose = useCan("asset.propose");
+  const { workspaceId, exactRevisionStates, ensureRevision } = useCatalogRuntime();
+  const state = exactRevisionStates[revisionCacheKey(workspaceId, reference.assetId, reference.revisionId)];
+  const complete = Boolean(reference.assetId && reference.revisionId && reference.releaseId);
+  useEffect(() => {
+    if (complete && !state) void ensureRevision(reference.assetId, reference.revisionId);
+  }, [complete, ensureRevision, reference.assetId, reference.revisionId, state]);
+  const revision = state?.revision;
+  const content = revision?.content;
+  const text = (...values: unknown[]) => values.find((value): value is string => typeof value === "string" && Boolean(value)) ?? "";
+  const typeLabels: Record<string, AssetType> = { business_object: "业务对象", business_term: "业务口径", metric: "指标", data_asset: "数据资产", analysis_model: "分析模型" };
+  const type = typeLabels[text(content?.assetType)];
+  return <section className="view view-assets asset-detail-page historical-knowledge-view" aria-label="已发布知识依据">
+    {!complete || state?.state === "error" ? <div className="catalog-detail-state" role="alert"><CircleAlert size={20} /><strong>指定知识修订读取失败</strong><span>{complete ? state?.error : "知识版本定位不完整。"}</span>{complete && <button type="button" onClick={() => void ensureRevision(reference.assetId, reference.revisionId)}>重试</button>}</div>
+      : !revision ? <div className="catalog-detail-state" role="status"><LoaderCircle className="spin" size={20} /><strong>正在读取指定知识修订</strong></div>
+      : <section className="asset-detail">
+        <header className="asset-detail-header">
+          <div className="asset-header-main">
+            {type ? <AssetTypeMark type={type} size={19} /> : <span className="asset-type-mark"><BookOpenCheck size={19} /></span>}
+            <div className="asset-title-copy"><span className="panel-kicker">已发布知识依据 · 版本 {revision.sequence}</span><h1>{text(content?.displayName, content?.name, content?.title) || reference.assetId}</h1><p>{text(content?.definition, content?.summary) || "此修订未声明文字定义。"}</p>{!canPropose && <p>当前身份没有提出知识修订的权限。</p>}</div>
+            <div className="asset-header-side"><button type="button" className="secondary-button" disabled={!canPropose} title={!canPropose ? "需要 asset.propose 权限" : undefined} onClick={() => onCorrect(reference)}><GitPullRequestArrow size={15} />修订当前知识</button></div>
+          </div>
+        </header>
+        <div className="asset-authority-detail">
+          {type && <section><h3>{type}定义</h3><KnowledgeSpecView type={type} spec={content?.spec as KnowledgeSpec | undefined} /></section>}
+          <section aria-label="修订证据"><h3>修订证据</h3>{revision.evidence.length ? <div className="asset-authority-evidence">{revision.evidence.map((item) => <article key={item.id}><strong>{item.note || item.locator}</strong><span>{item.fieldPath || "revision"}</span><span>{item.locator}</span></article>)}</div> : <p>此修订没有关联证据。</p>}</section>
+          <details className="production-technical"><summary>依据版本</summary><dl><div><dt>知识</dt><dd><code>{reference.assetId}</code></dd></div><div><dt>修订</dt><dd><code>{revision.id}</code></dd></div><div><dt>回答发布版本</dt><dd><code>{reference.releaseId}</code></dd></div><div><dt>内容摘要</dt><dd><code>{revision.contentDigest}</code></dd></div></dl></details>
+        </div>
+      </section>}
+  </section>;
+}
+
 interface ProductDeepLink {
+  assetEvidence: KnowledgeReference | null;
   reviews?: boolean;
   view?: ViewId;
   attentionItemId: string | null;
@@ -2403,6 +2450,7 @@ interface ProductDeepLink {
 
 function readProductDeepLink(): ProductDeepLink {
   const empty = {
+    assetEvidence: null,
     attentionItemId: null,
     proposalId: null,
     releaseId: null,
@@ -2443,7 +2491,7 @@ function readProductDeepLink(): ProductDeepLink {
   }
   if (segments[0] === "assets" && segments[1]) {
     const detail = { ...empty, view: "assets" as const, assetId: decodeURIComponent(segments[1]), assetDetail: true, ...(segments[2] === "versions" ? { assetTab: "定义" as const } : {}) };
-    return detail;
+    return { ...detail, assetEvidence: query.has("revision") || query.has("release") ? { assetId: detail.assetId, revisionId: query.get("revision") ?? "", releaseId: query.get("release") ?? "" } : null };
   }
   if (path === "/assets") {
     const assetId = query.get("asset");
@@ -2519,11 +2567,12 @@ function sourceSectionForIndex(index: number): SourceSection {
 }
 
 function ProductApplication({ session }: { session?: CapabilitySession }) {
-  const { assets, workspaceId } = useCatalogRuntime();
+  const { assets, workspaceId, ensureAsset } = useCatalogRuntime();
   const governance = useGovernanceRuntime();
   const workbench = useWorkbenchRuntime();
   const initialDeepLink = useMemo(() => readProductDeepLink(), []);
   const [view, setView] = useState<ViewId>(initialDeepLink.view ?? ("ask"));
+  const [askVisited, setAskVisited] = useState(!initialDeepLink.view || initialDeepLink.view === "ask");
   const [contextPanelOpen, setContextPanelOpen] = useState(true);
   const [contextPanelWidth, setContextPanelWidth] = useState(initialContextPanelWidth);
   const [askSessionKey, setAskSessionKey] = useState(0);
@@ -2542,11 +2591,22 @@ function ProductApplication({ session }: { session?: CapabilitySession }) {
   const [releaseDetailOpen, setReleaseDetailOpen] = useState(false);
   const [releaseDetailBackRequestEpoch, setReleaseDetailBackRequestEpoch] = useState(0);
   const [selectedAssetId, setSelectedAssetId] = useState(initialDeepLink.assetId ?? assets[0]?.id ?? "");
+  const [assetEvidence, setAssetEvidence] = useState(initialDeepLink.assetEvidence);
   const [assetTabRequest, setAssetTabRequest] = useState<AssetTab>("概览");
   const [assetDetailRequest, setAssetDetailRequest] = useState(Boolean(initialDeepLink.assetId));
   const [assetTabRequestEpoch, setAssetTabRequestEpoch] = useState(0);
   const [assetDetailBackRequestEpoch, setAssetDetailBackRequestEpoch] = useState(0);
   const [knowledgeRevisionRequest, setKnowledgeRevisionRequest] = useState<KnowledgeRevisionRequest | null>(null);
+  const revisionCommand = useRef<ReturnType<typeof createKnowledgeRevisionCommand> | null>(null);
+  const revisionController = useRef(new AbortController());
+  const [revisionSaveState, setRevisionSaveState] = useState({ busy: false, unknown: false });
+  const [productionRevisionContext, setProductionRevisionContext] = useState<{ operationId: string; text: string } | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    revisionController.current = controller;
+    revisionCommand.current = null;
+    return () => controller.abort();
+  }, [workspaceId, session?.principalId]);
   const [assetCatalogTypeRequest, setAssetCatalogTypeRequest] = useState<CatalogObjectType | "全部">("全部");
   const [assetCatalogVersionRequest, setAssetCatalogVersionRequest] = useState<KnowledgeVersionFilter>(initialDeepLink.catalogVersionFilter ?? "全部");
   const [askConversationTitles, setAskConversationTitles] = useState(initialAskConversationTitles);
@@ -2645,6 +2705,7 @@ function ProductApplication({ session }: { session?: CapabilitySession }) {
         setCompatibilityTarget(null);
         closeWorkbenchRuntimeItem();
         setKnowledgeRevisionRequest(null);
+        setAssetEvidence(route.assetEvidence);
         setSelectedAssetId(route.assetId ?? assets[0]?.id ?? "");
         setAssetCatalogVersionRequest(route.catalogVersionFilter ?? "全部");
         setAssetTabRequest(route.assetTab);
@@ -2675,6 +2736,7 @@ function ProductApplication({ session }: { session?: CapabilitySession }) {
         setCompatibilityTarget(null);
         closeWorkbenchRuntimeItem();
         setView("ask");
+        setAskVisited(true);
         setContextIndex(0);
       }
     };
@@ -2717,6 +2779,7 @@ function ProductApplication({ session }: { session?: CapabilitySession }) {
   }, [toastTimer]);
 
   const selectAsset = (id: string) => {
+    setAssetEvidence(null);
     setSelectedAssetId(id);
     writeProductRoute(assetRoute(id));
   };
@@ -2832,10 +2895,10 @@ function ProductApplication({ session }: { session?: CapabilitySession }) {
 
   const handleAuditRunRequest = useCallback(() => setAuditRunRequestId(undefined), []);
 
-  const openAssetEvidence = (assetId?: string) => {
-    const target = assets.find((asset) => asset.id === assetId) ?? assets[0];
-    if (!target) return;
-    selectAsset(target.id);
+  const openAssetEvidence = (reference: KnowledgeReference) => {
+    setSelectedAssetId(reference.assetId);
+    setAssetEvidence(reference);
+    writeProductRoute(assetRoute(reference.assetId, reference));
     setKnowledgeRevisionRequest(null);
     setView("assets");
     setContextIndex(0);
@@ -2859,6 +2922,8 @@ function ProductApplication({ session }: { session?: CapabilitySession }) {
   };
 
   const openKnowledgeRevision = (request: KnowledgeRevisionRequest) => {
+    if (revisionCommand.current) { showToast("上一修订的保存尚未完成，请先核对同一请求。"); return; }
+    void ensureAsset(request.assetId);
     selectAsset(request.assetId);
     setKnowledgeRevisionRequest(request);
     setView("assets");
@@ -2869,35 +2934,47 @@ function ProductApplication({ session }: { session?: CapabilitySession }) {
     setAssetTabRequestEpoch((epoch) => epoch + 1);
   };
 
+  const openAnswerRevision = (reference: KnowledgeReference, fieldPath: string, context: string) => {
+    if (!session?.capabilities.includes("asset.propose")) {
+      showToast("当前身份没有提出知识修订的权限。");
+      return;
+    }
+    openKnowledgeRevision({ assetId: reference.assetId, fieldPath, origin: "ask", context: `${context}\n回答依据：${reference.assetId} / ${reference.revisionId} / ${reference.releaseId}。修订使用当前知识基线。` });
+  };
+
   const submitKnowledgeRevision = async (submission: KnowledgeRevisionSubmission) => {
-    const asset = assets.find((item) => item.id === submission.assetId);
-    if (!asset) return;
-    const empty = (value: string | Record<string, unknown>) => typeof value === "string" && value.trim() === "";
-    const changeSet = submission.changes.map((change) => ({
-      fieldPath: change.field,
-      op: (empty(change.before) ? "add" : empty(change.after) ? "remove" : "update") as "add" | "remove" | "update",
-      beforeValue: empty(change.before) ? undefined : change.before,
-      afterValue: empty(change.after) ? undefined : change.after,
-    }));
-    const submitted = await governance.createAndSubmitProposal({
-      targetObjectType: "semantic_asset",
-      targetObjectId: asset.id,
-      baseRevisionId: asset.revisionRecord.revisionId.startsWith("rev_") ? asset.revisionRecord.revisionId : undefined,
-      title: submission.title,
-      summary: submission.summary,
-      reason: submission.reason,
-      changeSet,
-      createdBy: "catalog-web",
-    });
-    setKnowledgeRevisionRequest(null);
-    openCandidateVersionById(submitted.id);
-    showToast(`${asset.name} 知识修订已提交为提案 ${submitted.id}，治理验证运行中。`);
+    if (!session?.capabilities.includes("asset.propose")) {
+      if (revisionCommand.current) throw new KnowledgeRevisionUncertainError("当前身份没有提出知识修订的权限");
+      throw new Error("当前身份没有提出知识修订的权限。");
+    }
+    if (revisionCommand.current && !sameRevisionSubmission(revisionCommand.current.submission, submission)) throw new Error("上一修订的保存结果未确认，不能创建不同的修订请求。");
+    const signal = revisionController.current.signal;
+    const command = revisionCommand.current ?? createKnowledgeRevisionCommand(workspaceId, submission, signal);
+    revisionCommand.current = command;
+    setRevisionSaveState((current) => ({ ...current, busy: true }));
+    try {
+      const result = await command.run();
+      if (signal.aborted || revisionCommand.current !== command) return;
+      revisionCommand.current = null;
+      setRevisionSaveState({ busy: false, unknown: false });
+      setProductionRevisionContext({ operationId: result.operationId, text: command.submission.reason });
+      setKnowledgeRevisionRequest(null);
+      openKnowledgeAction(result.operationId);
+      showToast("知识修订草稿已保存；请继续确认业务口径，尚未提交验证、审核或发布。");
+    } catch (error) {
+      if (signal.aborted || revisionCommand.current !== command) return;
+      const unknown = error instanceof KnowledgeRevisionUncertainError;
+      if (!unknown) revisionCommand.current = null;
+      setRevisionSaveState({ busy: false, unknown });
+      throw error;
+    }
   };
 
   const navigate: NavigateToView = (nextView, nextContextIndex) => {
     if (nextView === "releases") nextView = "overview";
     setContextPanelOpen(true);
     setKnowledgeRevisionRequest(null);
+    setAssetEvidence(null);
     workbench.closeItem();
     setCompatibilityTarget(null);
     if (nextView === "overview") writeProductRoute(workRoute(nextContextIndex === 1 ? "initiated" : nextContextIndex === 2 ? "done" : "pending"));
@@ -2905,6 +2982,7 @@ function ProductApplication({ session }: { session?: CapabilitySession }) {
     else if (nextView === "sources") writeProductRoute(sourceRoute(undefined, sourceSectionForIndex(nextContextIndex ?? 0)));
     else writeProductRoute(viewRoutes[nextView]);
     setView(nextView);
+    if (nextView === "ask") setAskVisited(true);
     if (nextView === "sources") setSourceInitialSourceId(undefined);
     if (nextView === "assets" && (nextContextIndex === undefined || nextContextIndex === 0)) {
       setAssetTabRequest("概览");
@@ -3027,11 +3105,7 @@ function ProductApplication({ session }: { session?: CapabilitySession }) {
   };
   const selectProductionOperation = useCallback((id: string, releaseId?: string) => {
     setProductionId(id || undefined);
-    const operationPath = workOperationRoute(id, productionOrigin === "drafts" ? "pending" : productionInboxScope === 1 ? "initiated" : productionInboxScope === 2 ? "done" : "pending");
-    const operationQuery = new URLSearchParams();
-    if (releaseId) operationQuery.set("productionRelease", releaseId);
-    if (productionOrigin === "drafts") operationQuery.set("from", "drafts");
-    const route = id ? `${operationPath}${operationQuery.toString() ? `?${operationQuery.toString()}` : ""}` : `${assetRoute()}?status=draft`;
+    const route = id ? workOperationRoute(id, productionOrigin === "drafts" ? "pending" : productionInboxScope === 1 ? "initiated" : productionInboxScope === 2 ? "done" : "pending", { productionRelease: releaseId, ...(productionOrigin === "drafts" ? { from: "drafts" } : {}) }) : `${assetRoute()}?status=draft`;
     if (window.location.pathname + window.location.search !== route) writeProductRoute(route, id === productionId);
   }, [productionOrigin, productionInboxScope, productionId]);
   const backFromVersionDetail = () => {
@@ -3058,15 +3132,16 @@ function ProductApplication({ session }: { session?: CapabilitySession }) {
         <Topbar key={`${view}-${contextLabel ?? ""}`} view={view} contextLabel={contextLabel} onNewConversation={() => { setAskSessionKey((key) => key + 1); setContextIndex(0); }} onRenameContext={view === "ask" ? renameConversationTitle : undefined} onBack={compatibilityTarget ? () => { setCompatibilityTarget(null); closeWorkbenchItem(); } : view === "overview" && workbench.selectedItemId ? () => closeWorkbenchItem() : view === "assets" && assetDetailRequest ? () => { setKnowledgeRevisionRequest(null); setAssetDetailRequest(false); setAssetDetailBackRequestEpoch((epoch) => epoch + 1); writeProductRoute(assetRoute()); } : view === "sources" && contextIndex === 2 && sourceRunDetailOpen ? () => setSourceRunBackRequestEpoch((epoch) => epoch + 1) : view === "releases" && contextIndex === 2 ? () => navigate("overview", productionInboxScope) : view === "releases" && releaseDetailOpen ? backFromVersionDetail : undefined} backLabel={view === "overview" ? "返回待办" : view === "assets" ? "返回知识目录" : view === "releases" ? releaseOrigin === "audit" ? "返回审计与运行" : contextIndex === 2 || versionDetailRequest.key?.startsWith("candidate:") ? "返回待办" : "返回发布记录" : "返回运行记录"} />
         <main ref={workspaceRef} className="workspace-canvas">
           <SessionAuthorizationNotice />
+          {revisionSaveState.unknown && <div className="production-alert" role="alert">上次修订的保存结果未确认。<button type="button" className="secondary-button" disabled={revisionSaveState.busy || !session?.capabilities.includes("asset.propose")} onClick={() => { const command = revisionCommand.current; if (command) void submitKnowledgeRevision(command.submission).catch((error: unknown) => showToast(error instanceof Error ? error.message : "保存结果仍未确认。")); }}>核对上次修订保存</button></div>}
 
           {(view === "settings") && contextIndex === 2 && <SurfaceBoundaryNotice title="持久化索引" detail="重建使用已发布知识与固定模型配置；完整校验后生效，失败或取消保留当前索引。" />}
-          {view === "ask" && <AskView key={`${askSessionKey}-${contextIndex}`} workspaceId={workspaceId} noPublishedKnowledge={governance.releasesState === "ready" && governance.releases.length === 0} onOpenKnowledge={() => navigate("releases")} onOpenEvidence={openAssetEvidence} onStartRevision={(assetId, fieldPath, context) => { const target = assets.find((asset) => asset.id === assetId); if (target) openKnowledgeRevision({ assetId: target.id, fieldPath, origin: "ask", context }); }} />}
+          {(view === "ask" || askVisited) && <AskView key={`${workspaceId}:${askSessionKey}`} hidden={view !== "ask"} workspaceId={workspaceId} noPublishedKnowledge={governance.releasesState === "ready" && governance.releases.length === 0} onOpenKnowledge={() => navigate("releases")} onOpenEvidence={openAssetEvidence} onStartRevision={openAnswerRevision} />}
           {view === "sources" && ((<LiveSourcesView navigationEpoch={contextSelectionEpoch} focusIndex={contextIndex} runDetailBackRequestEpoch={sourceRunBackRequestEpoch} initialRunId={sourceInitialRunId} initialScheduleId={sourceInitialScheduleId} initialSourceId={sourceInitialSourceId} onRoute={writeProductRoute} onRunDetailOpenChange={setSourceRunDetailOpen} onOpenProposal={openCandidateVersionById} />))}
           {view === "overview" && compatibilityTarget && <CompatibilityImpactView workspaceId={workspaceId} consumerId={compatibilityTarget.consumerId} bindingId={compatibilityTarget.bindingId} queryId={compatibilityTarget.queryId} />}
           {view === "overview" && !compatibilityTarget && !workbench.selectedItemId && <UnifiedInbox key={inboxViewKey} initialViewState={inboxViews[inboxViewKey]} onRememberView={rememberInboxView} focusScopeRequestEpoch={inboxScopeRequestEpoch} onScopeChange={(scope) => { setInboxScopeRequestEpoch((epoch) => epoch + 1); navigate("overview", scope === "initiated" ? 1 : scope === "done" ? 2 : 0); }} workspaceId={workspaceId} principalId={session?.principalId} scope={contextIndex === 1 ? "initiated" : contextIndex === 2 ? "done" : "pending"} onOpenOperation={openKnowledgeAction} onOpenTask={openWorkbenchItem} onOpenReviews={() => { setProductionInboxScope(contextIndex); setView("releases"); setContextIndex(2); setVersionDetailRequest((current) => ({ key: null, epoch: current.epoch + 1 })); writeProductRoute(workReviewsRoute(contextIndex === 1 ? "initiated" : contextIndex === 2 ? "done" : "pending")); }} focusSearchRequestEpoch={workbenchSearchRequestEpoch} />}
           {view === "overview" && !compatibilityTarget && workbench.selectedItemId && <WorkbenchDetailView onOpenTarget={openWorkbenchTarget} onOpenReleaseRecord={openReleaseRecord} />}
-          {view === "assets" && <AssetsView key={assetTabRequestEpoch} selectedId={selectedAssetId} domainFilter="全部" requestedTab={assetTabRequest} requestedDetail={assetDetailRequest} requestedCatalogType={assetCatalogTypeRequest} requestedVersionFilter={assetCatalogVersionRequest} requestedRevision={knowledgeRevisionRequest} focusSearchRequestEpoch={assetSearchRequestEpoch} detailBackRequestEpoch={assetDetailBackRequestEpoch} onSelect={selectAsset} onDetailChange={setAssetDetailRequest} onNotify={showToast} onRevisionSubmit={submitKnowledgeRevision} onStartAIGeneration={(assetId, fieldPath) => setAiGenerationRequest({ assetId, fieldPath })} onOpenReleaseHistory={openReleaseHistory} onOpenReleaseRecord={openReleaseRecord} />}
-          {(view === "releases" && contextIndex === 1) && <SemanticProductionWorkspace onOpenSources={() => navigate("sources", 2)} key={`${workspaceId}:${session?.principalId}:${session?.version}:${contextSelectionEpoch}`} operationId={productionId} onBack={productionId ? backFromProduction : undefined} backLabel={productionOrigin === "drafts" ? "返回知识目录" : "返回待办"} onOpenProposal={openCandidateVersionById} onOpenAsset={openAssetDetail} onOperationSelected={selectProductionOperation} />}
+          {view === "assets" && (assetDetailRequest && assetEvidence ? <PinnedKnowledgeEvidence reference={assetEvidence} onCorrect={(reference) => openAnswerRevision(reference, "definition.boundary", "来自已发布知识依据的纠错。")} /> : <AssetsView key={assetTabRequestEpoch} selectedId={selectedAssetId} domainFilter="全部" requestedTab={assetTabRequest} requestedDetail={assetDetailRequest} requestedCatalogType={assetCatalogTypeRequest} requestedVersionFilter={assetCatalogVersionRequest} requestedRevision={knowledgeRevisionRequest} focusSearchRequestEpoch={assetSearchRequestEpoch} detailBackRequestEpoch={assetDetailBackRequestEpoch} onSelect={selectAsset} onDetailChange={setAssetDetailRequest} onNotify={showToast} onRevisionSubmit={submitKnowledgeRevision} onStartAIGeneration={(assetId, fieldPath) => setAiGenerationRequest({ assetId, fieldPath })} onOpenReleaseHistory={openReleaseHistory} onOpenReleaseRecord={openReleaseRecord} />)}
+          {(view === "releases" && contextIndex === 1) && <SemanticProductionWorkspace revisionContext={productionRevisionContext && productionRevisionContext.operationId === productionId ? productionRevisionContext.text : undefined} onOpenSources={() => navigate("sources", 2)} key={`${workspaceId}:${session?.principalId}:${session?.version}:${contextSelectionEpoch}`} operationId={productionId} onBack={productionId ? backFromProduction : undefined} backLabel={productionOrigin === "drafts" ? "返回知识目录" : "返回待办"} onOpenProposal={openCandidateVersionById} onOpenAsset={openAssetDetail} onOperationSelected={selectProductionOperation} />}
           {view === "releases" && ((contextIndex !== 1)) && <ReleasesView historyOnly={navigationView === "assets" || releaseOrigin === "audit"} batchOnly={contextIndex === 2} routeOrigin={releaseOrigin === "audit" ? "audit" : releaseOrigin === "inbox" ? "work" : "asset"} key={versionDetailRequest.epoch} initialSelectedKey={versionDetailRequest.key} initialSourceRun={versionSourceRun} detailBackRequestEpoch={releaseDetailBackRequestEpoch} rollbackNotice={rollbackNotice} onDetailOpenChange={setReleaseDetailOpen} onReview={setReviewing} onPublish={setPublishing} onRollback={(releaseId) => void handleRollback(releaseId)} onAssembleBatches={() => void handleAssembleBatches()} onConfirmBatch={setConfirmingBatch} onOpenReleaseRecord={openReleaseRecord} />}
           {view === "settings" && <SettingsView key={`${workspaceId}:${session?.principalId}:${session?.version}`} workspaceId={workspaceId}  authorizationVersion={session?.version} focusIndex={contextIndex} auditRunRequestId={auditRunRequestId} onAuditRunRequestHandled={handleAuditRunRequest} onNotify={showToast} onNavigate={navigate} />}
         </main>

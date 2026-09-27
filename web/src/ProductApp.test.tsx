@@ -1,16 +1,22 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, vi } from "vitest";
 
 import { CapabilityProvider } from "./authorization";
 import { CatalogRuntimeProvider } from "./testing/catalogFixture";
+import { useCatalogRuntime } from "./catalogRuntime";
 import { CompatibilityImpactView, ProductApp } from "./ProductApp";
 import type { CapabilitySession } from "./types";
 import { assetTypeProfiles, evaluateAssetTypeRules } from "./assetTypeProfiles";
 import { assets, authorizationRoles, authorizationSession } from "./testing/data";
+import { askReleasedSemantics } from "./ask";
+import { createKnowledgeRevisionCommand } from "./knowledgeProductionRevision";
+
+vi.mock("./ask", async (importOriginal) => ({ ...await importOriginal<typeof import("./ask")>(), askReleasedSemantics: vi.fn() }));
+vi.mock("./knowledgeProductionRevision", async (importOriginal) => ({ ...await importOriginal<typeof import("./knowledgeProductionRevision")>(), createKnowledgeRevisionCommand: vi.fn() }));
 
 vi.mock("./SemanticProductionPanel", () => ({
-  SemanticProductionWorkspace: ({ operationId, onOperationSelected, onBack, backLabel }: { operationId?: string; onOperationSelected: (id: string) => void; onBack?: () => void; backLabel?: string }) => <section aria-label="知识确认">{operationId ? <button onClick={onBack}>{backLabel}</button> : <button onClick={() => onOperationSelected("prodop_menu_test")}>打开测试草稿</button>}</section>,
+  SemanticProductionWorkspace: ({ operationId, revisionContext, onOperationSelected, onBack, backLabel }: { operationId?: string; revisionContext?: string; onOperationSelected: (id: string) => void; onBack?: () => void; backLabel?: string }) => <section aria-label="知识确认">{operationId ? <><code>{operationId}</code><p>{revisionContext}</p><button onClick={onBack}>{backLabel}</button></> : <button onClick={() => onOperationSelected("prodop_menu_test")}>打开测试草稿</button>}</section>,
 }));
 
 vi.mock("./sessionRuntime", async (importOriginal) => {
@@ -62,6 +68,11 @@ function App({ session = authorizationSession }: { session?: CapabilitySession }
   return <CatalogRuntimeProvider fixtureAssets={assets}><ProductApp session={session} /></CatalogRuntimeProvider>;
 }
 
+function FixtureCatalogQueryProbe() {
+  const runtime = useCatalogRuntime();
+  return <><button onClick={() => runtime.setQuery(assets[0].identity.key, "")}>Search fixture key</button><output data-testid="fixture-membership">{runtime.catalogAssetIds.join(",")}</output><output data-testid="fixture-total">{runtime.total}</output></>;
+}
+
 async function openReviewTask(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole("button", { name: "待办" }));
   await user.click(await screen.findByRole("button", { name: "进入审核：确认客单价退款订单口径" }));
@@ -76,11 +87,56 @@ async function openReleaseHistory(user: ReturnType<typeof userEvent.setup>) {
 const authorSession: CapabilitySession = { principalId: "prn_01arz3ndektsv4rrffq69g5fav", version: "1", capabilities: [...new Set(authorizationRoles.filter((role) => ["ROLE-ASSET-OWNER", "ROLE-SOURCE-OPERATOR"].includes(role.id)).flatMap((role) => role.permissions)), "workspace.manage", "member.manage", "role.assign"] };
 
 afterEach(() => {
+  vi.mocked(askReleasedSemantics).mockReset();
+  vi.mocked(createKnowledgeRevisionCommand).mockReset();
   window.history.replaceState({}, "", "/");
   vi.unstubAllGlobals();
 });
 
 describe("Semlia product workspace", () => {
+  it.each([false, true])("saves natural correction through production and fences late identity results: %s", async (changeIdentity) => {
+    let finish!: (result: { operationId: string }) => void;
+    const run = vi.fn().mockReturnValue(new Promise(resolve => { finish = resolve; }));
+    vi.mocked(createKnowledgeRevisionCommand).mockImplementation((_workspace, submission) => ({ submission, run }));
+    const current = { ...assets[0], knowledgeSpec: {} };
+    const show = (principalId: string) => <CatalogRuntimeProvider fixtureAssets={[current]}><ProductApp session={{ ...authorSession, principalId }} /></CatalogRuntimeProvider>;
+    const view = render(show("author"));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "知识库" }));
+    await user.click(screen.getByRole("button", { name: "打开语义资产 净收入" }));
+    await user.click(screen.getByRole("tab", { name: "定义" }));
+    await user.click(screen.getByRole("button", { name: "提出修订" }));
+    await user.type(screen.getByLabelText("业务定义候选值"), " Synthetic correction");
+    await user.type(screen.getByLabelText("知识修订原因"), "Synthetic answer provenance");
+    await user.click(screen.getByRole("button", { name: "运行检查" }));
+    await user.click(screen.getByRole("button", { name: "保存修订并继续确认" }));
+    expect(createKnowledgeRevisionCommand).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ assetId: current.id, baseRevisionId: current.revisionRecord.revisionId }), expect.any(AbortSignal));
+    const signal = vi.mocked(createKnowledgeRevisionCommand).mock.calls[0][2]!;
+    if (changeIdentity) view.rerender(show("another-author"));
+    await act(async () => finish({ operationId: "prodop_revision" }));
+    if (changeIdentity) {
+      expect(signal.aborted).toBe(true);
+      expect(window.location.pathname).not.toContain("prodop_revision");
+    } else {
+      expect(window.location.pathname).toBe("/work/operations/prodop_revision");
+      expect(screen.getByRole("region", { name: "知识确认" })).toHaveTextContent("Synthetic answer provenance");
+      expect(screen.getByText(/知识修订草稿已保存/)).toBeVisible();
+    }
+  });
+  it("does not mount Ask from an unrelated route and aborts a pending question when leaving Ask", async () => {
+    window.history.replaceState({}, "", "/assets");
+    vi.mocked(askReleasedSemantics).mockReturnValue(new Promise(() => {}));
+    render(<App session={authorSession} />);
+    expect(screen.queryByRole("textbox", { name: "向 Semlia 提问", hidden: true })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "问数" }));
+    await userEvent.type(screen.getByRole("textbox", { name: "向 Semlia 提问" }), "Private synthetic question");
+    await userEvent.click(screen.getByRole("button", { name: "发送问题" }));
+    const signal = vi.mocked(askReleasedSemantics).mock.calls[0][2]!;
+    await userEvent.click(screen.getByRole("button", { name: "知识库" }));
+    expect(signal.aborted).toBe(true);
+    await userEvent.click(screen.getByRole("button", { name: "问数" }));
+    expect(screen.getByText("请求已取消")).toBeVisible();
+  });
   it("offers creation rather than clearing nonexistent filters in an empty catalog", async () => {
     window.history.replaceState({}, "", "/assets");
     render(<CatalogRuntimeProvider fixtureAssets={[]}><ProductApp session={authorizationSession} /></CatalogRuntimeProvider>);
@@ -122,6 +178,30 @@ describe("Semlia product workspace", () => {
     expect(screen.getByRole("button", { name: `打开语义资产 ${source.name}` })).toBeVisible();
     await user.click(screen.getByRole("button", { name: /^草稿/ }));
     expect(screen.getByRole("button", { name: `打开语义资产 ${source.name}` })).toBeVisible();
+  });
+
+  it("retains authoritative published and explicitly unreleased draft filtering", async () => {
+    const published = assets[0];
+    const draft = {
+      ...assets[1], status: "草稿" as const,
+      revisionRecord: { ...assets[1].revisionRecord, workflowState: "draft" as const },
+      deployment: { ...assets[1].deployment, state: "unreleased" as const, revisionId: undefined, releaseId: undefined },
+    };
+    window.history.replaceState({}, "", "/assets");
+    render(<CatalogRuntimeProvider fixtureAssets={[published, draft]}><ProductApp session={authorizationSession} /></CatalogRuntimeProvider>);
+    const user = userEvent.setup();
+    expect(screen.queryByText("版本筛选暂不可用，当前显示全部版本。")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "正式版 1" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "草稿 1" })).toBeEnabled();
+    const publishedRow = screen.getByRole("button", { name: `打开语义资产 ${published.name}` });
+    expect(publishedRow).toHaveTextContent("正式版");
+    expect(within(publishedRow).getByRole("progressbar")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "正式版 1" }));
+    expect(screen.getByRole("button", { name: `打开语义资产 ${published.name}` })).toBeVisible();
+    expect(screen.queryByRole("button", { name: `打开语义资产 ${draft.name}` })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "草稿 1" }));
+    expect(screen.getByRole("button", { name: `打开语义资产 ${draft.name}` })).toHaveTextContent("草稿");
+    expect(screen.queryByRole("button", { name: `打开语义资产 ${published.name}` })).not.toBeInTheDocument();
   });
 
   it("preserves the originating inbox scope when returning from a direct knowledge link", async () => {
@@ -495,6 +575,37 @@ describe("Semlia product workspace", () => {
     expect(screen.getByRole("region", { name: "知识目录" })).toBeVisible();
     expect(screen.getByRole("searchbox", { name: "搜索知识目录" })).toHaveValue("净收入");
     expect(screen.queryByRole("region", { name: "语义资产详情" })).not.toBeInTheDocument();
+  });
+
+  it("makes the catalog fixture own its advertised query membership", async () => {
+    render(<CatalogRuntimeProvider fixtureAssets={assets}><FixtureCatalogQueryProbe /></CatalogRuntimeProvider>);
+    await userEvent.click(screen.getByRole("button", { name: "Search fixture key" }));
+    expect(screen.getByTestId("fixture-membership")).toHaveTextContent(new RegExp(`^${assets[0].id}$`));
+    expect(screen.getByTestId("fixture-total")).toHaveTextContent(/^1$/);
+  });
+
+  it("preserves local domain and governed-object selection within search membership", async () => {
+    const first = { ...assets[0], domain: "RevenueScope", aliases: ["catalog-match"] };
+    const dataAsset = assets.find((item) => item.type === "数据资产")!;
+    const second = { ...dataAsset, domain: "DataScope", aliases: ["catalog-match"], relations: [], bindings: [], joinContracts: [] };
+    window.history.replaceState({}, "", "/assets");
+    render(<CatalogRuntimeProvider fixtureAssets={[first, second]}><ProductApp session={authorizationSession} /></CatalogRuntimeProvider>);
+    const user = userEvent.setup();
+    await user.type(screen.getByRole("searchbox", { name: "搜索知识目录" }), "catalog-match");
+    expect(screen.getAllByRole("button", { name: /^打开语义资产 / })).toHaveLength(2);
+    await user.selectOptions(screen.getByRole("combobox", { name: "筛选语义域" }), "RevenueScope");
+    expect(screen.getAllByRole("button", { name: /^打开语义资产 / })).toHaveLength(1);
+    expect(screen.getByRole("button", { name: `打开语义资产 ${first.name}` })).toBeVisible();
+    expect(document.querySelector(".catalog-summary")).toHaveTextContent("显示 1 · 已加载 2 / 2 个语义资产");
+    await user.selectOptions(screen.getByRole("combobox", { name: "筛选语义域" }), "全部");
+    await user.selectOptions(screen.getByRole("combobox", { name: "筛选知识对象类型" }), "数据资产");
+    expect(screen.getAllByRole("button", { name: /^打开语义资产 / })).toHaveLength(1);
+    expect(screen.getByRole("button", { name: `打开语义资产 ${second.name}` })).toBeVisible();
+    await user.selectOptions(screen.getByRole("combobox", { name: "筛选知识对象类型" }), "物理绑定");
+    expect(screen.getAllByRole("button", { name: /^打开语义资产 / })).toHaveLength(1);
+    expect(screen.getByRole("button", { name: `打开语义资产 ${first.name}` })).toBeVisible();
+    expect(screen.getByRole("button", { name: /analytics.orders 映射至 净收入，物理绑定/ })).toBeVisible();
+    expect(screen.queryByRole("button", { name: /，语义关系，打开所属资产详情/ })).not.toBeInTheDocument();
   });
 
   it("specializes the stable detail shell for a non-executable business concept", async () => {

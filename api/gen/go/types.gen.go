@@ -8038,7 +8038,9 @@ type ResolvedSemanticPlan struct {
 	// ReleaseId Example: rls_01arz3ndektsv4rrffq69g5fav
 	ReleaseId       GovernanceReleaseId `json:"releaseId"`
 	ResolverVersion string              `json:"resolverVersion"`
-	TimeRange       *SemanticTimeRange  `json:"timeRange,omitempty"`
+
+	// TimeRange Half-open time interval [from, to): from is inclusive and to is exclusive. Granularity selects calendar time buckets for grouping, comparison, and ordering by the same time selector. A full calendar month ends at the first instant of the next month, not at the last second of its final day.
+	TimeRange *SemanticTimeRange `json:"timeRange,omitempty"`
 }
 
 // ResolvedSemanticPlanExecutionStatus defines model for ResolvedSemanticPlan.ExecutionStatus.
@@ -8247,7 +8249,9 @@ type SemanticQuery struct {
 	ModelId       *SemanticAssetId           `json:"modelId,omitempty"`
 	Order         *[]SemanticOrder           `json:"order,omitempty"`
 	SchemaVersion SemanticQuerySchemaVersion `json:"schemaVersion"`
-	TimeRange     *SemanticTimeRange         `json:"timeRange,omitempty"`
+
+	// TimeRange Half-open time interval [from, to): from is inclusive and to is exclusive. Granularity selects calendar time buckets for grouping, comparison, and ordering by the same time selector. A full calendar month ends at the first instant of the next month, not at the last second of its final day.
+	TimeRange *SemanticTimeRange `json:"timeRange,omitempty"`
 }
 
 // SemanticQueryIntent defines model for SemanticQuery.Intent.
@@ -8333,7 +8337,7 @@ type SemanticSelector struct {
 	Search   *string          `json:"search,omitempty"`
 }
 
-// SemanticTimeRange defines model for SemanticTimeRange.
+// SemanticTimeRange Half-open time interval [from, to): from is inclusive and to is exclusive. Granularity selects calendar time buckets for grouping, comparison, and ordering by the same time selector. A full calendar month ends at the first instant of the next month, not at the last second of its final day.
 type SemanticTimeRange struct {
 	// From RFC 3339 timestamp normalized to UTC at public boundaries.
 	//

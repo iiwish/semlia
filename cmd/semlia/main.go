@@ -640,10 +640,28 @@ func serve(ctx context.Context, cfg config.Config, output io.Writer) error {
 			governanceAuthoring, authorizer, clock,
 		))(governanceAuthoring)
 		options = append(options, httpapi.WithGovernance(governanceAuthoring))
-		options = append(options, httpapi.WithAsk(governanceapp.NewAskService(
+		askService := governanceapp.NewAskService(
 			catalogStore, modelConfig, governanceapp.NewAgentRunService(catalogStore, clock),
-			distributionService, authorizer,
-		)))
+			distributionService, authorizer, governanceapp.WithAskLogger(logger),
+		)
+		options = append(options, httpapi.WithAsk(askService))
+		go func() {
+			ticker := time.NewTicker(time.Minute)
+			defer ticker.Stop()
+			for {
+				reconcileCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+				err := askService.ReconcileExpired(reconcileCtx)
+				cancel()
+				if err != nil && ctx.Err() == nil {
+					logger.Warn("Ask expiry reconciliation failed")
+				}
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+				}
+			}
+		}()
 		if cfg.SemanticProductionEnabled {
 			options = append(options, httpapi.WithProduction(governanceapp.NewProductionService(catalogStore)))
 			options = append(options, httpapi.WithProductionGeneration(governanceapp.NewProductionGenerationService(catalogStore, cfg.ProductionGenerationGrants)))

@@ -1,10 +1,25 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { MatchAssetDialog, ProductionTargetEditor, ProductionValidationView } from "./SemanticProductionPanel";
+import { MatchAssetDialog, ProductionTargetEditor, ProductionValidationView, SemanticProductionPanel } from "./SemanticProductionPanel";
 import { makeAssetTarget, type ProductionOperation } from "./semanticProduction";
+import { useSemanticProduction } from "./semanticProductionRuntime";
+
+vi.mock("./semanticProductionRuntime", () => ({ useSemanticProduction: vi.fn() }));
 
 describe("production modeling and frozen review", () => {
+  it("keeps revision reason read-only and unconfirmed until the author explicitly confirms", async () => {
+    const target = makeAssetTarget("revision", "Synthetic model", "commerce.model", "analysis_model", "author");
+    const detail = { summary: { id: "operation", createdBy: "author", progress: "draft", frozen: false }, version: 1, input: { snapshots: [], candidates: [] }, targets: [{ localKey: "revision", targetId: "asset", declaration: target, outcome: "proposal" }], generationApplications: [], activeValidation: { status: "not_requested" }, unresolvedCodes: [] } as unknown as ProductionOperation;
+    const write = vi.fn();
+    vi.mocked(useSemanticProduction).mockReturnValue({ detail, items: [], rules: [], generations: [], release: null, loading: false, busy: false, uncertain: false, readFailed: false, error: "", notice: "", write, refresh: vi.fn() } as unknown as ReturnType<typeof useSemanticProduction>);
+    render(<SemanticProductionPanel workspaceId="workspace" principalId="author" identityKey="author:1" operationId="operation" revisionContext="Synthetic reason and R1 answer pin" permissions={{ edit: true, validate: true, review: false, publish: false, rollback: false }} onOpenProposal={vi.fn()} />);
+    expect(await screen.findByRole("region", { name: "未确认的修订上下文" })).toHaveTextContent("Synthetic reason and R1 answer pin");
+    expect(await screen.findByLabelText("业务规则声明")).toHaveValue("");
+    expect(screen.getByRole("checkbox", { name: "确认声明支持当前定义与范围" })).not.toBeChecked();
+    expect(screen.getByRole("button", { name: "记录业务确认" })).toBeDisabled();
+    expect(write).not.toHaveBeenCalled();
+  });
   it("disambiguates identical key names using their source dataset", () => {
     const target = makeAssetTarget("orders", "订单", "commerce.orders", "business_object", "author");
     const datasets = ["orders", "customers"].map((name) => ({ snapshotId: "snapshot", kind: "dataset" as const, objectId: name, revisionId: `${name}-revision`, name: `public.${name}`, locator: name, contentDigest: "digest", coverageKey: "source" }));

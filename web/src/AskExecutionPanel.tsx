@@ -2,11 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { CircleAlert, LoaderCircle, Play, RefreshCw, Square } from "lucide-react";
 import { cancelExecution, executePlan, getExecution, type ExecutionPlan, type ExecutionResult } from "./execution";
 
-export function AskExecutionPanel({ workspaceId, plan }: { workspaceId: string; plan?: ExecutionPlan }) {
-  return <ScopedExecutionPanel key={`${workspaceId}:${plan?.id ?? "history"}`} workspaceId={workspaceId} plan={plan} />;
+export function AskExecutionPanel({ workspaceId, plan, active = true }: { workspaceId: string; plan?: ExecutionPlan; active?: boolean }) {
+  return <ScopedExecutionPanel key={`${workspaceId}:${plan?.id ?? "history"}`} workspaceId={workspaceId} plan={plan} active={active} />;
 }
 
-function ScopedExecutionPanel({ workspaceId, plan }: { workspaceId: string; plan?: ExecutionPlan }) {
+function ScopedExecutionPanel({ workspaceId, plan, active }: { workspaceId: string; plan?: ExecutionPlan; active: boolean }) {
   const [result, setResult] = useState<ExecutionResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -15,7 +15,16 @@ function ScopedExecutionPanel({ workspaceId, plan }: { workspaceId: string; plan
   const mounted = useRef(true);
   const storageKey = `semlia.execution.${workspaceId}`;
   useEffect(() => {
-    mounted.current = true;
+    mounted.current = active;
+    if (!active) {
+      if (request.current) {
+        request.current.abort();
+        request.current = null;
+        setBusy(false);
+        setError("已停止等待查询响应，执行状态待核对。");
+      }
+      return;
+    }
     const controller = new AbortController();
     if (!plan) {
       let stored: string | null = null;
@@ -23,33 +32,34 @@ function ScopedExecutionPanel({ workspaceId, plan }: { workspaceId: string; plan
       if (stored) void getExecution(workspaceId, stored, controller.signal).then(value => { if (!controller.signal.aborted) setResult(value); }).catch(() => {});
     }
     return () => { mounted.current = false; controller.abort(); request.current?.abort(); };
-  }, [workspaceId, storageKey, plan]);
+  }, [workspaceId, storageKey, plan, active]);
 
   const execute = async () => {
-    if (!plan || busy) return;
+    if (!active || !plan || busy) return;
     const controller = new AbortController(); request.current = controller;
     const key = pendingKey || `web-execute-${crypto.randomUUID()}`;
     setPendingKey(key);
     setBusy(true); setResult(null); setError("");
     try {
       const value = await executePlan(workspaceId, plan, key, controller.signal);
-      if (!mounted.current) return;
+      if (!mounted.current || controller.signal.aborted || request.current !== controller) return;
       setResult(value);
       if (value.run.state !== "running") setPendingKey("");
       try { localStorage.setItem(storageKey, value.run.id); } catch { /* Rows are never persisted. */ }
     } catch (failure) {
-      if (!mounted.current) return;
+      if (!mounted.current || request.current !== controller) return;
       setError(controller.signal.aborted ? "取消请求已发送，执行状态待核对。" : failure instanceof Error ? failure.message : "EXECUTION_REQUEST_FAILED");
-    } finally { if (mounted.current) setBusy(false); }
+    } finally { if (mounted.current && request.current === controller) { setBusy(false); request.current = null; } }
   };
   const inspect = async (cancel = false) => {
-    if (!result || busy) return;
+    if (!active || !result || busy) return;
+    const controller = new AbortController(); request.current = controller;
     setBusy(true); setError("");
     try {
-      const value = cancel ? await cancelExecution(workspaceId, result.run.id) : await getExecution(workspaceId, result.run.id);
-      if (mounted.current) setResult(value);
-    } catch { if (mounted.current) setError("EXECUTION_STATUS_UNAVAILABLE"); }
-    finally { if (mounted.current) setBusy(false); }
+      const value = cancel ? await cancelExecution(workspaceId, result.run.id) : await getExecution(workspaceId, result.run.id, controller.signal);
+      if (mounted.current && !controller.signal.aborted && request.current === controller) setResult(value);
+    } catch { if (mounted.current && !controller.signal.aborted && request.current === controller) setError("EXECUTION_STATUS_UNAVAILABLE"); }
+    finally { if (mounted.current && request.current === controller) { setBusy(false); request.current = null; } }
   };
   if (!plan && !result) return null;
   const enabled = plan?.executionStatus === "requires_execution_validation";

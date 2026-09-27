@@ -1,0 +1,46 @@
+schema_version: 1
+packet_id: V1-T003-A006
+task_id: V1-T003
+feature_id: v1-convergence
+mode: Delegated Execute
+governance_inputs:
+  principles: [AGENTS.md, docs/SSOT.md]
+  spec: docs/specs/v1-convergence/spec.md
+  plan: docs/specs/v1-convergence/plan.md
+  tasks: docs/specs/v1-convergence/tasks.md
+  approval: User delegates browser acceptance and authorizes defect repair before commit, push and PR merge.
+work_unit:
+  goal: Preserve authoritative server catalog search matches in the visible semantic asset list, including full qualified keys and content/FTS matches not present in the summary.
+  dependencies: [Preserved RC.5 CUA search failure]
+  parallel: false
+codebase_context:
+  evidence: .semlia/v1-acceptance/current/browser-merge-rc5/search-canonical-red.ax.txt
+  reproduction: Consumer opens published model detail and returns; search demo_202609.model shows total 1 and loaded 1/1 but zero rows. Name search displays the same model.
+  cause: ProductApp repeats substring filtering on incomplete summary fields, dropping server-matched rows; a qualified-key-only patch does not cover FTS/content results.
+execution_constraints:
+  allowed_files:
+    - web/src/ProductApp.tsx
+    - web/src/Catalog.test.tsx
+    - web/src/ProductApp.test.tsx
+    - web/src/testing/catalogFixture.tsx
+    - web/e2e-production/production.spec.ts
+    - docs/evidence/V1-T003/catalog-search-membership.md
+  constraints:
+    - No backend, API, dependency, schema, model, source fixture, golden-answer, permission or lifecycle changes.
+    - Use catalogAssetIds as the server search membership boundary; do not re-add off-page cached detail assets or issue N+1 detail reads.
+    - Preserve local version/domain/governance-object selection and pagination behavior. Do not claim server pagination totals are local filtered counts.
+    - Test fixtures must model their advertised query membership rather than reintroduce production-only filtering or skip existing tests.
+    - Keep all previous failures and candidate bytes. No live calls, builds, Git writes or further delegation.
+validation_loop:
+  - Focused RED for qualified key and a server content/FTS-only match absent from visible summary; verify cached off-page detail is excluded.
+  - Minimal GREEN; preserve known version/domain/type and pagination tests.
+  - Add a strict real production browser regression after published assets exist, using the known exact asset address and expecting its visible row.
+  - Full frontend tests, lint, typecheck and scoped diff check; no timeout increases, retries or test weakening.
+evidence_contract:
+  public: docs/evidence/V1-T003/catalog-search-membership.md
+  include: [RED/GREEN, source authority, fixture boundary, actual commands, limits]
+review_contract:
+  - Root or independent reviewer checks membership, cached assets, local filters and asynchronous query replacement before candidate rebuild.
+handoff:
+  status: Needs_Review
+  next: Root rebuilds a new candidate and performs actual CUA regression before any model cohort or Git publication.

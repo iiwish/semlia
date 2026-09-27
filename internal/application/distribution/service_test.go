@@ -3,6 +3,7 @@ package distribution_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -152,6 +153,19 @@ type fakeDistributionRepository struct {
 	binding  distribution.ConsumerBinding
 	current  distribution.ReleaseSnapshot
 	records  []distributionapp.ResolutionRecord
+}
+
+func TestResolveRejectsReleaseDifferentFromInterpretationSnapshot(t *testing.T) {
+	w, _ := identity.NewWorkspaceID()
+	current, _ := identity.NewReleaseID()
+	expected, _ := identity.NewReleaseID()
+	p, _ := identity.NewPrincipalID()
+	repo := &fakeDistributionRepository{current: distribution.ReleaseSnapshot{WorkspaceID: w, ReleaseID: current}}
+	service := distributionapp.NewService(repo, nil, distributionapp.ClockFunc(time.Now))
+	_, err := service.Resolve(context.Background(), distributionapp.ResolveRequest{WorkspaceID: w, PrincipalRef: p.String(), Input: serviceQuery(distribution.ResolutionContext{Mode: distribution.ResolutionCurrent}), Channel: "ask", IdempotencyKey: "fixed-release", ExpectedReleaseID: &expected})
+	if !errors.Is(err, distribution.ErrConflict) || len(repo.records) != 0 {
+		t.Fatalf("different release persisted: err=%v records=%d", err, len(repo.records))
+	}
 }
 
 func (repository *fakeDistributionRepository) CreateConsumer(_ context.Context, value distribution.Consumer) (distribution.Consumer, error) {

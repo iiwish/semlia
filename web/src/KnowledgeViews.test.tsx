@@ -1,9 +1,15 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render as renderUI, screen, within } from "@testing-library/react";
+import type { ReactElement } from "react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { askReleasedSemantics, type AskResponse } from "./ask";
 import { AskView, errorMessage } from "./KnowledgeViews";
+import { CapabilityProvider } from "./authorization";
+
+function render(ui: ReactElement) {
+  return renderUI(ui, { wrapper: ({ children }) => <CapabilityProvider session={{ principalId: "author", version: "1", capabilities: ["asset.propose"] }}>{children}</CapabilityProvider> });
+}
 
 vi.mock("./ask", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./ask")>();
@@ -104,7 +110,7 @@ describe("real Ask", () => {
     expect(within(plan).getByText("已完成语义解析，未执行数据查询")).toBeVisible();
     expect(screen.queryByText(/¥|同比|目标低/)).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /净收入.*commerce.net_revenue/ }));
-    expect(openEvidence).toHaveBeenCalledWith("ast_01arz3ndektsv4rrffq69g5fav");
+    expect(openEvidence).toHaveBeenCalledWith({ assetId: "ast_01arz3ndektsv4rrffq69g5fav", revisionId: "rev_01arz3ndektsv4rrffq69g5fav", releaseId: "rls_01arz3ndektsv4rrffq69g5fav" });
   });
 
   it("maps provider failure to an explicit no-fallback boundary", () => {
@@ -114,6 +120,58 @@ describe("real Ask", () => {
       title: "模型服务暂不可用",
       detail: "本次请求已记录为失败，没有回退到演示答案。请检查默认模型及凭证后重试。",
     });
+  });
+
+  it("aborts a hidden question and ignores its late result after another question", async () => {
+    let finish!: (value: AskResponse) => void;
+    askMock.mockReturnValueOnce(new Promise((resolve) => { finish = resolve; })).mockResolvedValueOnce({ ...resolvedResponse(), agentRun: { ...resolvedResponse().agentRun, id: "arun_new" }, definitions: [] });
+    const props = { workspaceId, onOpenEvidence: vi.fn(), onStartRevision: vi.fn() };
+    const view = render(<AskView {...props} />);
+    const user = userEvent.setup();
+    await user.type(screen.getByRole("textbox", { name: "向 Semlia 提问" }), "旧问题");
+    await user.click(screen.getByRole("button", { name: "发送问题" }));
+    const signal = (askMock.mock.calls[0] as unknown as [string, unknown, AbortSignal])[2];
+    expect(signal).toBeInstanceOf(AbortSignal);
+    view.rerender(<AskView {...props} hidden />);
+    expect(signal.aborted).toBe(true);
+    view.rerender(<AskView {...props} />);
+    expect(screen.getByText("请求已取消")).toBeVisible();
+    await user.type(screen.getByRole("textbox", { name: "向 Semlia 提问" }), "新问题");
+    await user.click(screen.getByRole("button", { name: "发送问题" }));
+    await act(async () => finish(resolvedResponse()));
+    expect(screen.queryByText(/收入扣除确认退款后的已发布业务口径/)).not.toBeInTheDocument();
+    expect(screen.getByText("新问题")).toBeVisible();
+  });
+
+  it("carries the answer pin into correction and preserves a completed answer while hidden", async () => {
+    askMock.mockResolvedValue(resolvedResponse());
+    const props = { workspaceId, onOpenEvidence: vi.fn(), onStartRevision: vi.fn() };
+    const view = render(<AskView {...props} />);
+    const user = userEvent.setup();
+    await user.type(screen.getByRole("textbox", { name: "向 Semlia 提问" }), "净收入");
+    await user.click(screen.getByRole("button", { name: "发送问题" }));
+    await screen.findByText(/收入扣除确认退款后的已发布业务口径/);
+    view.rerender(<AskView {...props} hidden />);
+    view.rerender(<AskView {...props} />);
+    await user.click(screen.getByRole("button", { name: "指出问题" }));
+    await user.click(screen.getByRole("button", { name: "修订相关知识" }));
+    expect(props.onStartRevision).toHaveBeenCalledWith({ assetId: resolvedResponse().definitions[0].assetId, revisionId: resolvedResponse().definitions[0].revisionId, releaseId: resolvedResponse().resolution!.releaseId }, "definition.boundary", expect.stringContaining("净收入"));
+    expect(askMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps issue reporting available without allowing an unauthorized correction", async () => {
+    askMock.mockResolvedValue(resolvedResponse());
+    const onStartRevision = vi.fn();
+    render(<CapabilityProvider session={{ principalId: "consumer", version: "1", capabilities: ["semantic.resolve"] }}><AskView workspaceId={workspaceId} onOpenEvidence={vi.fn()} onStartRevision={onStartRevision} /></CapabilityProvider>);
+    const user = userEvent.setup();
+    await user.type(screen.getByRole("textbox", { name: "向 Semlia 提问" }), "净收入");
+    await user.click(screen.getByRole("button", { name: "发送问题" }));
+    await user.click(await screen.findByRole("button", { name: "指出问题" }));
+    expect(screen.getByRole("button", { name: "修订相关知识" })).toBeDisabled();
+    expect(screen.getByText("当前身份没有提出知识修订的权限。" )).toBeVisible();
+    await user.click(screen.getByRole("radio", { name: /问法被错误理解/ }));
+    expect(screen.getByRole("button", { name: "修改本次问题" })).toBeEnabled();
+    expect(onStartRevision).not.toHaveBeenCalled();
   });
 
   it("maps a missing default model to an actionable configuration boundary", () => {

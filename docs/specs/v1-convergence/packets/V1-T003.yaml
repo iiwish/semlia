@@ -1,0 +1,123 @@
+schema_version: 1
+packet_id: V1-T003-A001
+task_id: V1-T003
+feature_id: v1-convergence
+mode: Delegated Execute
+governance_inputs:
+  principles: [AGENTS.md, docs/SSOT.md]
+  spec: docs/specs/v1-convergence/spec.md
+  plan: docs/specs/v1-convergence/plan.md
+  tasks: docs/specs/v1-convergence/tasks.md
+  approval: User explicitly approved the scoped technical plan and continuous local implementation on 2026-09-26.
+work_unit:
+  goal: Make desktop evidence, correction and governance navigation exact, then prove the real-interface user journey at both supported desktop sizes.
+  dependencies: [V1-T002 technical review passes before execution]
+  requirements: [V1-FR-001, V1-FR-002, V1-FR-003, V1-FR-004, V1-FR-005, V1-NFR-002]
+  parallel_attempts:
+    A001: Frontend exact-object and immutable-version fixes, unit tests and existing production E2E updates.
+    A002: Normal-password real-runtime V1 browser acceptance driver and new E2E. Owns runtime lifecycle; waits for A001 before the final browser run.
+    A003: Natural knowledge correction uses the existing production operation contract, preserving exact baseline, source provenance, independent confirmation and create-command identity.
+codebase_context:
+  findings:
+    - Ask evidence falls back to assets[0] when the referenced asset is outside the current catalog cache.
+    - Ask correction silently does nothing for uncached assets.
+    - Production route state appends a second question mark when work scope is already present.
+    - Historical references call ensureAsset for the current revision instead of the exact immutable revision.
+    - Production E2E still expects obsolete query routes and old navigation labels.
+    - Natural correction calls legacy proposal creation, which correctly rejects production-reserved assets. The existing production update API is the supported path; database guards remain unchanged.
+  reuse:
+    - Existing GET catalog/assets/{assetId}/revisions/{revisionId} exposes immutable content and evidence through the generated SDK.
+    - ensureAsset can load exact IDs outside the paginated catalog.
+    - Existing normal-password V1 server/worker, real source and five-type governed fixture.
+execution_constraints:
+  allowed_files:
+    - web/src/KnowledgeViews.tsx
+    - web/src/KnowledgeViews.test.tsx
+    - web/src/ask.ts
+    - web/src/App.tsx
+    - web/src/App.test.tsx
+    - web/src/AskExecutionPanel.tsx
+    - web/src/AskExecutionPanel.test.tsx
+    - web/src/ProductApp.tsx
+    - web/src/ProductApp.test.tsx
+    - web/src/routes.ts
+    - web/src/routes.test.tsx
+    - web/src/catalog.ts
+    - web/src/catalogRuntime.tsx
+    - web/src/Catalog.test.tsx
+    - web/src/KnowledgeSpecView.tsx
+    - web/src/KnowledgeSpecView.test.tsx
+    - web/src/testing/catalogFixture.tsx
+    - web/src/KnowledgeRevisionWorkbench.tsx
+    - web/src/KnowledgeRevisionWorkbench.test.tsx
+    - web/src/knowledgeProductionRevision.ts
+    - web/src/knowledgeProductionRevision.test.tsx
+    - web/src/SemanticProductionPanel.tsx
+    - web/src/SemanticProductionPanel.test.tsx
+    - web/src/semanticProduction.ts
+    - web/src/types.ts
+    - web/src/styles.css
+    - web/e2e-production/production.spec.ts
+    - web/e2e-production/fixtures.ts
+    - web/e2e-v1/
+    - web/playwright.v1.config.ts
+    - scripts/acceptance/v1-browser*.mjs
+    - scripts/dev/validate-native.mjs
+    - docs/evidence/V1-T003/
+  ownership:
+    A001: Product and test files under web/src, web/e2e-production, scripts/dev/validate-native.mjs, and frontend evidence.
+    A002: web/e2e-v1, web/playwright.v1.config.ts, scripts/acceptance/v1-browser*.mjs, and browser evidence.
+    A003: A001 frontend owner implements the natural correction integration; the independent release reviewer does not edit these files. A002 resumes real writes only after review.
+  constraints:
+    - No backend API, migration, public SDK structure, visual redesign or mobile scope.
+    - styles.css changes are limited to removing nested section frames in the new historical knowledge view under its own class; preserve ordinary catalog layout and styling.
+    - Historical cache is keyed by workspace, asset and revision; stale workspace responses are ignored and concurrent exact requests deduplicated.
+    - A principal/account switch clears the catalog and retained Ask subtree so another identity cannot inherit cached historical content. Same-principal authorization-version refresh preserves already-read content under the existing session notice while subsequent operations remain reauthorized.
+    - Never substitute current content or another asset for missing or unauthorized pinned content.
+    - Evidence navigation preserves asset, revision and release across refresh/back; no extra governance-admin permission is required just to read permitted semantic evidence.
+    - Correction edits the exact asset using its current editable baseline while retaining the answer's pinned provenance as context.
+    - Revision submission carries the base revision captured when editing begins. Re-read the exact current canonical asset and reject changed baseline or mismatched before values; never replace user edits with a newer cached baseline.
+    - Resolve the operation that actually produced the exact published revision through authorized immutable release attribution and its exact operation version. Do not assume the current head or rollback attribution produced this asset. Bound traversal, detect cycles and fail visibly on unavailable provenance, authorization failure or mismatched data.
+    - Preserve verified source snapshot/coverage and evidence pins, clear consumed candidate links, and derive exact dependencies from canonical knowledge references. No fallback to legacy proposals, latest dependency rebasing, superseding a released create operation, or weakening backend invariants.
+    - Create one new production update draft, then enter the existing business confirmation, validation, independent review and publication UI. State accurately that the draft is saved, not already reviewed; never confirm business rules or submit implicitly. Keep the reason and Ask provenance as unconfirmed context only.
+    - Freeze create body and idempotency key before sending. Prevent duplicate in-flight creation, preserve the same command for an uncertain-result retry and prohibit edited/new commands while unresolved. Ignore late responses after identity/workspace change; retain unsent drafts on deterministic errors. Do not persist private draft content into a new storage mechanism.
+    - Retaining completed Ask state and ephemeral execution rows for back navigation must not trigger requests before first use or keep hidden work running. Forward AbortSignal through the existing Ask client and suspend/abort execution-panel effects while inactive without re-executing a plan or losing completed rows; preserve workspace and session reset boundaries.
+    - Existing E2E may use its isolated harness, but normal-password real-interface V1 acceptance must be separately recorded and must not intercept core APIs.
+    - Use only 1440x900 and 1024x768; preserve visible keyboard focus, reduced motion, synthetic disclosure and no horizontal overflow.
+    - Private sessions, credentials and traces remain under protected .semlia/v1-acceptance; never print private configuration or model responses.
+    - Model calls use the configured synthetic lane and bounded explicit attempts. Keep new browser attempt counts in evidence, separate from API model acceptance.
+    - Include one naturally ambiguous question without telling the model to clarify; a safe clarification or explicit no-plan refusal must not produce an execution.
+    - No further delegation, remote operations, unknown resource cleanup or concurrent runtime restart.
+tdd_plan:
+  red:
+    - Uncached Ask evidence and correction target exact IDs and surface 403/404 failures.
+    - Pinned R1 remains R1 when current R2 exists; exact member names and evidence survive refresh and back.
+    - Historical lookup mismatch, missing version and delayed workspace response cannot pollute current views.
+    - Work scope and from/productionRelease parameters round-trip without a second question mark.
+    - Natural revision of a production-reserved asset creates an update operation rather than a legacy proposal, with exact baseline, canonical changes and no automatic business confirmation.
+    - Provenance traversal handles unrelated head operations, rollback, exact historic operation version, consumed candidates, missing or denied sources, stale baseline, changed before values, duplicate clicks, uncertain same-key retry and late identity responses.
+  green:
+    - Add an exact immutable revision read/cache, precise reference callbacks and structured route helpers.
+    - Update old E2E locators to current work routes without deleting publication, persistence, independent review or rollback assertions.
+    - Run normal UI login, source inspection, knowledge edit/submit, independent review/publish, actual model Ask/Execute and evidence/correction navigation.
+validation_loop:
+  - pnpm --dir web typecheck
+  - pnpm --dir web lint
+  - pnpm --dir web test
+  - bash scripts/dev/production-acceptance.sh --suite desktop
+  - Run the new V1 normal-runtime browser entry at both desktop sizes, with screenshots and console/overflow checks.
+  - git diff --check
+evidence_contract:
+  public: docs/evidence/V1-T003/
+  private: .semlia/v1-acceptance/
+  include: [RED/GREEN commands, exact scenarios, real versus harness distinctions, screenshots, errors, model attempt counts, residual risks]
+review_contract:
+  - Independent code review for exact-object/version identity, authorization failures and asynchronous workspace races.
+  - Root inspects both desktop screenshots and verifies no lowering of existing governance assertions.
+handoff:
+  status: Needs_Review
+  next: V1-T004 after technical review.
+stop_conditions:
+  - Need for a new product capability or edits outside the packet.
+  - Runtime ownership or credentials cannot be safely verified.
+  - Actual model or core workflow is blocked; report failures instead of substituting mocks.

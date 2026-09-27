@@ -1,0 +1,40 @@
+schema_version: 1
+packet_id: V1-T004-A004
+task_id: V1-T004
+mode: Delegated Execute
+context:
+  spec: docs/specs/v1-convergence/spec.md
+  plan: docs/specs/v1-convergence/plan.md
+  approval: Approved local scoped delivery; fix defects exposed by actual embedded-candidate acceptance, without expanding scope.
+  failures:
+    - Verified RC preflight has two failed author deep-link cases and two passed consumer cases. The embedded handler returns 404 for /assets/ast_* because of its static assets prefix rule.
+    - Browser wrapper exits at after-runtime before storing postflight. Cause remains unclassified; long synchronous child execution plus stale HTTP pooling is a hypothesis to test, not an established fact.
+ownership:
+  backend:
+    - internal/platform/web/handler.go
+    - internal/platform/web/handler_test.go
+  browser_driver:
+    - scripts/acceptance/v1-browser.mjs
+    - scripts/acceptance/v1-browser-core.mjs
+    - scripts/acceptance/v1-browser.test.mjs
+    - scripts/acceptance/v1/runtime.mjs
+    - scripts/acceptance/v1.test.mjs
+  evidence:
+    - docs/evidence/V1-T004/embedded-candidate-fix.md
+constraints:
+  - Backend and driver subattempts may use their disjoint file boundaries; evidence has one owner designated by root. Independent reviewer is read-only.
+  - Real asset detail and version deep links, including revision/release queries, must reach the SPA. Missing static scripts/styles/fonts must remain 404; existing immutable static caching, no-store HTML, GET/HEAD and API/health routing must remain correct.
+  - Do not bypass the failing deep-link test by navigating through the sidebar or using Vite.
+  - Reproduce the wrapper lifecycle fault with an actual local HTTP/control server and child process if possible. Preserve unknown classification where evidence is insufficient.
+  - Never print raw exceptions, provider responses, credentials or browser logs. Safe error codes/stages and protected raw diagnostics are allowed.
+  - Persist child outcome and before identity/counters before a postflight failure can erase them. Failure must remain nonzero; no silent retries or weakened success conditions.
+  - No model call, shared database changes, new product scope, broad cleanup or further delegation.
+  - Do not alter the existing candidate or manifest. New build inputs require a new candidate and complete T005 gates.
+validation:
+  - Backend tests first reproduce actual /assets deep-link 404, then verify GET/HEAD, query pins, missing static 404, cache headers and unchanged API/health routing.
+  - Driver tests reproduce any claimed cause before fixing it; test success, failed child, postflight failure and diagnostic privacy with real subprocess boundaries.
+  - Focused Go and Node suites, type/syntax checks as applicable, independent review and diff check.
+  - Actual candidate browser revalidation only after a new full frozen-source build and explicit root authorization.
+handoff:
+  status: Needs_Review
+  next: Complete final gates for a fresh uniquely versioned candidate; retain all prior failures and artifacts.

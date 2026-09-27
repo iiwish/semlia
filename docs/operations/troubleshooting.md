@@ -1,65 +1,54 @@
 # Local Troubleshooting
 
-Start with `make doctor`, then inspect the Compose state and recent logs:
+Identify the runtime before taking action. Normal `make dev` runs native server/worker/Vite; it is not a Compose deployment. The isolated V1 acceptance harness and container deployments have separate ownership receipts and lifecycle commands. Never stop a process, container or database solely because its name or port looks familiar.
 
-```bash
-./scripts/dev/compose.sh ps --all
-./scripts/dev/compose.sh logs --tail 200 postgres migrate server worker
-```
+## Tools and Readiness
 
-## Doctor Reports a Version Error
+Run `make doctor` from the repository root and use the versions in `.tool-versions`. `make smoke` checks the already-running normal native supervisor and Web/API readiness. Native logs are under `.semlia/native/` (`server.log`, `worker.log`, `web.log`, `supervisor.log`); inspect them privately and share only allowlisted status/trace identifiers, not full environment, DSNs or raw provider errors.
 
-Semlia requires the exact Go, Node.js, and pnpm versions in `.tool-versions`. Activate those versions in the current shell, confirm `go version`, `node --version`, and `pnpm --version`, then rerun `make doctor`. Running from outside the repository also fails the Go module check.
+`/health/live` is process liveness; `/health/ready` includes required dependencies. HTTP 503 is not permission to rebuild or reset PostgreSQL. Verify the configured endpoint, dedicated role, schema 33/not dirty, encryption key and durable stores. Restart only the explicitly owned runtime after correcting its configuration.
 
-## A Default Port Is Busy
+A missing required dependency returns the stable `DEPENDENCY_UNAVAILABLE` code with a `traceId`. Correlate that identifier with protected structured server logs to identify the failing dependency; share only the code and trace identifier, not raw configuration or credential-bearing logs. Recovery requires a successful readiness check, not merely a live process.
 
-Stop the other listener or edit `SEMLIA_HTTP_PORT` and `SEMLIA_POSTGRES_PORT` in `.semlia/dev.env` after running `make dev-down`. Do not change the container-side ports in Compose. `make doctor` always checks the defaults, so it can continue to warn after an override. Verify the chosen ports directly, for example with `lsof -nP -iTCP:<port> -sTCP:LISTEN`, before restarting.
+For an explicitly identified Compose installation, use its exact project name, Compose files and protected environment files for `ps` and private logs. Do not default to another installation's Compose wrapper or inherited `COMPOSE_FILE`.
 
-## Local Environment File Is Rejected
+## Port Occupied
 
-`.semlia/dev.env` must be a regular file with generated 64-character hexadecimal credentials. The setup refuses symbolic links and malformed values. Remove only this local ignored file, then regenerate it:
+Inspect ownership with `lsof -nP -iTCP:<port> -sTCP:LISTEN`. Choose unused `SEMLIA_NATIVE_WEB_PORT` and `SEMLIA_NATIVE_API_PORT` values in `.semlia/native.env`; they must differ. Do not stop an unknown listener. Doctor warns about common default ports and may still warn when an intentional override is configured. Use the URL printed by `make dev` rather than assuming port 8080.
 
-```bash
-rm .semlia/dev.env
-make dev
-```
+## Private Environment Rejected
 
-Do not add credentials to `.env.example` or commit the generated file.
+Preserve `.semlia/dev.env`, `.semlia/native.env`, backups and encryption keys. Do **not** follow a regeneration suggestion by deleting an existing environment file: a new password does not change the existing PostgreSQL role, and a new encryption key cannot decrypt existing source credentials.
 
-## Migration Does Not Complete
+Verify locally that files are regular, not symbolic links, protected with `0600`, and contain the expected entries. `ensure-env.sh` expects 64-character hexadecimal default secret values; an explicit `SEMLIA_DATABASE_URL` must refer to the owned database with its real credential. Repair from a trusted private record or use a separately approved credential rotation. Never paste the file, parsed configuration, cookie or credential value into tool output, a ticket or chat.
 
-Inspect `postgres` and `migrate` logs. The application services wait for PostgreSQL health and a successful migration exit. A migration failure intentionally prevents `server` and `worker` startup.
+The default native entry merges both local configuration files and retains the caller environment. An explicit `SEMLIA_NATIVE_ENV_FILE` selects a required complete independent file and also requires `SEMLIA_NATIVE_STATE_DIR` inside the current repository's `.semlia/` tree. Missing inputs fail instead of falling back. The explicit branch passes only tool-environment values and its own configuration, not ordinary local credentials, execution sources or caller LAN settings. The file must not contain the reserved `SEMLIA_NATIVE_ENV_FILE` or `SEMLIA_NATIVE_STATE_DIR` controls. Use the same two controls for startup, status, migrations, account commands and shutdown. See [T004 browser isolation evidence](../evidence/V1-T004/browser-gate-isolation.md); final RC verification remains separate.
 
-For an isolated test database, inspect the committed migration state with `make db-migrate-version`. Generated database code must remain current; run `make db-generate-check` before editing generated files.
+## Migration or Login Fails
 
-## Readiness Returns 503
+Native startup checks schema but does not migrate. For a fresh owned database, build the binary and use the explicit [quickstart migration/account sequence](../quickstart.md#4-migration-and-first-account). For existing data, first verify a full [backup and restore](backup-recovery.md) into a new owned target. Do not force a migration version or downgrade a live schema-33 database to make startup pass.
 
-`/health/live` reports whether the process is alive. `/health/ready` also checks required dependencies. When PostgreSQL is unavailable, readiness returns HTTP 503 with stable code `DEPENDENCY_UNAVAILABLE` and a `traceId`; liveness and the embedded status application remain available.
+The current upgrade evidence is schema 32 with initialized identity/workspace data to 33, not arbitrary historic seven-type prototype compatibility. Container server and worker must wait for `migrate` to complete successfully; a failed migration correctly blocks them.
 
-Check PostgreSQL and restart it without deleting data:
+Use `scripts/dev/account.sh` interactively to bootstrap the first administrator or reset a known local account. Login rate limits apply to successful attempts too; wait for the normal cooldown instead of deleting budget rows, changing identity or altering client IP. Password recovery revokes existing account sessions.
 
-```bash
-./scripts/dev/compose.sh ps postgres
-./scripts/dev/compose.sh logs --tail 200 postgres server
-./scripts/dev/compose.sh start postgres
-curl --fail --show-error http://127.0.0.1:8080/health/ready
-```
+## Ask, Source and Correction Failures
 
-The trace ID can be matched against structured server logs. If recovery stalls, run `make dev-down` followed by `make dev`.
+Ask requires an enabled supported LLM configuration, its private credential variable and an authorized published analysis model. Clarification/refusal is not a result table. Inspect stable error categories and exact release/revision pins; do not change providers, timestamps or expected SQL answers silently during acceptance.
 
-## Contract or Generated-File Drift
+Source discovery and query execution are separate configurations. Verify the discovery source's encrypted credential and read-only role, then the execution-only `SEMLIA_EXECUTION_SOURCES` mapping and named DSN. Do not enable an unsafe-source permission bypass. Plaintext loopback development is a transport exception only.
 
-Verify committed OpenAPI artifacts without rewriting them:
+SQL registration/discovery does not imply content preview support: the SQL adapter returns HTTP 422 for preview. Use a supported preview type such as Markdown when checking artifact recovery. A correction's pending request key is memory-only; after a page reload or unknown network result, inspect existing operations before submitting again. Historical producer lookup stops after 64 steps and fails explicitly rather than inventing a baseline. [Local development](local-development.md#桌面与恢复边界) describes these limits.
+
+## Generated Drift and Cleanup
 
 ```bash
 make contracts-check
 make db-generate-check
 ```
 
-If a source contract was intentionally changed, regenerate through the repository commands, review all generated diffs, and rerun `make check-source`. Do not hand-edit generated API or sqlc output.
+Use generators only for an intentional source change; review their diffs, never edit generated output by hand. Final release gates require one frozen source fingerprint.
 
-## Smoke or Security Check Leaves Resources
+`make dev-down` stops owned native processes only: it does not remove Docker containers, networks or volumes. `make check-smoke` is a separate isolated destructive test of its **own** disposable stack. Inspect exact ownership labels/receipts before any cleanup; preserve unknown resources and report a collision. Do not delete ownership files merely because control is unavailable. Never run global Docker prune or blanket volume deletion.
 
-Both gates are designed to clean up their own Compose containers and networks. Run `make dev-down` to remove normal local containers while preserving data. For deliberate deletion of only Semlia's current Compose data volume, use `./scripts/dev/compose.sh down --volumes --remove-orphans`.
-
-Never use `docker system prune`, `docker volume prune`, or cleanup commands targeted at another `COMPOSE_PROJECT_NAME`.
+Run security gates with a fresh owned `SEMLIA_SECURITY_IMAGE` tag to protect existing images. A prior development-tool output disclosed private configuration; arrange approved rotation before production, without reproducing values or discarding encryption recovery material. Candidate gate results and unresolved checks are recorded under [T005 evidence](../evidence/V1-T005/).

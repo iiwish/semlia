@@ -31,6 +31,10 @@ sql:
       - ../migrations/000027_semantic_production_generation.up.sql
       - ../migrations/000028_production_business_rules.up.sql
       - ../migrations/000029_local_password_auth.up.sql
+      - ../migrations/000030_agent_authoring_role.up.sql
+      - ../migrations/000031_agent_authoring_binding_order.up.sql
+      - ../migrations/000032_five_knowledge_types.up.sql
+      - ../migrations/000033_ask_request_idempotency.up.sql
     queries:
       - queries
     gen:

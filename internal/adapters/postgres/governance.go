@@ -1146,6 +1146,22 @@ func (store *Store) CountRollbacksFor(
 // ---------- agent runs ----------
 
 func (store *Store) CreateAgentRun(ctx context.Context, run governance.AgentRun) (governance.AgentRun, error) {
+	tx, err := store.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return governance.AgentRun{}, governanceRepositoryError("begin agent run", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	created, err := createAgentRunTx(ctx, tx, run)
+	if err != nil {
+		return governance.AgentRun{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return governance.AgentRun{}, governanceRepositoryError("commit agent run", err)
+	}
+	return created, nil
+}
+
+func createAgentRunTx(ctx context.Context, tx pgx.Tx, run governance.AgentRun) (governance.AgentRun, error) {
 	workspaceID, err := uuidValue(run.WorkspaceID)
 	if err != nil {
 		return governance.AgentRun{}, fmt.Errorf("encode workspace ID: %w", err)
@@ -1160,11 +1176,6 @@ func (store *Store) CreateAgentRun(ctx context.Context, run governance.AgentRun)
 			return governance.AgentRun{}, fmt.Errorf("encode principal ID: %w", err)
 		}
 	}
-	tx, err := store.pool.BeginTx(ctx, pgx.TxOptions{})
-	if err != nil {
-		return governance.AgentRun{}, governanceRepositoryError("begin agent run", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
 	queries := dbgen.New(tx)
 	row, err := queries.CreateAgentRun(ctx, dbgen.CreateAgentRunParams{
 		ID: runID, WorkspaceID: workspaceID, PrincipalID: principalID,
@@ -1195,9 +1206,6 @@ func (store *Store) CreateAgentRun(ctx context.Context, run governance.AgentRun)
 		StartedAt: timePointer(run.StartedAt), Version: 1, CreatedAt: run.CreatedAt.UTC(), UpdatedAt: run.CreatedAt.UTC()}, event); err != nil {
 		return governance.AgentRun{}, governanceRepositoryError("project agent run", err)
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return governance.AgentRun{}, governanceRepositoryError("commit agent run", err)
-	}
 	return created, nil
 }
 
@@ -1220,6 +1228,22 @@ func (store *Store) GetAgentRun(
 }
 
 func (store *Store) FinishAgentRun(ctx context.Context, command governanceapp.AgentRunFinishCommand) (governance.AgentRun, error) {
+	tx, err := store.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return governance.AgentRun{}, governanceRepositoryError("begin agent finish", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	finished, err := finishAgentRunTx(ctx, tx, command)
+	if err != nil {
+		return governance.AgentRun{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return governance.AgentRun{}, governanceRepositoryError("commit agent finish", err)
+	}
+	return finished, nil
+}
+
+func finishAgentRunTx(ctx context.Context, tx pgx.Tx, command governanceapp.AgentRunFinishCommand) (governance.AgentRun, error) {
 	workspaceID, err := uuidValue(command.WorkspaceID)
 	if err != nil {
 		return governance.AgentRun{}, fmt.Errorf("encode workspace ID: %w", err)
@@ -1228,11 +1252,6 @@ func (store *Store) FinishAgentRun(ctx context.Context, command governanceapp.Ag
 	if err != nil {
 		return governance.AgentRun{}, fmt.Errorf("encode agent run ID: %w", err)
 	}
-	tx, err := store.pool.BeginTx(ctx, pgx.TxOptions{})
-	if err != nil {
-		return governance.AgentRun{}, governanceRepositoryError("begin agent finish", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
 	queries := dbgen.New(tx)
 	row, err := queries.FinishAgentRun(ctx, dbgen.FinishAgentRunParams{
 		WorkspaceID: workspaceID, AgentRunID: runID, Status: string(command.FinalState),
@@ -1267,9 +1286,6 @@ func (store *Store) FinishAgentRun(ctx context.Context, command governanceapp.Ag
 	}
 	if err := projectRuntime(ctx, queries, projected, event); err != nil {
 		return governance.AgentRun{}, governanceRepositoryError("project agent finish", err)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return governance.AgentRun{}, governanceRepositoryError("commit agent finish", err)
 	}
 	return finished, nil
 }

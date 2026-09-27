@@ -1,0 +1,43 @@
+schema_version: 1
+packet_id: V1-T002-A006
+task_id: V1-T002
+mode: Delegated Execute
+context:
+  spec: docs/specs/v1-convergence/spec.md
+  plan: docs/specs/v1-convergence/plan.md
+  approval: Approved continuous local implementation and bounded verification repairs. Root separately authorizes one live reconciliation after offline independent review.
+  failure: A005 performed five successful ordinary governance mutations without replay and published its definition-only supplement. The wrapper exited 1 because beforePins verification omitted the real contentDigest field. The original ledger remains failed and incomplete; no approved pointer exists. Model, agent and execution counts are 27 each, with zero unfinished runs.
+ownership:
+  implementation:
+    - scripts/acceptance/v1/value-knowledge.mjs
+    - scripts/acceptance/v1-value-knowledge.test.mjs
+    - scripts/acceptance/v1-model.mjs
+    - scripts/acceptance/v1/correction.mjs
+    - scripts/acceptance/v1/final-candidate.mjs
+    - scripts/acceptance/v1-final-candidate.test.mjs
+    - scripts/acceptance/v1-model.test.mjs
+  evidence:
+    - docs/evidence/V1-T002/value-grounding.md
+constraints:
+  - One implementation owner, separate read-only reviewer, no further delegation. No product prompt, schema, compiler, fixture, question, golden or comparator changes.
+  - Require the real beforePins.contentDigest and cross-check it against the fixed original catalog revision and original released operation target, declaration, target ID and release link. Never discard the field to pass comparison.
+  - Separate fact verification from attempt terminal state. Do not clone the failed attempt with success flags or rewrite its bytes, state, status or exit code.
+  - A separate reconcile-values entry uses the existing exclusive operation lock and a wx private value-knowledge-reconciliation.json ledger. Any existing reconciliation is one-shot and cannot resume or retry.
+  - Reconciliation is only for the known five finished successful, unreplayed mutations. Partial, unknown, missing, drifted or differently published attempts fail closed. It is not a general failed-operation recovery mechanism.
+  - All workspace API requests are GET. No governance mutation, source test, execution or model endpoint may be called. Normal password/session authentication is allowed separately when needed; do not bypass login limits. Explicit read-only counters and dedicated synthetic reader category SQL are allowed as preservation checks, not hidden application writes.
+  - Fresh normal reads verify fixed original release, saved before release, exact already published after release and current head, original and new model revisions, original and supplemental operations, confirmation witness, proposal, independent approval, source revision/snapshot/binding operation/release. Full attribution and manifests must satisfy the A005 contract.
+  - The expected publication is taken from the immutable saved successful publish response and must equal saved postflight release/revision facts. Never choose arbitrary latest head as a new baseline.
+  - Preserve the failed value-knowledge.json, value-knowledge-root-command.json, root preflight/postflight/failure evidence, fixture/state/golden and all earlier candidate/cohort ledgers by hash and file identity. Watch the same inputs throughout and record their digests. Source data, initial published pins and original environment remain unchanged.
+  - A new reconciliation receipt states that the original wrapper failed and the already applied publication was read-only verified. It contains fresh facts and binds the original failed receipt and root command digests; it never represents the original command as successful.
+  - Create the private approved pointer only after all checks, including unchanged counters and source categories, pass. Its exact allowlisted path, owner and digests bind the reconciliation and original failure. Pointer/basis/candidate guards verify and watch both records, plus the original root command, before and after each cohort.
+  - Retain the ordinary fully successful preparation path. Reject partial reconciliation, pointer replacement, symlinks, foreign ownership, loose permissions, changed original failure, missing proof and incomplete evidence.
+  - Offline work does not authorize any API, SQL, model, runtime restart or publication. Root authorizes one reconciliation after independent review; a model cohort waits for a new complete RC.4 build and all final gates.
+validation:
+  - Real DTO beforePins regression RED then GREEN with exact contentDigest, no weakened immutable comparisons.
+  - Filesystem and fake transport tests prove workspace GET-only behavior, unknown/partial refusal, one-shot claim, preservation on failure, pointer guards and immutable original failed flags.
+  - Reconciliation full positive proof plus changed head/content/digest/roles/manifests/source/counters rejection tests.
+  - Full V1 Node tests, syntax checks and git diff --check; independent review also runs saved real DTO facts offline without rewriting private evidence.
+  - Root live reconciliation records actual exit code, fresh head and content proof, counters, source categories and old evidence preservation. No new governance or model mutations.
+handoff:
+  status: Needs_Review
+  next: Only verified reconciliation permits T005 RC.4 frozen-source gates and one fresh fixed model cohort. Historical preparation failure and RC.2/RC.3 model failures remain unchanged.
