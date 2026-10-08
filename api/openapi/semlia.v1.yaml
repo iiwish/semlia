@@ -6023,6 +6023,16 @@ components:
         assertionState: {$ref: "#/components/schemas/RelationAssertionState"}
         subjectAssetId: {$ref: "#/components/schemas/SemanticAssetId"}
         objectAssetId: {$ref: "#/components/schemas/SemanticAssetId"}
+        counterpartTitle:
+          type: string
+          maxLength: 256
+          description: Display name of the asset at the other end, when the server resolved it.
+        inferenceRule:
+          type: string
+          maxLength: 160
+          description: >-
+            Present on inferred relations. "spec_reference:" followed by the comma separated spec fields the relation
+            was read from. Inferred relations are a projection of published specs and are not stored assertions.
     CatalogPhysicalBindingAuthority:
       type: object
       additionalProperties: false

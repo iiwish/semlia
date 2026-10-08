@@ -818,6 +818,48 @@ func (q *Queries) ListCatalogAssetAuthorityRecords(ctx context.Context, arg List
 	return items, nil
 }
 
+const listCatalogAssetRefsByID = `-- name: ListCatalogAssetRefsByID :many
+SELECT asset.id,
+       asset.asset_type,
+       COALESCE(NULLIF(revision.content->>'displayName', ''), revision.content->>'name', revision.content->>'title', asset.key)::text AS title
+FROM semantic_assets AS asset
+LEFT JOIN asset_revisions AS revision ON revision.id = asset.current_revision_id
+WHERE asset.workspace_id = $1
+  AND asset.id = ANY($2::uuid[])
+ORDER BY asset.id
+`
+
+type ListCatalogAssetRefsByIDParams struct {
+	WorkspaceID pgtype.UUID   `json:"workspace_id"`
+	AssetIds    []pgtype.UUID `json:"asset_ids"`
+}
+
+type ListCatalogAssetRefsByIDRow struct {
+	ID        pgtype.UUID `json:"id"`
+	AssetType string      `json:"asset_type"`
+	Title     string      `json:"title"`
+}
+
+func (q *Queries) ListCatalogAssetRefsByID(ctx context.Context, arg ListCatalogAssetRefsByIDParams) ([]ListCatalogAssetRefsByIDRow, error) {
+	rows, err := q.db.Query(ctx, listCatalogAssetRefsByID, arg.WorkspaceID, arg.AssetIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListCatalogAssetRefsByIDRow{}
+	for rows.Next() {
+		var i ListCatalogAssetRefsByIDRow
+		if err := rows.Scan(&i.ID, &i.AssetType, &i.Title); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listCatalogAssetRevisions = `-- name: ListCatalogAssetRevisions :many
 SELECT revision.id, revision.workspace_id, revision.asset_id, revision.sequence, revision.schema_version, revision.content_digest, revision.content, revision.created_by, revision.created_at
 FROM asset_revisions AS revision
@@ -998,6 +1040,65 @@ func (q *Queries) ListCatalogAssets(ctx context.Context, arg ListCatalogAssetsPa
 			&i.Summary,
 			&i.UpdatedAt,
 			&i.SearchRank,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCatalogAssetsReferencingAsset = `-- name: ListCatalogAssetsReferencingAsset :many
+SELECT asset.id,
+       asset.asset_type,
+       COALESCE(NULLIF(revision.content->>'displayName', ''), revision.content->>'name', revision.content->>'title', asset.key)::text AS title,
+       revision.content
+FROM semantic_assets AS asset
+JOIN asset_revisions AS revision ON revision.id = asset.current_revision_id
+WHERE asset.workspace_id = $1
+  AND asset.id <> $2::uuid
+  AND jsonb_path_exists(revision.content, '$.spec.** ? (@.assetId == $target)', jsonb_build_object('target', $3::text))
+ORDER BY asset.id
+LIMIT $4
+`
+
+type ListCatalogAssetsReferencingAssetParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	AssetID     pgtype.UUID `json:"asset_id"`
+	AssetRef    string      `json:"asset_ref"`
+	PageLimit   int32       `json:"page_limit"`
+}
+
+type ListCatalogAssetsReferencingAssetRow struct {
+	ID        pgtype.UUID `json:"id"`
+	AssetType string      `json:"asset_type"`
+	Title     string      `json:"title"`
+	Content   []byte      `json:"content"`
+}
+
+// Assets whose current spec holds a reference to the target at any depth (expression trees included).
+func (q *Queries) ListCatalogAssetsReferencingAsset(ctx context.Context, arg ListCatalogAssetsReferencingAssetParams) ([]ListCatalogAssetsReferencingAssetRow, error) {
+	rows, err := q.db.Query(ctx, listCatalogAssetsReferencingAsset,
+		arg.WorkspaceID,
+		arg.AssetID,
+		arg.AssetRef,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListCatalogAssetsReferencingAssetRow{}
+	for rows.Next() {
+		var i ListCatalogAssetsReferencingAssetRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AssetType,
+			&i.Title,
+			&i.Content,
 		); err != nil {
 			return nil, err
 		}

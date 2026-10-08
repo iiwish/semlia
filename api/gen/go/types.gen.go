@@ -5213,8 +5213,14 @@ type CatalogPhysicalBindingAuthority struct {
 
 // CatalogRelationAuthority defines model for CatalogRelationAuthority.
 type CatalogRelationAuthority struct {
-	AssertionState RelationAssertionState            `json:"assertionState"`
-	Direction      CatalogRelationAuthorityDirection `json:"direction"`
+	AssertionState RelationAssertionState `json:"assertionState"`
+
+	// CounterpartTitle Display name of the asset at the other end, when the server resolved it.
+	CounterpartTitle *string                           `json:"counterpartTitle,omitempty"`
+	Direction        CatalogRelationAuthorityDirection `json:"direction"`
+
+	// InferenceRule Present on inferred relations. "spec_reference:" followed by the comma separated spec fields the relation was read from. Inferred relations are a projection of published specs and are not stored assertions.
+	InferenceRule *string `json:"inferenceRule,omitempty"`
 
 	// ObjectAssetId Example: ast_01arz3ndektsv4rrffq69g5fav
 	ObjectAssetId SemanticAssetId   `json:"objectAssetId"`

@@ -3117,6 +3117,10 @@ export interface components {
             assertionState: components["schemas"]["RelationAssertionState"];
             subjectAssetId: components["schemas"]["SemanticAssetId"];
             objectAssetId: components["schemas"]["SemanticAssetId"];
+            /** @description Display name of the asset at the other end, when the server resolved it. */
+            counterpartTitle?: string;
+            /** @description Present on inferred relations. "spec_reference:" followed by the comma separated spec fields the relation was read from. Inferred relations are a projection of published specs and are not stored assertions. */
+            inferenceRule?: string;
         };
         CatalogPhysicalBindingAuthority: {
             assetId: components["schemas"]["SemanticAssetId"];

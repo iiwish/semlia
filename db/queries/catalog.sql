@@ -528,3 +528,27 @@ SELECT *
 FROM discovery_findings
 WHERE discovery_run_id = sqlc.arg(run_id)
 ORDER BY sequence;
+
+-- name: ListCatalogAssetRefsByID :many
+SELECT asset.id,
+       asset.asset_type,
+       COALESCE(NULLIF(revision.content->>'displayName', ''), revision.content->>'name', revision.content->>'title', asset.key)::text AS title
+FROM semantic_assets AS asset
+LEFT JOIN asset_revisions AS revision ON revision.id = asset.current_revision_id
+WHERE asset.workspace_id = sqlc.arg(workspace_id)
+  AND asset.id = ANY(sqlc.arg(asset_ids)::uuid[])
+ORDER BY asset.id;
+
+-- name: ListCatalogAssetsReferencingAsset :many
+-- Assets whose current spec holds a reference to the target at any depth (expression trees included).
+SELECT asset.id,
+       asset.asset_type,
+       COALESCE(NULLIF(revision.content->>'displayName', ''), revision.content->>'name', revision.content->>'title', asset.key)::text AS title,
+       revision.content
+FROM semantic_assets AS asset
+JOIN asset_revisions AS revision ON revision.id = asset.current_revision_id
+WHERE asset.workspace_id = sqlc.arg(workspace_id)
+  AND asset.id <> sqlc.arg(asset_id)::uuid
+  AND jsonb_path_exists(revision.content, '$.spec.** ? (@.assetId == $target)', jsonb_build_object('target', sqlc.arg(asset_ref)::text))
+ORDER BY asset.id
+LIMIT sqlc.arg(page_limit);

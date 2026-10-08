@@ -807,6 +807,8 @@ func authorityRecordResponse(record domain.AuthorityRecord) contract.CatalogAuth
 			Predicate: contract.RelationPredicate(value.Predicate), Plane: contract.RelationPlane(value.Plane),
 			AssertionState: contract.RelationAssertionState(value.AssertionState),
 			SubjectAssetId: value.SubjectAssetID, ObjectAssetId: value.ObjectAssetID,
+			CounterpartTitle: optionalStringPointer(value.CounterpartTitle),
+			InferenceRule:    optionalStringPointer(value.InferenceRule),
 		}
 	}
 	if record.PhysicalBinding != nil {

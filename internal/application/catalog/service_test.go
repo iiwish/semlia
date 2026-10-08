@@ -303,6 +303,14 @@ func (repository *fakeRepository) ListCatalogAuthorityRecords(context.Context, d
 	return domain.AuthorityRecordResult{}, nil
 }
 
+func (repository *fakeRepository) ListCatalogAssetRefs(context.Context, identity.WorkspaceID, []identity.AssetID) ([]domain.AssetRef, error) {
+	return nil, nil
+}
+
+func (repository *fakeRepository) ListCatalogAssetsReferencing(context.Context, identity.WorkspaceID, identity.AssetID, int) ([]domain.ReferencingAsset, error) {
+	return nil, nil
+}
+
 func (repository *fakeRepository) CreateCatalogAsset(_ context.Context, command domain.CreateAssetCommand) (domain.AssetDetail, error) {
 	repository.created = command
 	repository.createCalls++
