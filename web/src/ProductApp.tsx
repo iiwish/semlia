@@ -258,6 +258,13 @@ function revisionVersionLabel(value: string) {
   return match ? `@${match[1]}` : value;
 }
 
+// Real revision ids carry no sequence; never print them as a version. The current revision's own @N is known.
+function publishedVersionLabel(asset: Asset, publishedRevisionId: string, isPublishedCurrent: boolean) {
+  const match = publishedRevisionId.match(/@(\d+)(?:-draft)?$/);
+  if (match) return `@${match[1]}`;
+  return isPublishedCurrent ? revisionVersionLabel(asset.revision) : "";
+}
+
 function knowledgeVersionState(asset: Asset) {
   if (asset.detailLoaded === false || asset.deployment.state === "unknown" || asset.revisionRecord.workflowState === "unknown") {
     return { known: false, hasPublishedVersion: false, hasDraftVersion: false, isPublishedCurrent: false, label: asset.detailLoaded === false ? "发布状态待加载" : "发布状态不可用", tone: "neutral" } as const;
@@ -269,7 +276,7 @@ function knowledgeVersionState(asset: Asset) {
     || asset.revisionRecord.workflowState === "proposed"
     || asset.revisionRecord.workflowState === "in_review"
     || Boolean(publishedRevisionId && publishedRevisionId !== asset.revisionRecord.revisionId);
-  const publishedVersion = publishedRevisionId ? revisionVersionLabel(publishedRevisionId) : "";
+  const publishedVersion = publishedRevisionId ? publishedVersionLabel(asset, publishedRevisionId, isPublishedCurrent) : "";
   const draftVersion = revisionVersionLabel(asset.revision);
   const label = hasPublishedVersion && hasDraftVersion
     ? `正式版 ${publishedVersion || "已发布"} · 有草稿 ${draftVersion}`
@@ -1309,6 +1316,18 @@ function KnowledgeRevisionLauncher({ asset, active, onStart }: { asset: Asset; a
   );
 }
 
+const CATALOG_DETAIL_CONCURRENCY = 4;
+
+function pendingDetailLabel(state: "idle" | "loading" | "ready" | "error" | undefined, subject: string) {
+  return state === "error" ? `${subject}加载失败` : `${subject}加载中`;
+}
+
+function catalogVersionNotice(settled: boolean, loaded: number, total: number, failed: number) {
+  if (failed > 0) return `${failed} 个资产的发布状态读取失败，版本筛选暂不可用，当前显示全部版本；打开该资产可重试。`;
+  if (!settled) return `正在读取发布状态（${loaded}/${total}），完成后可按版本筛选，当前显示全部版本。`;
+  return "版本筛选暂不可用，当前显示全部版本。";
+}
+
 function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, requestedCatalogType, requestedVersionFilter, requestedRevision, focusSearchRequestEpoch, detailBackRequestEpoch, onSelect, onDetailChange, onNotify, onRevisionSubmit, onStartAIGeneration, onOpenReleaseHistory, onOpenReleaseRecord }: { selectedId: string; domainFilter: string; requestedTab: AssetTab; requestedDetail: boolean; requestedCatalogType: CatalogObjectType | "全部"; requestedVersionFilter: KnowledgeVersionFilter; requestedRevision: KnowledgeRevisionRequest | null; focusSearchRequestEpoch: number; detailBackRequestEpoch: number; onSelect: (id: string) => void; onDetailChange: (open: boolean) => void; onNotify: (message: string) => void; onRevisionSubmit: (submission: KnowledgeRevisionSubmission) => Promise<void>; onStartAIGeneration: (assetId: string, fieldPath: string) => void; onOpenReleaseHistory: () => void; onOpenReleaseRecord: (releaseId?: string) => void }) {
   const { assets, catalogAssetIds, detailStates, ensureAsset, loading: catalogLoading, error: catalogError, setQuery: setCatalogQuery, total: catalogTotal, nextCursor: catalogNextCursor, loadingMore: catalogLoadingMore, appendError: catalogAppendError, loadMoreAssets } = useCatalogRuntime();
   const catalogAssets = useMemo(() => catalogAssetIds.flatMap((assetId) => {
@@ -1324,6 +1343,9 @@ function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, r
     && (catalogTotal === undefined || catalogAssets.length >= catalogTotal)
     && catalogAssets.every((asset) => knowledgeVersionState(asset).known);
   const effectiveVersionFilter = versionsComplete ? versionFilter : "全部";
+  const detailsSettled = catalogAssets.every((asset) => asset.detailLoaded !== false);
+  const detailsLoadedCount = catalogAssets.filter((asset) => asset.detailLoaded !== false).length;
+  const detailsFailedCount = catalogAssets.filter((asset) => asset.detailLoaded === false && detailStates[asset.id]?.state === "error").length;
   const [domain, setDomain] = useState(domainFilter);
   const [sort, setSort] = useState<"attention" | "name" | "type">("attention");
   const [tab, setTab] = useState<AssetTab>(requestedTab);
@@ -1360,6 +1382,8 @@ function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, r
     return groups.sort((left, right) => {
       if (sort === "name") return left.asset.name.localeCompare(right.asset.name, "zh-CN");
       if (sort === "type") return left.asset.type.localeCompare(right.asset.type, "zh-CN") || left.asset.name.localeCompare(right.asset.name, "zh-CN");
+      // Unloaded rows have no authoritative status yet; keep a stable name order instead of reshuffling per response.
+      if (!detailsSettled) return left.asset.name.localeCompare(right.asset.name, "zh-CN");
       const statusOrder: Record<Asset["status"], number> = { "需关注": 0, "待确认": 1, "草稿": 2, "已发布": 3 };
       const statusDelta = statusOrder[left.asset.status] - statusOrder[right.asset.status];
       if (statusDelta !== 0) return statusDelta;
@@ -1367,7 +1391,7 @@ function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, r
       if (readinessDelta !== 0) return readinessDelta;
       return left.asset.name.localeCompare(right.asset.name, "zh-CN");
     });
-  }, [catalogAssets, catalogKnowledgeItems, domain, effectiveVersionFilter, isGovernedObjectType, normalizedQuery, sort, type]);
+  }, [catalogAssets, catalogKnowledgeItems, detailsSettled, domain, effectiveVersionFilter, isGovernedObjectType, normalizedQuery, sort, type]);
   const visibleChildCount = catalogGroups.reduce((total, group) => total + group.visibleChildren.length, 0);
   const selected = assets.find((asset) => asset.id === selectedId) ?? (requestedDetail ? undefined : assets[0]);
   const focusedObject = focusedObjectId ? detailKnowledgeItems.find((item) => item.key === focusedObjectId) : undefined;
@@ -1431,6 +1455,20 @@ function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, r
     if (activeMode === "detail" && selected?.detailLoaded === false && (!detailStates[selected.id] || detailStates[selected.id]?.state === "idle")) void ensureAsset(selected.id);
     if (activeMode === "detail" && !selected && selectedId && (!detailStates[selectedId] || detailStates[selectedId]?.state === "idle")) void ensureAsset(selectedId);
   }, [activeMode, detailStates, ensureAsset, selected, selectedId]);
+  // The list DTO carries no authoritative publication, ownership or readiness, so rows read their own detail.
+  // Requests run in list order with a small window; failures are shown per row and retried only by the user.
+  useEffect(() => {
+    if (activeMode !== "catalog" || catalogLoading || catalogError) return;
+    let inFlight = catalogAssets.filter((asset) => detailStates[asset.id]?.state === "loading").length;
+    for (const asset of catalogAssets) {
+      if (inFlight >= CATALOG_DETAIL_CONCURRENCY) break;
+      if (asset.detailLoaded !== false) continue;
+      const state = detailStates[asset.id]?.state;
+      if (state === "loading" || state === "error") continue;
+      inFlight += 1;
+      void ensureAsset(asset.id);
+    }
+  }, [activeMode, catalogAssets, catalogError, catalogLoading, detailStates, ensureAsset]);
 
   if (activeMode === "detail" && selected) {
     const openAssetTab = (nextTab: AssetTab) => { setTab(nextTab); setFocusedObjectId(undefined); scrollWorkspaceTo(0); };
@@ -1497,7 +1535,7 @@ function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, r
           <button className="catalog-clear-button" type="button" aria-label="清除全部筛选" title="清除全部筛选" disabled={!hasFilters} onClick={() => { setQuery(""); setType("全部"); setVersionFilter("全部"); setDomain("全部"); }}><X size={15} /></button>
           <CreateCatalogAssetButton onCreated={(assetId) => { onSelect(assetId); void ensureAsset(assetId); onDetailChange(true); setMode("detail"); }} />
         </div>
-        {!versionsComplete && <p id="catalog-version-unavailable" className="catalog-version-notice" role="status">版本筛选暂不可用，当前显示全部版本。</p>}
+        {!versionsComplete && <p id="catalog-version-unavailable" className="catalog-version-notice" role="status">{catalogVersionNotice(detailsSettled, detailsLoadedCount, catalogAssets.length, detailsFailedCount)}</p>}
         <div className="catalog-summary">
           <span>显示 <strong>{catalogGroups.length}</strong> · 已加载 {catalogAssetIds.length}{catalogTotal !== undefined ? ` / ${catalogTotal}` : ""} 个语义资产{isGovernedObjectType && <> · {visibleChildCount} 个{type}</>}</span>
           <CatalogRefreshButton />
@@ -1517,10 +1555,10 @@ function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, r
                   <button className="asset-row-open" type="button" aria-label={`打开语义资产 ${asset.name}`} onClick={() => openDetail(assetItem)}>
                     <span className="asset-row-identity"><AssetTypeMark type={asset.type} /><span className="asset-row-copy"><strong>{asset.name}</strong><code>{asset.key}</code></span></span>
                     <span className="asset-row-taxonomy"><strong>{asset.type}</strong><small>{asset.domain}</small></span>
-                    <span className="asset-row-scope">{asset.detailLoaded === false ? <strong>关系与实现待加载</strong> : <><strong>{asset.relations.length} 关系 · {asset.bindings.length} 绑定</strong><small>{asset.joinContracts.length} 个 JoinContract</small></>}</span>
-                    <span className="asset-row-owner">{asset.detailLoaded === false ? <strong>责任信息待加载</strong> : <><strong>{asset.owner}</strong><small>{asset.maintainer}</small></>}</span>
-                    <span className="asset-row-readiness">{readiness.known ? <><span><b>{readiness.passed}/{readiness.total}</b><small>{readiness.warnings > 0 ? `${readiness.warnings} 项需关注` : "门禁通过"}</small></span><progress max={readiness.total} value={readiness.passed} aria-label={`${asset.name}就绪度 ${readiness.passed}/${readiness.total}`} /></> : <span><b>{asset.detailLoaded === false ? "就绪度待加载" : "就绪度不可用"}</b></span>}</span>
-                    <StatusBadge tone={versionState.tone}>{versionState.label}</StatusBadge>
+                    <span className="asset-row-scope">{asset.detailLoaded === false ? <strong>{pendingDetailLabel(detailStates[asset.id]?.state, "关系与实现")}</strong> : <><strong>{asset.relations.length} 关系 · {asset.bindings.length} 绑定</strong><small>{asset.joinContracts.length} 个 JoinContract</small></>}</span>
+                    <span className="asset-row-owner">{asset.detailLoaded === false ? <strong>{pendingDetailLabel(detailStates[asset.id]?.state, "责任信息")}</strong> : <><strong>{asset.owner}</strong><small>{asset.maintainer}</small></>}</span>
+                    <span className="asset-row-readiness">{readiness.known ? <><span><b>{readiness.passed}/{readiness.total}</b><small>{readiness.warnings > 0 ? `${readiness.warnings} 项需关注` : "门禁通过"}</small></span><progress max={readiness.total} value={readiness.passed} aria-label={`${asset.name}就绪度 ${readiness.passed}/${readiness.total}`} /></> : <span><b>{asset.detailLoaded === false ? pendingDetailLabel(detailStates[asset.id]?.state, "就绪度") : "就绪度不可用"}</b></span>}</span>
+                    <StatusBadge tone={versionState.tone}>{asset.detailLoaded === false ? pendingDetailLabel(detailStates[asset.id]?.state, "发布状态") : versionState.label}</StatusBadge>
                     <ChevronRight className="asset-row-chevron" size={16} />
                   </button>
                 </div>

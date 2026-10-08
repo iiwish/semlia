@@ -189,6 +189,28 @@ afterEach(() => {
   window.sessionStorage.clear();
 });
 
+type CatalogSummary = typeof asset;
+
+async function detailFor(summary: CatalogSummary, published: boolean) {
+  const base = await defaultGetAssetImplementation!();
+  return {
+    ...base, ...summary,
+    currentRevision: { ...base.currentRevision, id: summary.currentRevisionId, assetId: summary.id, content: { ...base.currentRevision.content, title: summary.title } },
+    authoritySections: base.authoritySections.map((section: { kind: string }) => published && section.kind === "released_state" ? {
+      ...section, availability: "available", revisionId: summary.currentRevisionId, releaseId: "rls_01arz3ndektsv4rrffq69g5fav", releaseSequence: 5,
+    } : section),
+  };
+}
+
+// Detail reads that stay pending until the test releases them, keyed by asset id.
+function holdDetailReads(details: Map<string, ReturnType<typeof detailFor>>) {
+  const releases = new Map<string, () => void>();
+  getAssetMock.mockImplementation((_workspaceId: string, assetId: string) => new Promise((resolve, reject) => {
+    releases.set(assetId, () => { const detail = details.get(assetId); if (detail) detail.then(resolve, reject); else reject(new Error("unknown asset")); });
+  }));
+  return releases;
+}
+
 function CatalogCreationProbe() {
   const runtime = useCatalogRuntime();
   return <div>
@@ -462,6 +484,11 @@ describe("production catalog", () => {
 
   it("loads a real registry view and opens asset detail", async () => {
     const user = userEvent.setup();
+    let releaseDetail!: () => void;
+    getAssetMock.mockImplementationOnce(async () => {
+      await new Promise<void>((resolve) => { releaseDetail = resolve; });
+      return defaultGetAssetImplementation!();
+    });
     render(<App />);
 
     expect(await screen.findByRole("button", { name: "知识库" })).toBeVisible();
@@ -469,12 +496,15 @@ describe("production catalog", () => {
     expect((await screen.findAllByText("Net revenue")).length).toBeGreaterThan(0);
     expect(screen.getByText("net_revenue")).toBeVisible();
     const summaryRow = screen.getByRole("button", { name: "打开语义资产 Net revenue" });
-    expect(summaryRow).toHaveTextContent("发布状态待加载");
-    expect(summaryRow).toHaveTextContent("就绪度待加载");
-    expect(summaryRow).toHaveTextContent("关系与实现待加载");
-    expect(summaryRow).toHaveTextContent("责任信息待加载");
+    expect(summaryRow).toHaveTextContent("发布状态加载中");
+    expect(summaryRow).toHaveTextContent("就绪度加载中");
+    expect(summaryRow).toHaveTextContent("关系与实现加载中");
+    expect(summaryRow).toHaveTextContent("责任信息加载中");
     expect(summaryRow).not.toHaveTextContent(/未发布|@0|0\/6|项需关注|门禁通过|未分配|0 关系|0 绑定|0 个 JoinContract/);
     expect(within(summaryRow).queryByRole("progressbar")).not.toBeInTheDocument();
+    releaseDetail();
+    await waitFor(() => expect(screen.getByRole("button", { name: "打开语义资产 Net revenue" })).not.toHaveTextContent("加载中"));
+    expect(screen.getByRole("button", { name: "打开语义资产 Net revenue" })).toHaveTextContent("草稿");
 
     await user.click(screen.getByRole("button", { name: "打开语义资产 Net revenue" }));
     expect(await screen.findByRole("heading", { name: "Net revenue", level: 1 })).toBeVisible();
@@ -507,8 +537,9 @@ describe("production catalog", () => {
     expect(getAssetMock).toHaveBeenCalledTimes(detailCalls);
   });
 
-  it.each(["draft", "released"])("keeps cold %s deep links from reporting an empty version result", async (status) => {
+  it.each(["draft", "released"])("keeps %s deep links from reporting an empty version result while details load", async (status) => {
     const detailCalls = getAssetMock.mock.calls.length;
+    holdDetailReads(new Map());
     window.history.replaceState({}, "", `/assets?status=${status}`);
     render(<App />);
     expect(await screen.findByRole("button", { name: "打开语义资产 Net revenue" })).toBeVisible();
@@ -517,34 +548,77 @@ describe("production catalog", () => {
     for (const name of ["正式版 待确认", "草稿 待确认"]) {
       const button = within(versions).getByRole("button", { name });
       expect(button).toBeDisabled();
-      expect(button).toHaveAccessibleDescription("版本筛选暂不可用，当前显示全部版本。");
+      expect(button).toHaveAccessibleDescription("正在读取发布状态（0/1），完成后可按版本筛选，当前显示全部版本。");
       await userEvent.click(button);
     }
-    expect(screen.getByText("版本筛选暂不可用，当前显示全部版本。")).toBeVisible();
+    expect(screen.getByText("正在读取发布状态（0/1），完成后可按版本筛选，当前显示全部版本。")).toBeVisible();
     expect(screen.queryByText("没有匹配知识资产")).not.toBeInTheDocument();
-    expect(getAssetMock).toHaveBeenCalledTimes(detailCalls);
+    expect(getAssetMock).toHaveBeenCalledTimes(detailCalls + 1);
+  });
+
+  it("reads every listed row on its own and enables the version filters without opening assets", async () => {
+    getAssetMock.mockClear();
+    const second = { ...asset, id: "ast_01arz3ndektsv4rrffq69g5faw", address: "commerce.gross_revenue", title: "Gross revenue", currentRevisionId: "rev_01arz3ndektsv4rrffq69g5faw" };
+    listAssetsMock.mockResolvedValue({ items: [asset, second], page: { limit: 100, total: 2 } });
+    const published = new Map([[asset.id, detailFor(asset, true)], [second.id, detailFor(second, false)]]);
+    getAssetMock.mockImplementation(async (_workspaceId: string, assetId: string) => published.get(assetId));
+    window.history.replaceState({}, "", "/assets");
+    render(<App />);
+    const first = await screen.findByRole("button", { name: "打开语义资产 Net revenue" });
+    await waitFor(() => expect(first).toHaveTextContent("正式版"));
+    const other = screen.getByRole("button", { name: "打开语义资产 Gross revenue" });
+    await waitFor(() => expect(other).not.toHaveTextContent("加载中"));
+    expect(other).toHaveTextContent("草稿");
+    expect(other).not.toHaveTextContent(/待加载|加载中|加载失败/);
+    expect(screen.getByRole("button", { name: "正式版 1" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "草稿 1" })).toBeEnabled();
+    expect(screen.queryByText(/版本筛选暂不可用|正在读取发布状态/)).not.toBeInTheDocument();
+    expect(getAssetMock.mock.calls.map((call) => call[1]).sort()).toEqual([asset.id, second.id].sort());
+    // A published revision id has no sequence of its own: show the current @N, never the raw rev_ id.
+    expect(first).toHaveTextContent(/正式版 @\d+/);
+    expect(first).not.toHaveTextContent("rev_");
+  });
+
+  it("reads at most four rows at a time and starts the next one in list order", async () => {
+    getAssetMock.mockClear();
+    const items = Array.from({ length: 6 }, (_, index) => ({ ...asset, id: `ast_01arz3ndektsv4rrffq69g5f${index}0`, address: `commerce.metric_${index}`, title: `Metric ${index}`, currentRevisionId: `rev_01arz3ndektsv4rrffq69g5f${index}0` }));
+    listAssetsMock.mockResolvedValue({ items, page: { limit: 100, total: 6 } });
+    const releases = holdDetailReads(new Map(items.map((item) => [item.id, detailFor(item, true)])));
+    window.history.replaceState({}, "", "/assets");
+    render(<App />);
+    await screen.findByRole("button", { name: "打开语义资产 Metric 0" });
+    await waitFor(() => expect(getAssetMock).toHaveBeenCalledTimes(4));
+    expect(getAssetMock.mock.calls.map((call) => call[1])).toEqual(items.slice(0, 4).map((item) => item.id));
+    expect(screen.getByText("正在读取发布状态（0/6），完成后可按版本筛选，当前显示全部版本。")).toBeVisible();
+
+    releases.get(items[0].id)!();
+    await waitFor(() => expect(getAssetMock).toHaveBeenCalledTimes(5));
+    expect(getAssetMock).toHaveBeenLastCalledWith(workspace.id, items[4].id);
+    await waitFor(() => expect(screen.getByText("正在读取发布状态（1/6），完成后可按版本筛选，当前显示全部版本。")).toBeVisible());
+    for (const item of items.slice(1)) {
+      await waitFor(() => expect(releases.has(item.id)).toBe(true));
+      releases.get(item.id)!();
+    }
+    await waitFor(() => expect(screen.getByRole("button", { name: "正式版 6" })).toBeEnabled());
+    expect(getAssetMock).toHaveBeenCalledTimes(6);
   });
 
   it("does not turn one loaded published detail into a complete formal count", async () => {
     const second = { ...asset, id: "ast_01arz3ndektsv4rrffq69g5faw", address: "commerce.gross_revenue", title: "Gross revenue" };
     listAssetsMock.mockResolvedValue({ items: [asset, second], page: { limit: 100, total: 2 } });
-    const detail = await defaultGetAssetImplementation!();
-    getAssetMock.mockResolvedValue({ ...detail, authoritySections: detail.authoritySections.map((section: { kind: string }) => section.kind === "released_state" ? {
-      ...section, availability: "available", revisionId: asset.currentRevisionId, releaseId: "rls_01arz3ndektsv4rrffq69g5fav", releaseSequence: 5,
-    } : section) });
-    const detailCalls = getAssetMock.mock.calls.length;
+    const releases = holdDetailReads(new Map([[asset.id, detailFor(asset, true)], [second.id, detailFor(second, true)]]));
     window.history.replaceState({}, "", "/assets");
     render(<App />);
-    const user = userEvent.setup();
-    await user.click(await screen.findByRole("button", { name: "打开语义资产 Net revenue" }));
-    expect(await screen.findByRole("region", { name: "语义资产详情" })).toHaveTextContent("生产");
-    await user.click(screen.getByRole("button", { name: "返回知识目录" }));
-    expect(screen.getByRole("button", { name: "打开语义资产 Net revenue" })).toHaveTextContent("正式版");
-    expect(screen.getByRole("button", { name: "打开语义资产 Gross revenue" })).toHaveTextContent("发布状态待加载");
+    await screen.findByRole("button", { name: "打开语义资产 Net revenue" });
+    await waitFor(() => expect(releases.has(asset.id) && releases.has(second.id)).toBe(true));
+    releases.get(asset.id)!();
+    await waitFor(() => expect(screen.getByRole("button", { name: "打开语义资产 Net revenue" })).toHaveTextContent("正式版"));
+    // One known row must not make a partial formal count look complete.
+    expect(screen.getByRole("button", { name: "打开语义资产 Gross revenue" })).toHaveTextContent("发布状态加载中");
     expect(screen.getByRole("button", { name: "正式版 待确认" })).toBeDisabled();
     expect(screen.queryByRole("button", { name: "正式版 1" })).not.toBeInTheDocument();
-    expect(getAssetMock).toHaveBeenCalledTimes(detailCalls + 1);
-    expect(getAssetMock).toHaveBeenLastCalledWith(workspace.id, asset.id);
+    releases.get(second.id)!();
+    expect(await screen.findByRole("button", { name: "正式版 2" })).toBeEnabled();
   });
 
   it("keeps version filters unavailable while an unread catalog page remains", async () => {
@@ -552,9 +626,12 @@ describe("production catalog", () => {
     listAssetsMock.mockImplementation(async (_workspaceId: string, _search: string, _assetType: string, cursor?: string) => cursor
       ? { items: [second], page: { limit: 1, total: 2 } }
       : { items: [asset], page: { limit: 1, total: 2, nextCursor: "assets-next" } });
-    const detailCalls = getAssetMock.mock.calls.length;
+    const details = new Map([[asset.id, detailFor(asset, false)], [second.id, detailFor(second, true)]]);
+    const releases = holdDetailReads(details);
     window.history.replaceState({}, "", `/assets/${asset.id}`);
     render(<App />);
+    await waitFor(() => expect(releases.has(asset.id)).toBe(true));
+    releases.get(asset.id)!();
     expect(await screen.findByRole("region", { name: "语义资产详情" })).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "返回知识目录" }));
     expect(await screen.findByRole("button", { name: "打开语义资产 Net revenue" })).toHaveTextContent("草稿 @3");
@@ -563,22 +640,15 @@ describe("production catalog", () => {
     expect(screen.getByRole("button", { name: "加载更多资产" })).toBeEnabled();
     expect(document.querySelector(".catalog-summary")).toHaveTextContent("已加载 1 / 2 个语义资产");
     await userEvent.click(screen.getByRole("button", { name: "加载更多资产" }));
-    expect(await screen.findByRole("button", { name: "打开语义资产 Gross revenue" })).toHaveTextContent("发布状态待加载");
+    expect(await screen.findByRole("button", { name: "打开语义资产 Gross revenue" })).toHaveTextContent("发布状态加载中");
     expect(screen.getByRole("button", { name: "草稿 待确认" })).toBeDisabled();
     expect(screen.queryByRole("button", { name: "加载更多资产" })).not.toBeInTheDocument();
-    expect(getAssetMock).toHaveBeenCalledTimes(detailCalls + 1);
 
-    const detail = await defaultGetAssetImplementation!();
-    getAssetMock.mockResolvedValue({ ...detail, ...second, currentRevision: { ...detail.currentRevision, id: second.currentRevisionId, assetId: second.id, content: { title: second.title } }, authoritySections: detail.authoritySections.map((section: { kind: string }) => section.kind === "released_state" ? {
-      ...section, availability: "available", revisionId: second.currentRevisionId, releaseId: "rls_01arz3ndektsv4rrffq69g5fav", releaseSequence: 5,
-    } : section) });
-    await userEvent.click(screen.getByRole("button", { name: "打开语义资产 Gross revenue" }));
-    expect(await screen.findByRole("heading", { name: "Gross revenue", level: 1 })).toBeVisible();
-    await userEvent.click(screen.getByRole("button", { name: "返回知识目录" }));
-    expect(screen.getByRole("button", { name: "草稿 1" })).toBeEnabled();
+    await waitFor(() => expect(releases.has(second.id)).toBe(true));
+    releases.get(second.id)!();
+    expect(await screen.findByRole("button", { name: "草稿 1" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "正式版 1" })).toBeEnabled();
-    expect(screen.queryByText("版本筛选暂不可用，当前显示全部版本。")).not.toBeInTheDocument();
-    expect(getAssetMock).toHaveBeenCalledTimes(detailCalls + 2);
+    expect(screen.queryByText(/版本筛选暂不可用|正在读取发布状态/)).not.toBeInTheDocument();
   });
 
   it.each(["missing", "forbidden", "failed", "available-without-revision"])("does not infer draft or unpublished from unavailable release authority: %s", async (availability) => {
@@ -758,15 +828,14 @@ describe("production catalog", () => {
       const items = search === asset.address ? [asset] : search ? [] : [asset, other];
       return { items, page: { limit: 100, total: items.length } };
     });
-    const detail = await defaultGetAssetImplementation!();
-    getAssetMock.mockResolvedValue({ ...detail, authoritySections: detail.authoritySections.map((section: { kind: string }) => section.kind === "released_state" ? {
-      ...section, availability: "available", revisionId: asset.currentRevisionId, releaseId: "rls_01arz3ndektsv4rrffq69g5fav", releaseSequence: 5,
-    } : section) });
-    const detailCalls = getAssetMock.mock.calls.length;
+    const details = new Map([[asset.id, detailFor(asset, true)], [other.id, detailFor(other, true)]]);
+    getAssetMock.mockImplementation(async (_workspaceId: string, assetId: string) => details.get(assetId));
     window.history.replaceState({}, "", "/assets");
     render(<App />);
     const user = userEvent.setup();
     await screen.findByRole("button", { name: "打开语义资产 Net revenue" });
+    await waitFor(() => expect(screen.queryAllByText(/加载中/)).toHaveLength(0));
+    const detailCalls = getAssetMock.mock.calls.length;
     if (loadDetail) {
       await user.click(screen.getByRole("button", { name: "打开语义资产 Net revenue" }));
       await screen.findByRole("region", { name: "语义资产详情" });
@@ -775,7 +844,7 @@ describe("production catalog", () => {
     await user.type(screen.getByRole("searchbox", { name: "搜索知识目录" }), asset.address);
     await waitFor(() => expect(listAssetsMock).toHaveBeenLastCalledWith(workspace.id, asset.address, "", undefined, expect.any(AbortSignal)));
     const row = await screen.findByRole("button", { name: "打开语义资产 Net revenue" });
-    expect(row).toHaveTextContent(loadDetail ? "正式版" : "发布状态待加载");
+    expect(row).toHaveTextContent("正式版");
     expect(screen.queryByRole("button", { name: "打开语义资产 Gross revenue" })).not.toBeInTheDocument();
     expect(document.querySelector(".catalog-summary")).toHaveTextContent("显示 1 · 已加载 1 / 1 个语义资产");
     expect(screen.queryByText("没有匹配知识资产")).not.toBeInTheDocument();
@@ -796,7 +865,9 @@ describe("production catalog", () => {
     listAssetsMock.mockImplementation(async (_workspaceId: string, query: string, _type: string, cursor?: string) => query === search
       ? cursor ? { items: [second], page: { limit: 1, total: 2 } } : { items: [first], page: { limit: 1, total: 2, nextCursor: "content-next" } }
       : { items: [asset], page: { limit: 100, total: 1 } });
-    const detailCalls = getAssetMock.mock.calls.length;
+    const details = new Map([[asset.id, detailFor(asset, false)], [first.id, detailFor(first, false)], [second.id, detailFor(second, false)]]);
+    getAssetMock.mockClear();
+    getAssetMock.mockImplementation(async (_workspaceId: string, assetId: string) => details.get(assetId));
     window.history.replaceState({}, "", "/assets");
     render(<App />);
     const user = userEvent.setup();
@@ -812,7 +883,9 @@ describe("production catalog", () => {
     expect(screen.getAllByRole("button", { name: /^打开语义资产 / })).toHaveLength(2);
     expect(listAssetsMock).toHaveBeenLastCalledWith(workspace.id, search, "", "content-next");
     expect(document.querySelector(".catalog-summary")).toHaveTextContent("显示 2 · 已加载 2 / 2 个语义资产");
-    expect(getAssetMock).toHaveBeenCalledTimes(detailCalls + 1);
+    await waitFor(() => expect(screen.queryAllByText(/加载中/)).toHaveLength(0));
+    // Rows read only the assets the server listed; the cached off-page asset is never refetched or shown.
+    expect(new Set(getAssetMock.mock.calls.map((call) => call[1]))).toEqual(new Set([asset.id, first.id, second.id]));
   });
 
   it("keeps the latest server search membership when an older first page resolves late", async () => {
@@ -929,11 +1002,20 @@ describe("production catalog", () => {
 
   it("keeps a production detail failure explicit instead of falling back to fixture content", async () => {
     const user = userEvent.setup();
-    getAssetMock.mockRejectedValueOnce(new Error("catalog authority unavailable"));
+    getAssetMock.mockClear();
+    getAssetMock.mockRejectedValue(new Error("catalog authority unavailable"));
     render(<App />);
 
     await user.click(await screen.findByRole("button", { name: "知识库" }));
-    await user.click(await screen.findByRole("button", { name: "打开语义资产 Net revenue" }));
+    const row = await screen.findByRole("button", { name: "打开语义资产 Net revenue" });
+    await waitFor(() => expect(row).toHaveTextContent("发布状态加载失败"));
+    expect(row).toHaveTextContent("责任信息加载失败");
+    expect(row).not.toHaveTextContent(/未发布|未分配|0 关系/);
+    expect(screen.getByText("1 个资产的发布状态读取失败，版本筛选暂不可用，当前显示全部版本；打开该资产可重试。")).toBeVisible();
+    // A failed row is not retried in the background; only opening it asks again.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(getAssetMock).toHaveBeenCalledTimes(1);
+    await user.click(row);
     const failure = await screen.findByRole("alert");
     expect(failure).toHaveTextContent("资产详情读取失败");
     expect(failure).toHaveTextContent("catalog authority unavailable");
