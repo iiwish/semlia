@@ -1000,6 +1000,30 @@ describe("production catalog", () => {
     expect(screen.getByRole("button", { name: "打开语义资产 Net revenue" })).toBeVisible();
   });
 
+  it("names the other end of a projected relation and says it is inferred from spec fields", async () => {
+    const implementation = defaultGetAssetImplementation!;
+    const detail = await implementation();
+    getAssetMock.mockResolvedValue({
+      ...detail,
+      authoritySections: detail.authoritySections.map((section: { kind: string }) => section.kind === "relations" ? {
+        ...section, availability: "available", values: { relationCount: 1 }, recordsPage: { limit: 100, total: 1 },
+        records: [{ kind: "relation", id: "rel_01arz3ndektsv4rrffq69g5fav", authority: "spec_references", status: "inferred", label: "measures", relatedId: "ast_01arz3ndektsv4rrffq69g5faw", version: 0,
+          relation: { direction: "outgoing", predicate: "measures", plane: "semantic", assertionState: "inferred", subjectAssetId: asset.id, objectAssetId: "ast_01arz3ndektsv4rrffq69g5faw", counterpartTitle: "订单", inferenceRule: "spec_reference:spec.inputRef,spec.timeAttributeRef" } }],
+      } : section),
+    });
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "知识库" }));
+    await user.click(await screen.findByRole("button", { name: "打开语义资产 Net revenue" }));
+    await user.click(await screen.findByRole("tab", { name: "本体关系" }));
+    const page = await screen.findByRole("region", { name: "语义资产详情" });
+    expect(await within(page).findByText("出向 · 当前资产 衡量 订单")).toBeVisible();
+    expect(within(page).getByText("推导关系", { selector: "span" })).toBeVisible();
+    expect(within(page).getByText("由规格字段推导：inputRef、timeAttributeRef")).toBeVisible();
+    // The name leads the card; the raw id stays only in the collapsed technical details.
+    for (const raw of within(page).queryAllByText("ast_01arz3ndektsv4rrffq69g5faw")) expect(raw).not.toBeVisible();
+  });
+
   it("keeps a production detail failure explicit instead of falling back to fixture content", async () => {
     const user = userEvent.setup();
     getAssetMock.mockClear();

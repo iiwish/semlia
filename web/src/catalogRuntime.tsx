@@ -517,6 +517,13 @@ function projectDetail(workspaceId: string, item: CatalogAssetDetail): Asset {
   return projectAsset(workspaceId, item, item);
 }
 
+// "spec_reference:spec.inputRef,spec.filterRefs" -> "由规格字段推导：inputRef、filterRefs"
+export function inferenceRuleLabel(rule: string) {
+  const [kind, fields = ""] = rule.split(":");
+  if (kind !== "spec_reference") return rule;
+  return `由规格字段推导：${fields.split(",").map((field) => field.replace(/^spec\./, "")).join("、")}`;
+}
+
 function authorityCount(section: AssetAuthoritySection | undefined, key: string): number | null {
   const value = section?.values[key];
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null;
@@ -547,9 +554,9 @@ function projectAsset(workspaceId: string, summary: CatalogAsset, detail: Catalo
       plane: record.relation.plane,
       assertionState: record.relation.assertionState,
       targetId: counterpartId,
-      targetName: counterpartId,
+      targetName: record.relation.counterpartTitle || counterpartId,
       direction: record.relation.direction,
-      evidence: "服务端未提供证据引用",
+      evidence: record.relation.inferenceRule ? inferenceRuleLabel(record.relation.inferenceRule) : "服务端未提供证据引用",
       release: record.releaseId ?? relationSection?.releaseId ?? "服务端未提供 release 基准",
     }];
   });

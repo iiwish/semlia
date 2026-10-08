@@ -542,7 +542,7 @@ describe("Semlia product workspace", () => {
     expect(within(detail).getByText("一致性通过")).toBeVisible();
     expect(within(detail).getByRole("table", { name: "本体关系类型约束" })).toHaveTextContent("端点类型、方向与基数");
     expect(within(detail).getByText("commerce.orders_model")).toBeVisible();
-    expect(within(detail).getAllByText("证据推导", { exact: false }).length).toBeGreaterThan(0);
+    expect(within(detail).getAllByText("推导关系", { exact: false }).length).toBeGreaterThan(0);
     await user.click(within(detail).getByRole("button", { name: "概念层级" }));
     expect(within(detail).getByRole("img", { name: "净收入 的本体层级图" })).toBeVisible();
     await user.click(within(detail).getByRole("button", { name: "依赖与影响" }));

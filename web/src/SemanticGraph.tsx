@@ -33,7 +33,7 @@ const relationLabels: Record<AssetRelation["type"], string> = {
 
 const assertionLabels: Record<AssetRelation["assertionState"], string> = {
   asserted: "人工声明",
-  inferred: "证据推导",
+  inferred: "推导关系",
   candidate: "候选关系",
   deprecated: "已废弃",
 };
