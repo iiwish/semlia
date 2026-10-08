@@ -43,13 +43,21 @@ const knowledgeFields: KnowledgeFieldDescriptor[] = [
   { key: "relations", label: "本体关系", fieldPath: "ontology.relations", help: "每行声明一条候选关系，保留关系层、方向、predicate、目标语义地址和断言状态。", multiline: true, code: true },
 ];
 
-function initialFieldFor(fieldPath: string): EditableKnowledgeField {
+function requestedFieldFor(fieldPath: string): EditableKnowledgeField {
   if (fieldPath.startsWith("spec") || fieldPath.includes("binding")) return "expression";
   if (fieldPath.includes("includes")) return "includes";
   if (fieldPath.includes("excludes")) return "excludes";
   if (fieldPath.includes("disambiguation")) return "disambiguation";
   if (fieldPath.includes("ontology") || fieldPath.includes("relation")) return "relations";
   return "definition";
+}
+
+// A typed knowledge object edits only its definition and its type-specific spec. The editor must start on one of
+// those two, otherwise it renders the first field while typing into a hidden one and never sees the change.
+function initialFieldFor(fieldPath: string, canonical: boolean): EditableKnowledgeField {
+  const requested = requestedFieldFor(fieldPath);
+  if (!canonical) return requested;
+  return requested === "expression" ? "expression" : "definition";
 }
 
 function fieldValues(asset: Asset): Record<EditableKnowledgeField, string> {
@@ -83,7 +91,7 @@ export function KnowledgeRevisionWorkbench({ asset: currentAsset, request, onCan
   const canPropose = useCan("asset.propose");
   const publishedValues = useMemo(() => fieldValues(asset), [asset]);
   const [draftValues, setDraftValues] = useState(() => fieldValues(asset));
-  const [activeField, setActiveField] = useState<EditableKnowledgeField>(() => initialFieldFor(request.fieldPath));
+  const [activeField, setActiveField] = useState<EditableKnowledgeField>(() => initialFieldFor(request.fieldPath, currentAsset.knowledgeSpec !== undefined));
   const [reason, setReason] = useState(request.context ?? "");
   const [checksRun, setChecksRun] = useState(false);
   const [submitting, setSubmitting] = useState(false);

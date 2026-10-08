@@ -8,8 +8,8 @@ import { CatalogRuntimeProvider } from "./testing/catalogFixture";
 import { assets } from "./testing/data";
 
 const asset = { ...assets[0], knowledgeSpec: {}, revisionRecord: { ...assets[0].revisionRecord, revisionId: "rev_opened", definition: "Opened baseline" } };
-function Form({ onSubmit, current = asset }: { onSubmit: (value: unknown) => Promise<void>; current?: typeof asset }) {
-  return <CapabilityProvider session={{ principalId: "author", version: "1", capabilities: ["asset.propose"] }}><CatalogRuntimeProvider fixtureAssets={[current]}><KnowledgeRevisionWorkbench asset={current} request={{ assetId: asset.id, fieldPath: "definition", origin: "ask", context: "Synthetic answer pin" }} onCancel={vi.fn()} onNotify={vi.fn()} onStartAIGeneration={vi.fn()} onSubmit={onSubmit} /></CatalogRuntimeProvider></CapabilityProvider>;
+function Form({ onSubmit, current = asset, fieldPath = "definition" }: { onSubmit: (value: unknown) => Promise<void>; current?: typeof asset; fieldPath?: string }) {
+  return <CapabilityProvider session={{ principalId: "author", version: "1", capabilities: ["asset.propose"] }}><CatalogRuntimeProvider fixtureAssets={[current]}><KnowledgeRevisionWorkbench asset={current} request={{ assetId: asset.id, fieldPath, origin: "ask", context: "Synthetic answer pin" }} onCancel={vi.fn()} onNotify={vi.fn()} onStartAIGeneration={vi.fn()} onSubmit={onSubmit} /></CatalogRuntimeProvider></CapabilityProvider>;
 }
 
 it("captures the opened baseline and saves a draft without claiming review submission", async () => {
@@ -52,4 +52,25 @@ it("preserves editable unsent content on a deterministic validation error", asyn
   expect(await screen.findByText("Baseline changed")).toBeVisible();
   expect(screen.getByLabelText("业务定义候选值")).toHaveValue("Opened baseline corrected");
   expect(screen.getByLabelText("业务定义候选值")).toBeEnabled();
+});
+
+it.each(["definition.excludes", "definition.includes", "wiki.disambiguation", "definition.boundary"])("binds the editor to a visible field when opened from %s on a typed knowledge object", async (fieldPath) => {
+  const onSubmit = vi.fn().mockResolvedValue(undefined);
+  render(<Form onSubmit={onSubmit} fieldPath={fieldPath} />);
+  const user = userEvent.setup();
+  // The typed editor exposes only the definition and the type-specific spec; the opened target must land on one of them.
+  expect(screen.getByRole("heading", { name: "业务定义", level: 3 })).toBeVisible();
+  expect(screen.getByLabelText("业务定义候选值")).toHaveValue("Opened baseline");
+  expect(screen.queryByText("当前没有内容")).not.toBeInTheDocument();
+  await user.type(screen.getByLabelText("业务定义候选值"), " plus exclusions");
+  await user.type(screen.getByLabelText("知识修订原因"), "Clarify the boundary");
+  await user.click(screen.getByRole("button", { name: "运行检查" }));
+  expect(screen.queryByText("至少修改一项知识字段后才能运行检查。")).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "保存修订并继续确认" }));
+  expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ changes: [{ field: "definition", before: "Opened baseline", after: "Opened baseline plus exclusions" }] }));
+});
+
+it("opens the type-specific spec when the requested target is an executable member", async () => {
+  render(<Form onSubmit={vi.fn().mockResolvedValue(undefined)} fieldPath="spec.expression" />);
+  expect(screen.getByRole("heading", { name: "类型专属知识", level: 3 })).toBeVisible();
 });

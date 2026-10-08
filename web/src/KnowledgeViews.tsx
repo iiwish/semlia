@@ -44,6 +44,32 @@ export function errorMessage(error: unknown): { code: string; title: string; det
   return { code, title: "语义问答未完成", detail };
 }
 
+// Resolver refusal codes are stable API values; people read the label, engineers still see the code.
+const refusalLabels: Record<string, string> = {
+  NO_RELEASE: "尚无已发布版本",
+  NO_MATCH: "没有匹配的已发布知识",
+  AMBIGUOUS_MATCH: "匹配到多个候选，需要消歧",
+  UNAUTHORIZED_ASSET: "指定知识不存在、未发布或无权读取",
+  UNAUTHORIZED_CONSUMER: "当前消费者无权使用",
+  CONSUMER_INACTIVE: "消费者已停用",
+  BINDING_INACTIVE: "消费绑定未生效",
+  BINDING_EXPIRED: "消费绑定已过期",
+  STALE_RELEASE_BINDING: "绑定的发布版本已过期",
+  MISSING_PHYSICAL_BINDING: "没有已发布模型覆盖所需成员",
+  MISSING_JOIN_PATH: "缺少表间关联路径",
+  INCOMPATIBLE_GRAIN: "数据粒度不兼容",
+  INVALID_QUERY: "查询结构无效",
+  INVALID_FILTER: "过滤条件无效",
+  INVALID_TIME_RANGE: "时间范围无效",
+  INVALID_ORDERING: "排序方式无效",
+  INVALID_LIMIT: "行数限制无效",
+  INVALID_PLAN: "执行计划无效",
+};
+
+function refusalLabel(code: string) {
+  return refusalLabels[code] ?? "无法解析";
+}
+
 function AskResultView({ result, question, reportingIssue, selectedIssue, onOpenEvidence, onReportingIssue, onSelectIssue, onStartRevision, onRefineQuestion }: {
   result: AskResponse;
   question: string;
@@ -67,13 +93,13 @@ function AskResultView({ result, question, reportingIssue, selectedIssue, onOpen
   if (result.interpretation.outcome === "clarification") {
     return <article className="assistant-answer ask-clarification">
       <header><span className="assistant-mark"><MessageSquareWarning size={17} /></span><div><strong>需要补充信息</strong><small>模型解释已完成 · 尚未调用语义解析器</small></div><span className="grounded-badge ask-badge-neutral">未解析</span></header>
-      <div className="answer-copy"><p>{result.interpretation.clarification}</p><p>补充指标、维度、时间范围或比较对象后重新提问。</p></div>
+      <div className="answer-copy"><p>{result.interpretation.clarification}</p></div>
     </article>;
   }
 
   if (refusal) {
     return <article className="assistant-answer ask-refusal">
-      <header><span className="assistant-mark ask-mark-warning"><CircleAlert size={17} /></span><div><strong>语义解析被拒绝</strong><small>Agent run {result.agentRun.id} · 没有生成执行计划</small></div><span className="grounded-badge ask-badge-warning">{refusal.code}</span></header>
+      <header><span className="assistant-mark ask-mark-warning"><CircleAlert size={17} /></span><div><strong>语义解析被拒绝</strong><small>Agent run {result.agentRun.id} · {refusal.code} · 没有生成执行计划</small></div><span className="grounded-badge ask-badge-warning" title={refusal.code}>{refusalLabel(refusal.code)}</span></header>
       <div className="answer-copy"><p><strong>{refusal.clarification}</strong></p><p>这是显式拒绝，不会被替换成猜测、样例值或未发布知识。</p></div>
       {refusal.candidateIds.length > 0 && <div className="ask-candidates"><span>可消歧候选</span>{refusal.candidateIds.map((id) => <code key={id}>{id}</code>)}</div>}
     </article>;
@@ -177,7 +203,7 @@ function ScopedAskView({ workspaceId, hidden = false, noPublishedKnowledge = fal
           {state === "running" ? <div className="answer-loading" role="status"><LoaderCircle size={18} /><div><strong>正在解释并验证语义请求</strong><span>模型只负责结构化解释；发布版本选择与计划验证由 Semlia 执行。</span></div></div> : state === "error" && failure ? <article className="assistant-answer ask-error" role="alert"><header><span className="assistant-mark ask-mark-warning"><CircleAlert size={17} /></span><div><strong>{failure.title}</strong><small>{failure.code}</small></div><span className="grounded-badge ask-badge-warning">未回退</span></header><div className="answer-copy"><p>{failure.detail}</p></div></article> : result ? <AskResultView key={result.agentRun.id} onRefineQuestion={() => { setQuestion(submittedQuestion + "\n补充："); setReportingIssue(false); }} result={result} question={submittedQuestion} reportingIssue={reportingIssue} selectedIssue={selectedIssue} onOpenEvidence={onOpenEvidence} onReportingIssue={setReportingIssue} onSelectIssue={setSelectedIssue} onStartRevision={onStartRevision} /> : null}
         </div>}
       </section>
-      <AskExecutionPanel key={`${workspaceId}:${result?.resolution?.plan?.id ?? "history"}`} active={!hidden} workspaceId={workspaceId} plan={result?.resolution?.plan?.executionStatus === "requires_execution_validation" ? result.resolution.plan : undefined} />
+      <AskExecutionPanel active={!hidden} restoreFinished={!submittedQuestion} workspaceId={workspaceId} plan={result?.resolution?.plan?.executionStatus === "requires_execution_validation" ? result.resolution.plan : undefined} />
       <form className="ask-composer" onSubmit={(event) => { event.preventDefault(); ask(); }}>
         <textarea aria-label="向 Semlia 提问" value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="询问已发布的指标口径、维度或语义计划..." rows={2} />
         <div><span><ShieldCheck size={13} />仅使用已发布知识 · 查询需单独确认</span><button type="submit" aria-label="发送问题" disabled={noPublishedKnowledge || !question.trim() || state === "running"}><Send size={16} /></button></div>
