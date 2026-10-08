@@ -17,6 +17,16 @@ type AskKnowledge struct {
 	Payload   json.RawMessage
 	Digest    string
 	ReleaseID identity.ReleaseID
+	// Catalog lists what the caller may ask about, by display name. It never reaches the model prompt and is not
+	// part of Digest, so it can be rebuilt on replay and cannot change what the model sees.
+	Catalog []AskCatalogEntry
+}
+
+// AskCatalogEntry carries only authorized semantic names: no ids, addresses or physical locations.
+type AskCatalogEntry struct {
+	Type    string
+	Name    string
+	Members []string
 }
 
 // InterpretationContext discloses only authorized semantic names and members,
@@ -45,6 +55,7 @@ func (s *Service) AskKnowledge(ctx context.Context, request ResolveRequest) (Ask
 	snapshot.Assets = append([]d.ReleasedAsset(nil), snapshot.Assets...)
 	sort.Slice(snapshot.Assets, func(i, j int) bool { return snapshot.Assets[i].AssetID.String() < snapshot.Assets[j].AssetID.String() })
 	items := []any{}
+	catalog := []AskCatalogEntry{}
 	bytesRemaining := 64 * 1024
 	for _, a := range snapshot.Assets {
 		if len(items) >= 128 {
@@ -58,19 +69,25 @@ func (s *Service) AskKnowledge(ctx context.Context, request ResolveRequest) (Ask
 			continue
 		}
 		var content struct {
-			Definition string                 `json:"definition"`
-			Spec       semantic.KnowledgeSpec `json:"spec"`
+			DisplayName string                 `json:"displayName"`
+			Name        string                 `json:"name"`
+			Title       string                 `json:"title"`
+			Definition  string                 `json:"definition"`
+			Spec        semantic.KnowledgeSpec `json:"spec"`
 		}
 		if json.Unmarshal(a.Content, &content) != nil {
 			continue
 		}
 		members := []map[string]string{}
+		entry := AskCatalogEntry{Type: string(a.AssetType), Name: firstNonEmpty(content.DisplayName, content.Name, content.Title, a.Name)}
 		for _, m := range content.Spec.Members {
 			if len(members) >= 64 {
 				break
 			}
 			members = append(members, map[string]string{"id": m.ID, "name": m.Name, "valueType": m.ValueType})
+			entry.Members = append(entry.Members, firstNonEmpty(m.Name, m.ID))
 		}
+		catalog = append(catalog, entry)
 		item := map[string]any{"assetId": a.AssetID.String(), "revisionId": a.RevisionID.String(), "address": a.Address, "name": a.Name, "type": a.AssetType, "definition": content.Definition, "members": members, "capability": content.Spec.Capability, "metricRefs": content.Spec.MetricRefs, "publicAttributeRefs": content.Spec.PublicAttributeRefs, "compatibleTermRefs": content.Spec.CompatibleTermRefs, "defaultTimeAttributeRef": content.Spec.DefaultTimeAttributeRef}
 		encoded, err := json.Marshal(item)
 		if err != nil {
@@ -87,5 +104,14 @@ func (s *Service) AskKnowledge(ctx context.Context, request ResolveRequest) (Ask
 		return AskKnowledge{}, err
 	}
 	payload, err := json.Marshal(map[string]any{"releaseId": snapshot.ReleaseID.String(), "currentTime": s.clock.Now().UTC(), "assets": items})
-	return AskKnowledge{Payload: payload, Digest: fmt.Sprintf("sha256:%x", sha256.Sum256(stable)), ReleaseID: snapshot.ReleaseID}, err
+	return AskKnowledge{Payload: payload, Digest: fmt.Sprintf("sha256:%x", sha256.Sum256(stable)), ReleaseID: snapshot.ReleaseID, Catalog: catalog}, err
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }

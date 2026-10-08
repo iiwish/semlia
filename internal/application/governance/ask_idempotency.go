@@ -13,8 +13,6 @@ import (
 	"github.com/iiwish/semlia/pkg/identity"
 )
 
-const askClarification = "请补充要查询的指标、维度、时间范围或比较对象。"
-
 type AskStateError struct{ Code string }
 
 func (err *AskStateError) Error() string { return err.Code }
@@ -70,7 +68,7 @@ func (service *AskService) replay(ctx context.Context, request AskRequest, recor
 	if err != nil {
 		return AskResult{}, err
 	}
-	result := AskResult{Run: run, Interpretation: AskInterpretation{Schema: AskInterpretationSchemaID, Outcome: "clarification", Clarification: askClarification}}
+	result := AskResult{Run: run, Interpretation: AskInterpretation{Schema: AskInterpretationSchemaID, Outcome: "clarification", Clarification: askClarificationText(knowledge.Catalog)}}
 	if record.Status == "clarification" {
 		return result, nil
 	}

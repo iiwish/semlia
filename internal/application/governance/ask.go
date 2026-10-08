@@ -239,7 +239,7 @@ func (service *AskService) Ask(ctx context.Context, request AskRequest) (AskResu
 		return service.failure(ctx, claim, &AskStateError{Code: "ASK_CONTEXT_CHANGED"}, "ASK_CONTEXT_CHANGED", contentDigestOf(response.Content), response)
 	}
 	if interpretation.Outcome == "clarification" {
-		interpretation.Clarification = askClarification
+		interpretation.Clarification = askClarificationText(knowledge.Catalog)
 		normalized, _ = json.Marshal(interpretation)
 		finished, finishErr := service.settle(ctx, claim, "clarification", "", contentDigestOf(string(normalized)), contentDigestOf(response.Content), nil, response)
 		return AskResult{Run: finished, Interpretation: interpretation}, finishErr
