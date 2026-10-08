@@ -33,7 +33,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     -ldflags="-s -w -linkmode external -extldflags -static" -o /out/demo-seed ./cmd/demo-seed
 RUN mkdir -p /out/git-content/sql /out/artifacts
 
-FROM gcr.io/distroless/base-debian12:nonroot
+FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
 
 WORKDIR /app
 COPY --from=go-builder /out/semlia /app/semlia
