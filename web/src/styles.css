@@ -22593,3 +22593,9 @@ select:focus-visible { box-shadow: var(--focus); outline: none; }
 .knowledge-published-value dl > div { display: contents; }
 .knowledge-published-value dt { color: var(--muted); }
 .knowledge-published-value dd { margin: 0; color: var(--ink); overflow-wrap: anywhere; }
+
+/* Revision history rows: the date and technical details are direct children and need the row's type size. */
+.asset-authority-detail > .asset-revision-history { grid-column: 1 / -1; }
+.asset-revision-history-list article > span { color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
+.asset-revision-history-list article > details { min-width: 0; font-size: 10px; }
+.asset-revision-history-list article > details code, .asset-revision-history-list article > details p, .asset-revision-history-list article > details span { display: block; overflow-wrap: anywhere; }
