@@ -248,6 +248,36 @@ func (e AskInterpretationSchema) Valid() bool {
 	}
 }
 
+// Defines values for AskVocabularyMatchVia.
+const (
+	Alias       AskVocabularyMatchVia = "alias"
+	Member      AskVocabularyMatchVia = "member"
+	MemberAlias AskVocabularyMatchVia = "member_alias"
+	Name        AskVocabularyMatchVia = "name"
+	Value       AskVocabularyMatchVia = "value"
+	ValueAlias  AskVocabularyMatchVia = "value_alias"
+)
+
+// Valid indicates whether the value is a known member of the AskVocabularyMatchVia enum.
+func (e AskVocabularyMatchVia) Valid() bool {
+	switch e {
+	case Alias:
+		return true
+	case Member:
+		return true
+	case MemberAlias:
+		return true
+	case Name:
+		return true
+	case Value:
+		return true
+	case ValueAlias:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AssetLifecycleState.
 const (
 	AssetLifecycleStateActive     AssetLifecycleState = "active"
@@ -4703,7 +4733,32 @@ type AskResponse struct {
 	Definitions    []ReleasedDefinition `json:"definitions"`
 	Interpretation AskInterpretation    `json:"interpretation"`
 	Resolution     *SemanticResolution  `json:"resolution,omitempty"`
+
+	// VocabularyMatches Question phrases bound to governed wording of knowledge the caller may read. Unsettled shared words are omitted; they are clarified instead.
+	VocabularyMatches *[]AskVocabularyMatch `json:"vocabularyMatches,omitempty"`
 }
+
+// AskVocabularyMatch defines model for AskVocabularyMatch.
+type AskVocabularyMatch struct {
+	// AssetId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
+	//
+	// Example: ast_01arz3ndektsv4rrffq69g5fav
+	AssetId    ResourceId        `json:"assetId"`
+	AssetType  SemanticAssetType `json:"assetType"`
+	MemberId   *string           `json:"memberId,omitempty"`
+	MemberName *string           `json:"memberName,omitempty"`
+	Name       string            `json:"name"`
+
+	// Text The normalized question phrase.
+	Text string `json:"text"`
+
+	// Value Canonical category value the phrase maps to.
+	Value *string               `json:"value,omitempty"`
+	Via   AskVocabularyMatchVia `json:"via"`
+}
+
+// AskVocabularyMatchVia defines model for AskVocabularyMatch.Via.
+type AskVocabularyMatchVia string
 
 // AssetContent defines model for AssetContent.
 type AssetContent struct {

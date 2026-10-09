@@ -22,6 +22,9 @@ type AskKnowledge struct {
 	// Ambiguities are question phrases that name several assets of one type with nothing to tell them apart. They
 	// are part of Digest; a caller clarifies them instead of asking the model to guess.
 	Ambiguities []d.AskAmbiguity
+	// Matches bind question phrases to governed wording of authorized assets; like Catalog they are evidence for the
+	// caller and are rebuilt deterministically on replay.
+	Matches []d.AskMatch
 }
 
 // AskCatalogEntry carries only authorized semantic names: no ids, addresses or physical locations.
@@ -87,7 +90,7 @@ func (s *Service) AskKnowledge(ctx context.Context, request ResolveRequest, ques
 	delete(selected, "manifestDigest")
 	selected["currentTime"] = s.clock.Now().UTC()
 	payload, err := json.Marshal(selected)
-	return AskKnowledge{Payload: payload, Digest: fmt.Sprintf("sha256:%x", sha256.Sum256(stable)), ReleaseID: snapshot.ReleaseID, Catalog: catalog, Ambiguities: selection.Ambiguities}, err
+	return AskKnowledge{Payload: payload, Digest: fmt.Sprintf("sha256:%x", sha256.Sum256(stable)), ReleaseID: snapshot.ReleaseID, Catalog: catalog, Ambiguities: selection.Ambiguities, Matches: selection.Matches}, err
 }
 
 func firstNonEmpty(values ...string) string {

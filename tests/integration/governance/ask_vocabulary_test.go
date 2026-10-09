@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -95,8 +96,21 @@ func TestAskClarifiesSharedWordingWithoutCallingTheModel(t *testing.T) {
 
 	// Naming one of them settles the word; the model then sees the binding.
 	request.Question, request.IdempotencyKey = "有效支付金额，也就是销售额，是什么意思？", "settled-wording"
-	if _, err := svc.Ask(ctx, request); err != nil {
+	settled, err := svc.Ask(ctx, request)
+	if err != nil {
 		t.Fatal(err)
+	}
+	evidence := map[string][]string{}
+	for _, match := range settled.Matches {
+		for _, hit := range match.Settled() {
+			evidence[match.Text] = append(evidence[match.Text], hit.AssetID+"/"+hit.Via)
+		}
+	}
+	if !reflect.DeepEqual(evidence["销售额"], []string{paid.AssetID + "/alias"}) || !reflect.DeepEqual(evidence["有效支付金额"], []string{paid.AssetID + "/name"}) {
+		t.Fatalf("answer evidence does not show settled wording: %v", evidence)
+	}
+	if len(result.Matches) != 1 || len(result.Matches[0].Settled()) != 0 {
+		t.Fatalf("an unsettled shared word must not be shown as a binding: %+v", result.Matches)
 	}
 	sent, _ := prompt.Load().(string)
 	if calls.Load() != 1 || !strings.Contains(sent, `"questionMatches"`) || !strings.Contains(sent, `"resolvedAssetIds":["`+paid.AssetID+`"]`) || !strings.Contains(sent, `"ambiguities":[]`) {

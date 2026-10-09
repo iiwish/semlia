@@ -132,6 +132,18 @@ type AskMatch struct {
 	excluded, ambiguous map[string]bool
 }
 
+// Settled lists the hits that still stand after disambiguation: every attribute or value hit, and asset hits the
+// question did not settle against or leave unsettled.
+func (match AskMatch) Settled() []AskHit {
+	hits := []AskHit{}
+	for _, hit := range match.Hits {
+		if match.usable(hit) {
+			hits = append(hits, hit)
+		}
+	}
+	return hits
+}
+
 // usable reports whether an asset-level hit still stands after disambiguation.
 func (match AskMatch) usable(hit AskHit) bool {
 	return hit.MemberID != "" || (!match.excluded[hit.AssetID] && !match.ambiguous[hit.AssetID])

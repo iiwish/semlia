@@ -4246,6 +4246,21 @@ export interface components {
             interpretation: components["schemas"]["AskInterpretation"];
             resolution?: components["schemas"]["SemanticResolution"];
             definitions: components["schemas"]["ReleasedDefinition"][];
+            /** @description Question phrases bound to governed wording of knowledge the caller may read. Unsettled shared words are omitted; they are clarified instead. */
+            vocabularyMatches?: components["schemas"]["AskVocabularyMatch"][];
+        };
+        AskVocabularyMatch: {
+            /** @description The normalized question phrase. */
+            text: string;
+            assetId: components["schemas"]["ResourceId"];
+            name: string;
+            assetType: components["schemas"]["SemanticAssetType"];
+            memberId?: string;
+            memberName?: string;
+            /** @description Canonical category value the phrase maps to. */
+            value?: string;
+            /** @enum {string} */
+            via: "name" | "alias" | "member" | "member_alias" | "value" | "value_alias";
         };
         /** Format: typeid */
         ConsumerId: string;

@@ -547,6 +547,20 @@ func askResponse(result governanceapp.AskResult) map[string]any {
 		"interpretation": result.Interpretation,
 		"definitions":    []any{},
 	}
+	matches := []map[string]any{}
+	for _, match := range result.Matches {
+		for _, hit := range match.Settled() {
+			item := map[string]any{"text": match.Text, "assetId": hit.AssetID, "name": hit.Name, "assetType": hit.Type, "via": hit.Via}
+			if hit.MemberID != "" {
+				item["memberId"], item["memberName"] = hit.MemberID, hit.MemberName
+			}
+			if hit.Value != "" {
+				item["value"] = hit.Value
+			}
+			matches = append(matches, item)
+		}
+	}
+	response["vocabularyMatches"] = matches
 	if result.Resolution == nil {
 		return response
 	}

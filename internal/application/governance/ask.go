@@ -106,6 +106,8 @@ type AskResult struct {
 	Run            domain.AgentRun
 	Interpretation AskInterpretation
 	Resolution     *distributionapp.ResolutionResult
+	// Matches show how question phrases bound to governed wording.
+	Matches []distributiondomain.AskMatch
 }
 
 func (service *AskService) Ask(ctx context.Context, request AskRequest) (AskResult, error) {
@@ -175,7 +177,7 @@ func (service *AskService) Ask(ctx context.Context, request AskRequest) (AskResu
 		interpretation := AskInterpretation{Schema: AskInterpretationSchemaID, Outcome: "clarification", Clarification: askServerClarification(knowledge)}
 		normalized, _ := json.Marshal(interpretation)
 		finished, finishErr := service.finish(ctx, AskFinishCommand{Request: claim, Status: "clarification", OutputDigest: contentDigestOf(string(normalized)), ModelOutputDigest: contentDigestOf("server disambiguation"), ServerTool: "ask_disambiguation"})
-		return AskResult{Run: finished, Interpretation: interpretation}, finishErr
+		return AskResult{Run: finished, Interpretation: interpretation, Matches: knowledge.Matches}, finishErr
 	}
 	client, err := service.clientFactory(provider, nil, nil)
 	if err != nil {
@@ -249,7 +251,7 @@ func (service *AskService) Ask(ctx context.Context, request AskRequest) (AskResu
 		interpretation.Clarification = askServerClarification(knowledge)
 		normalized, _ = json.Marshal(interpretation)
 		finished, finishErr := service.settle(ctx, claim, "clarification", "", contentDigestOf(string(normalized)), contentDigestOf(response.Content), nil, response)
-		return AskResult{Run: finished, Interpretation: interpretation}, finishErr
+		return AskResult{Run: finished, Interpretation: interpretation, Matches: knowledge.Matches}, finishErr
 	}
 	resolution, err := service.resolver.Resolve(ctx, distributionapp.ResolveRequest{
 		WorkspaceID: request.WorkspaceID, Input: *interpretation.Query, Channel: "ask",

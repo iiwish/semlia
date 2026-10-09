@@ -8378,6 +8378,24 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ReleasedDefinition"
+        vocabularyMatches:
+          type: array
+          description: Question phrases bound to governed wording of knowledge the caller may read. Unsettled shared words are omitted; they are clarified instead.
+          items:
+            $ref: "#/components/schemas/AskVocabularyMatch"
+    AskVocabularyMatch:
+      type: object
+      additionalProperties: false
+      required: [text, assetId, name, assetType, via]
+      properties:
+        text: { type: string, minLength: 1, maxLength: 256, description: The normalized question phrase. }
+        assetId: { $ref: '#/components/schemas/ResourceId' }
+        name: { type: string, minLength: 1, maxLength: 256 }
+        assetType: { $ref: '#/components/schemas/SemanticAssetType' }
+        memberId: { type: string, pattern: '^[a-z][a-z0-9_]{0,63}$' }
+        memberName: { type: string, maxLength: 256 }
+        value: { type: string, maxLength: 64, description: Canonical category value the phrase maps to. }
+        via: { type: string, enum: [name, alias, member, member_alias, value, value_alias] }
     ConsumerId:
       type: string
       format: typeid

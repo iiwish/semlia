@@ -70,7 +70,7 @@ func (service *AskService) replay(ctx context.Context, request AskRequest, recor
 	if err != nil {
 		return AskResult{}, err
 	}
-	result := AskResult{Run: run, Interpretation: AskInterpretation{Schema: AskInterpretationSchemaID, Outcome: "clarification", Clarification: askServerClarification(knowledge)}}
+	result := AskResult{Run: run, Interpretation: AskInterpretation{Schema: AskInterpretationSchemaID, Outcome: "clarification", Clarification: askServerClarification(knowledge)}, Matches: knowledge.Matches}
 	if record.Status == "clarification" {
 		return result, nil
 	}
