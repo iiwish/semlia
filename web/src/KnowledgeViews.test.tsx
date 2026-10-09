@@ -119,6 +119,32 @@ describe("real Ask", () => {
     expect(openEvidence).toHaveBeenCalledWith({ assetId: "ast_01arz3ndektsv4rrffq69g5fav", revisionId: "rev_01arz3ndektsv4rrffq69g5fav", releaseId: "rls_01arz3ndektsv4rrffq69g5fav" });
   });
 
+  it("shows how the question's wording bound to governed vocabulary", async () => {
+    const user = userEvent.setup();
+    askMock.mockResolvedValue({ ...resolvedResponse(), vocabularyMatches: [
+      { text: "gmv", assetId: "ast_01arz3ndektsv4rrffq69g5fav", name: "有效支付金额", assetType: "metric", via: "alias" },
+      { text: "江浙沪", assetId: "ast_01arz3ndektsv4rrffq69g5fa1", name: "客户", assetType: "business_object", memberId: "region", memberName: "当前区域", value: "华东", via: "value_alias" },
+      { text: "有效支付金额", assetId: "ast_01arz3ndektsv4rrffq69g5fav", name: "有效支付金额", assetType: "metric", via: "name" },
+    ] });
+    render(<AskView workspaceId={workspaceId} onOpenEvidence={() => {}} onStartRevision={() => {}} />);
+    await user.type(screen.getByRole("textbox", { name: "向 Semlia 提问" }), "江浙沪 GMV 是多少？");
+    await user.click(screen.getByRole("button", { name: "发送问题" }));
+    const matches = await screen.findByRole("region", { name: "问题中的词汇匹配" });
+    expect(matches).toHaveTextContent("gmv→有效支付金额别名");
+    expect(matches).toHaveTextContent("江浙沪→客户 · 当前区域 = 华东取值别名");
+    expect(within(matches).getAllByRole("listitem")).toHaveLength(2);
+  });
+
+  it("omits the vocabulary section when only names matched", async () => {
+    const user = userEvent.setup();
+    askMock.mockResolvedValue({ ...resolvedResponse(), vocabularyMatches: [{ text: "净收入", assetId: "ast_01arz3ndektsv4rrffq69g5fav", name: "净收入", assetType: "metric", via: "name" }] });
+    render(<AskView workspaceId={workspaceId} onOpenEvidence={() => {}} onStartRevision={() => {}} />);
+    await user.type(screen.getByRole("textbox", { name: "向 Semlia 提问" }), "净收入是多少？");
+    await user.click(screen.getByRole("button", { name: "发送问题" }));
+    await screen.findByText("计划已验证");
+    expect(screen.queryByRole("region", { name: "问题中的词汇匹配" })).not.toBeInTheDocument();
+  });
+
   it("maps provider failure to an explicit no-fallback boundary", () => {
     const failure = errorMessage({ message: "unavailable", code: "PROVIDER_UNAVAILABLE" });
     expect(failure).toEqual({

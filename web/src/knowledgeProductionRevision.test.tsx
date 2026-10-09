@@ -63,8 +63,40 @@ it.each(["stale", "unpublished draft", "wrong before", "wrong asset", "wrong rev
 });
 
 it("does not rebase conflicting dependency pins to latest versions", async () => {
-  const edit: KnowledgeRevisionSubmission = { ...submission, changes: [{ field: "spec", before: content.spec, after: { baseObjectRef: { ...ref, revisionId: "rev_other" } } }] };
+  const edit: KnowledgeRevisionSubmission = { ...submission, changes: [{ field: "spec", before: content.spec, after: { baseObjectRef: ref, publicAttributeRefs: [{ ...ref, revisionId: "rev_other", memberId: "region" }] } }] };
   await expect(prepareKnowledgeProductionRevision("wsp_a", edit)).rejects.toThrow(/依赖/);
+});
+
+it("declares exactly the pins the revised content cites", async () => {
+  const moved = { ...ref, revisionId: "rev_orders_next" };
+  const edit: KnowledgeRevisionSubmission = { ...submission, changes: [{ field: "spec", before: content.spec, after: { baseObjectRef: moved } }] };
+  const draft = await prepareKnowledgeProductionRevision("wsp_a", edit);
+  // The inherited dependency named the previous pin; keeping it would fail once the head no longer holds it.
+  expect(draft.input.dependencies).toEqual([{ kind: "semantic_asset", targetId: ref.assetId, revisionId: "rev_orders_next", releaseId: ref.releaseId }]);
+});
+
+it("submits governed vocabulary as its own fields and aligns its pins with the spec", async () => {
+  const other = { assetId: "ast_booked", revisionId: "rev_booked", releaseId: "rls_booked" };
+  const edit: KnowledgeRevisionSubmission = { ...submission, changes: [
+    { field: "aliases", before: undefined, after: ["GMV", "成交额"] },
+    { field: "confusableWith", before: [], after: [{ ref: other, distinction: "含无效订单" }] },
+    { field: "sampleQuestions", before: undefined, after: [{ question: "8月 GMV 是多少？", expects: { refs: [{ ...ref, revisionId: "rev_orders_stale" }] } }] },
+  ] };
+  const draft = await prepareKnowledgeProductionRevision("wsp_a", edit);
+  const target = draft.targets[0];
+  expect(target.changes.map((change) => [change.fieldPath, change.op])).toEqual([["aliases", "add"], ["confusableWith", "add"], ["sampleQuestions", "add"]]);
+  expect((target.content as Record<string, unknown>).sampleQuestions).toEqual([{ question: "8月 GMV 是多少？", expects: { refs: [ref] } }]);
+  expect(draft.input.dependencies).toEqual([
+    { kind: "semantic_asset", targetId: ref.assetId, revisionId: ref.revisionId, releaseId: ref.releaseId },
+    { kind: "semantic_asset", targetId: other.assetId, revisionId: other.revisionId, releaseId: other.releaseId },
+  ]);
+  const cleared = await prepareKnowledgeProductionRevision("wsp_a", { ...submission, changes: [{ field: "aliases", before: ["GMV"], after: undefined }] }).catch((error: Error) => error);
+  expect(cleared).toBeInstanceOf(Error);
+  vi.mocked(getAssetRevision).mockResolvedValue({ ...structuredClone(revision), content: { ...content, aliases: ["GMV"] } });
+  const removed = await prepareKnowledgeProductionRevision("wsp_a", { ...submission, changes: [{ field: "aliases", before: ["GMV"], after: undefined }] });
+  expect(removed.targets[0].changes).toEqual([{ fieldPath: "aliases", op: "remove", beforeValue: ["GMV"] }]);
+  expect(removed.targets[0].content).not.toHaveProperty("aliases");
+  await expect(prepareKnowledgeProductionRevision("wsp_a", { ...submission, changes: [{ field: "synonyms", before: undefined, after: ["GMV"] }] })).rejects.toThrow(/修订字段/);
 });
 
 it("bounds an otherwise unending release chain to 64 reads", async () => {

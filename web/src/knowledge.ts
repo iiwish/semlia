@@ -61,3 +61,49 @@ export function expressionLabel(expression?: KnowledgeExpression): string {
   const symbol: Record<string, string> = { add: "+", subtract: "-", multiply: "×", divide: "÷", eq: "=", neq: "≠", lt: "<", lte: "≤", gt: ">", gte: "≥", and: "且", or: "或" };
   return `(${expressionLabel(expression.left)} ${symbol[expression.op] ?? expression.op} ${expressionLabel(expression.right)})`;
 }
+
+export type KnowledgeConfusion = components["schemas"]["VocabularyConfusion"];
+export type KnowledgeSampleQuestion = components["schemas"]["VocabularySampleQuestion"];
+export type KnowledgeValueAlias = components["schemas"]["KnowledgeValueAlias"];
+
+// Governed wording of one knowledge revision. It never changes computation; the server keeps references to a
+// revision valid when only these fields change.
+export interface KnowledgeVocabulary {
+  aliases: string[];
+  includes: string[];
+  excludes: string[];
+  examples: string[];
+  confusableWith: KnowledgeConfusion[];
+  sampleQuestions: KnowledgeSampleQuestion[];
+}
+
+export const vocabularyFields = ["aliases", "includes", "excludes", "examples", "confusableWith", "sampleQuestions"] as const;
+export type VocabularyField = (typeof vocabularyFields)[number];
+
+export const vocabularyFieldLabels: Record<VocabularyField, string> = {
+  aliases: "别名", includes: "口径包含", excludes: "明确排除", examples: "示例", confusableWith: "易混淆知识", sampleQuestions: "典型问题",
+};
+
+function isReference(value: unknown): value is KnowledgeReference {
+  const ref = value as Record<string, unknown> | null;
+  return !!ref && typeof ref.assetId === "string" && typeof ref.revisionId === "string" && typeof ref.releaseId === "string";
+}
+
+export function vocabularyFrom(content: Record<string, unknown>): KnowledgeVocabulary {
+  const strings = (value: unknown) => Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+  const confusions = Array.isArray(content.confusableWith) ? content.confusableWith.flatMap((item): KnowledgeConfusion[] => {
+    const value = item as Record<string, unknown>;
+    return isReference(value?.ref) && typeof value.distinction === "string" ? [{ ref: value.ref, distinction: value.distinction }] : [];
+  }) : [];
+  const samples = Array.isArray(content.sampleQuestions) ? content.sampleQuestions.flatMap((item): KnowledgeSampleQuestion[] => {
+    const value = item as Record<string, unknown>;
+    if (typeof value?.question !== "string") return [];
+    const refs = Array.isArray((value.expects as Record<string, unknown> | undefined)?.refs) ? ((value.expects as Record<string, unknown>).refs as unknown[]).filter(isReference) : [];
+    return [refs.length ? { question: value.question, expects: { refs } } : { question: value.question }];
+  }) : [];
+  return { aliases: strings(content.aliases), includes: strings(content.includes), excludes: strings(content.excludes), examples: strings(content.examples), confusableWith: confusions, sampleQuestions: samples };
+}
+
+export function emptyVocabulary(): KnowledgeVocabulary {
+  return { aliases: [], includes: [], excludes: [], examples: [], confusableWith: [], sampleQuestions: [] };
+}

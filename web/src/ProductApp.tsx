@@ -39,6 +39,7 @@ import {
   Users,
   X,
 } from "lucide-react";
+import { AssetVocabularySection } from "./AssetVocabularySection";
 import { LoaderCircle } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { components } from "@semlia/sdk-typescript";
@@ -1011,7 +1012,7 @@ function AssetAuthoritativeDefinition({ asset, onStartRevision, onOpenReleaseRec
   const fields = assetContractFields(asset);
   return <AuthorityUnavailable asset={asset} kinds={["definition"]}><div className="asset-authority-detail">
     <section><header><div><h3>{asset.type}定义</h3></div><button className="secondary-button" type="button" onClick={() => onStartRevision({ assetId: asset.id, fieldPath: "definition.boundary", origin: "definition" })}><GitPullRequestArrow size={15} />提出修订</button></header>{asset.knowledgeSpec ? <KnowledgeSpecView type={asset.type} spec={asset.knowledgeSpec} /> : <dl>{fields.map((field) => <div key={field.label}><dt>{field.label}</dt><dd><code>{field.value}</code></dd></div>)}</dl>}</section>
-    {[asset.aliases, asset.includes, asset.excludes, asset.examples].some((items) => items.length > 0) && <section><h3>定义边界</h3><dl>{[["别名", asset.aliases], ["包含", asset.includes], ["排除", asset.excludes], ["示例", asset.examples]].map(([label, values]) => Array.isArray(values) && values.length > 0 ? <div key={String(label)}><dt>{label}</dt><dd>{values.join("；")}</dd></div> : null)}</dl></section>}
+    <AssetVocabularySection asset={asset} onStartRevision={onStartRevision} />
     <AssetRevisionHistory asset={asset} onOpenReleaseRecord={onOpenReleaseRecord} />
   </div></AuthorityUnavailable>;
 }
@@ -1260,6 +1261,7 @@ const knowledgeRevisionLaunchTargets = [
   { label: "口径包含", fieldPath: "definition.includes" },
   { label: "明确排除", fieldPath: "definition.excludes" },
   { label: "消歧规则", fieldPath: "wiki.disambiguation" },
+  { label: "业务词汇", fieldPath: "vocabulary" },
 ] as const;
 
 function KnowledgeRevisionLauncher({ asset, active, onStart }: { asset: Asset; active: boolean; onStart: (request: KnowledgeRevisionRequest) => void }) {

@@ -54,20 +54,49 @@ it("preserves editable unsent content on a deterministic validation error", asyn
   expect(screen.getByLabelText("业务定义候选值")).toBeEnabled();
 });
 
-it.each(["definition.excludes", "definition.includes", "wiki.disambiguation", "definition.boundary"])("binds the editor to a visible field when opened from %s on a typed knowledge object", async (fieldPath) => {
+it("binds the editor to the visible definition when opened from definition.boundary on a typed knowledge object", async () => {
   const onSubmit = vi.fn().mockResolvedValue(undefined);
-  render(<Form onSubmit={onSubmit} fieldPath={fieldPath} />);
+  render(<Form onSubmit={onSubmit} fieldPath="definition.boundary" />);
   const user = userEvent.setup();
-  // The typed editor exposes only the definition and the type-specific spec; the opened target must land on one of them.
   expect(screen.getByRole("heading", { name: "业务定义", level: 3 })).toBeVisible();
   expect(screen.getByLabelText("业务定义候选值")).toHaveValue("Opened baseline");
-  expect(screen.queryByText("当前没有内容")).not.toBeInTheDocument();
   await user.type(screen.getByLabelText("业务定义候选值"), " plus exclusions");
   await user.type(screen.getByLabelText("知识修订原因"), "Clarify the boundary");
   await user.click(screen.getByRole("button", { name: "运行检查" }));
-  expect(screen.queryByText("至少修改一项知识字段后才能运行检查。")).not.toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "保存修订并继续确认" }));
   expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ changes: [{ field: "definition", before: "Opened baseline", after: "Opened baseline plus exclusions" }] }));
+});
+
+it.each(["definition.excludes", "definition.includes", "wiki.disambiguation", "vocabulary"])("opens governed wording when opened from %s on a typed knowledge object", async (fieldPath) => {
+  const onSubmit = vi.fn().mockResolvedValue(undefined);
+  const worded = { ...asset, vocabulary: { aliases: ["GMV"], includes: [], excludes: [], examples: [], confusableWith: [], sampleQuestions: [] } };
+  render(<Form onSubmit={onSubmit} fieldPath={fieldPath} current={worded} />);
+  const user = userEvent.setup();
+  expect(screen.getByRole("heading", { name: "业务词汇", level: 3 })).toBeVisible();
+  expect(screen.getByLabelText("别名（每行一项）")).toHaveValue("GMV");
+  await user.type(screen.getByLabelText("别名（每行一项）"), "\n成交额");
+  await user.type(screen.getByLabelText("明确排除（每行一项）"), "无效订单");
+  await user.type(screen.getByLabelText("知识修订原因"), "Record how people ask");
+  await user.click(screen.getByRole("button", { name: "运行检查" }));
+  await user.click(screen.getByRole("button", { name: "保存修订并继续确认" }));
+  expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ changes: [
+    { field: "aliases", before: ["GMV"], after: ["GMV", "成交额"] },
+    { field: "excludes", before: undefined, after: ["无效订单"] },
+  ] }));
+});
+
+it("blocks incomplete vocabulary before saving", async () => {
+  const onSubmit = vi.fn().mockResolvedValue(undefined);
+  render(<Form onSubmit={onSubmit} fieldPath="vocabulary" />);
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: "添加典型问题" }));
+  await user.type(screen.getByLabelText("知识修订原因"), "Add a sample");
+  await user.click(screen.getByRole("button", { name: "运行检查" }));
+  expect(screen.getByRole("alert")).toHaveTextContent("典型问题不能为空。");
+  await user.type(screen.getByLabelText("典型问题 1"), "8月 GMV 是多少？");
+  await user.click(screen.getByRole("button", { name: "运行检查" }));
+  await user.click(screen.getByRole("button", { name: "保存修订并继续确认" }));
+  expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ changes: [{ field: "sampleQuestions", before: undefined, after: [{ question: "8月 GMV 是多少？" }] }] }));
 });
 
 it("opens the type-specific spec when the requested target is an executable member", async () => {

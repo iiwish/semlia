@@ -20,6 +20,7 @@ import {
 import type { Asset, AssetAuthoritySection, AssetType, AssetTypeSpec, EvidenceAuthority } from "./types";
 import { useOptionalSessionRuntime } from "./sessionRuntime";
 import { knowledgeReadiness } from "./knowledgeReadiness";
+import { vocabularyFrom } from "./knowledge";
 
 interface CreateAssetInput {
   scope?: string;
@@ -487,6 +488,11 @@ export function CatalogRuntimeProvider({ children }: { children: ReactNode }) {
   return <CatalogRuntimeContext.Provider value={value}>{children}</CatalogRuntimeContext.Provider>;
 }
 
+// useOptionalCatalogRuntime lets read-only views degrade outside a catalog workspace.
+export function useOptionalCatalogRuntime() {
+  return useContext(CatalogRuntimeContext);
+}
+
 export function useCatalogRuntime() {
   const value = useContext(CatalogRuntimeContext);
   if (!value) throw new Error("useCatalogRuntime must be used inside CatalogRuntimeProvider");
@@ -591,6 +597,7 @@ function projectAsset(workspaceId: string, summary: CatalogAsset, detail: Catalo
   return {
     id: summary.id,
     knowledgeSpec: (content.spec ?? {}) as Asset["knowledgeSpec"],
+    vocabulary: vocabularyFrom(content),
     detailLoaded: Boolean(detail),
     authoritySections,
     revision: !detail ? "版本待加载" : revision?.sequence ? `@${revision.sequence}` : "@0",

@@ -8,7 +8,8 @@ import type { KnowledgeReference, KnowledgeSpec, KnowledgeType } from "./knowled
 export const KnowledgeWorkspaceContext = createContext<string | undefined>(undefined);
 const referenceKey = (value?: KnowledgeReference) => value ? `${value.assetId}:${value.revisionId}:${value.releaseId}:${value.memberId ?? ""}` : "";
 
-function publishedReference(asset: CatalogAssetDetail): KnowledgeReference | undefined {
+// eslint-disable-next-line react-refresh/only-export-components
+export function publishedReference(asset: CatalogAssetDetail): KnowledgeReference | undefined {
   const release = asset.authoritySections.find((section) => section.kind === "released_state" && section.availability === "available");
   if (!release?.releaseId || !release.revisionId || release.revisionId !== asset.currentRevision?.id) return;
   return { assetId: asset.id, revisionId: release.revisionId, releaseId: release.releaseId };

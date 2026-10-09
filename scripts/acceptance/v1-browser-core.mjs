@@ -29,6 +29,8 @@ export function browserPlan(command) {
     'compact-desktop': { project: 'compact-desktop', grep: '@journey' },
     ambiguous: { project: 'desktop', grep: '@ambiguous' },
     'desktop-resume-route-query-optional': { project: 'desktop', grep: '@journey', repair: 'route-query-optional' },
+    // Vocabulary acceptance runs on the governed vocabulary head, which has moved past the frozen V1 baseline.
+    vocabulary: { grep: '@vocabulary', vocabularyHead: true },
   };
   assert.ok(Object.hasOwn(plans, command), 'Unapproved browser acceptance command');
   return plans[command];

@@ -144,7 +144,8 @@ export interface KnowledgeRevisionSubmission {
   title: string;
   summary: string;
   reason: string;
-  changes: Array<{ field: string; before: string | Record<string, unknown>; after: string | Record<string, unknown> }>;
+  // A vocabulary field that did not exist has before undefined; one that is cleared has after undefined.
+  changes: Array<{ field: string; before?: unknown; after?: unknown }>;
 }
 
 export interface EvidenceArtifact {
@@ -284,6 +285,8 @@ export interface JoinContract {
 
 export interface Asset {
   knowledgeSpec?: import("./knowledge").KnowledgeSpec;
+  // Governed wording of the current revision; absent for content that predates typed knowledge.
+  vocabulary?: import("./knowledge").KnowledgeVocabulary;
   // This is a denormalized detail projection. Canonical identity, revision,
   // deployment and quality records remain independently addressable.
   id: string;

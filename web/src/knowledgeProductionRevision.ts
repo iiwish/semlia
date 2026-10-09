@@ -1,5 +1,5 @@
 import { getAsset, getAssetRevision } from "./catalog";
-import { knowledgeReferences, type KnowledgeSpec } from "./knowledge";
+import { knowledgeReferences, vocabularyFields, type KnowledgeReference, type KnowledgeSpec } from "./knowledge";
 import { getProductionSnapshot, productionAPI, ProductionApiError, productionMessage, targetChanges, type AssetContent, type ProductionDraft, type ProductionOperation } from "./semanticProduction";
 import type { KnowledgeRevisionSubmission } from "./types";
 
@@ -9,6 +9,27 @@ function canonical(value: unknown): string {
 
 export function sameRevisionSubmission(a: KnowledgeRevisionSubmission, b: KnowledgeRevisionSubmission) {
   return canonical(a) === canonical(b);
+}
+
+// An absent vocabulary field and an empty list mean the same thing.
+function sameFieldValue(field: string, current: unknown, before: unknown) {
+  if (vocabularyFields.includes(field as (typeof vocabularyFields)[number])) {
+    const empty = (value: unknown) => value === undefined || (Array.isArray(value) && value.length === 0);
+    if (empty(current) && empty(before)) return true;
+  }
+  return canonical(current) === canonical(before);
+}
+
+// Vocabulary references only name an asset, so they follow the pin the spec already cites for it; one asset must
+// never be pinned twice in a production request.
+function alignVocabularyPins(content: Record<string, unknown>) {
+  const cited = new Map(knowledgeReferences(content.spec as KnowledgeSpec).map((ref) => [ref.assetId, ref]));
+  const align = (ref: KnowledgeReference): KnowledgeReference => {
+    const pin = cited.get(ref.assetId);
+    return pin ? { ...ref, revisionId: pin.revisionId, releaseId: pin.releaseId } : ref;
+  };
+  if (Array.isArray(content.confusableWith)) content.confusableWith = (content.confusableWith as Array<{ ref: KnowledgeReference; distinction: string }>).map((item) => ({ ...item, ref: align(item.ref) }));
+  if (Array.isArray(content.sampleQuestions)) content.sampleQuestions = (content.sampleQuestions as Array<{ question: string; expects?: { refs: KnowledgeReference[] } }>).map((item) => item.expects ? { ...item, expects: { refs: item.expects.refs.map(align) } } : item);
 }
 
 export async function prepareKnowledgeProductionRevision(workspaceId: string, submission: KnowledgeRevisionSubmission, signal?: AbortSignal): Promise<ProductionDraft> {
@@ -25,12 +46,16 @@ export async function prepareKnowledgeProductionRevision(workspaceId: string, su
   if (content.address !== detail.address || content.assetType !== detail.assetType || typeof content.displayName !== "string" || typeof content.ownerPrincipalId !== "string" || !content.spec || typeof content.spec !== "object" || Array.isArray(content.spec)) throw new Error("此知识缺少规范生产内容，不能创建生产修订。");
   const desired = structuredClone(content);
   const changed = new Set<string>();
+  const vocabulary = new Set<string>(vocabularyFields);
   for (const change of submission.changes) {
-    if (!["definition", "spec"].includes(change.field) || changed.has(change.field) || canonical(content[change.field]) !== canonical(change.before)) throw new Error("修订字段或原值与编辑基线不匹配，请重新核对。");
-    if (change.field === "definition" ? typeof change.after !== "string" : !change.after || typeof change.after !== "object" || Array.isArray(change.after)) throw new Error("修订内容不符合规范字段类型。");
-    desired[change.field] = structuredClone(change.after);
+    const known = change.field === "definition" || change.field === "spec" || vocabulary.has(change.field);
+    if (!known || changed.has(change.field) || !sameFieldValue(change.field, content[change.field], change.before)) throw new Error("修订字段或原值与编辑基线不匹配，请重新核对。");
+    if (change.field === "definition" ? typeof change.after !== "string" : change.field === "spec" ? !change.after || typeof change.after !== "object" || Array.isArray(change.after) : change.after !== undefined && !Array.isArray(change.after)) throw new Error("修订内容不符合规范字段类型。");
+    if (change.after === undefined) delete desired[change.field];
+    else desired[change.field] = structuredClone(change.after);
     changed.add(change.field);
   }
+  alignVocabularyPins(desired);
   const changes = targetChanges(content as AssetContent, desired as AssetContent);
   if (!changes.length) throw new Error("没有需要保存的知识变化。");
 
@@ -66,8 +91,10 @@ export async function prepareKnowledgeProductionRevision(workspaceId: string, su
     if (snapshot.id !== pin.snapshotId || snapshot.sourceId !== pin.sourceId || snapshot.contentDigest !== pin.digest || snapshot.historyQuality !== "verified" || !pin.coverageKeys.length || !pin.coverageKeys.every((key) => snapshot.coverage.some((unit) => unit.key === key && unit.status === "complete" && unit.enumerationComplete))) throw new Error("固定来源快照或覆盖无法验证，未创建修订。");
   }
   input.candidates = [];
+  // Dependencies are exactly the pins the new content cites; inherited ones may name revisions the head dropped.
   const dependencies = new Map<string, (typeof input.dependencies)[number]>();
-  for (const dependency of [...input.dependencies, ...knowledgeReferences(desired.spec as KnowledgeSpec).map((ref) => ({ kind: "semantic_asset" as const, targetId: ref.assetId, revisionId: ref.revisionId, releaseId: ref.releaseId }))]) {
+  for (const ref of knowledgeReferences(Object.fromEntries([["spec", desired.spec], ...vocabularyFields.map((field) => [field, desired[field]])]) as KnowledgeSpec)) {
+    const dependency = { kind: "semantic_asset" as const, targetId: ref.assetId, revisionId: ref.revisionId, releaseId: ref.releaseId };
     const key = `${dependency.kind}:${dependency.targetId}`;
     const existing = dependencies.get(key);
     if (existing && canonical(existing) !== canonical(dependency)) throw new Error("依赖的固定版本冲突，不能自动改用最新版本。");

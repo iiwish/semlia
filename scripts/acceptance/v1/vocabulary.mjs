@@ -241,3 +241,24 @@ export async function measureVocabulary(root, phase, rounds = 3, print = console
   print(JSON.stringify({ phase, passed: ledger.passed, total: ledger.total, summary: ledger.summary }));
   return ledger;
 }
+
+// vocabularyHeadProof replaces the frozen V1 baseline proof for vocabulary acceptance: the head has moved on purpose,
+// so it proves the governed vocabulary release is in place and records which head the browser checked.
+export async function vocabularyHeadProof(root, request = requestAs) {
+  const state = readState(root), base = `/api/v1/workspaces/${state.workspace.id}`;
+  const wording = state.vocabulary?.wording?.releaseId;
+  assert.ok(wording, 'Vocabulary acceptance requires the published vocabulary release');
+  const latest = await request(root, 'author', 'GET', base + '/governance/releases?limit=1');
+  assert.equal(latest.status, 200);
+  const current = latest.body.items[0];
+  assert.ok(current?.id, 'Current release required');
+  const release = await request(root, 'author', 'GET', base + '/production-releases/' + current.id);
+  assert.equal(release.status, 200);
+  const amount = state.published['demo_202609.amount'].targetId;
+  const pin = release.body.afterManifest.assets.find(asset => asset.assetId === amount);
+  assert.ok(pin, 'Current head must pin the vocabulary metric');
+  const revision = await request(root, 'author', 'GET', base + `/catalog/assets/${amount}/revisions/${pin.revisionId}`);
+  assert.equal(revision.status, 200);
+  assert.ok(revision.body.content.aliases?.includes('GMV'), 'Current head must carry the governed vocabulary');
+  return { currentRelease: current.id, correctBaselineContent: true, knowledgeBasis: { kind: 'vocabulary', wordingRelease: wording }, checkedAt: new Date().toISOString() };
+}

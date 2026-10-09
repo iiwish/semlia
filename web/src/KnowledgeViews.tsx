@@ -33,6 +33,18 @@ const answerIssueOptions = [
   { id: "disambiguation", label: "问法被错误理解", detail: "修订检索词、同名消歧或回答范围。", fieldPath: "wiki.disambiguation" },
 ] as const;
 
+const matchVia: Record<NonNullable<AskResponse["vocabularyMatches"]>[number]["via"], string> = { name: "名称", alias: "别名", member: "属性名称", member_alias: "属性别名", value: "规范取值", value_alias: "取值别名" };
+
+// VocabularyMatches shows how the question's wording bound to governed vocabulary; names alone are omitted as obvious.
+function VocabularyMatches({ matches }: { matches: NonNullable<AskResponse["vocabularyMatches"]> }) {
+  const shown = matches.filter((match) => match.via !== "name");
+  if (shown.length === 0) return null;
+  return <section className="ask-vocabulary" aria-label="问题中的词汇匹配">
+    <span className="content-label">词汇匹配</span>
+    <ul>{shown.map((match) => <li key={`${match.text}:${match.assetId}:${match.memberId ?? ""}:${match.value ?? ""}`}><q>{match.text}</q><span aria-hidden="true">→</span><span>{match.name}{match.memberName ? ` · ${match.memberName}` : ""}{match.value ? ` = ${match.value}` : ""}</span><small>{matchVia[match.via]}</small></li>)}</ul>
+  </section>;
+}
+
 export function errorMessage(error: unknown): { code: string; title: string; detail: string } {
   const code = error instanceof AskApiError ? error.code : error && typeof error === "object" && "code" in error && typeof error.code === "string" ? error.code : "REQUEST_FAILED";
   if (code === "PROVIDER_UNAVAILABLE") return { code, title: "模型服务暂不可用", detail: "本次请求已记录为失败，没有回退到演示答案。请检查默认模型及凭证后重试。" };
@@ -92,7 +104,7 @@ function AskResultView({ result, question, reportingIssue, selectedIssue, onOpen
 
   if (result.interpretation.outcome === "clarification") {
     return <article className="assistant-answer ask-clarification">
-      <header><span className="assistant-mark"><MessageSquareWarning size={17} /></span><div><strong>需要补充信息</strong><small>模型解释已完成 · 尚未调用语义解析器</small></div><span className="grounded-badge ask-badge-neutral">未解析</span></header>
+      <header><span className="assistant-mark"><MessageSquareWarning size={17} /></span><div><strong>需要补充信息</strong><small>按已发布知识回复 · 尚未调用语义解析器</small></div><span className="grounded-badge ask-badge-neutral">未解析</span></header>
       <div className="answer-copy"><p>{result.interpretation.clarification}</p></div>
     </article>;
   }
@@ -107,6 +119,7 @@ function AskResultView({ result, question, reportingIssue, selectedIssue, onOpen
 
   return <article className="assistant-answer">
     <header><span className="assistant-mark"><Sparkles size={17} /></span><div><strong>Semlia</strong><small>基于 {releaseLabel} · {result.definitions.length} 个已发布定义 · Agent run {result.agentRun.id}</small></div><span className="grounded-badge"><BadgeCheck size={13} />计划已验证</span></header>
+    <VocabularyMatches matches={result.vocabularyMatches ?? []} />
     <div className="answer-copy">
       {result.definitions.length > 0 ? result.definitions.map((definition) => <p key={definition.assetId}><strong>{definition.name || definition.address}</strong>：{definition.definition || "该发布修订没有可展示的文字定义。"}</p>) : <p>语义请求已解析，但所选发布修订没有可展示的文字定义。</p>}
     </div>
