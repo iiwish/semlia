@@ -57,7 +57,7 @@ func (service *AskService) replay(ctx context.Context, request AskRequest, recor
 	if record.Status != "succeeded" && record.Status != "clarification" {
 		return AskResult{}, askTerminalError(record.ErrorCode)
 	}
-	knowledge, err := service.resolver.AskKnowledge(ctx, distributionapp.ResolveRequest{WorkspaceID: request.WorkspaceID, PrincipalRef: request.PrincipalRef, TraceID: request.TraceID, Input: distributiondomain.SemanticQueryInput{Context: request.Context}})
+	knowledge, err := service.resolver.AskKnowledge(ctx, distributionapp.ResolveRequest{WorkspaceID: request.WorkspaceID, PrincipalRef: request.PrincipalRef, TraceID: request.TraceID, Input: distributiondomain.SemanticQueryInput{Context: request.Context}}, request.Question)
 	if err != nil {
 		return AskResult{}, err
 	}
@@ -68,7 +68,7 @@ func (service *AskService) replay(ctx context.Context, request AskRequest, recor
 	if err != nil {
 		return AskResult{}, err
 	}
-	result := AskResult{Run: run, Interpretation: AskInterpretation{Schema: AskInterpretationSchemaID, Outcome: "clarification", Clarification: askClarificationText(knowledge.Catalog)}}
+	result := AskResult{Run: run, Interpretation: AskInterpretation{Schema: AskInterpretationSchemaID, Outcome: "clarification", Clarification: askServerClarification(knowledge)}}
 	if record.Status == "clarification" {
 		return result, nil
 	}

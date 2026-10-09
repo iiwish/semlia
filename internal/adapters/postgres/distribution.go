@@ -803,12 +803,17 @@ func appendReleasedObject(snapshot *domain.ReleaseSnapshot, row dbgen.ListDistri
 
 func releasedAssetNames(address string, content []byte) (string, []string) {
 	var payload struct {
-		Name    string   `json:"name"`
-		Title   string   `json:"title"`
-		Aliases []string `json:"aliases"`
+		DisplayName string   `json:"displayName"`
+		Name        string   `json:"name"`
+		Title       string   `json:"title"`
+		Aliases     []string `json:"aliases"`
 	}
 	_ = json.Unmarshal(content, &payload)
-	name := strings.TrimSpace(payload.Name)
+	// Five-type knowledge names itself with displayName; older content used name or title.
+	name := strings.TrimSpace(payload.DisplayName)
+	if name == "" {
+		name = strings.TrimSpace(payload.Name)
+	}
 	if name == "" {
 		name = strings.TrimSpace(payload.Title)
 	}

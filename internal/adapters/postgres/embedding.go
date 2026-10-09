@@ -6,7 +6,6 @@ import (
 	"errors"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	dbgen "github.com/iiwish/semlia/internal/adapters/postgres/sqlc"
 	app "github.com/iiwish/semlia/internal/application/embedding"
@@ -169,24 +168,12 @@ func (s *Store) StartEmbedding(ctx context.Context, command app.StartCommand) (d
 		}
 		chunk.AssetID, _ = identity.AssetIDFromUUIDBytes(asset.Bytes)
 		chunk.RevisionID, _ = identity.RevisionIDFromUUIDBytes(revision.Bytes)
-		var fields map[string]json.RawMessage
-		if json.Unmarshal(content, &fields) != nil {
+		text, err := domain.ChunkText(chunk.Address, content)
+		if err != nil {
 			rows.Close()
 			return domain.Index{}, domain.ErrInvalid
 		}
-		chunk.Text = chunk.Address
-		for _, key := range []string{"name", "title", "description"} {
-			var value string
-			if json.Unmarshal(fields[key], &value) == nil && strings.TrimSpace(value) != "" {
-				chunk.Text += "\n" + value
-			}
-		}
-		if len(chunk.Text) > 2048 {
-			chunk.Text = chunk.Text[:2048]
-			for !utf8.ValidString(chunk.Text) {
-				chunk.Text = chunk.Text[:len(chunk.Text)-1]
-			}
-		}
+		chunk.Text = text
 		chunk.Ordinal = len(chunks) + 1
 		chunk.Digest = domain.Digest(chunk.Text)
 		chunks = append(chunks, chunk)

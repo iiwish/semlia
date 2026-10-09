@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"math"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/iiwish/semlia/pkg/identity"
 )
@@ -36,7 +38,9 @@ const (
 	ReasonNoPublishedRelease = "no_published_release"
 )
 
-const ChunkVersion = "released-summary/v1"
+// ChunkVersion v2 indexes governed wording and five-type names; v1 indexed only name, title and description, so
+// knowledge named by displayName was indexed by address alone.
+const ChunkVersion = "released-summary/v2"
 const MaxChunks = 5000
 const BatchSize = 16
 
@@ -123,4 +127,70 @@ func ValidateVectors(vectors [][]float32, count, dimension int) error {
 		}
 	}
 	return nil
+}
+
+// ChunkText renders one released revision for embedding: identity and meaning first, then the wording people use.
+func ChunkText(address string, content json.RawMessage) (string, error) {
+	var fields struct {
+		DisplayName     string   `json:"displayName"`
+		Name            string   `json:"name"`
+		Title           string   `json:"title"`
+		Description     string   `json:"description"`
+		Definition      string   `json:"definition"`
+		Scope           string   `json:"scope"`
+		Aliases         []string `json:"aliases"`
+		Includes        []string `json:"includes"`
+		Excludes        []string `json:"excludes"`
+		SampleQuestions []struct {
+			Question string `json:"question"`
+		} `json:"sampleQuestions"`
+		Spec struct {
+			Members []struct {
+				Name    string   `json:"name"`
+				Aliases []string `json:"aliases"`
+			} `json:"members"`
+		} `json:"spec"`
+	}
+	if err := json.Unmarshal(content, &fields); err != nil {
+		return "", err
+	}
+	lines := []string{address}
+	add := func(label string, values ...string) {
+		kept := []string{}
+		for _, value := range values {
+			if value = strings.TrimSpace(value); value != "" {
+				kept = append(kept, value)
+			}
+		}
+		if len(kept) == 0 {
+			return
+		}
+		if label == "" {
+			lines = append(lines, kept...)
+			return
+		}
+		lines = append(lines, label+strings.Join(kept, "; "))
+	}
+	add("", fields.DisplayName, fields.Name, fields.Title, fields.Description, fields.Definition, fields.Scope)
+	add("aliases: ", fields.Aliases...)
+	add("includes: ", fields.Includes...)
+	add("excludes: ", fields.Excludes...)
+	questions := []string{}
+	for _, sample := range fields.SampleQuestions {
+		questions = append(questions, sample.Question)
+	}
+	add("questions: ", questions...)
+	members := []string{}
+	for _, member := range fields.Spec.Members {
+		members = append(members, strings.Join(append([]string{member.Name}, member.Aliases...), "/"))
+	}
+	add("members: ", members...)
+	text := strings.Join(lines, "\n")
+	if len(text) > 2048 {
+		text = text[:2048]
+		for !utf8.ValidString(text) {
+			text = text[:len(text)-1]
+		}
+	}
+	return text, nil
 }

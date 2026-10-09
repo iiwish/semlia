@@ -5,6 +5,7 @@ import (
 	"unicode/utf8"
 
 	distributionapp "github.com/iiwish/semlia/internal/application/distribution"
+	distributiondomain "github.com/iiwish/semlia/internal/domain/distribution"
 )
 
 const (
@@ -102,4 +103,50 @@ func askMenuName(value string) string {
 		value = string(runes[:askMenuNameLimit]) + "…"
 	}
 	return value
+}
+
+const askDisambiguationClose = "请在问题中写明指哪一个。"
+
+var askTypeLabels = map[string]string{"metric": "指标", "business_object": "业务对象", "business_term": "业务口径", "data_asset": "数据资产", "analysis_model": "分析模型"}
+
+// askDisambiguationText is server-owned like the menu: it names only candidates the caller may read and the
+// distinctions their authors published, and is rebuilt from the same release on replay.
+func askDisambiguationText(ambiguities []distributiondomain.AskAmbiguity) string {
+	for distinctionCap := 60; ; distinctionCap -= 15 {
+		parts := []string{}
+		for _, ambiguity := range ambiguities {
+			label := askTypeLabels[string(ambiguity.Type)]
+			if label == "" {
+				label = "知识"
+			}
+			candidates := []string{}
+			for _, candidate := range ambiguity.Candidates {
+				item := askMenuName(candidate.Name)
+				if distinction := strings.Join(strings.Fields(candidate.Distinction), " "); distinction != "" && distinctionCap > 0 {
+					if runes := []rune(distinction); len(runes) > distinctionCap {
+						distinction = string(runes[:distinctionCap]) + "…"
+					}
+					item += "（" + distinction + "）"
+				}
+				candidates = append(candidates, item)
+			}
+			parts = append(parts, "「"+askMenuName(ambiguity.Text)+"」可能指不同的"+label+"："+strings.Join(candidates, "；"))
+		}
+		text := strings.Join(parts, "。") + "。" + askDisambiguationClose
+		if utf8.RuneCountInString(text) <= askClarificationLimit {
+			return text
+		}
+		if distinctionCap <= 0 {
+			runes := []rune(text)
+			return string(runes[:askClarificationLimit-utf8.RuneCountInString(askDisambiguationClose)-1]) + "…" + askDisambiguationClose
+		}
+	}
+}
+
+// askServerClarification prefers a disambiguation the release can state over the generic menu.
+func askServerClarification(knowledge distributionapp.AskKnowledge) string {
+	if len(knowledge.Ambiguities) > 0 {
+		return askDisambiguationText(knowledge.Ambiguities)
+	}
+	return askClarificationText(knowledge.Catalog)
 }
