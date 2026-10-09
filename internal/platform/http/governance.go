@@ -1080,7 +1080,11 @@ func writeGovernanceError(response http.ResponseWriter, err error, traceID strin
 	var releaseRefusal *governanceapp.ReleaseRefusalError
 	var providerUnsupported *llm.ProviderUnsupportedError
 	var providerUnavailable *llm.ProviderUnavailableError
+	var vocabularyConflict *domain.VocabularyConflictError
 	switch {
+	case errors.As(err, &vocabularyConflict):
+		writeError(response, http.StatusUnprocessableEntity, "VOCABULARY_CONFLICT", vocabularyConflict.Message(), traceID, false)
+		return "VOCABULARY_CONFLICT"
 	case errors.As(err, &dutyConflict):
 		details := map[string]any{
 			"conflict":     dutyConflict.Conflict,

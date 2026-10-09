@@ -86,6 +86,23 @@
 
 业务“订单属于客户”与物理 Join 分开记录。语义关系描述端点、方向和业务约束；JoinContract 固定数据集、键对、连接方式、基数、左右粒度、必要过滤、有效范围与扇出验证。数据血缘、语义依赖和证据溯源分别记录，通过版本化映射连接。
 
+### 3.1 业务词汇
+
+业务词汇记录人们怎样称呼和区分一份知识，与名称、定义一样随修订评审、发布和回滚，不改变计算语义。
+
+| 位置 | 字段 | 约束 |
+| --- | --- | --- |
+| 内容顶层，五类通用 | `aliases` | 同义词、简称、英文名；≤32 个、每个 ≤64 字，不得与自身名称相同 |
+| 内容顶层 | `includes` / `excludes` / `examples` | 概念边界与正例；每类 ≤32 条、每条 ≤256 字 |
+| 内容顶层 | `confusableWith` | `[{ref, distinction}]`，易混淆的已发布资产及区分说明；≤16 个 |
+| 内容顶层 | `sampleQuestions` | `[{question, expects?}]`，典型问题；`expects.refs` 列出检索必须召回的资产或成员；≤16 个 |
+| 规格成员 | `members[].aliases` | 属性别名；在同一资产内只能指向一个成员 |
+| 业务对象字符串属性 | `members[].valueAliases` | `[{value, aliases}]`，把“江浙沪”等说法映射到规范取值；同一属性内一个说法只对应一个取值，不得遮蔽其他规范取值 |
+
+比较时统一做全半角折叠、大小写折叠和空白归并。`confusableWith` 与 `sampleQuestions` 中的引用和规格引用一样固定 release 与 revision，作为依赖参与授权和存在性校验。
+
+发布门禁：在同一 release 中，一个归一化后的说法（名称或别名，至少一方是别名）只能指向同类型的一个资产；任一方在 `confusableWith` 中声明对方即视为已知歧义，问数时按区分说明澄清。生产校验以 `PRODUCTION_VOCABULARY_CONFLICT` 在评审前提示冲突，发布事务对完整 manifest 再检查一次并以 `VOCABULARY_CONFLICT` 拒绝。提示只给出冲突的说法，不暴露调用方可能无权读取的另一方资产。
+
 完整案例见[数据资产、本体与血缘](data-assets-ontology-lineage.md)。[定义结构示例](knowledge-definition-examples.json)包含五类对象、对象属性、判定规则、基础与派生指标的 JSON 阅读投影。它不是 JSON Schema、生产请求体或完整可执行依赖图，示例中的未知信息与外部引用不得用于发布取数。
 
 ## 4. 生产与消费边界

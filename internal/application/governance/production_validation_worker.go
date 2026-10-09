@@ -20,6 +20,8 @@ type ProductionValidationWork struct {
 	Rules            []domain.PolicyRule
 	ReferenceFailure string
 	BusinessRules    map[string]bool
+	// VocabularyConflicts previews the publication vocabulary gate per target local key.
+	VocabularyConflicts map[string][]semantic.VocabularyConflict
 }
 
 type ProductionCheckResult struct {
@@ -168,6 +170,9 @@ func EvaluateProductionValidation(work ProductionValidationWork, now time.Time) 
 						}
 						if _, err := semantic.ParseKnowledgeSpec(content.AssetType, content.Spec, true); err != nil {
 							findings = append(findings, blockerFinding(digest, "PRODUCTION_KNOWLEDGE_INCOMPLETE", "知识结构不完整："+err.Error()))
+						}
+						if conflicts := work.VocabularyConflicts[target.LocalKey]; len(conflicts) > 0 {
+							findings = append(findings, blockerFinding(digest, "PRODUCTION_VOCABULARY_CONFLICT", (&domain.VocabularyConflictError{Conflicts: conflicts}).Message()))
 						}
 					}
 				}

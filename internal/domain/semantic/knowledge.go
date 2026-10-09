@@ -32,6 +32,8 @@ type KnowledgeMember struct {
 	NullPolicy     string           `json:"nullPolicy,omitempty"`
 	HistoryPolicy  string           `json:"historyPolicy,omitempty"`
 	SourceFieldRef *SourceReference `json:"sourceFieldRef,omitempty"`
+	Aliases        []string         `json:"aliases,omitempty"`
+	ValueAliases   []ValueAlias     `json:"valueAliases,omitempty"`
 }
 
 type KnowledgeExpression struct {
@@ -145,6 +147,9 @@ func ParseKnowledgeSpec(kind AssetType, raw json.RawMessage, complete bool) (Kno
 		if !optionalEnum(member.ValueType, "string number integer boolean date timestamp") || !optionalEnum(member.NullPolicy, "required unknown excluded") || !optionalEnum(member.HistoryPolicy, "stable current_value event_time") {
 			return bad("invalid member semantics")
 		}
+		if err := validateMemberVocabulary(kind, member); err != nil {
+			return bad(err.Error())
+		}
 		if kind == "business_object" && member.SourceFieldRef != nil {
 			return bad("business members cannot own source fields")
 		}
@@ -156,6 +161,24 @@ func ParseKnowledgeSpec(kind AssetType, raw json.RawMessage, complete bool) (Kno
 		}
 		if spec.DatasetRef != nil && member.SourceFieldRef != nil && spec.DatasetRef.SnapshotID != member.SourceFieldRef.SnapshotID {
 			return bad("member belongs to another snapshot")
+		}
+	}
+	// An attribute alias must point at exactly one member of this asset.
+	memberTerms := map[string]string{}
+	for _, member := range spec.Members {
+		if term := NormalizeTerm(member.Name); term != "" {
+			if _, taken := memberTerms[term]; !taken {
+				memberTerms[term] = member.ID
+			}
+		}
+	}
+	for _, member := range spec.Members {
+		for _, alias := range member.Aliases {
+			term := NormalizeTerm(alias)
+			if owner, taken := memberTerms[term]; taken && owner != member.ID {
+				return bad("member alias " + alias + " names another member")
+			}
+			memberTerms[term] = member.ID
 		}
 	}
 	seenKeys := map[string]bool{}

@@ -4594,6 +4594,32 @@ export interface components {
             scope: string | null;
             ownerPrincipalId: components["schemas"]["ResourceId"];
             spec?: components["schemas"]["KnowledgeSpec"];
+            aliases?: components["schemas"]["VocabularyTerms"];
+            includes?: components["schemas"]["VocabularyBoundary"];
+            excludes?: components["schemas"]["VocabularyBoundary"];
+            examples?: components["schemas"]["VocabularyBoundary"];
+            /** @description Neighbouring assets that people easily mistake for this one, each with how to tell them apart. Declaring either side accepts a shared alias. */
+            confusableWith?: components["schemas"]["VocabularyConfusion"][];
+            /** @description Typical questions this asset answers. Expected references are what retrieval must surface. */
+            sampleQuestions?: components["schemas"]["VocabularySampleQuestion"][];
+        };
+        /** @description Other words people use for the asset. Within one release a term names at most one asset of a type unless one side declares the other confusable. */
+        VocabularyTerms: string[];
+        VocabularyBoundary: string[];
+        VocabularyConfusion: {
+            ref: components["schemas"]["KnowledgeReference"];
+            distinction: string;
+        };
+        VocabularySampleQuestion: {
+            question: string;
+            expects?: {
+                refs: components["schemas"]["KnowledgeReference"][];
+            };
+        };
+        KnowledgeValueAlias: {
+            /** @description Canonical category value as stored in the data. */
+            value: string;
+            aliases: string[];
         };
         /** @description Type-specific knowledge contract. Drafts may be incomplete. Fields are restricted by assetType and publication validates completeness. */
         KnowledgeSpec: {
@@ -4653,6 +4679,9 @@ export interface components {
             /** @enum {string} */
             historyPolicy?: "stable" | "current_value" | "event_time";
             sourceFieldRef?: components["schemas"]["PhysicalReference"];
+            aliases?: string[];
+            /** @description Business wording for canonical category values; string business object attributes only. */
+            valueAliases?: components["schemas"]["KnowledgeValueAlias"][];
         };
         KnowledgeExpression: {
             /** @enum {string} */

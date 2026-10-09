@@ -4707,16 +4707,28 @@ type AskResponse struct {
 
 // AssetContent defines model for AssetContent.
 type AssetContent struct {
-	Address     string            `json:"address"`
-	AssetType   SemanticAssetType `json:"assetType"`
-	Definition  *string           `json:"definition"`
-	DisplayName string            `json:"displayName"`
+	Address string `json:"address"`
+
+	// Aliases Other words people use for the asset. Within one release a term names at most one asset of a type unless one side declares the other confusable.
+	Aliases   *VocabularyTerms  `json:"aliases,omitempty"`
+	AssetType SemanticAssetType `json:"assetType"`
+
+	// ConfusableWith Neighbouring assets that people easily mistake for this one, each with how to tell them apart. Declaring either side accepts a shared alias.
+	ConfusableWith *[]VocabularyConfusion `json:"confusableWith,omitempty"`
+	Definition     *string                `json:"definition"`
+	DisplayName    string                 `json:"displayName"`
+	Examples       *VocabularyBoundary    `json:"examples,omitempty"`
+	Excludes       *VocabularyBoundary    `json:"excludes,omitempty"`
+	Includes       *VocabularyBoundary    `json:"includes,omitempty"`
 
 	// OwnerPrincipalId Stable TypeID containing a registered lowercase resource prefix and UUIDv7 value.
 	//
 	// Example: ast_01arz3ndektsv4rrffq69g5fav
 	OwnerPrincipalId ResourceId `json:"ownerPrincipalId"`
-	Scope            *string    `json:"scope"`
+
+	// SampleQuestions Typical questions this asset answers. Expected references are what retrieval must surface.
+	SampleQuestions *[]VocabularySampleQuestion `json:"sampleQuestions,omitempty"`
+	Scope           *string                     `json:"scope"`
 
 	// Spec Type-specific knowledge contract. Drafts may be incomplete. Fields are restricted by assetType and publication validates completeness.
 	Spec *KnowledgeSpec `json:"spec,omitempty"`
@@ -6936,12 +6948,16 @@ type KnowledgeExpressionOp string
 
 // KnowledgeMember defines model for KnowledgeMember.
 type KnowledgeMember struct {
+	Aliases        *[]string                     `json:"aliases,omitempty"`
 	HistoryPolicy  *KnowledgeMemberHistoryPolicy `json:"historyPolicy,omitempty"`
 	Id             string                        `json:"id"`
 	Name           *string                       `json:"name,omitempty"`
 	NullPolicy     *KnowledgeMemberNullPolicy    `json:"nullPolicy,omitempty"`
 	SourceFieldRef *PhysicalReference            `json:"sourceFieldRef,omitempty"`
-	ValueType      *KnowledgeMemberValueType     `json:"valueType,omitempty"`
+
+	// ValueAliases Business wording for canonical category values; string business object attributes only.
+	ValueAliases *[]KnowledgeValueAlias    `json:"valueAliases,omitempty"`
+	ValueType    *KnowledgeMemberValueType `json:"valueType,omitempty"`
 }
 
 // KnowledgeMemberHistoryPolicy defines model for KnowledgeMember.HistoryPolicy.
@@ -7044,6 +7060,14 @@ type KnowledgeSpecStage string
 
 // KnowledgeSpecZeroDenominator defines model for KnowledgeSpec.ZeroDenominator.
 type KnowledgeSpecZeroDenominator string
+
+// KnowledgeValueAlias defines model for KnowledgeValueAlias.
+type KnowledgeValueAlias struct {
+	Aliases []string `json:"aliases"`
+
+	// Value Canonical category value as stored in the data.
+	Value string `json:"value"`
+}
 
 // LineageEdgeId defines model for LineageEdgeId.
 type LineageEdgeId = identity.LineageEdgeID
@@ -9104,6 +9128,26 @@ type ValidationStatus0Status string
 
 // Version defines model for Version.
 type Version = int
+
+// VocabularyBoundary defines model for VocabularyBoundary.
+type VocabularyBoundary = []string
+
+// VocabularyConfusion defines model for VocabularyConfusion.
+type VocabularyConfusion struct {
+	Distinction string             `json:"distinction"`
+	Ref         KnowledgeReference `json:"ref"`
+}
+
+// VocabularySampleQuestion defines model for VocabularySampleQuestion.
+type VocabularySampleQuestion struct {
+	Expects *struct {
+		Refs []KnowledgeReference `json:"refs"`
+	} `json:"expects,omitempty"`
+	Question string `json:"question"`
+}
+
+// VocabularyTerms Other words people use for the asset. Within one release a term names at most one asset of a type unless one side declares the other confusable.
+type VocabularyTerms = []string
 
 // WebhookDelivery defines model for WebhookDelivery.
 type WebhookDelivery struct {

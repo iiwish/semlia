@@ -9,6 +9,7 @@ import (
 	app "github.com/iiwish/semlia/internal/application/governance"
 	authz "github.com/iiwish/semlia/internal/domain/authorization"
 	domain "github.com/iiwish/semlia/internal/domain/governance"
+	"github.com/iiwish/semlia/internal/domain/semantic"
 	"github.com/iiwish/semlia/pkg/identity"
 	"github.com/jackc/pgx/v5"
 )
@@ -85,7 +86,61 @@ func (s *Store) LoadProductionValidationWork(ctx context.Context, w identity.Wor
 	if digest != attempt.FreshnessDigest {
 		work.ReferenceFailure = "PRODUCTION_VALIDATION_CONTEXT_CHANGED"
 	}
+	work.VocabularyConflicts, err = productionVocabularyConflictsTx(ctx, tx, ver, targets)
+	if err != nil {
+		return work, err
+	}
 	return work, nil
+}
+
+// productionVocabularyConflictsTx previews the publication vocabulary gate: the authoring head with this set's
+// semantic targets applied. Conflicts are attributed to every target that takes part in them.
+func productionVocabularyConflictsTx(ctx context.Context, tx pgx.Tx, ver domain.ProductionVersion, targets []domain.ProductionTarget) (map[string][]semantic.VocabularyConflict, error) {
+	entries := []semantic.VocabularyEntry{}
+	if ver.BaselineHead.ReleaseID != nil {
+		head, err := releaseVocabularyEntries(ctx, tx, ver.WorkspaceID, *ver.BaselineHead.ReleaseID)
+		if err != nil {
+			return nil, err
+		}
+		entries = head
+	}
+	owners := map[string]string{}
+	for _, target := range targets {
+		if target.Kind != domain.TargetKindSemanticAsset || target.Declaration == nil {
+			continue
+		}
+		var content struct {
+			AssetType semantic.AssetType `json:"assetType"`
+		}
+		if json.Unmarshal(target.Declaration.Content, &content) != nil {
+			continue
+		}
+		id := target.TargetID
+		if id == "" {
+			id = "local:" + target.LocalKey
+		}
+		entry, err := semantic.VocabularyEntryFromContent(id, content.AssetType, target.Declaration.Content)
+		if err != nil {
+			continue // the schema check reports invalid vocabulary
+		}
+		kept := entries[:0]
+		for _, existing := range entries {
+			if existing.AssetID != id {
+				kept = append(kept, existing)
+			}
+		}
+		entries = append(kept, entry)
+		owners[id] = target.LocalKey
+	}
+	result := map[string][]semantic.VocabularyConflict{}
+	for _, conflict := range semantic.VocabularyConflicts(entries) {
+		for _, claim := range conflict.Assets {
+			if key, ok := owners[claim.AssetID]; ok {
+				result[key] = append(result[key], conflict)
+			}
+		}
+	}
+	return result, nil
 }
 
 func (s *Store) CompleteProductionValidation(ctx context.Context, completion app.ProductionValidationCompletion) error {

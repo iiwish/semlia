@@ -1009,6 +1009,7 @@ func validateJSONDepthAndNoDuplicates(raw []byte, maxDepth int) error {
 
 func writeProductionError(response http.ResponseWriter, err error, traceID string) string {
 	var denial *authz.DenialError
+	var vocabularyConflict *domain.VocabularyConflictError
 	switch {
 	case errors.As(err, &denial):
 		writeError(response, http.StatusForbidden, string(denial.Decision.ReasonCode), "the acting principal lacks the required capability", traceID, false)
@@ -1060,6 +1061,9 @@ func writeProductionError(response http.ResponseWriter, err error, traceID strin
 	case errors.Is(err, domain.ErrEvidenceMissing):
 		writeError(response, http.StatusUnprocessableEntity, "EVIDENCE_MISSING", err.Error(), traceID, false)
 		return "EVIDENCE_MISSING"
+	case errors.As(err, &vocabularyConflict):
+		writeError(response, http.StatusUnprocessableEntity, "VOCABULARY_CONFLICT", vocabularyConflict.Message(), traceID, false)
+		return "VOCABULARY_CONFLICT"
 	case errors.Is(err, domain.ErrDependencyInvalid):
 		writeError(response, http.StatusUnprocessableEntity, "DEPENDENCY_INVALID", err.Error(), traceID, false)
 		return "DEPENDENCY_INVALID"

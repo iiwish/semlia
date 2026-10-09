@@ -327,6 +327,11 @@ func ValidateCandidateDeclarations(candidates []CandidateDeclaration, targets []
 }
 
 // ResolveLocalReferences resolves structured local references, leaving business strings intact.
+// pinnedKnowledgeField names semantic content fields whose references keep their exact release and revision pins.
+func pinnedKnowledgeField(field string) bool {
+	return field == "spec" || field == "confusableWith" || field == "sampleQuestions"
+}
+
 func ResolveLocalReferences(content json.RawMessage, localKeyToTargetID map[string]string) (json.RawMessage, error) {
 	if len(content) == 0 {
 		return content, nil
@@ -383,8 +388,8 @@ func ResolveLocalReferences(content json.RawMessage, localKeyToTargetID map[stri
 			}
 			res := make(map[string]any, len(val))
 			for k, item := range val {
-				if k == "spec" {
-					// Knowledge specs contain immutable versioned references, not local IDs.
+				if pinnedKnowledgeField(k) {
+					// Knowledge specs and vocabulary contain immutable versioned references, not local IDs.
 					res[k] = item
 					continue
 				}
