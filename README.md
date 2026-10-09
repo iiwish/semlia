@@ -27,7 +27,7 @@ Instead of scattering meaning across SQL, dashboards, documents, and prompts, Se
 
 Semlia is built around four ideas:
 
-- **Living LLM Wiki**: authoritative pages connect human-readable meaning with evidence, ownership, history, and context suitable for AI.
+- **Governed knowledge pages**: each asset has one authoritative page for its definition, boundary, business wording (aliases, confusable neighbours, sample questions), evidence, ownership and history. The same page compiles into the context Ask retrieves; AI proposes changes but never rewrites it directly. A broader living wiki is the long-term target, not a shipped claim.
 - **Five knowledge types**: business objects, business rules, metrics, data assets and analysis models form a versioned, machine-readable knowledge base.
 - **Software-grade lifecycle**: AI may propose changes, but tests, policy, evidence, and review determine what becomes published truth.
 - **Trusted resolution**: CLI, MCP, REST, SDKs, and events resolve released semantics before an optional execution adapter runs a query.
@@ -57,13 +57,15 @@ For the complete product and architecture contract, read the [project SSOT](docs
 
 | Surface | Current state |
 | --- | --- |
-| Knowledge and governance | Real source discovery, five knowledge types, author confirmation, independent review, publication, exact historical evidence and rollback |
-| Ask and execution | Real-model questions constrained by a published analysis model; explicit read-only execution, SQL/parameter evidence and synthetic SQL reconciliation |
+| Knowledge and governance | Real source discovery, five knowledge types, author confirmation, independent review, publication, exact historical evidence and rollback; governed business vocabulary with alias-conflict and sample-question recall gates, and vocabulary-only revisions that keep dependents' pins valid |
+| Ask and execution | Real-model questions constrained by a published analysis model, picked automatically when exactly one covers the question; deterministic retrieval binds question wording to governed vocabulary and shows the bindings; shared words are clarified by the server without a model call; explicit read-only execution, SQL/parameter evidence and synthetic SQL reconciliation |
 | Machine consumption | Ordinary REST/MCP/CLI credentials, identical release/model pins and digests, revocation checks |
 | Installation and recovery | Fresh install, isolated identity/workspace schema 32-to-33 upgrade, full application/files/key restore verified on synthetic data |
 | Final local candidate | Frozen-source gates, exact-binary embedded UI and one fixed real-model cohort pass: 4/4 positives, 2/2 negatives. See [T005 delivery](docs/evidence/V1-T005/summary.md) for evidence, preserved failures and limits |
+| Ontology | Typed relations are projected from published specs (measures, filters, derivation, containment, dependency) and labelled as inferred. Hand-declared taxonomy relations such as broader-than or synonym-of are modelled but not yet authored in the product |
+| After the candidate (local branch, unreleased) | Governed vocabulary, retrieval and authoring. A colloquial real-model cohort rose from 12/24 to 24/24 on synthetic data; see [vocabulary evidence](docs/evidence/ask-vocabulary-2026-10-09/summary.md) |
 
-The supported product is desktop Web at **1024px or wider**, verified at 1440x900 and 1024x768. Current scope excludes planning without a published analysis model, complete independent mapping governance, long-term conversational memory, automatic publication and a broad new connector suite. Synthetic acceptance is not an enterprise SLA or a guarantee for arbitrary schemas and questions. See [T001](docs/evidence/V1-T001/summary.md), [T002](docs/evidence/V1-T002/summary.md), [T003](docs/evidence/V1-T003/summary.md) and [T004](docs/evidence/V1-T004/summary.md).
+The supported product is desktop Web at **1024px or wider**, verified at 1440x900 and 1024x768. Current scope excludes planning without a published analysis model (one must exist; naming it in the question is no longer required), complete independent mapping governance, long-term conversational memory, automatic publication and a broad new connector suite. Synthetic acceptance is not an enterprise SLA or a guarantee for arbitrary schemas and questions. See [T001](docs/evidence/V1-T001/summary.md), [T002](docs/evidence/V1-T002/summary.md), [T003](docs/evidence/V1-T003/summary.md) and [T004](docs/evidence/V1-T004/summary.md).
 
 ## Quick Start
 
