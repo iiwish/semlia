@@ -152,3 +152,61 @@ func mustID[T any](t *testing.T, factory func() (T, error)) T {
 	}
 	return value
 }
+
+func TestBuildPlanAcceptsPinsToVocabularyOnlyPredecessors(t *testing.T) {
+	c := knowledgecase.New()
+	baseline, refusal, err := distribution.BuildPlan(c.Query, c.Snapshot, mustID(t, identity.NewSemanticQueryID), mustID(t, identity.NewResolvedSemanticPlanID), c.Snapshot.Assets, time.Unix(10, 0))
+	if err != nil || refusal != nil {
+		t.Fatalf("baseline error=%v refusal=%#v", err, refusal)
+	}
+	// Amount and customers gain vocabulary: new current revisions, while the model, the derived metric and the
+	// term still pin their predecessors.
+	previous := map[string]identity.RevisionID{}
+	revise := func(compatible bool) distribution.ReleaseSnapshot {
+		snapshot := c.Snapshot
+		snapshot.Assets = append([]distribution.ReleasedAsset(nil), c.Snapshot.Assets...)
+		for i := range snapshot.Assets {
+			a := &snapshot.Assets[i]
+			if a.Name != "amount" && a.Name != "customers" {
+				continue
+			}
+			if _, ok := previous[a.Name]; !ok {
+				previous[a.Name] = a.RevisionID
+			}
+			a.RevisionID = mustID(t, identity.NewRevisionID)
+			if compatible {
+				a.CompatibleRevisionIDs = []identity.RevisionID{previous[a.Name]}
+			}
+		}
+		return snapshot
+	}
+	if _, refusal, err := distribution.BuildPlan(c.Query, revise(false), mustID(t, identity.NewSemanticQueryID), mustID(t, identity.NewResolvedSemanticPlanID), nil, time.Unix(10, 0)); err == nil && refusal == nil {
+		t.Fatal("stale pins accepted without a compatible predecessor")
+	}
+	snapshot := revise(true)
+	plan, refusal, err := distribution.BuildPlan(c.Query, snapshot, mustID(t, identity.NewSemanticQueryID), mustID(t, identity.NewResolvedSemanticPlanID), nil, time.Unix(10, 0))
+	if err != nil || refusal != nil {
+		t.Fatalf("vocabulary-only predecessor refused: error=%v refusal=%#v", err, refusal)
+	}
+	if plan.Model == nil || len(plan.Objects) != len(baseline.Objects) {
+		t.Fatalf("plan changed shape: %#v", plan)
+	}
+	// Re-pinning only the derived metric leaves the model on the predecessor; both pins name the same revision.
+	for i := range snapshot.Assets {
+		a := &snapshot.Assets[i]
+		if a.Name != "average" {
+			continue
+		}
+		var content map[string]any
+		_ = json.Unmarshal(a.Content, &content)
+		for _, current := range snapshot.Assets {
+			if current.Name == "amount" {
+				content["spec"].(map[string]any)["expression"].(map[string]any)["left"].(map[string]any)["ref"].(map[string]any)["revisionId"] = current.RevisionID.String()
+			}
+		}
+		a.Content, _ = json.Marshal(content)
+	}
+	if _, refusal, err := distribution.BuildPlan(c.Query, snapshot, mustID(t, identity.NewSemanticQueryID), mustID(t, identity.NewResolvedSemanticPlanID), nil, time.Unix(10, 0)); err != nil || refusal != nil {
+		t.Fatalf("partially re-pinned knowledge refused: error=%v refusal=%#v", err, refusal)
+	}
+}

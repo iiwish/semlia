@@ -21,14 +21,6 @@ function isPin(value) {
   return value && typeof value === 'object' && !Array.isArray(value) && typeof value.assetId === 'string' && typeof value.revisionId === 'string' && typeof value.releaseId === 'string';
 }
 
-// repin points every knowledge reference to a re-published asset at its new revision, keeping member IDs.
-export function repin(value, pins) {
-  if (Array.isArray(value)) return value.map(item => repin(item, pins));
-  if (isPin(value) && pins[value.assetId]) return { ...value, revisionId: pins[value.assetId].revisionId, releaseId: pins[value.assetId].releaseId };
-  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, repin(item, pins)]));
-  return value;
-}
-
 // dependenciesOf lists the exact pins the targets reference. Production validation requires one pin per asset.
 export function dependenciesOf(targets) {
   const pins = new Map();
@@ -61,7 +53,7 @@ export function alignHeadPins(head) {
   return Object.fromEntries(Object.entries(head).map(([address, entry]) => [address, { ...entry, releaseId: cited[entry.assetId + '/' + entry.revisionId] ?? entry.releaseId }]));
 }
 
-function updateTarget(entry, key, fields, specAfter) {
+export function updateTarget(entry, key, fields, specAfter) {
   const content = { ...entry.content, ...fields }, changes = [];
   for (const [fieldPath, afterValue] of Object.entries(fields)) changes.push({ fieldPath, op: entry.content[fieldPath] === undefined ? 'add' : 'update', ...(entry.content[fieldPath] === undefined ? {} : { beforeValue: entry.content[fieldPath] }), afterValue });
   if (specAfter && JSON.stringify(specAfter) !== JSON.stringify(entry.content.spec)) {
@@ -71,13 +63,12 @@ function updateTarget(entry, key, fields, specAfter) {
   return { intent: 'update', kind: 'semantic_asset', localKey: key, targetId: entry.assetId, baseRevisionId: entry.revisionId, title: entry.content.displayName + '：业务词汇', content, changes, evidenceIds: [] };
 }
 
-// Vocabulary changes create new revisions, and released pins must name current revisions, so dependents are
-// re-pinned in order: wording first, then the derived metric and term, then the model that uses them all.
-export const vocabularyStages = ['wording', 'derived', 'model'];
+// Vocabulary-only revisions keep earlier pins compatible, so dependents need no re-pinning and all wording ships in
+// one operation. Environments measured before compatibility existed recorded extra re-pin stages; they stay valid.
+export const vocabularyStages = ['wording'];
 
-export function vocabularyStage(stage, head, pins = {}) {
+export function vocabularyStage(stage, head) {
   const entry = key => head[prefix + key];
-  const repinned = key => repin(entry(key).content.spec, pins);
   if (stage === 'wording') {
     const customers = entry('customers').content;
     const customerSpec = { ...customers.spec, members: customers.spec.members.map(m => m.id !== 'region' ? m : { ...m, aliases: ['区域', '大区'], valueAliases: [{ value: '华东', aliases: ['江浙沪', '华东地区', '华东区'] }, { value: '华南', aliases: ['两广', '华南地区', '华南区'] }] }) };
@@ -99,13 +90,10 @@ export function vocabularyStage(stage, head, pins = {}) {
         sampleQuestions: [{ question: '8月下单金额是多少？' }],
         spec: { kind: 'aggregate', inputRef: member(head, 'orders', 'amount'), aggregation: 'sum', unit: 'CNY', nullPolicy: 'required', timeAttributeRef: member(head, 'orders', 'paid_at') },
       } },
+      updateTarget(entry('average'), 'average', { aliases: ['AOV', '平均订单金额'], excludes: ['按客户平均的金额'], sampleQuestions: [{ question: '华东回头客的客单价' }] }),
+      updateTarget(entry('old'), 'old', { aliases: ['老客', '回头客'], sampleQuestions: [{ question: '回头客的客单价是多少？' }] }),
     ];
   }
-  if (stage === 'derived') return [
-    updateTarget(entry('average'), 'average', { aliases: ['AOV', '平均订单金额'], excludes: ['按客户平均的金额'], sampleQuestions: [{ question: '华东回头客的客单价' }] }, repinned('average')),
-    updateTarget(entry('old'), 'old', { aliases: ['老客', '回头客'], sampleQuestions: [{ question: '回头客的客单价是多少？' }] }, repinned('old')),
-  ];
-  if (stage === 'model') return [updateTarget(entry('model'), 'model', {}, repinned('model'))];
   throw new Error('Unknown vocabulary stage');
 }
 
@@ -138,14 +126,15 @@ async function readHead(root) {
   return { state, base, release, head: alignHeadPins(head) };
 }
 
-async function publishStage(root, stage, print) {
+// publishStage publishes one stage of targets through the governed path; build may supply ad hoc targets.
+export async function publishStage(root, stage, print = console.log, build = vocabularyStage) {
   let { state, base, head } = await readHead(root);
   const saved = state.vocabulary?.[stage];
   if (saved?.releaseId) return state;
   const actors = {};
   for (const role of ['author', 'reviewer', 'publisher']) actors[role] = (await connect(root, state, role)).client;
   const { author, reviewer, publisher } = actors;
-  const targets = saved?.targets ?? vocabularyStage(stage, head, state.vocabulary?.pins ?? {});
+  const targets = saved?.targets ?? build(stage, head);
   const snapshot = state.discovery.snapshot;
   const payload = { input: { snapshots: [{ sourceId: state.sourceId, snapshotId: snapshot.id, digest: snapshot.contentDigest, coverageKeys: snapshot.coverage.filter(x => x.status === 'complete' && x.enumerationComplete).map(x => x.key).sort() }], candidates: [], evidence: [], dependencies: dependenciesOf(targets) }, targets };
   let operationId = saved?.operationId;
@@ -170,7 +159,7 @@ async function publishStage(root, stage, print) {
   if (!operation.summary.releaseId && operation.activeValidation.status !== 'succeeded') throw new Error(`Vocabulary ${stage} validation failed: ` + (operation.unresolvedCodes ?? []).join(','));
   if (!operation.summary.releaseId) {
     const validation = { attemptNo: operation.activeValidation.attemptNo, validationDigest: operation.activeValidation.validationDigest };
-    await reviewer.request('POST', path + '/reviews', { ...version, validation, proposalIds: operation.targets.map(x => x.proposalId), decision: 'approve', note: 'Independent synthetic reviewer checks governed wording, re-pinned references and sample questions; not a real business approval.' }, 'v1-vocabulary-review-' + stage);
+    await reviewer.request('POST', path + '/reviews', { ...version, validation, proposalIds: operation.targets.map(x => x.proposalId), decision: 'approve', note: 'Independent synthetic reviewer checks governed wording and sample questions; not a real business approval.' }, 'v1-vocabulary-review-' + stage);
     await publisher.request('POST', path + '/publish', { ...version, validation, expectedHead: operation.baselineHead }, 'v1-vocabulary-publish-' + stage);
     operation = await author.request('GET', path);
   }

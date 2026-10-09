@@ -20,6 +20,17 @@ func buildKnowledgePlan(query SemanticQueryInput, snapshot ReleaseSnapshot, quer
 	for _, asset := range snapshot.Assets {
 		assets[asset.AssetID.String()] = asset
 	}
+	// A pin to a vocabulary-only predecessor names the current revision; comparing canonical revisions keeps
+	// partially re-pinned knowledge consistent with itself.
+	canonicalRevision := func(ref semantic.KnowledgeReference) string {
+		if a, ok := assets[ref.AssetID]; ok && a.Accepts(ref.RevisionID) {
+			return a.RevisionID.String()
+		}
+		return ref.RevisionID
+	}
+	samePin := func(left, right semantic.KnowledgeReference) bool {
+		return left.AssetID == right.AssetID && canonicalRevision(left) == canonicalRevision(right)
+	}
 	selectorAssets := selected
 	if selectorAssets == nil {
 		selectorAssets = snapshot.Assets
@@ -114,7 +125,7 @@ func buildKnowledgePlan(query SemanticQueryInput, snapshot ReleaseSnapshot, quer
 			for _, s := range selectors {
 				found := false
 				for _, r := range refs {
-					if key(r) == selectorKey(s) && r.RevisionID == assets[s.AssetID.String()].RevisionID.String() {
+					if key(r) == selectorKey(s) && assets[s.AssetID.String()].Accepts(r.RevisionID) {
 						found = true
 					}
 				}
@@ -143,7 +154,7 @@ func buildKnowledgePlan(query SemanticQueryInput, snapshot ReleaseSnapshot, quer
 	used := map[string]ReleasedAsset{model.AssetID.String(): model}
 	resolveRef := func(ref semantic.KnowledgeReference, kind semantic.AssetType) (ReleasedAsset, semantic.KnowledgeSpec, error) {
 		a, ok := assets[ref.AssetID]
-		if !ok || a.RevisionID.String() != ref.RevisionID || (kind != "" && a.AssetType != kind) {
+		if !ok || !a.Accepts(ref.RevisionID) || (kind != "" && a.AssetType != kind) {
 			return a, semantic.KnowledgeSpec{}, ErrInvalidArgument
 		}
 		s, e := readSpec(a)
@@ -188,7 +199,7 @@ func buildKnowledgePlan(query SemanticQueryInput, snapshot ReleaseSnapshot, quer
 		}
 		matches := []semantic.MemberBinding{}
 		for _, b := range spec.MemberBindings {
-			if key(b.SemanticRef) == key(ref) && b.SemanticRef.RevisionID == ref.RevisionID {
+			if key(b.SemanticRef) == key(ref) && samePin(b.SemanticRef, ref) {
 				matches = append(matches, b)
 			}
 		}
@@ -198,7 +209,7 @@ func buildKnowledgePlan(query SemanticQueryInput, snapshot ReleaseSnapshot, quer
 		dataRef := matches[0].DataRef
 		declared := false
 		for _, r := range spec.DataAssetRefs {
-			if r.AssetID == dataRef.AssetID && r.RevisionID == dataRef.RevisionID {
+			if samePin(r, dataRef) {
 				declared = true
 			}
 		}
@@ -308,7 +319,7 @@ func buildKnowledgePlan(query SemanticQueryInput, snapshot ReleaseSnapshot, quer
 		if visited[ref.AssetID] {
 			return nil
 		}
-		if m.TimeAttributeRef == nil || key(*m.TimeAttributeRef) != key(*spec.DefaultTimeAttributeRef) || m.TimeAttributeRef.RevisionID != spec.DefaultTimeAttributeRef.RevisionID {
+		if m.TimeAttributeRef == nil || key(*m.TimeAttributeRef) != key(*spec.DefaultTimeAttributeRef) || !samePin(*m.TimeAttributeRef, *spec.DefaultTimeAttributeRef) {
 			return ErrInvalidArgument
 		}
 		if _, _, err := resolveRef(*m.TimeAttributeRef, semantic.BusinessObject); err != nil {
@@ -395,7 +406,7 @@ func buildKnowledgePlan(query SemanticQueryInput, snapshot ReleaseSnapshot, quer
 		ref := fixedTerms[id]
 		compatible := false
 		for _, r := range spec.CompatibleTermRefs {
-			if r.AssetID == id && r.RevisionID == ref.RevisionID {
+			if r.AssetID == id && samePin(r, ref) {
 				compatible = true
 			}
 		}

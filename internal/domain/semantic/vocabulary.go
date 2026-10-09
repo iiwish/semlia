@@ -2,6 +2,8 @@ package semantic
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -348,4 +350,35 @@ func VocabularyEntryFromContent(assetID string, kind AssetType, content json.Raw
 	var object map[string]json.RawMessage
 	_ = json.Unmarshal(content, &object)
 	return VocabularyEntry{AssetID: assetID, AssetType: kind, DisplayName: displayNameOf(object), Vocabulary: vocabulary}, nil
+}
+
+// ComputationalCore digests revision content without its vocabulary: top-level wording fields and member aliases
+// and value aliases. Two revisions with equal cores mean and compute the same thing, so a reference pinned to one
+// stays valid for the other. Every other change, including definition, scope and display name, alters the core.
+func ComputationalCore(content json.RawMessage) (string, error) {
+	var object map[string]any
+	decoder := json.NewDecoder(bytes.NewReader(content))
+	decoder.UseNumber()
+	if err := decoder.Decode(&object); err != nil || object == nil {
+		return "", fmt.Errorf("invalid content")
+	}
+	for _, key := range strings.Fields(VocabularyFields) {
+		delete(object, key)
+	}
+	if spec, ok := object["spec"].(map[string]any); ok {
+		if members, ok := spec["members"].([]any); ok {
+			for _, raw := range members {
+				if member, ok := raw.(map[string]any); ok {
+					delete(member, "aliases")
+					delete(member, "valueAliases")
+				}
+			}
+		}
+	}
+	encoded, err := json.Marshal(object)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(encoded)
+	return "sha256:" + hex.EncodeToString(sum[:]), nil
 }

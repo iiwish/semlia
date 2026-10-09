@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"errors"
 
 	authapp "github.com/iiwish/semlia/internal/application/authorization"
 	authz "github.com/iiwish/semlia/internal/domain/authorization"
@@ -51,9 +52,10 @@ func validateProductionDependencies(ctx context.Context, tx pgx.Tx, access autha
 				return domain.ErrDependencyInvalid
 			}
 			// A reference keeps its original immutable release. It remains usable
-			// only while that exact revision is also present in the authoring head.
+			// while the authoring head holds that revision or one that differs only
+			// in vocabulary.
 			if checkHead {
-				if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM release_assets WHERE workspace_id=$1 AND release_id=$2 AND asset_id=$3 AND revision_id=$4)`, w.UUID(), version.BaselineHead.ReleaseID.UUID(), id, revision.UUID()).Scan(&found); err != nil {
+				if found, err = headHoldsCompatibleRevision(ctx, tx, w, *version.BaselineHead.ReleaseID, id, revision); err != nil {
 					return err
 				}
 				if !found {
@@ -193,4 +195,30 @@ func validateProductionDependencies(ctx context.Context, tx pgx.Tx, access autha
 		}
 	}
 	return nil
+}
+
+// headHoldsCompatibleRevision reports whether the head pins the asset at the given revision, or at a revision with
+// the same computational core.
+func headHoldsCompatibleRevision(ctx context.Context, tx pgx.Tx, w identity.WorkspaceID, head identity.ReleaseID, asset pgtype.UUID, revision identity.RevisionID) (bool, error) {
+	var headRevision pgtype.UUID
+	var headContent, pinnedContent []byte
+	err := tx.QueryRow(ctx, `SELECT e.revision_id,r.content FROM release_assets e JOIN asset_revisions r ON r.workspace_id=e.workspace_id AND r.id=e.revision_id WHERE e.workspace_id=$1 AND e.release_id=$2 AND e.asset_id=$3`, w.UUID(), head.UUID(), asset).Scan(&headRevision, &headContent)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if formatUUID(headRevision) == revision.UUID() {
+		return true, nil
+	}
+	if err := tx.QueryRow(ctx, `SELECT content FROM asset_revisions WHERE workspace_id=$1 AND asset_id=$2 AND id=$3`, w.UUID(), asset, revision.UUID()).Scan(&pinnedContent); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
+	}
+	headCore, headErr := semantic.ComputationalCore(headContent)
+	pinnedCore, pinnedErr := semantic.ComputationalCore(pinnedContent)
+	return headErr == nil && pinnedErr == nil && headCore == pinnedCore, nil
 }

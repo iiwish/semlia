@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { alignHeadPins, dependenciesOf, judgeVocabularyCase, repin, vocabularyCases, vocabularyStage, vocabularyStages } from './v1/vocabulary.mjs';
+import { alignHeadPins, dependenciesOf, judgeVocabularyCase, vocabularyCases, vocabularyStage, vocabularyStages } from './v1/vocabulary.mjs';
 
 const id = (kind, n) => `${kind}_01m3ev2edmfssaj5p015${String(n).padStart(6, '0')}`;
 function syntheticHead() {
@@ -28,10 +28,11 @@ test('head pins reuse the release existing content cites', () => {
   assert.equal(head['demo_202609.model'].releaseId, id('rls', 9), 'an uncited revision is pinned to the head release');
 });
 
-test('every stage declares exactly the pins its content references', () => {
+test('one operation declares exactly the pins its content references', () => {
   const { head } = syntheticHead();
+  assert.deepEqual(vocabularyStages, ['wording']);
   const wording = vocabularyStage('wording', head);
-  assert.deepEqual(wording.map(t => t.localKey), ['amount', 'count', 'customers', 'booked']);
+  assert.deepEqual(wording.map(t => t.localKey), ['amount', 'count', 'customers', 'booked', 'average', 'old']);
   const dependencies = dependenciesOf(wording);
   assert.ok(dependencies.some(d => d.targetId === head['demo_202609.model'].assetId), 'sample expectation is a dependency');
   assert.ok(dependencies.some(d => d.targetId === head['demo_202609.orders'].assetId && d.releaseId === id('rls', 1)));
@@ -39,21 +40,10 @@ test('every stage declares exactly the pins its content references', () => {
   assert.deepEqual(region.valueAliases[0], { value: '华东', aliases: ['江浙沪', '华东地区', '华东区'] });
   assert.deepEqual(wording[2].changes.map(c => c.fieldPath), ['spec']);
   assert.deepEqual(wording[0].changes.map(c => [c.fieldPath, c.op]), [['aliases', 'add'], ['includes', 'add'], ['excludes', 'add'], ['sampleQuestions', 'add']]);
-});
-
-test('dependents are re-pinned to re-published revisions in order', () => {
-  const { head } = syntheticHead();
-  assert.deepEqual(vocabularyStages, ['wording', 'derived', 'model']);
-  const fresh = { [head['demo_202609.amount'].assetId]: { revisionId: id('rev', 50), releaseId: id('rls', 50) }, [head['demo_202609.customers'].assetId]: { revisionId: id('rev', 51), releaseId: id('rls', 50) } };
-  const derived = vocabularyStage('derived', head, fresh);
-  assert.equal(derived[0].content.spec.expression.left.ref.revisionId, id('rev', 50));
-  assert.equal(derived[0].content.spec.expression.right.ref.revisionId, head['demo_202609.count'].revisionId, 'unchanged assets keep their pin');
-  assert.equal(derived[1].content.spec.predicate.left.ref.memberId, 'first_paid_at', 'member pins keep their member');
-  assert.equal(derived[1].content.spec.subjectRef.revisionId, id('rev', 51));
-  const spec = derived[1].changes.find(c => c.fieldPath === 'spec');
-  assert.deepEqual(spec.beforeValue, head['demo_202609.old'].content.spec);
+  // Dependents keep their pins: a vocabulary-only revision stays compatible.
+  assert.deepEqual(wording[4].content.spec, head['demo_202609.average'].content.spec);
+  assert.deepEqual(wording[4].changes.map(c => c.fieldPath), ['aliases', 'excludes', 'sampleQuestions']);
   assert.throws(() => dependenciesOf([{ content: { a: { assetId: 'x', revisionId: 'r1', releaseId: 'l' }, b: { assetId: 'x', revisionId: 'r2', releaseId: 'l' } } }]), /two pins/);
-  assert.deepEqual(repin({ list: [{ assetId: 'y', revisionId: 'r', releaseId: 'l' }] }, {}), { list: [{ assetId: 'y', revisionId: 'r', releaseId: 'l' }] });
 });
 
 test('cases are judged by reconciliation or by naming the candidates', () => {

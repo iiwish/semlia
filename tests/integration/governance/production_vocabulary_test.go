@@ -135,3 +135,71 @@ func TestProductionSampleQuestionsMustBeRecalled(t *testing.T) {
 	}, []any{}), http.StatusCreated)
 	productionValidateAndApprove(t, f, h, w, p, reviewer, declared)
 }
+
+func TestVocabularyOnlyRevisionKeepsEarlierPinsCompatible(t *testing.T) {
+	f, h, w, p := authoringLifecycleSetup(t)
+	reviewer := authoringLifecyclePrincipal(t, f, w, "Compatibility reviewer")
+	publisher := authoringLifecyclePrincipal(t, f, w, "Compatibility publisher")
+	path := fmt.Sprintf("/api/v1/workspaces/%s/production-operations", w)
+	input := productionFixtureInput(t, f, w, identity.SemanticCandidateID{}, true)
+	ctx := context.Background()
+	publish := func(key string, payload map[string]any, head map[string]any) map[string]any {
+		t.Helper()
+		created := productionRequestResult(t, h, http.MethodPost, path, p, key, payload, http.StatusCreated)
+		digest := productionValidateAndApprove(t, f, h, w, p, reviewer, created)
+		return productionRequestResult(t, h, http.MethodPost, path+"/"+created["operationId"].(string)+"/publish", publisher, key+"-publish", map[string]any{"expectedVersion": 1, "setDigest": created["setDigest"], "validation": map[string]any{"attemptNo": 1, "validationDigest": digest}, "expectedHead": head}, http.StatusCreated)
+	}
+	current := func() (string, string, map[string]any) {
+		t.Helper()
+		var asset, revision pgtype.UUID
+		var raw []byte
+		if err := f.pool.QueryRow(ctx, `SELECT a.id,a.current_revision_id,r.content FROM semantic_assets a JOIN asset_revisions r ON r.workspace_id=a.workspace_id AND r.id=a.current_revision_id WHERE a.workspace_id=$1 AND a.key='revenue'`, w.UUID()).Scan(&asset, &revision, &raw); err != nil {
+			t.Fatal(err)
+		}
+		assetID, _ := identity.AssetIDFromUUIDBytes(asset.Bytes)
+		revisionID, _ := identity.RevisionIDFromUUIDBytes(revision.Bytes)
+		var content map[string]any
+		if err := json.Unmarshal(raw, &content); err != nil {
+			t.Fatal(err)
+		}
+		return assetID.String(), revisionID.String(), content
+	}
+	update := func(key string, field string, before, after any, head map[string]any) map[string]any {
+		t.Helper()
+		asset, revision, content := current()
+		change := map[string]any{"fieldPath": field, "op": "add", "afterValue": after}
+		if before != nil {
+			change["op"], change["beforeValue"] = "update", before
+		}
+		content[field] = after
+		payload := map[string]any{"input": input, "targets": []any{map[string]any{"intent": "update", "kind": "semantic_asset", "localKey": "revenue", "targetId": asset, "baseRevisionId": revision, "title": "Revenue wording", "content": content, "changes": []any{change}}}}
+		completeProductionTargets(payload, p)
+		return publish(key, payload, map[string]any{"presence": "present", "releaseId": head["releaseId"], "manifestDigest": head["manifestDigest"]})
+	}
+	compatible := func() []identity.RevisionID {
+		t.Helper()
+		snapshot, err := f.store.CurrentReleaseSnapshot(ctx, w)
+		if err != nil {
+			t.Fatal(err)
+		}
+		asset, _, _ := current()
+		for _, released := range snapshot.Assets {
+			if released.AssetID.String() == asset {
+				return released.CompatibleRevisionIDs
+			}
+		}
+		t.Fatal("released asset missing")
+		return nil
+	}
+
+	first := publish("compat-create", vocabularyProductionPayload(t, input, p, "revenue", "有效支付金额", nil, []any{}), map[string]any{"presence": "absent"})
+	_, original, content := current()
+	worded := update("compat-alias", "aliases", nil, []any{"GMV"}, first)
+	if got := compatible(); len(got) != 1 || got[0].String() != original {
+		t.Fatalf("vocabulary-only revision not compatible with its predecessor: %v", got)
+	}
+	update("compat-definition", "definition", content["definition"], "有效订单支付金额之和（改写）", worded)
+	if got := compatible(); len(got) != 0 {
+		t.Fatalf("a definition change kept earlier pins compatible: %v", got)
+	}
+}

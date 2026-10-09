@@ -168,3 +168,33 @@ func TestNormalizeTermFoldsWidthCaseAndSpace(t *testing.T) {
 		t.Fatalf("NormalizeTerm = %q", got)
 	}
 }
+
+func TestComputationalCoreIgnoresOnlyVocabulary(t *testing.T) {
+	base := `{"assetType":"business_object","displayName":"客户","definition":"合成客户","spec":{"grain":"每位客户一行","members":[{"id":"region","name":"当前区域","valueType":"string"}]}}`
+	core := func(raw string) string {
+		t.Helper()
+		digest, err := ComputationalCore(json.RawMessage(raw))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return digest
+	}
+	original := core(base)
+	worded := core(`{"assetType":"business_object","displayName":"客户","definition":"合成客户","aliases":["顾客"],"excludes":["潜在客户"],"sampleQuestions":[{"question":"有多少客户？"}],"spec":{"members":[{"valueType":"string","name":"当前区域","id":"region","aliases":["大区"],"valueAliases":[{"value":"华东","aliases":["江浙沪"]}]}],"grain":"每位客户一行"}}`)
+	if worded != original {
+		t.Fatal("vocabulary or key order changed the computational core")
+	}
+	for name, raw := range map[string]string{
+		"definition":   strings.Replace(base, "合成客户", "全部客户", 1),
+		"display name": strings.Replace(base, `"displayName":"客户"`, `"displayName":"顾客"`, 1),
+		"member name":  strings.Replace(base, "当前区域", "区域", 1),
+		"grain":        strings.Replace(base, "每位客户一行", "每个客户版本一行", 1),
+	} {
+		if core(raw) == original {
+			t.Fatalf("%s change kept the computational core", name)
+		}
+	}
+	if _, err := ComputationalCore(json.RawMessage(`[]`)); err == nil {
+		t.Fatal("non-object content accepted")
+	}
+}

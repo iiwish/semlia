@@ -330,6 +330,22 @@ type ReleasedAsset struct {
 	Content       json.RawMessage
 	ContentDigest string
 	Position      int
+	// CompatibleRevisionIDs are earlier revisions whose computational core equals this one: they differ only in
+	// vocabulary, so references pinned to them still resolve to this revision.
+	CompatibleRevisionIDs []identity.RevisionID
+}
+
+// Accepts reports whether a reference pinned to revision resolves to this released revision.
+func (asset ReleasedAsset) Accepts(revision string) bool {
+	if asset.RevisionID.String() == revision {
+		return true
+	}
+	for _, compatible := range asset.CompatibleRevisionIDs {
+		if compatible.String() == revision {
+			return true
+		}
+	}
+	return false
 }
 
 type ReleasedPhysicalBinding struct {
