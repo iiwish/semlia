@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/iiwish/semlia/internal/application/jobs"
+	catalogdomain "github.com/iiwish/semlia/internal/domain/catalog"
 	"github.com/iiwish/semlia/pkg/identity"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -193,7 +194,32 @@ func TestVocabularyOnlyRevisionKeepsEarlierPinsCompatible(t *testing.T) {
 	}
 
 	first := publish("compat-create", vocabularyProductionPayload(t, input, p, "revenue", "有效支付金额", nil, []any{}), map[string]any{"presence": "absent"})
-	_, original, content := current()
+	assetText, original, content := current()
+	// Readiness reads the sealed production validation that produced the released revision.
+	assetID, _ := identity.ParseAssetID(assetText)
+	detail, err := f.store.GetCatalogAsset(ctx, w, assetID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, section := range detail.AuthoritySections {
+		if section.Kind == "validation" && (section.Availability != "available" || section.Values["runCount"] != 4 || section.Values["blockerCount"] != 0 || section.RevisionID == nil || section.RevisionID.String() != original) {
+			t.Fatalf("production validation not reflected: %+v", section)
+		}
+	}
+	runs, err := f.store.ListCatalogAuthorityRecords(ctx, catalogdomain.ListAuthorityRecordsQuery{WorkspaceID: w, AssetID: assetID, Section: "validation", Limit: 50})
+	if err != nil {
+		t.Fatal(err)
+	}
+	validators := map[string]bool{}
+	for _, run := range runs.Items {
+		if run.Kind != "validation_run" || run.Status != "succeeded" || run.Authority != "production_validation_seals" {
+			t.Fatalf("unexpected validation record: %+v", run)
+		}
+		validators[run.Label] = true
+	}
+	if runs.Total != 4 || len(validators) != 4 {
+		t.Fatalf("validation records = %d %v", runs.Total, validators)
+	}
 	worded := update("compat-alias", "aliases", nil, []any{"GMV"}, first)
 	if got := compatible(); len(got) != 1 || got[0].String() != original {
 		t.Fatalf("vocabulary-only revision not compatible with its predecessor: %v", got)

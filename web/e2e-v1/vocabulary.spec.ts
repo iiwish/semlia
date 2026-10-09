@@ -21,7 +21,14 @@ async function assertFocusRing(page: Page, field: ReturnType<Page["getByLabel"]>
 test("@vocabulary author reads and revises governed wording without saving", async ({ page }, info) => {
   await login(page, "author");
   const observed = observe(page);
+  // Readiness counts sealed production validation and model-based implementation; evidence stays honestly missing.
+  await page.goto("/assets");
+  await expect(page.getByLabel("有效支付金额就绪度 5/6", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("下单金额就绪度 4/6", { exact: true })).toBeVisible();
+  await screenshot(page, `vocabulary-readiness-${info.project.name}`);
   await openDefinition(page, amountId);
+  // Synthetic data is disclosed by the published knowledge itself.
+  await expect(page.getByText(/^合成演示指标/).first()).toBeVisible();
   const section = page.getByRole("region", { name: "业务词汇", exact: true });
   await expect(section).toContainText("GMV；成交额；销售额");
   await expect(section).toContainText("2026年8月的GMV是多少？");
@@ -62,6 +69,7 @@ test("@vocabulary consumer sees how wording bound and is asked to pick a shared 
   await expect(matches).toContainText("江浙沪");
   await expect(matches).toContainText("当前区域 = 华东");
   await expect(matches).toContainText("成交额");
+  await expect(page.locator(".answer-copy").last()).toContainText("合成演示");
   await matches.scrollIntoViewIfNeeded();
   await screenshot(page, `vocabulary-ask-matches-${info.project.name}`);
   const clarified = await ask("2026年8月销售额是多少？");
