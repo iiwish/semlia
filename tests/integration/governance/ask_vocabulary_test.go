@@ -78,8 +78,15 @@ func TestAskClarifiesSharedWordingWithoutCallingTheModel(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := result.Interpretation.Clarification
-	if calls.Load() != 0 || result.Interpretation.Outcome != "clarification" || !strings.Contains(text, "「销售额」") || !strings.Contains(text, "有效支付金额") || !strings.Contains(text, "下单金额（包含未支付订单）") {
+	if calls.Load() != 0 || result.Interpretation.Outcome != "clarification" || !strings.Contains(text, "「销售额」") || !strings.Contains(text, "有效支付金额") || !strings.Contains(text, "下单金额") || !strings.Contains(text, "区别：包含未支付订单") {
 		t.Fatalf("calls=%d clarification=%q", calls.Load(), text)
+	}
+	var modelSteps, serverSteps int
+	if err := env.pool.QueryRow(ctx, `SELECT count(*) FILTER (WHERE kind='model'),count(*) FILTER (WHERE kind='tool' AND tool_name='ask_disambiguation') FROM agent_steps WHERE workspace_id=$1 AND agent_run_id=$2`, w.UUID(), result.Run.ID.UUID()).Scan(&modelSteps, &serverSteps); err != nil {
+		t.Fatal(err)
+	}
+	if modelSteps != 0 || serverSteps != 1 {
+		t.Fatalf("audit claims a model call: model=%d server=%d", modelSteps, serverSteps)
 	}
 	replayed, err := svc.Ask(ctx, request)
 	if err != nil || calls.Load() != 0 || replayed.Run.ID != result.Run.ID || replayed.Interpretation.Clarification != text {

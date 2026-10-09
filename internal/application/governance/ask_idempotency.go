@@ -24,8 +24,10 @@ type AskFinishCommand struct {
 	ErrorCode         string
 	OutputDigest      string
 	ModelOutputDigest string
-	CostMicros        int64
-	FinishedAt        time.Time
+	// ServerTool names the server step that settled the request without a model call, such as disambiguation.
+	ServerTool string
+	CostMicros int64
+	FinishedAt time.Time
 }
 
 type AskRequestRepository interface {
@@ -102,9 +104,14 @@ func askTerminalError(code string) error {
 }
 
 func (service *AskService) settle(ctx context.Context, claim domain.AskRequestRecord, status, code, outputDigest, modelDigest string, queryID *identity.SemanticQueryID, response llm.CompleteResponse) (domain.AgentRun, error) {
+	return service.finish(ctx, AskFinishCommand{Request: claim, Status: status, ErrorCode: code, OutputDigest: outputDigest, ModelOutputDigest: modelDigest, QueryID: queryID, CostMicros: response.Usage.PromptTokens + response.Usage.CompletionTokens})
+}
+
+func (service *AskService) finish(ctx context.Context, command AskFinishCommand) (domain.AgentRun, error) {
 	finishCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
-	return service.repository.FinishAskRequest(finishCtx, AskFinishCommand{Request: claim, Status: status, ErrorCode: code, OutputDigest: outputDigest, ModelOutputDigest: modelDigest, QueryID: queryID, CostMicros: response.Usage.PromptTokens + response.Usage.CompletionTokens, FinishedAt: service.runs.clock.Now().UTC()})
+	command.FinishedAt = service.runs.clock.Now().UTC()
+	return service.repository.FinishAskRequest(finishCtx, command)
 }
 
 func (service *AskService) failure(ctx context.Context, claim domain.AskRequestRecord, original error, code, modelDigest string, response llm.CompleteResponse) (AskResult, error) {

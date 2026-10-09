@@ -138,10 +138,12 @@ func (match AskMatch) usable(hit AskHit) bool {
 }
 
 // AskAmbiguity is a phrase that names several assets of one type with nothing in the question to tell them apart.
+// Distinctions are what the candidates' authors published about each other, each stated once.
 type AskAmbiguity struct {
-	Text       string             `json:"text"`
-	Type       semantic.AssetType `json:"type"`
-	Candidates []AskConfusion     `json:"candidates"`
+	Text         string              `json:"text"`
+	Type         semantic.AssetType  `json:"type"`
+	Candidates   []AskModelCandidate `json:"candidates"`
+	Distinctions []string            `json:"distinctions"`
 }
 
 type AskModelCandidate struct {
@@ -164,6 +166,9 @@ type AskBudget struct {
 	MaxCards int
 	MaxBytes int
 }
+
+// DefaultAskBudget bounds what one question sends to the model. A catalog that fits is sent whole.
+var DefaultAskBudget = AskBudget{MaxCards: 128, MaxBytes: 64 * 1024}
 
 type lexiconEntry struct {
 	hit  AskHit
@@ -443,10 +448,10 @@ func resolveAmbiguities(matches []AskMatch, cards []AskCard, byID map[string]int
 				}
 				continue
 			}
-			ambiguity := AskAmbiguity{Text: match.Text, Type: semantic.AssetType(kind)}
+			ambiguity := AskAmbiguity{Text: match.Text, Type: semantic.AssetType(kind), Distinctions: distinctionsAmong(group, cards, byID)}
 			for _, hit := range group {
 				match.ambiguous[hit.AssetID] = true
-				ambiguity.Candidates = append(ambiguity.Candidates, AskConfusion{AssetID: hit.AssetID, Name: hit.Name, Distinction: distinctionFor(hit.AssetID, group, cards, byID)})
+				ambiguity.Candidates = append(ambiguity.Candidates, AskModelCandidate{AssetID: hit.AssetID, Name: hit.Name})
 			}
 			selection.Ambiguities = append(selection.Ambiguities, ambiguity)
 		}
@@ -454,27 +459,23 @@ func resolveAmbiguities(matches []AskMatch, cards []AskCard, byID map[string]int
 	}
 }
 
-// distinctionFor prefers what the asset says about its neighbours, then what a neighbour says about it.
-func distinctionFor(id string, group []AskHit, cards []AskCard, byID map[string]int) string {
-	others := map[string]bool{}
+// distinctionsAmong collects what each candidate says about the others, in candidate order, without repeats.
+func distinctionsAmong(group []AskHit, cards []AskCard, byID map[string]int) []string {
+	members := map[string]bool{}
 	for _, hit := range group {
-		if hit.AssetID != id {
-			others[hit.AssetID] = true
-		}
+		members[hit.AssetID] = true
 	}
-	for _, confusion := range cards[byID[id]].ConfusableWith {
-		if others[confusion.AssetID] {
-			return confusion.Distinction
-		}
-	}
-	for other := range others {
-		for _, confusion := range cards[byID[other]].ConfusableWith {
-			if confusion.AssetID == id {
-				return confusion.Distinction
+	seen := map[string]bool{}
+	distinctions := []string{}
+	for _, hit := range group {
+		for _, confusion := range cards[byID[hit.AssetID]].ConfusableWith {
+			if members[confusion.AssetID] && !seen[confusion.Distinction] {
+				seen[confusion.Distinction] = true
+				distinctions = append(distinctions, confusion.Distinction)
 			}
 		}
 	}
-	return ""
+	return distinctions
 }
 
 // coveringModels lists analysis models that contain every metric the question names without ambiguity.
@@ -591,4 +592,52 @@ func firstText(values ...string) string {
 		}
 	}
 	return ""
+}
+
+// SampleRecallFailure is a typical question that retrieval would not answer with its own asset: the asset or an
+// expected reference is not recalled, or the question would be sent back for clarification.
+type SampleRecallFailure struct {
+	AssetID   string
+	Question  string
+	Missing   []string
+	Ambiguous bool
+}
+
+// CheckSampleQuestions replays each owner's sample questions through the same deterministic retrieval Ask uses.
+func CheckSampleQuestions(cards []AskCard, owners map[string]bool, budget AskBudget) []SampleRecallFailure {
+	failures := []SampleRecallFailure{}
+	for _, card := range cards {
+		if !owners[card.AssetID] {
+			continue
+		}
+		for _, sample := range card.sampleQuestions {
+			selection := SelectAskKnowledge(sample.Question, cards, budget)
+			recalled := map[string]bool{}
+			for _, id := range selection.Recalled {
+				recalled[id] = true
+			}
+			sent := map[string]bool{}
+			for _, sentCard := range selection.Cards {
+				sent[sentCard.AssetID] = true
+			}
+			want := []string{card.AssetID}
+			if sample.Expects != nil {
+				for _, ref := range sample.Expects.Refs {
+					want = append(want, ref.AssetID)
+				}
+			}
+			failure := SampleRecallFailure{AssetID: card.AssetID, Question: sample.Question, Ambiguous: len(selection.Ambiguities) > 0}
+			seen := map[string]bool{}
+			for _, id := range want {
+				if !seen[id] && (!recalled[id] || !sent[id]) {
+					failure.Missing = append(failure.Missing, id)
+				}
+				seen[id] = true
+			}
+			if failure.Ambiguous || len(failure.Missing) > 0 {
+				failures = append(failures, failure)
+			}
+		}
+	}
+	return failures
 }

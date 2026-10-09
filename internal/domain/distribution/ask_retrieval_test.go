@@ -145,12 +145,12 @@ func TestSelectAskKnowledgeReportsUnsettledAmbiguity(t *testing.T) {
 	if len(selection.Ambiguities) != 1 || selection.Ambiguities[0].Text != "销售额" || len(selection.Ambiguities[0].Candidates) != 2 {
 		t.Fatalf("ambiguities = %+v", selection.Ambiguities)
 	}
-	distinctions := map[string]string{}
+	names := []string{}
 	for _, candidate := range selection.Ambiguities[0].Candidates {
-		distinctions[candidate.Name] = candidate.Distinction
+		names = append(names, candidate.Name)
 	}
-	if distinctions["有效支付金额"] != "只计已支付订单" || distinctions["下单金额"] != "包含未支付和已退款订单" {
-		t.Fatalf("distinctions = %+v", distinctions)
+	if len(names) != 2 || !reflect.DeepEqual(selection.Ambiguities[0].Distinctions, []string{"只计已支付订单", "包含未支付和已退款订单"}) && !reflect.DeepEqual(selection.Ambiguities[0].Distinctions, []string{"包含未支付和已退款订单", "只计已支付订单"}) {
+		t.Fatalf("candidates=%v distinctions=%v", names, selection.Ambiguities[0].Distinctions)
 	}
 	if len(selection.CoveringModels) != 0 {
 		t.Fatalf("an ambiguous metric must not pick a model: %+v", selection.CoveringModels)
@@ -197,5 +197,37 @@ func TestSelectAskKnowledgeRespectsLatinWordBoundaries(t *testing.T) {
 	}
 	if selection := d.SelectAskKnowledge("show GMV for August", cards, wideBudget); len(selection.Matches) != 1 {
 		t.Fatalf("bounded alias not matched: %+v", selection.Matches)
+	}
+}
+
+func TestCheckSampleQuestionsReplaysRetrieval(t *testing.T) {
+	c, _ := retrievalCase(t)
+	for i := range c.Snapshot.Assets {
+		a := &c.Snapshot.Assets[i]
+		if a.Name != "amount" {
+			continue
+		}
+		var content map[string]any
+		_ = json.Unmarshal(a.Content, &content)
+		content["sampleQuestions"] = []any{
+			map[string]any{"question": "8月 GMV 是多少？", "expects": map[string]any{"refs": []any{c.Refs["model"]}}},
+			map[string]any{"question": "上个月销售额是多少？"},
+			map[string]any{"question": "库存周转天数是多少？"},
+		}
+		a.Content, _ = json.Marshal(content)
+	}
+	cards := d.CompileAskCards(c.Snapshot.Assets)
+	failures := d.CheckSampleQuestions(cards, map[string]bool{c.Refs["amount"].AssetID: true}, wideBudget)
+	if len(failures) != 2 {
+		t.Fatalf("failures = %+v", failures)
+	}
+	if failures[0].Question != "上个月销售额是多少？" || !failures[0].Ambiguous {
+		t.Fatalf("ambiguous sample not reported: %+v", failures[0])
+	}
+	if failures[1].Question != "库存周转天数是多少？" || len(failures[1].Missing) != 1 || failures[1].Missing[0] != c.Refs["amount"].AssetID {
+		t.Fatalf("unrecalled sample not reported: %+v", failures[1])
+	}
+	if others := d.CheckSampleQuestions(cards, map[string]bool{c.Refs["count"].AssetID: true}, wideBudget); len(others) != 0 {
+		t.Fatalf("only owners are checked: %+v", others)
 	}
 }

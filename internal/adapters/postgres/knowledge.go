@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/iiwish/semlia/internal/domain/distribution"
 	"github.com/iiwish/semlia/internal/domain/governance"
 	"github.com/iiwish/semlia/internal/domain/semantic"
 	"github.com/iiwish/semlia/pkg/identity"
@@ -90,33 +91,43 @@ func requirePublishedKnowledgeRef(ctx context.Context, tx pgx.Tx, workspace iden
 	return nil
 }
 
-// releaseVocabularyEntries loads the conflict-check view of every asset pinned by one release.
-func releaseVocabularyEntries(ctx context.Context, tx pgx.Tx, workspace identity.WorkspaceID, release identity.ReleaseID) ([]semantic.VocabularyEntry, error) {
-	rows, err := tx.Query(ctx, `SELECT a.id,a.asset_type,r.content FROM release_assets e JOIN semantic_assets a ON a.workspace_id=e.workspace_id AND a.id=e.asset_id JOIN asset_revisions r ON r.workspace_id=e.workspace_id AND r.id=e.revision_id AND r.asset_id=e.asset_id WHERE e.workspace_id=$1 AND e.release_id=$2`, workspace.UUID(), release.UUID())
+// releasedAssetsTx loads every asset revision pinned by one release.
+func releasedAssetsTx(ctx context.Context, tx pgx.Tx, workspace identity.WorkspaceID, release identity.ReleaseID) ([]distribution.ReleasedAsset, error) {
+	rows, err := tx.Query(ctx, `SELECT a.id,r.id,a.namespace||'.'||a.key,a.asset_type,r.content FROM release_assets e JOIN semantic_assets a ON a.workspace_id=e.workspace_id AND a.id=e.asset_id JOIN asset_revisions r ON r.workspace_id=e.workspace_id AND r.id=e.revision_id AND r.asset_id=e.asset_id WHERE e.workspace_id=$1 AND e.release_id=$2 ORDER BY e.position`, workspace.UUID(), release.UUID())
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	entries := []semantic.VocabularyEntry{}
+	assets := []distribution.ReleasedAsset{}
 	for rows.Next() {
-		var id pgtype.UUID
-		var kind string
+		var id, revision pgtype.UUID
+		var address, kind string
 		var content []byte
-		if err := rows.Scan(&id, &kind, &content); err != nil {
+		if err := rows.Scan(&id, &revision, &address, &kind, &content); err != nil {
 			return nil, err
 		}
-		asset, err := identity.AssetIDFromUUIDBytes(id.Bytes)
-		if err != nil {
+		asset := distribution.ReleasedAsset{Address: address, AssetType: semantic.AssetType(kind), Content: content}
+		if asset.AssetID, err = identity.AssetIDFromUUIDBytes(id.Bytes); err != nil {
 			return nil, err
 		}
-		entry, err := semantic.VocabularyEntryFromContent(asset.String(), semantic.AssetType(kind), content)
-		if err != nil {
-			// Content published before vocabulary existed is not re-judged here; its own publication gate applied.
-			continue
+		if asset.RevisionID, err = identity.RevisionIDFromUUIDBytes(revision.Bytes); err != nil {
+			return nil, err
 		}
-		entries = append(entries, entry)
+		assets = append(assets, asset)
 	}
-	return entries, rows.Err()
+	return assets, rows.Err()
+}
+
+// vocabularyEntries is the conflict-check view of released assets. Content published before vocabulary existed is
+// not re-judged here; its own publication gate applied.
+func vocabularyEntries(assets []distribution.ReleasedAsset) []semantic.VocabularyEntry {
+	entries := []semantic.VocabularyEntry{}
+	for _, asset := range assets {
+		if entry, err := semantic.VocabularyEntryFromContent(asset.AssetID.String(), asset.AssetType, asset.Content); err == nil {
+			entries = append(entries, entry)
+		}
+	}
+	return entries
 }
 
 // checkReleaseVocabularyTx is the authoritative publication gate: within one release a term may name only one asset
@@ -126,12 +137,12 @@ func checkReleaseVocabularyTx(ctx context.Context, tx pgx.Tx, workspace identity
 	if len(changed) == 0 {
 		return nil
 	}
-	entries, err := releaseVocabularyEntries(ctx, tx, workspace, release)
+	assets, err := releasedAssetsTx(ctx, tx, workspace, release)
 	if err != nil {
 		return governanceRepositoryError("load release vocabulary", err)
 	}
 	blocking := []semantic.VocabularyConflict{}
-	for _, conflict := range semantic.VocabularyConflicts(entries) {
+	for _, conflict := range semantic.VocabularyConflicts(vocabularyEntries(assets)) {
 		if changed[conflict.Assets[0].AssetID] || changed[conflict.Assets[1].AssetID] {
 			blocking = append(blocking, conflict)
 		}

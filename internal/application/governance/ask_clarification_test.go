@@ -135,3 +135,24 @@ func TestAskClarificationUsesDisplayNamesNotAddresses(t *testing.T) {
 		t.Fatalf("clarification must prefer display names over addresses: %s", text)
 	}
 }
+
+func TestAskDisambiguationNamesCandidatesThenDifferences(t *testing.T) {
+	ambiguity := distributiondomain.AskAmbiguity{Text: "销售额", Type: "metric",
+		Candidates:   []distributiondomain.AskModelCandidate{{AssetID: "ast_a", Name: "有效支付金额"}, {AssetID: "ast_b", Name: "下单金额"}},
+		Distinctions: []string{"下单金额含无效订单；有效支付金额只计有效订单。"}}
+	text := askDisambiguationText([]distributiondomain.AskAmbiguity{ambiguity})
+	if text != "「销售额」可能指不同的指标：有效支付金额、下单金额。区别：下单金额含无效订单；有效支付金额只计有效订单。请在问题中写明指哪一个。" {
+		t.Fatalf("text = %q", text)
+	}
+	if strings.Contains(text, "ast_") {
+		t.Fatal("identifiers leaked into clarification")
+	}
+	ambiguity.Distinctions = []string{strings.Repeat("区别很长", 200)}
+	long := askDisambiguationText([]distributiondomain.AskAmbiguity{ambiguity, ambiguity, ambiguity, ambiguity})
+	if utf8.RuneCountInString(long) > askClarificationLimit || !strings.HasSuffix(long, askDisambiguationClose) {
+		t.Fatalf("clarification exceeds the API limit: %d", utf8.RuneCountInString(long))
+	}
+	if got := askServerClarification(distributionapp.AskKnowledge{Ambiguities: []distributiondomain.AskAmbiguity{ambiguity}}); !strings.HasPrefix(got, "「销售额」") {
+		t.Fatalf("server clarification ignored ambiguity: %q", got)
+	}
+}

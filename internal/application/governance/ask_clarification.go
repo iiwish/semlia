@@ -112,25 +112,32 @@ var askTypeLabels = map[string]string{"metric": "指标", "business_object": "�
 // askDisambiguationText is server-owned like the menu: it names only candidates the caller may read and the
 // distinctions their authors published, and is rebuilt from the same release on replay.
 func askDisambiguationText(ambiguities []distributiondomain.AskAmbiguity) string {
-	for distinctionCap := 60; ; distinctionCap -= 15 {
+	for distinctionCap := 80; ; distinctionCap -= 20 {
 		parts := []string{}
 		for _, ambiguity := range ambiguities {
 			label := askTypeLabels[string(ambiguity.Type)]
 			if label == "" {
 				label = "知识"
 			}
-			candidates := []string{}
+			names := []string{}
 			for _, candidate := range ambiguity.Candidates {
-				item := askMenuName(candidate.Name)
-				if distinction := strings.Join(strings.Fields(candidate.Distinction), " "); distinction != "" && distinctionCap > 0 {
+				names = append(names, askMenuName(candidate.Name))
+			}
+			part := "「" + askMenuName(ambiguity.Text) + "」可能指不同的" + label + "：" + strings.Join(names, "、")
+			if distinctionCap > 0 {
+				notes := []string{}
+				for _, distinction := range ambiguity.Distinctions {
+					distinction = strings.TrimRight(strings.Join(strings.Fields(distinction), " "), "。；;.")
 					if runes := []rune(distinction); len(runes) > distinctionCap {
 						distinction = string(runes[:distinctionCap]) + "…"
 					}
-					item += "（" + distinction + "）"
+					notes = append(notes, distinction)
 				}
-				candidates = append(candidates, item)
+				if len(notes) > 0 {
+					part += "。区别：" + strings.Join(notes, "；")
+				}
 			}
-			parts = append(parts, "「"+askMenuName(ambiguity.Text)+"」可能指不同的"+label+"："+strings.Join(candidates, "；"))
+			parts = append(parts, part)
 		}
 		text := strings.Join(parts, "。") + "。" + askDisambiguationClose
 		if utf8.RuneCountInString(text) <= askClarificationLimit {

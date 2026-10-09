@@ -6,6 +6,7 @@ import { governanceRehearsal, governanceHeadProof } from './v1/correction.mjs';
 import { safeFailureMessage, readState, rejectLinks } from './v1/core.mjs';
 import { finalCandidate } from './v1/final-candidate.mjs';
 import { prepareValues, reconcileValues } from './v1/value-knowledge.mjs';
+import { applyVocabulary, measureVocabulary } from './v1/vocabulary.mjs';
 import { unlinkOwned } from '../demo/runtime.mjs';
 
 process.umask(0o077);
@@ -13,12 +14,14 @@ let fd, lockIdentity;
 const command = process.argv[2];
 const lock = join(root, 'operation.lock');
 try {
-  if (process.argv.length !== 3 || !['baseline', 'retry', 'round-16384', 'round-16384-retry', 'round-half-open', 'round-half-open-retry', 'execute-replay', 'execute-compiler-replay', 'reverify-receipts', 'audit-windows', 'replay', 'governance', 'final-candidate', 'prepare-values', 'reconcile-values'].includes(command)) throw new Error('Unknown model acceptance command');
+  if (process.argv.length !== 3 || !['baseline', 'retry', 'round-16384', 'round-16384-retry', 'round-half-open', 'round-half-open-retry', 'execute-replay', 'execute-compiler-replay', 'reverify-receipts', 'audit-windows', 'replay', 'governance', 'final-candidate', 'prepare-values', 'reconcile-values', 'vocabulary-baseline', 'apply-vocabulary', 'vocabulary-measure'].includes(command)) throw new Error('Unknown model acceptance command');
   readState(root); rejectLinks(lock);
   fd = openSync(lock, 'wx', 0o600); lockIdentity = lstatSync(lock);
   if (command === 'final-candidate') { if (!(await finalCandidate(root)).summary.passed) process.exitCode = 1; }
   else if (command === 'prepare-values') { if (!(await prepareValues(root)).complete) process.exitCode = 1; }
   else if (command === 'reconcile-values') { if (!(await reconcileValues(root)).complete) process.exitCode = 1; }
+  else if (command === 'apply-vocabulary') await applyVocabulary(root);
+  else if (command === 'vocabulary-baseline' || command === 'vocabulary-measure') await measureVocabulary(root, command === 'vocabulary-baseline' ? 'before' : 'after');
   else if (command === 'governance') { if (!(await governanceRehearsal(root)).complete) process.exitCode = 1; }
   else if (command === 'audit-windows') auditSavedWindows(root);
   else if (command === 'replay') { if ((await replayClaimedRequests(root)).claimReplays.some(x => !x.passed)) process.exitCode = 1; }

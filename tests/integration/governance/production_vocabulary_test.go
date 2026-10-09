@@ -54,21 +54,7 @@ func TestProductionVocabularyConflictBlocksUntilConfusionIsDeclared(t *testing.T
 
 	// A folded duplicate of a published alias names two metrics: validation blocks it before review.
 	conflicting := productionRequestResult(t, h, http.MethodPost, path, p, "vocabulary-conflict", vocabularyProductionPayload(t, input, p, "booked", "下单金额", map[string]any{"aliases": []any{"ｇｍｖ"}}, []any{}), http.StatusCreated)
-	confirmProductionFixtureRules(t, f, h, w, p, conflicting)
-	op := conflicting["operationId"].(string)
-	productionRequestResult(t, h, http.MethodPost, path+"/"+op+"/submit", p, "vocabulary-conflict-submit", map[string]any{"expectedVersion": 1, "setDigest": conflicting["setDigest"]}, http.StatusAccepted)
-	job := jobs.Job{WorkspaceID: w, Attempt: 1, MaxAttempts: 3}
-	if err := f.pool.QueryRow(ctx, `SELECT payload,trace_id FROM jobs WHERE workspace_id=$1 AND job_type='governance.proposal.validate' AND payload->>'operationId'=$2`, w.UUID(), op).Scan(&job.Payload, &job.TraceID); err != nil {
-		t.Fatal(err)
-	}
-	if err := runProductionValidationJob(t, f, job); err != nil {
-		t.Fatal(err)
-	}
-	var status string
-	var results []byte
-	if err := f.pool.QueryRow(ctx, `SELECT a.status,s.results_json FROM production_validation_attempts a JOIN production_validation_seals s ON s.workspace_id=a.workspace_id AND s.operation_id=a.operation_id AND s.production_version=a.production_version AND s.attempt_no=a.attempt_no WHERE a.workspace_id=$1 AND a.operation_id=$2 AND a.attempt_no=1`, w.UUID(), mustParseProductionOperationID(t, op).UUID()).Scan(&status, &results); err != nil {
-		t.Fatal(err)
-	}
+	status, results := productionValidationOutcome(t, f, h, w, p, conflicting)
 	if status != "failed" || !strings.Contains(string(results), "PRODUCTION_VOCABULARY_CONFLICT") || !strings.Contains(string(results), "「gmv」") {
 		t.Fatalf("conflicting alias not blocked: %s %s", status, results)
 	}
@@ -106,4 +92,46 @@ func TestProductionVocabularyConflictBlocksUntilConfusionIsDeclared(t *testing.T
 	if err := json.Unmarshal(confusable, &stored); err != nil || len(stored) != 1 || stored[0].Ref.ReleaseID != published["releaseId"] {
 		t.Fatalf("confusable reference lost its pin: %s %v", confusable, err)
 	}
+}
+
+// productionValidationOutcome submits a created operation, runs its validation job and returns the sealed result.
+func productionValidationOutcome(t *testing.T, f *fixture, h http.Handler, w identity.WorkspaceID, p identity.PrincipalID, created map[string]any) (string, []byte) {
+	t.Helper()
+	ctx := context.Background()
+	confirmProductionFixtureRules(t, f, h, w, p, created)
+	op := created["operationId"].(string)
+	productionRequestResult(t, h, http.MethodPost, fmt.Sprintf("/api/v1/workspaces/%s/production-operations/%s/submit", w, op), p, "submit-"+op, map[string]any{"expectedVersion": 1, "setDigest": created["setDigest"]}, http.StatusAccepted)
+	job := jobs.Job{WorkspaceID: w, Attempt: 1, MaxAttempts: 3}
+	if err := f.pool.QueryRow(ctx, `SELECT payload,trace_id FROM jobs WHERE workspace_id=$1 AND job_type='governance.proposal.validate' AND payload->>'operationId'=$2`, w.UUID(), op).Scan(&job.Payload, &job.TraceID); err != nil {
+		t.Fatal(err)
+	}
+	if err := runProductionValidationJob(t, f, job); err != nil {
+		t.Fatal(err)
+	}
+	var status string
+	var results []byte
+	if err := f.pool.QueryRow(ctx, `SELECT a.status,s.results_json FROM production_validation_attempts a JOIN production_validation_seals s ON s.workspace_id=a.workspace_id AND s.operation_id=a.operation_id AND s.production_version=a.production_version AND s.attempt_no=a.attempt_no WHERE a.workspace_id=$1 AND a.operation_id=$2 AND a.attempt_no=1`, w.UUID(), mustParseProductionOperationID(t, op).UUID()).Scan(&status, &results); err != nil {
+		t.Fatal(err)
+	}
+	return status, results
+}
+
+func TestProductionSampleQuestionsMustBeRecalled(t *testing.T) {
+	f, h, w, p := authoringLifecycleSetup(t)
+	path := fmt.Sprintf("/api/v1/workspaces/%s/production-operations", w)
+	input := productionFixtureInput(t, f, w, identity.SemanticCandidateID{}, true)
+	created := productionRequestResult(t, h, http.MethodPost, path, p, "sample-unrecalled", vocabularyProductionPayload(t, input, p, "turnover", "库存周转", map[string]any{
+		"sampleQuestions": []any{map[string]any{"question": "8月库存周转是多少？"}, map[string]any{"question": "存货多久卖完？"}},
+	}, []any{}), http.StatusCreated)
+	status, results := productionValidationOutcome(t, f, h, w, p, created)
+	// The first question names the asset; the second uses wording nobody declared.
+	if status != "failed" || strings.Count(string(results), "PRODUCTION_SAMPLE_QUESTION_NOT_RECALLED") != 1 || !strings.Contains(string(results), "存货多久卖完？") {
+		t.Fatalf("unrecalled sample question not blocked: %s %s", status, results)
+	}
+	reviewer := authoringLifecyclePrincipal(t, f, w, "Sample reviewer")
+	declared := productionRequestResult(t, h, http.MethodPost, path, p, "sample-recalled", vocabularyProductionPayload(t, input, p, "stock_turnover", "库存周转", map[string]any{
+		"aliases":         []any{"存货"},
+		"sampleQuestions": []any{map[string]any{"question": "存货多久卖完？"}},
+	}, []any{}), http.StatusCreated)
+	productionValidateAndApprove(t, f, h, w, p, reviewer, declared)
 }

@@ -174,7 +174,7 @@ func (service *AskService) Ask(ctx context.Context, request AskRequest) (AskResu
 		// The release says these words name different assets; asking the model would only make it guess.
 		interpretation := AskInterpretation{Schema: AskInterpretationSchemaID, Outcome: "clarification", Clarification: askServerClarification(knowledge)}
 		normalized, _ := json.Marshal(interpretation)
-		finished, finishErr := service.settle(ctx, claim, "clarification", "", contentDigestOf(string(normalized)), contentDigestOf("server disambiguation"), nil, llm.CompleteResponse{})
+		finished, finishErr := service.finish(ctx, AskFinishCommand{Request: claim, Status: "clarification", OutputDigest: contentDigestOf(string(normalized)), ModelOutputDigest: contentDigestOf("server disambiguation"), ServerTool: "ask_disambiguation"})
 		return AskResult{Run: finished, Interpretation: interpretation}, finishErr
 	}
 	client, err := service.clientFactory(provider, nil, nil)

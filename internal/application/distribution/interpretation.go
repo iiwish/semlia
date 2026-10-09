@@ -31,9 +31,6 @@ type AskCatalogEntry struct {
 	Members []string
 }
 
-// askKnowledgeBudget bounds what one question sends to the model. A catalog that fits is sent whole.
-var askKnowledgeBudget = d.AskBudget{MaxCards: 128, MaxBytes: 64 * 1024}
-
 // InterpretationContext discloses only authorized semantic names and members,
 // never physical locations, credentials or unpublished authoring content.
 func (s *Service) InterpretationContext(ctx context.Context, request ResolveRequest) (json.RawMessage, error) {
@@ -80,7 +77,7 @@ func (s *Service) AskKnowledge(ctx context.Context, request ResolveRequest, ques
 		}
 		catalog = append(catalog, entry)
 	}
-	selection := d.SelectAskKnowledge(question, cards, askKnowledgeBudget)
+	selection := d.SelectAskKnowledge(question, cards, d.DefaultAskBudget)
 	selected := map[string]any{"releaseId": snapshot.ReleaseID.String(), "assets": selection.Cards, "questionMatches": selection.Matches, "ambiguities": selection.Ambiguities, "coveringModels": selection.CoveringModels, "omittedAssets": selection.OmittedAssets}
 	selected["manifestDigest"] = snapshot.ManifestDigest
 	stable, err := json.Marshal(selected)

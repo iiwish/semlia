@@ -8,6 +8,7 @@ import (
 
 	app "github.com/iiwish/semlia/internal/application/governance"
 	authz "github.com/iiwish/semlia/internal/domain/authorization"
+	"github.com/iiwish/semlia/internal/domain/distribution"
 	domain "github.com/iiwish/semlia/internal/domain/governance"
 	"github.com/iiwish/semlia/internal/domain/semantic"
 	"github.com/iiwish/semlia/pkg/identity"
@@ -86,30 +87,32 @@ func (s *Store) LoadProductionValidationWork(ctx context.Context, w identity.Wor
 	if digest != attempt.FreshnessDigest {
 		work.ReferenceFailure = "PRODUCTION_VALIDATION_CONTEXT_CHANGED"
 	}
-	work.VocabularyConflicts, err = productionVocabularyConflictsTx(ctx, tx, ver, targets)
+	work.VocabularyConflicts, work.SampleRecallFailures, err = productionVocabularyChecksTx(ctx, tx, ver, targets)
 	if err != nil {
 		return work, err
 	}
 	return work, nil
 }
 
-// productionVocabularyConflictsTx previews the publication vocabulary gate: the authoring head with this set's
-// semantic targets applied. Conflicts are attributed to every target that takes part in them.
-func productionVocabularyConflictsTx(ctx context.Context, tx pgx.Tx, ver domain.ProductionVersion, targets []domain.ProductionTarget) (map[string][]semantic.VocabularyConflict, error) {
-	entries := []semantic.VocabularyEntry{}
+// productionVocabularyChecksTx previews the publication vocabulary gate and replays sample questions against the
+// authoring head with this set's semantic targets applied. Findings are attributed to the targets they concern.
+func productionVocabularyChecksTx(ctx context.Context, tx pgx.Tx, ver domain.ProductionVersion, targets []domain.ProductionTarget) (map[string][]semantic.VocabularyConflict, map[string][]distribution.SampleRecallFailure, error) {
+	assets := []distribution.ReleasedAsset{}
 	if ver.BaselineHead.ReleaseID != nil {
-		head, err := releaseVocabularyEntries(ctx, tx, ver.WorkspaceID, *ver.BaselineHead.ReleaseID)
+		head, err := releasedAssetsTx(ctx, tx, ver.WorkspaceID, *ver.BaselineHead.ReleaseID)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		entries = head
+		assets = head
 	}
+	entries := vocabularyEntries(assets)
 	owners := map[string]string{}
 	for _, target := range targets {
 		if target.Kind != domain.TargetKindSemanticAsset || target.Declaration == nil {
 			continue
 		}
 		var content struct {
+			Address   string             `json:"address"`
 			AssetType semantic.AssetType `json:"assetType"`
 		}
 		if json.Unmarshal(target.Declaration.Content, &content) != nil {
@@ -123,24 +126,42 @@ func productionVocabularyConflictsTx(ctx context.Context, tx pgx.Tx, ver domain.
 		if err != nil {
 			continue // the schema check reports invalid vocabulary
 		}
-		kept := entries[:0]
+		keptEntries := entries[:0]
 		for _, existing := range entries {
 			if existing.AssetID != id {
-				kept = append(kept, existing)
+				keptEntries = append(keptEntries, existing)
 			}
 		}
-		entries = append(kept, entry)
+		entries = append(keptEntries, entry)
 		owners[id] = target.LocalKey
+		// Retrieval needs a typed identity; a target without one is still checked for conflicts above.
+		if asset, err := identity.ParseAssetID(id); err == nil {
+			keptAssets := assets[:0]
+			for _, existing := range assets {
+				if existing.AssetID != asset {
+					keptAssets = append(keptAssets, existing)
+				}
+			}
+			assets = append(keptAssets, distribution.ReleasedAsset{AssetID: asset, Address: content.Address, AssetType: content.AssetType, Content: target.Declaration.Content})
+		}
 	}
-	result := map[string][]semantic.VocabularyConflict{}
+	conflicts := map[string][]semantic.VocabularyConflict{}
 	for _, conflict := range semantic.VocabularyConflicts(entries) {
 		for _, claim := range conflict.Assets {
 			if key, ok := owners[claim.AssetID]; ok {
-				result[key] = append(result[key], conflict)
+				conflicts[key] = append(conflicts[key], conflict)
 			}
 		}
 	}
-	return result, nil
+	checked := map[string]bool{}
+	for id := range owners {
+		checked[id] = true
+	}
+	recall := map[string][]distribution.SampleRecallFailure{}
+	for _, failure := range distribution.CheckSampleQuestions(distribution.CompileAskCards(assets), checked, distribution.DefaultAskBudget) {
+		recall[owners[failure.AssetID]] = append(recall[owners[failure.AssetID]], failure)
+	}
+	return conflicts, recall, nil
 }
 
 func (s *Store) CompleteProductionValidation(ctx context.Context, completion app.ProductionValidationCompletion) error {

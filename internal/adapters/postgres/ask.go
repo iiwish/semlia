@@ -166,7 +166,12 @@ func finishAskTx(ctx context.Context, tx pgx.Tx, command app.AskFinishCommand) (
 		return domain.AgentRun{}, err
 	}
 	stepID, _ := uuidValue(step)
-	if _, err := queries.CreateAgentStep(ctx, dbgen.CreateAgentStepParams{ID: stepID, WorkspaceID: w, AgentRunID: runID, Sequence: 1, Kind: "model", InputHash: r.InputDigest, OutputHash: command.ModelOutputDigest, ErrorCode: optionalTextValue(command.ErrorCode), CreatedAt: timestamp(command.FinishedAt)}); err != nil {
+	// A request the server settled itself records that step instead of claiming a model call.
+	first := dbgen.CreateAgentStepParams{ID: stepID, WorkspaceID: w, AgentRunID: runID, Sequence: 1, Kind: "model", InputHash: r.InputDigest, OutputHash: command.ModelOutputDigest, ErrorCode: optionalTextValue(command.ErrorCode), CreatedAt: timestamp(command.FinishedAt)}
+	if command.ServerTool != "" {
+		first.Kind, first.ToolName = "tool", textValue(command.ServerTool)
+	}
+	if _, err := queries.CreateAgentStep(ctx, first); err != nil {
 		return domain.AgentRun{}, err
 	}
 	if command.QueryID != nil {
