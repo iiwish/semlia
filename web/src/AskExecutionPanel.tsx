@@ -2,11 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import { CircleAlert, LoaderCircle, Play, RefreshCw, Square } from "lucide-react";
 import { cancelExecution, executePlan, getExecution, type ExecutionPlan, type ExecutionResult } from "./execution";
 
-export function AskExecutionPanel({ workspaceId, plan, active = true }: { workspaceId: string; plan?: ExecutionPlan; active?: boolean }) {
-  return <ScopedExecutionPanel key={`${workspaceId}:${plan?.id ?? "history"}`} workspaceId={workspaceId} plan={plan} active={active} />;
+// restoreFinished: show the last finished run's metadata only while no question is on screen. A run that still needs
+// attention (running, unknown) is always restored so it can be inspected or cancelled after a refresh.
+export function AskExecutionPanel({ workspaceId, plan, active = true, restoreFinished = false }: { workspaceId: string; plan?: ExecutionPlan; active?: boolean; restoreFinished?: boolean }) {
+  return <ScopedExecutionPanel key={`${workspaceId}:${plan?.id ?? (restoreFinished ? "history" : "attention")}`} workspaceId={workspaceId} plan={plan} active={active} restoreFinished={restoreFinished} />;
 }
 
-function ScopedExecutionPanel({ workspaceId, plan, active }: { workspaceId: string; plan?: ExecutionPlan; active: boolean }) {
+function ScopedExecutionPanel({ workspaceId, plan, active, restoreFinished }: { workspaceId: string; plan?: ExecutionPlan; active: boolean; restoreFinished: boolean }) {
   const [result, setResult] = useState<ExecutionResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -29,10 +31,13 @@ function ScopedExecutionPanel({ workspaceId, plan, active }: { workspaceId: stri
     if (!plan) {
       let stored: string | null = null;
       try { stored = localStorage.getItem(storageKey); } catch { /* Storage can be disabled. */ }
-      if (stored) void getExecution(workspaceId, stored, controller.signal).then(value => { if (!controller.signal.aborted) setResult(value); }).catch(() => {});
+      if (stored) void getExecution(workspaceId, stored, controller.signal).then(value => {
+        const needsAttention = value.run.state === "running" || value.run.state === "unknown";
+        if (!controller.signal.aborted && (needsAttention || restoreFinished)) setResult(value);
+      }).catch(() => {});
     }
     return () => { mounted.current = false; controller.abort(); request.current?.abort(); };
-  }, [workspaceId, storageKey, plan, active]);
+  }, [workspaceId, storageKey, plan, active, restoreFinished]);
 
   const execute = async () => {
     if (!active || !plan || busy) return;

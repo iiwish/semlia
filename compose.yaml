@@ -56,6 +56,13 @@ services:
       postgres:
         condition: service_healthy
     restart: "no"
+    # Docker copies image content (including directory ownership) into an empty named volume when a container that
+    # mounts it is created. Compose orders only startup, so server and worker were created concurrently and raced on
+    # that copy ("failed to mkdir .../_data/sql: file exists"). Only migrate, created first, populates the shared
+    # volumes; server and worker mount them with nocopy.
+    volumes:
+      - git-content:/var/lib/semlia/content
+      - artifact-data:/var/lib/semlia/artifacts
 
   server:
     <<: *semlia-app
@@ -78,8 +85,15 @@ services:
     restart: unless-stopped
     stop_grace_period: 15s
     volumes:
-      - artifact-data:/var/lib/semlia/artifacts
-      - git-content:/var/lib/semlia/content:ro
+      - type: volume
+        source: artifact-data
+        target: /var/lib/semlia/artifacts
+        volume: { nocopy: true }
+      - type: volume
+        source: git-content
+        target: /var/lib/semlia/content
+        read_only: true
+        volume: { nocopy: true }
 
   worker:
     <<: *semlia-app
@@ -94,8 +108,14 @@ services:
     restart: unless-stopped
     stop_grace_period: 15s
     volumes:
-      - git-content:/var/lib/semlia/content
-      - artifact-data:/var/lib/semlia/artifacts
+      - type: volume
+        source: git-content
+        target: /var/lib/semlia/content
+        volume: { nocopy: true }
+      - type: volume
+        source: artifact-data
+        target: /var/lib/semlia/artifacts
+        volume: { nocopy: true }
 
 networks:
   backend:

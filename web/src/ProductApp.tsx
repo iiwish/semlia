@@ -39,6 +39,7 @@ import {
   Users,
   X,
 } from "lucide-react";
+import { AssetVocabularySection } from "./AssetVocabularySection";
 import { LoaderCircle } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { components } from "@semlia/sdk-typescript";
@@ -58,7 +59,7 @@ import {
 } from "./routes";
 
 import { apiClient } from "./apiClient";
-import { revisionCacheKey, useCatalogRuntime } from "./catalogRuntime";
+import { inferenceRuleLabel, revisionCacheKey, useCatalogRuntime } from "./catalogRuntime";
 import type { KnowledgeReference, KnowledgeSpec } from "./knowledge";
 import { CatalogDataNotice, CatalogRefreshButton, CreateCatalogAssetButton } from "./CatalogControls";
 import { CapabilityProvider, useCan } from "./authorization";
@@ -205,7 +206,7 @@ function relationPlaneLabel(plane: Asset["relations"][number]["plane"]) {
 }
 
 function relationAssertionLabel(state: Asset["relations"][number]["assertionState"]) {
-  return ({ asserted: "人工声明", inferred: "证据推导", candidate: "候选关系", deprecated: "已废弃" } as const)[state];
+  return ({ asserted: "人工声明", inferred: "推导关系", candidate: "候选关系", deprecated: "已废弃" } as const)[state];
 }
 
 function cardinalityLabel(value: Asset["ontologyContext"]["relationConstraints"][number]["cardinality"]) {
@@ -258,6 +259,13 @@ function revisionVersionLabel(value: string) {
   return match ? `@${match[1]}` : value;
 }
 
+// Real revision ids carry no sequence; never print them as a version. The current revision's own @N is known.
+function publishedVersionLabel(asset: Asset, publishedRevisionId: string, isPublishedCurrent: boolean) {
+  const match = publishedRevisionId.match(/@(\d+)(?:-draft)?$/);
+  if (match) return `@${match[1]}`;
+  return isPublishedCurrent ? revisionVersionLabel(asset.revision) : "";
+}
+
 function knowledgeVersionState(asset: Asset) {
   if (asset.detailLoaded === false || asset.deployment.state === "unknown" || asset.revisionRecord.workflowState === "unknown") {
     return { known: false, hasPublishedVersion: false, hasDraftVersion: false, isPublishedCurrent: false, label: asset.detailLoaded === false ? "发布状态待加载" : "发布状态不可用", tone: "neutral" } as const;
@@ -269,7 +277,7 @@ function knowledgeVersionState(asset: Asset) {
     || asset.revisionRecord.workflowState === "proposed"
     || asset.revisionRecord.workflowState === "in_review"
     || Boolean(publishedRevisionId && publishedRevisionId !== asset.revisionRecord.revisionId);
-  const publishedVersion = publishedRevisionId ? revisionVersionLabel(publishedRevisionId) : "";
+  const publishedVersion = publishedRevisionId ? publishedVersionLabel(asset, publishedRevisionId, isPublishedCurrent) : "";
   const draftVersion = revisionVersionLabel(asset.revision);
   const label = hasPublishedVersion && hasDraftVersion
     ? `正式版 ${publishedVersion || "已发布"} · 有草稿 ${draftVersion}`
@@ -1004,7 +1012,7 @@ function AssetAuthoritativeDefinition({ asset, onStartRevision, onOpenReleaseRec
   const fields = assetContractFields(asset);
   return <AuthorityUnavailable asset={asset} kinds={["definition"]}><div className="asset-authority-detail">
     <section><header><div><h3>{asset.type}定义</h3></div><button className="secondary-button" type="button" onClick={() => onStartRevision({ assetId: asset.id, fieldPath: "definition.boundary", origin: "definition" })}><GitPullRequestArrow size={15} />提出修订</button></header>{asset.knowledgeSpec ? <KnowledgeSpecView type={asset.type} spec={asset.knowledgeSpec} /> : <dl>{fields.map((field) => <div key={field.label}><dt>{field.label}</dt><dd><code>{field.value}</code></dd></div>)}</dl>}</section>
-    {[asset.aliases, asset.includes, asset.excludes, asset.examples].some((items) => items.length > 0) && <section><h3>定义边界</h3><dl>{[["别名", asset.aliases], ["包含", asset.includes], ["排除", asset.excludes], ["示例", asset.examples]].map(([label, values]) => Array.isArray(values) && values.length > 0 ? <div key={String(label)}><dt>{label}</dt><dd>{values.join("；")}</dd></div> : null)}</dl></section>}
+    <AssetVocabularySection asset={asset} onStartRevision={onStartRevision} />
     <AssetRevisionHistory asset={asset} onOpenReleaseRecord={onOpenReleaseRecord} />
   </div></AuthorityUnavailable>;
 }
@@ -1048,7 +1056,7 @@ function AuthorityRecords({ assetId, section, empty }: { assetId: string; sectio
   const pageState = authorityPageStates[`${assetId}:${section.kind}`];
   const canPage = pageableAuthorityKinds.has(section.kind);
   const recordsPage = section.recordsPage;
-  return <div className="asset-authority-records"><div className="asset-authority-record-summary">已加载 <strong>{section.records.length}</strong>{recordsPage ? ` / ${recordsPage.total}` : ""} 项</div>{section.records.length === 0 ? <div className="empty-inline">{empty}</div> : <div className="asset-authority-record-list">{section.records.map((record) => <article key={`${record.kind}:${record.id}`}><header><div><strong>{authorityRecordTitle(record, assetAuthorityKindLabels[section.kind])}</strong></div><StatusBadge tone={record.status === "active" || record.status === "passed" ? "success" : "neutral"}>{{ available: "可用", active: "生效", passed: "通过", failed: "失败", asserted: "已确认", candidate: "待确认", deprecated: "已弃用" }[record.status ?? ""] ?? record.status ?? "未声明状态"}</StatusBadge></header>{record.physicalBinding?.transform && <p>{record.physicalBinding.transform}</p>}{record.modelGrain && <p>{record.modelGrain.grainExpression}</p>}{record.entityKey && <p>{record.entityKey.uniquenessSemantics}</p>}{record.joinContract && <p><span>{cardinalityLabel(record.joinContract.cardinality)}</span> · <span>{record.joinContract.joinExpression === "field_pairs_equal/v1" ? "字段等值连接" : record.joinContract.joinExpression}</span></p>}<details className="production-technical"><summary>记录详情</summary><code>{record.id}</code>{record.label && record.label !== authorityRecordTitle(record, assetAuthorityKindLabels[section.kind]) && <p>{record.label}</p>}<dl className="asset-authority-record-facts"><div><dt>权威来源</dt><dd><code>{record.authority}</code></dd></div><div><dt>版本</dt><dd>{record.version}</dd></div>{record.relatedId && <div><dt>关联对象</dt><dd><code>{record.relatedId}</code></dd></div>}{record.releaseId && <div><dt>Release</dt><dd><code>{record.releaseId}{record.releaseSequence !== undefined ? ` · #${record.releaseSequence}` : ""}</code></dd></div>}{record.relation && <><div><dt>方向 / 谓词</dt><dd><code>{record.relation.direction} · {record.relation.predicate}</code></dd></div><div><dt>关系平面 / 状态</dt><dd><code>{record.relation.plane} · {record.relation.assertionState}</code></dd></div><div><dt>左侧资产</dt><dd><code>{record.relation.subjectAssetId}</code></dd></div><div><dt>右侧资产</dt><dd><code>{record.relation.objectAssetId}</code></dd></div></>}{record.physicalBinding && <><div><dt>数据集</dt><dd><code>{record.physicalBinding.datasetId}</code></dd></div>{record.physicalBinding.fieldId && <div><dt>字段</dt><dd><code>{record.physicalBinding.fieldId}</code></dd></div>}</>}{record.modelGrain && <><div><dt>粒度字段</dt><dd><code>{record.modelGrain.grainFieldRefs.join(" · ") || "空集合"}</code></dd></div>{record.modelGrain.documentedBy && <div><dt>记录证据</dt><dd><code>{record.modelGrain.documentedBy}</code></dd></div>}</>}{record.entityKey && <><div><dt>实体键字段</dt><dd><code>{record.entityKey.keyFieldRefs.join(" · ") || "空集合"}</code></dd></div></>}{record.joinContract && <><div><dt>方向 / Join 类型</dt><dd><code>{record.joinContract.direction} · {record.joinContract.joinType}</code></dd></div><div><dt>左侧数据集 / 字段</dt><dd><code>{record.joinContract.leftDatasetId} · {record.joinContract.leftFieldRefs.join(" · ") || "空集合"}</code></dd></div><div><dt>右侧数据集 / 字段</dt><dd><code>{record.joinContract.rightDatasetId} · {record.joinContract.rightFieldRefs.join(" · ") || "空集合"}</code></dd></div><div><dt>基数</dt><dd><code>{record.joinContract.cardinality}</code></dd></div>{record.joinContract.joinExpression === "field_pairs_equal/v1" && <div><dt>表达式标识</dt><dd><code>{record.joinContract.joinExpression}</code></dd></div>}</>}{record.lineage && <><div><dt>方向 / 边类型</dt><dd><code>{record.lineage.direction} · {record.lineage.edgeKind}</code></dd></div><div><dt>上游数据集</dt><dd><code>{record.lineage.upstreamDatasetId}</code></dd></div><div><dt>下游数据集</dt><dd><code>{record.lineage.downstreamDatasetId}</code></dd></div><div><dt>来源修订</dt><dd><code>{record.lineage.sourceRevisionId}</code></dd></div>{record.lineage.codeArtifactId && <div><dt>代码工件</dt><dd><code>{record.lineage.codeArtifactId}</code></dd></div>}<div><dt>置信度</dt><dd>{record.lineage.confidence}</dd></div></>}{record.consumerBinding && <><div><dt>消费者 / 模式</dt><dd><code>{record.consumerBinding.consumerId} · {record.consumerBinding.mode}</code></dd></div><div><dt>生效 Release</dt><dd><code>{record.consumerBinding.effectiveReleaseId}</code></dd></div><div><dt>环境 / 用途</dt><dd>{record.consumerBinding.environment} · {record.consumerBinding.purpose}</dd></div><div><dt>状态</dt><dd><code>{record.consumerBinding.status}</code></dd></div><div><dt>兼容约束</dt><dd><code>{JSON.stringify(record.consumerBinding.compatibilityConstraint)}</code></dd></div>{record.consumerBinding.expiresAt && <div><dt>到期时间</dt><dd>{record.consumerBinding.expiresAt}</dd></div>}</>}</dl>{!record.releaseId && <small>服务端未返回 release 基准</small>}</details></article>)}</div>}{canPage && recordsPage?.nextCursor && <div className="catalog-pagination"><button type="button" disabled={pageState?.loadingMore} onClick={() => void loadMoreAuthorityRecords(assetId, section.kind as "relations" | "physical_bindings" | "join_contracts" | "validation" | "lineage" | "consumer_impact")}>{pageState?.loadingMore ? "正在读取…" : "加载更多权威记录"}</button>{pageState?.appendError && <span role="alert">{pageState.appendError}</span>}</div>}{canPage && !recordsPage?.nextCursor && pageState?.appendError && <div className="catalog-pagination"><span role="alert">{pageState.appendError}</span></div>}</div>;
+  return <div className="asset-authority-records"><div className="asset-authority-record-summary">已加载 <strong>{section.records.length}</strong>{recordsPage ? ` / ${recordsPage.total}` : ""} 项</div>{section.records.length === 0 ? <div className="empty-inline">{empty}</div> : <div className="asset-authority-record-list">{section.records.map((record) => <article key={`${record.kind}:${record.id}`}><header><div><strong>{record.relation?.counterpartTitle ? record.relation.direction === "outgoing" ? `出向 · 当前资产 ${relationLabel(record.relation.predicate)} ${record.relation.counterpartTitle}` : `入向 · ${record.relation.counterpartTitle} ${relationLabel(record.relation.predicate)} 当前资产` : authorityRecordTitle(record, assetAuthorityKindLabels[section.kind])}</strong></div><StatusBadge tone={record.status === "active" || record.status === "passed" ? "success" : "neutral"}>{{ available: "可用", active: "生效", passed: "通过", failed: "失败", asserted: "已确认", inferred: "推导关系", candidate: "待确认", deprecated: "已弃用" }[record.status ?? ""] ?? record.status ?? "未声明状态"}</StatusBadge></header>{record.relation?.inferenceRule && <p>{inferenceRuleLabel(record.relation.inferenceRule)}</p>}{record.physicalBinding?.transform && <p>{record.physicalBinding.transform}</p>}{record.modelGrain && <p>{record.modelGrain.grainExpression}</p>}{record.entityKey && <p>{record.entityKey.uniquenessSemantics}</p>}{record.joinContract && <p><span>{cardinalityLabel(record.joinContract.cardinality)}</span> · <span>{record.joinContract.joinExpression === "field_pairs_equal/v1" ? "字段等值连接" : record.joinContract.joinExpression}</span></p>}<details className="production-technical"><summary>记录详情</summary><code>{record.id}</code>{record.label && record.label !== authorityRecordTitle(record, assetAuthorityKindLabels[section.kind]) && <p>{record.label}</p>}<dl className="asset-authority-record-facts"><div><dt>权威来源</dt><dd><code>{record.authority}</code></dd></div><div><dt>版本</dt><dd>{record.version}</dd></div>{record.relatedId && <div><dt>关联对象</dt><dd><code>{record.relatedId}</code></dd></div>}{record.releaseId && <div><dt>Release</dt><dd><code>{record.releaseId}{record.releaseSequence !== undefined ? ` · #${record.releaseSequence}` : ""}</code></dd></div>}{record.relation && <><div><dt>方向 / 谓词</dt><dd><code>{record.relation.direction} · {record.relation.predicate}</code></dd></div><div><dt>关系平面 / 状态</dt><dd><code>{record.relation.plane} · {record.relation.assertionState}</code></dd></div><div><dt>左侧资产</dt><dd><code>{record.relation.subjectAssetId}</code></dd></div><div><dt>右侧资产</dt><dd><code>{record.relation.objectAssetId}</code></dd></div></>}{record.physicalBinding && <><div><dt>数据集</dt><dd><code>{record.physicalBinding.datasetId}</code></dd></div>{record.physicalBinding.fieldId && <div><dt>字段</dt><dd><code>{record.physicalBinding.fieldId}</code></dd></div>}</>}{record.modelGrain && <><div><dt>粒度字段</dt><dd><code>{record.modelGrain.grainFieldRefs.join(" · ") || "空集合"}</code></dd></div>{record.modelGrain.documentedBy && <div><dt>记录证据</dt><dd><code>{record.modelGrain.documentedBy}</code></dd></div>}</>}{record.entityKey && <><div><dt>实体键字段</dt><dd><code>{record.entityKey.keyFieldRefs.join(" · ") || "空集合"}</code></dd></div></>}{record.joinContract && <><div><dt>方向 / Join 类型</dt><dd><code>{record.joinContract.direction} · {record.joinContract.joinType}</code></dd></div><div><dt>左侧数据集 / 字段</dt><dd><code>{record.joinContract.leftDatasetId} · {record.joinContract.leftFieldRefs.join(" · ") || "空集合"}</code></dd></div><div><dt>右侧数据集 / 字段</dt><dd><code>{record.joinContract.rightDatasetId} · {record.joinContract.rightFieldRefs.join(" · ") || "空集合"}</code></dd></div><div><dt>基数</dt><dd><code>{record.joinContract.cardinality}</code></dd></div>{record.joinContract.joinExpression === "field_pairs_equal/v1" && <div><dt>表达式标识</dt><dd><code>{record.joinContract.joinExpression}</code></dd></div>}</>}{record.lineage && <><div><dt>方向 / 边类型</dt><dd><code>{record.lineage.direction} · {record.lineage.edgeKind}</code></dd></div><div><dt>上游数据集</dt><dd><code>{record.lineage.upstreamDatasetId}</code></dd></div><div><dt>下游数据集</dt><dd><code>{record.lineage.downstreamDatasetId}</code></dd></div><div><dt>来源修订</dt><dd><code>{record.lineage.sourceRevisionId}</code></dd></div>{record.lineage.codeArtifactId && <div><dt>代码工件</dt><dd><code>{record.lineage.codeArtifactId}</code></dd></div>}<div><dt>置信度</dt><dd>{record.lineage.confidence}</dd></div></>}{record.consumerBinding && <><div><dt>消费者 / 模式</dt><dd><code>{record.consumerBinding.consumerId} · {record.consumerBinding.mode}</code></dd></div><div><dt>生效 Release</dt><dd><code>{record.consumerBinding.effectiveReleaseId}</code></dd></div><div><dt>环境 / 用途</dt><dd>{record.consumerBinding.environment} · {record.consumerBinding.purpose}</dd></div><div><dt>状态</dt><dd><code>{record.consumerBinding.status}</code></dd></div><div><dt>兼容约束</dt><dd><code>{JSON.stringify(record.consumerBinding.compatibilityConstraint)}</code></dd></div>{record.consumerBinding.expiresAt && <div><dt>到期时间</dt><dd>{record.consumerBinding.expiresAt}</dd></div>}</>}</dl>{!record.releaseId && <small>服务端未返回 release 基准</small>}</details></article>)}</div>}{canPage && recordsPage?.nextCursor && <div className="catalog-pagination"><button type="button" disabled={pageState?.loadingMore} onClick={() => void loadMoreAuthorityRecords(assetId, section.kind as "relations" | "physical_bindings" | "join_contracts" | "validation" | "lineage" | "consumer_impact")}>{pageState?.loadingMore ? "正在读取…" : "加载更多权威记录"}</button>{pageState?.appendError && <span role="alert">{pageState.appendError}</span>}</div>}{canPage && !recordsPage?.nextCursor && pageState?.appendError && <div className="catalog-pagination"><span role="alert">{pageState.appendError}</span></div>}</div>;
 }
 
 function AssetAuthoritativeTrust({ asset }: { asset: Asset }) {
@@ -1253,6 +1261,7 @@ const knowledgeRevisionLaunchTargets = [
   { label: "口径包含", fieldPath: "definition.includes" },
   { label: "明确排除", fieldPath: "definition.excludes" },
   { label: "消歧规则", fieldPath: "wiki.disambiguation" },
+  { label: "业务词汇", fieldPath: "vocabulary" },
 ] as const;
 
 function KnowledgeRevisionLauncher({ asset, active, onStart }: { asset: Asset; active: boolean; onStart: (request: KnowledgeRevisionRequest) => void }) {
@@ -1309,6 +1318,18 @@ function KnowledgeRevisionLauncher({ asset, active, onStart }: { asset: Asset; a
   );
 }
 
+const CATALOG_DETAIL_CONCURRENCY = 4;
+
+function pendingDetailLabel(state: "idle" | "loading" | "ready" | "error" | undefined, subject: string) {
+  return state === "error" ? `${subject}加载失败` : `${subject}加载中`;
+}
+
+function catalogVersionNotice(settled: boolean, loaded: number, total: number, failed: number) {
+  if (failed > 0) return `${failed} 个资产的发布状态读取失败，版本筛选暂不可用，当前显示全部版本；打开该资产可重试。`;
+  if (!settled) return `正在读取发布状态（${loaded}/${total}），完成后可按版本筛选，当前显示全部版本。`;
+  return "版本筛选暂不可用，当前显示全部版本。";
+}
+
 function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, requestedCatalogType, requestedVersionFilter, requestedRevision, focusSearchRequestEpoch, detailBackRequestEpoch, onSelect, onDetailChange, onNotify, onRevisionSubmit, onStartAIGeneration, onOpenReleaseHistory, onOpenReleaseRecord }: { selectedId: string; domainFilter: string; requestedTab: AssetTab; requestedDetail: boolean; requestedCatalogType: CatalogObjectType | "全部"; requestedVersionFilter: KnowledgeVersionFilter; requestedRevision: KnowledgeRevisionRequest | null; focusSearchRequestEpoch: number; detailBackRequestEpoch: number; onSelect: (id: string) => void; onDetailChange: (open: boolean) => void; onNotify: (message: string) => void; onRevisionSubmit: (submission: KnowledgeRevisionSubmission) => Promise<void>; onStartAIGeneration: (assetId: string, fieldPath: string) => void; onOpenReleaseHistory: () => void; onOpenReleaseRecord: (releaseId?: string) => void }) {
   const { assets, catalogAssetIds, detailStates, ensureAsset, loading: catalogLoading, error: catalogError, setQuery: setCatalogQuery, total: catalogTotal, nextCursor: catalogNextCursor, loadingMore: catalogLoadingMore, appendError: catalogAppendError, loadMoreAssets } = useCatalogRuntime();
   const catalogAssets = useMemo(() => catalogAssetIds.flatMap((assetId) => {
@@ -1324,6 +1345,9 @@ function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, r
     && (catalogTotal === undefined || catalogAssets.length >= catalogTotal)
     && catalogAssets.every((asset) => knowledgeVersionState(asset).known);
   const effectiveVersionFilter = versionsComplete ? versionFilter : "全部";
+  const detailsSettled = catalogAssets.every((asset) => asset.detailLoaded !== false);
+  const detailsLoadedCount = catalogAssets.filter((asset) => asset.detailLoaded !== false).length;
+  const detailsFailedCount = catalogAssets.filter((asset) => asset.detailLoaded === false && detailStates[asset.id]?.state === "error").length;
   const [domain, setDomain] = useState(domainFilter);
   const [sort, setSort] = useState<"attention" | "name" | "type">("attention");
   const [tab, setTab] = useState<AssetTab>(requestedTab);
@@ -1360,6 +1384,8 @@ function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, r
     return groups.sort((left, right) => {
       if (sort === "name") return left.asset.name.localeCompare(right.asset.name, "zh-CN");
       if (sort === "type") return left.asset.type.localeCompare(right.asset.type, "zh-CN") || left.asset.name.localeCompare(right.asset.name, "zh-CN");
+      // Unloaded rows have no authoritative status yet; keep a stable name order instead of reshuffling per response.
+      if (!detailsSettled) return left.asset.name.localeCompare(right.asset.name, "zh-CN");
       const statusOrder: Record<Asset["status"], number> = { "需关注": 0, "待确认": 1, "草稿": 2, "已发布": 3 };
       const statusDelta = statusOrder[left.asset.status] - statusOrder[right.asset.status];
       if (statusDelta !== 0) return statusDelta;
@@ -1367,7 +1393,7 @@ function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, r
       if (readinessDelta !== 0) return readinessDelta;
       return left.asset.name.localeCompare(right.asset.name, "zh-CN");
     });
-  }, [catalogAssets, catalogKnowledgeItems, domain, effectiveVersionFilter, isGovernedObjectType, normalizedQuery, sort, type]);
+  }, [catalogAssets, catalogKnowledgeItems, detailsSettled, domain, effectiveVersionFilter, isGovernedObjectType, normalizedQuery, sort, type]);
   const visibleChildCount = catalogGroups.reduce((total, group) => total + group.visibleChildren.length, 0);
   const selected = assets.find((asset) => asset.id === selectedId) ?? (requestedDetail ? undefined : assets[0]);
   const focusedObject = focusedObjectId ? detailKnowledgeItems.find((item) => item.key === focusedObjectId) : undefined;
@@ -1431,6 +1457,20 @@ function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, r
     if (activeMode === "detail" && selected?.detailLoaded === false && (!detailStates[selected.id] || detailStates[selected.id]?.state === "idle")) void ensureAsset(selected.id);
     if (activeMode === "detail" && !selected && selectedId && (!detailStates[selectedId] || detailStates[selectedId]?.state === "idle")) void ensureAsset(selectedId);
   }, [activeMode, detailStates, ensureAsset, selected, selectedId]);
+  // The list DTO carries no authoritative publication, ownership or readiness, so rows read their own detail.
+  // Requests run in list order with a small window; failures are shown per row and retried only by the user.
+  useEffect(() => {
+    if (activeMode !== "catalog" || catalogLoading || catalogError) return;
+    let inFlight = catalogAssets.filter((asset) => detailStates[asset.id]?.state === "loading").length;
+    for (const asset of catalogAssets) {
+      if (inFlight >= CATALOG_DETAIL_CONCURRENCY) break;
+      if (asset.detailLoaded !== false) continue;
+      const state = detailStates[asset.id]?.state;
+      if (state === "loading" || state === "error") continue;
+      inFlight += 1;
+      void ensureAsset(asset.id);
+    }
+  }, [activeMode, catalogAssets, catalogError, catalogLoading, detailStates, ensureAsset]);
 
   if (activeMode === "detail" && selected) {
     const openAssetTab = (nextTab: AssetTab) => { setTab(nextTab); setFocusedObjectId(undefined); scrollWorkspaceTo(0); };
@@ -1497,7 +1537,7 @@ function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, r
           <button className="catalog-clear-button" type="button" aria-label="清除全部筛选" title="清除全部筛选" disabled={!hasFilters} onClick={() => { setQuery(""); setType("全部"); setVersionFilter("全部"); setDomain("全部"); }}><X size={15} /></button>
           <CreateCatalogAssetButton onCreated={(assetId) => { onSelect(assetId); void ensureAsset(assetId); onDetailChange(true); setMode("detail"); }} />
         </div>
-        {!versionsComplete && <p id="catalog-version-unavailable" className="catalog-version-notice" role="status">版本筛选暂不可用，当前显示全部版本。</p>}
+        {!versionsComplete && <p id="catalog-version-unavailable" className="catalog-version-notice" role="status">{catalogVersionNotice(detailsSettled, detailsLoadedCount, catalogAssets.length, detailsFailedCount)}</p>}
         <div className="catalog-summary">
           <span>显示 <strong>{catalogGroups.length}</strong> · 已加载 {catalogAssetIds.length}{catalogTotal !== undefined ? ` / ${catalogTotal}` : ""} 个语义资产{isGovernedObjectType && <> · {visibleChildCount} 个{type}</>}</span>
           <CatalogRefreshButton />
@@ -1517,10 +1557,10 @@ function AssetsView({ selectedId, domainFilter, requestedTab, requestedDetail, r
                   <button className="asset-row-open" type="button" aria-label={`打开语义资产 ${asset.name}`} onClick={() => openDetail(assetItem)}>
                     <span className="asset-row-identity"><AssetTypeMark type={asset.type} /><span className="asset-row-copy"><strong>{asset.name}</strong><code>{asset.key}</code></span></span>
                     <span className="asset-row-taxonomy"><strong>{asset.type}</strong><small>{asset.domain}</small></span>
-                    <span className="asset-row-scope">{asset.detailLoaded === false ? <strong>关系与实现待加载</strong> : <><strong>{asset.relations.length} 关系 · {asset.bindings.length} 绑定</strong><small>{asset.joinContracts.length} 个 JoinContract</small></>}</span>
-                    <span className="asset-row-owner">{asset.detailLoaded === false ? <strong>责任信息待加载</strong> : <><strong>{asset.owner}</strong><small>{asset.maintainer}</small></>}</span>
-                    <span className="asset-row-readiness">{readiness.known ? <><span><b>{readiness.passed}/{readiness.total}</b><small>{readiness.warnings > 0 ? `${readiness.warnings} 项需关注` : "门禁通过"}</small></span><progress max={readiness.total} value={readiness.passed} aria-label={`${asset.name}就绪度 ${readiness.passed}/${readiness.total}`} /></> : <span><b>{asset.detailLoaded === false ? "就绪度待加载" : "就绪度不可用"}</b></span>}</span>
-                    <StatusBadge tone={versionState.tone}>{versionState.label}</StatusBadge>
+                    <span className="asset-row-scope">{asset.detailLoaded === false ? <strong>{pendingDetailLabel(detailStates[asset.id]?.state, "关系与实现")}</strong> : <><strong>{asset.relations.length} 关系 · {asset.bindings.length} 绑定</strong><small>{asset.joinContracts.length} 个 JoinContract</small></>}</span>
+                    <span className="asset-row-owner">{asset.detailLoaded === false ? <strong>{pendingDetailLabel(detailStates[asset.id]?.state, "责任信息")}</strong> : <><strong>{asset.owner}</strong><small>{asset.maintainer}</small></>}</span>
+                    <span className="asset-row-readiness">{readiness.known ? <><span><b>{readiness.passed}/{readiness.total}</b><small>{readiness.warnings > 0 ? `${readiness.warnings} 项需关注` : "门禁通过"}</small></span><progress max={readiness.total} value={readiness.passed} aria-label={`${asset.name}就绪度 ${readiness.passed}/${readiness.total}`} /></> : <span><b>{asset.detailLoaded === false ? pendingDetailLabel(detailStates[asset.id]?.state, "就绪度") : "就绪度不可用"}</b></span>}</span>
+                    <StatusBadge tone={versionState.tone}>{asset.detailLoaded === false ? pendingDetailLabel(detailStates[asset.id]?.state, "发布状态") : versionState.label}</StatusBadge>
                     <ChevronRight className="asset-row-chevron" size={16} />
                   </button>
                 </div>

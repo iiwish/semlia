@@ -214,7 +214,7 @@ func InspectProductionContent(kind string, content json.RawMessage) (ProductionC
 	var object map[string]any
 	switch kind {
 	case TargetKindSemanticAsset:
-		object, err = productionObject(value, "address assetType displayName definition scope ownerPrincipalId", "spec")
+		object, err = productionObject(value, "address assetType displayName definition scope ownerPrincipalId", "spec "+semantic.VocabularyFields)
 		if err != nil {
 			return refs, err
 		}
@@ -240,7 +240,11 @@ func InspectProductionContent(kind string, content json.RawMessage) (ProductionC
 		if err != nil {
 			return refs, fmt.Errorf("%w: %s", ErrInvalidArgument, err)
 		}
-		for _, ref := range spec.References() {
+		vocabulary, err := semantic.ParseVocabulary(content)
+		if err != nil {
+			return refs, fmt.Errorf("%w: %s", ErrInvalidArgument, err)
+		}
+		for _, ref := range append(spec.References(), vocabulary.References()...) {
 			refs.Published = append(refs.Published, ProductionPublishedReference{Kind: TargetKindSemanticAsset, TargetID: ref.AssetID, ReleaseID: ref.ReleaseID, RevisionID: ref.RevisionID})
 		}
 		if spec.DatasetRef != nil {
@@ -425,7 +429,7 @@ func parseProductionPublishedReference(value any) (ProductionPublishedReference,
 
 func validateProductionChangePaths(target TargetDeclaration) error {
 	allowed := map[string]string{
-		TargetKindSemanticAsset:   "displayName definition scope ownerPrincipalId spec",
+		TargetKindSemanticAsset:   "displayName definition scope ownerPrincipalId spec " + semantic.VocabularyFields,
 		TargetKindPhysicalBinding: "asset dataset field transform",
 		TargetKindModelGrain:      "asset expression fields",
 		TargetKindEntityKey:       "asset fields uniqueness",

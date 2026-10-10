@@ -6,10 +6,11 @@ import { root as ownedRoot, repo as repository, status as runtimeStatus } from '
 import { readState, writePrivate, safeFailureMessage, rejectLinks } from './v1/core.mjs';
 import { counters as runtimeCounters } from './v1/model.mjs';
 import { governanceHeadProof as runtimeHeadProof } from './v1/correction.mjs';
+import { vocabularyHeadProof as runtimeVocabularyHeadProof } from './v1/vocabulary.mjs';
 import { browserPlan, browserEnvironment, safeBrowserFailure, selectBrowserRuntime, assertBrowserRuntimeIdentity, browserChildOutcome, privateBrowserError } from './v1-browser-core.mjs';
 import { unlinkOwned } from '../demo/runtime.mjs';
 
-export async function runBrowserAcceptance(command, { root = ownedRoot, repo = repository, status = runtimeStatus, counters = runtimeCounters, governanceHeadProof = runtimeHeadProof, spawnBrowser = spawnSync, print = console.log, printError = console.error } = {}) {
+export async function runBrowserAcceptance(command, { root = ownedRoot, repo = repository, status = runtimeStatus, counters = runtimeCounters, governanceHeadProof = runtimeHeadProof, vocabularyHeadProof = runtimeVocabularyHeadProof, spawnBrowser = spawnSync, print = console.log, printError = console.error } = {}) {
   process.umask(0o077);
   let exitCode = 0;
   let lockFd, lockIdentity, saveRun;
@@ -63,7 +64,7 @@ export async function runBrowserAcceptance(command, { root = ownedRoot, repo = r
     selectBrowserRuntime(state, runtimeAfter, plan.candidate); assertBrowserRuntimeIdentity(runtimeBefore, runtimeAfter);
     stage = 'after-counters'; const after = counters(root);
     saveRun('counters-after.json', after);
-    stage = 'head-proof'; const head = await governanceHeadProof(root);
+    stage = 'head-proof'; const head = plan.vocabularyHead ? await vocabularyHeadProof(root) : await governanceHeadProof(root);
     saveRun('head-proof.json', head);
     stage = 'receipt';
     const receipt = { command, status: result.status, child, runtimeBefore, runtimeAfter, before, after, modelSteps: after.modelSteps - before.modelSteps, executions: after.executions - before.executions, correctBaselineContent: head.correctBaselineContent, currentRelease: head.currentRelease, logPath, checkedAt: new Date().toISOString() };

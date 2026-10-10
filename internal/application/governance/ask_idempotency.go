@@ -13,8 +13,6 @@ import (
 	"github.com/iiwish/semlia/pkg/identity"
 )
 
-const askClarification = "请补充要查询的指标、维度、时间范围或比较对象。"
-
 type AskStateError struct{ Code string }
 
 func (err *AskStateError) Error() string { return err.Code }
@@ -26,8 +24,10 @@ type AskFinishCommand struct {
 	ErrorCode         string
 	OutputDigest      string
 	ModelOutputDigest string
-	CostMicros        int64
-	FinishedAt        time.Time
+	// ServerTool names the server step that settled the request without a model call, such as disambiguation.
+	ServerTool string
+	CostMicros int64
+	FinishedAt time.Time
 }
 
 type AskRequestRepository interface {
@@ -59,7 +59,7 @@ func (service *AskService) replay(ctx context.Context, request AskRequest, recor
 	if record.Status != "succeeded" && record.Status != "clarification" {
 		return AskResult{}, askTerminalError(record.ErrorCode)
 	}
-	knowledge, err := service.resolver.AskKnowledge(ctx, distributionapp.ResolveRequest{WorkspaceID: request.WorkspaceID, PrincipalRef: request.PrincipalRef, TraceID: request.TraceID, Input: distributiondomain.SemanticQueryInput{Context: request.Context}})
+	knowledge, err := service.resolver.AskKnowledge(ctx, distributionapp.ResolveRequest{WorkspaceID: request.WorkspaceID, PrincipalRef: request.PrincipalRef, TraceID: request.TraceID, Input: distributiondomain.SemanticQueryInput{Context: request.Context}}, request.Question)
 	if err != nil {
 		return AskResult{}, err
 	}
@@ -70,7 +70,7 @@ func (service *AskService) replay(ctx context.Context, request AskRequest, recor
 	if err != nil {
 		return AskResult{}, err
 	}
-	result := AskResult{Run: run, Interpretation: AskInterpretation{Schema: AskInterpretationSchemaID, Outcome: "clarification", Clarification: askClarification}}
+	result := AskResult{Run: run, Interpretation: AskInterpretation{Schema: AskInterpretationSchemaID, Outcome: "clarification", Clarification: askServerClarification(knowledge)}, Matches: knowledge.Matches}
 	if record.Status == "clarification" {
 		return result, nil
 	}
@@ -104,9 +104,14 @@ func askTerminalError(code string) error {
 }
 
 func (service *AskService) settle(ctx context.Context, claim domain.AskRequestRecord, status, code, outputDigest, modelDigest string, queryID *identity.SemanticQueryID, response llm.CompleteResponse) (domain.AgentRun, error) {
+	return service.finish(ctx, AskFinishCommand{Request: claim, Status: status, ErrorCode: code, OutputDigest: outputDigest, ModelOutputDigest: modelDigest, QueryID: queryID, CostMicros: response.Usage.PromptTokens + response.Usage.CompletionTokens})
+}
+
+func (service *AskService) finish(ctx context.Context, command AskFinishCommand) (domain.AgentRun, error) {
 	finishCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
-	return service.repository.FinishAskRequest(finishCtx, AskFinishCommand{Request: claim, Status: status, ErrorCode: code, OutputDigest: outputDigest, ModelOutputDigest: modelDigest, QueryID: queryID, CostMicros: response.Usage.PromptTokens + response.Usage.CompletionTokens, FinishedAt: service.runs.clock.Now().UTC()})
+	command.FinishedAt = service.runs.clock.Now().UTC()
+	return service.repository.FinishAskRequest(finishCtx, command)
 }
 
 func (service *AskService) failure(ctx context.Context, claim domain.AskRequestRecord, original error, code, modelDigest string, response llm.CompleteResponse) (AskResult, error) {

@@ -245,6 +245,9 @@ func (store *Store) loadReleaseSnapshot(ctx context.Context, header releaseHeade
 			Address: row.Namespace + "." + row.Key, AssetType: semantic.AssetType(row.AssetType), Name: name,
 			Aliases: aliases, Content: cloneJSON(row.Content), ContentDigest: row.ContentDigest, Position: int(row.Position)})
 	}
+	if err := store.attachCompatibleRevisions(ctx, header.workspaceID, snapshot.Assets); err != nil {
+		return domain.ReleaseSnapshot{}, err
+	}
 	objectRows, err := store.queries.ListDistributionReleaseObjectSnapshots(ctx, dbgen.ListDistributionReleaseObjectSnapshotsParams{
 		WorkspaceID: header.workspaceID, ReleaseID: header.id,
 	})
@@ -803,12 +806,17 @@ func appendReleasedObject(snapshot *domain.ReleaseSnapshot, row dbgen.ListDistri
 
 func releasedAssetNames(address string, content []byte) (string, []string) {
 	var payload struct {
-		Name    string   `json:"name"`
-		Title   string   `json:"title"`
-		Aliases []string `json:"aliases"`
+		DisplayName string   `json:"displayName"`
+		Name        string   `json:"name"`
+		Title       string   `json:"title"`
+		Aliases     []string `json:"aliases"`
 	}
 	_ = json.Unmarshal(content, &payload)
-	name := strings.TrimSpace(payload.Name)
+	// Five-type knowledge names itself with displayName; older content used name or title.
+	name := strings.TrimSpace(payload.DisplayName)
+	if name == "" {
+		name = strings.TrimSpace(payload.Name)
+	}
 	if name == "" {
 		name = strings.TrimSpace(payload.Title)
 	}
@@ -894,4 +902,54 @@ func typedField(value string) (identity.PhysicalFieldID, error) {
 		return identity.PhysicalFieldID{}, err
 	}
 	return identity.ParsePhysicalFieldID(id.String())
+}
+
+// attachCompatibleRevisions records, for each released asset, the other revisions whose computational core equals
+// the released one, so references pinned before a vocabulary-only change still resolve.
+func (store *Store) attachCompatibleRevisions(ctx context.Context, workspace pgtype.UUID, assets []domain.ReleasedAsset) error {
+	if len(assets) == 0 {
+		return nil
+	}
+	ids := make([]pgtype.UUID, 0, len(assets))
+	index := map[identity.AssetID]int{}
+	cores := make([]string, len(assets))
+	for i, asset := range assets {
+		id, err := uuidValue(asset.AssetID)
+		if err != nil {
+			return err
+		}
+		ids = append(ids, id)
+		index[asset.AssetID] = i
+		if cores[i], err = semantic.ComputationalCore(asset.Content); err != nil {
+			cores[i] = ""
+		}
+	}
+	rows, err := store.pool.Query(ctx, `SELECT asset_id,id,content FROM asset_revisions WHERE workspace_id=$1 AND asset_id=ANY($2) ORDER BY asset_id,sequence`, workspace, ids)
+	if err != nil {
+		return distributionRepositoryError("list compatible revisions", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var assetUUID, revisionUUID pgtype.UUID
+		var content []byte
+		if err := rows.Scan(&assetUUID, &revisionUUID, &content); err != nil {
+			return distributionRepositoryError("scan compatible revision", err)
+		}
+		asset, err := identity.AssetIDFromUUIDBytes(assetUUID.Bytes)
+		if err != nil {
+			return err
+		}
+		revision, err := identity.RevisionIDFromUUIDBytes(revisionUUID.Bytes)
+		if err != nil {
+			return err
+		}
+		i, ok := index[asset]
+		if !ok || cores[i] == "" || revision == assets[i].RevisionID {
+			continue
+		}
+		if core, err := semantic.ComputationalCore(content); err == nil && core == cores[i] {
+			assets[i].CompatibleRevisionIDs = append(assets[i].CompatibleRevisionIDs, revision)
+		}
+	}
+	return rows.Err()
 }

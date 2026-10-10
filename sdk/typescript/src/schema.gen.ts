@@ -3117,6 +3117,10 @@ export interface components {
             assertionState: components["schemas"]["RelationAssertionState"];
             subjectAssetId: components["schemas"]["SemanticAssetId"];
             objectAssetId: components["schemas"]["SemanticAssetId"];
+            /** @description Display name of the asset at the other end, when the server resolved it. */
+            counterpartTitle?: string;
+            /** @description Present on inferred relations. "spec_reference:" followed by the comma separated spec fields the relation was read from. Inferred relations are a projection of published specs and are not stored assertions. */
+            inferenceRule?: string;
         };
         CatalogPhysicalBindingAuthority: {
             assetId: components["schemas"]["SemanticAssetId"];
@@ -4242,6 +4246,21 @@ export interface components {
             interpretation: components["schemas"]["AskInterpretation"];
             resolution?: components["schemas"]["SemanticResolution"];
             definitions: components["schemas"]["ReleasedDefinition"][];
+            /** @description Question phrases bound to governed wording of knowledge the caller may read. Unsettled shared words are omitted; they are clarified instead. */
+            vocabularyMatches?: components["schemas"]["AskVocabularyMatch"][];
+        };
+        AskVocabularyMatch: {
+            /** @description The normalized question phrase. */
+            text: string;
+            assetId: components["schemas"]["ResourceId"];
+            name: string;
+            assetType: components["schemas"]["SemanticAssetType"];
+            memberId?: string;
+            memberName?: string;
+            /** @description Canonical category value the phrase maps to. */
+            value?: string;
+            /** @enum {string} */
+            via: "name" | "alias" | "member" | "member_alias" | "value" | "value_alias";
         };
         /** Format: typeid */
         ConsumerId: string;
@@ -4590,6 +4609,32 @@ export interface components {
             scope: string | null;
             ownerPrincipalId: components["schemas"]["ResourceId"];
             spec?: components["schemas"]["KnowledgeSpec"];
+            aliases?: components["schemas"]["VocabularyTerms"];
+            includes?: components["schemas"]["VocabularyBoundary"];
+            excludes?: components["schemas"]["VocabularyBoundary"];
+            examples?: components["schemas"]["VocabularyBoundary"];
+            /** @description Neighbouring assets that people easily mistake for this one, each with how to tell them apart. Declaring either side accepts a shared alias. */
+            confusableWith?: components["schemas"]["VocabularyConfusion"][];
+            /** @description Typical questions this asset answers. Expected references are what retrieval must surface. */
+            sampleQuestions?: components["schemas"]["VocabularySampleQuestion"][];
+        };
+        /** @description Other words people use for the asset. Within one release a term names at most one asset of a type unless one side declares the other confusable. */
+        VocabularyTerms: string[];
+        VocabularyBoundary: string[];
+        VocabularyConfusion: {
+            ref: components["schemas"]["KnowledgeReference"];
+            distinction: string;
+        };
+        VocabularySampleQuestion: {
+            question: string;
+            expects?: {
+                refs: components["schemas"]["KnowledgeReference"][];
+            };
+        };
+        KnowledgeValueAlias: {
+            /** @description Canonical category value as stored in the data. */
+            value: string;
+            aliases: string[];
         };
         /** @description Type-specific knowledge contract. Drafts may be incomplete. Fields are restricted by assetType and publication validates completeness. */
         KnowledgeSpec: {
@@ -4649,6 +4694,9 @@ export interface components {
             /** @enum {string} */
             historyPolicy?: "stable" | "current_value" | "event_time";
             sourceFieldRef?: components["schemas"]["PhysicalReference"];
+            aliases?: string[];
+            /** @description Business wording for canonical category values; string business object attributes only. */
+            valueAliases?: components["schemas"]["KnowledgeValueAlias"][];
         };
         KnowledgeExpression: {
             /** @enum {string} */

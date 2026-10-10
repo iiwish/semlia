@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/iiwish/semlia/internal/domain/distribution"
 	"github.com/iiwish/semlia/internal/domain/governance"
 	"github.com/iiwish/semlia/internal/domain/semantic"
 	"github.com/iiwish/semlia/pkg/identity"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"strings"
 )
 
@@ -24,6 +26,18 @@ func validateKnowledgePublication(ctx context.Context, tx pgx.Tx, workspace iden
 	spec, err := semantic.ParseKnowledgeSpec(kind, content.Spec, true)
 	if err != nil {
 		return fmt.Errorf("%w: %s", governance.ErrInvalidArgument, err)
+	}
+	vocabulary, err := semantic.ParseVocabulary(raw)
+	if err != nil {
+		return fmt.Errorf("%w: %s", governance.ErrInvalidArgument, err)
+	}
+	for _, ref := range vocabulary.References() {
+		if ref.AssetID == targetID && ref.MemberID == "" {
+			return governance.ErrDependencyInvalid
+		}
+		if err := requirePublishedKnowledgeRef(ctx, tx, workspace, ref); err != nil {
+			return err
+		}
 	}
 	if kind == semantic.DataAsset {
 		refs := []semantic.SourceReference{*spec.DatasetRef}
@@ -61,4 +75,80 @@ func validateKnowledgePublication(ctx context.Context, tx pgx.Tx, workspace iden
 		targetSpec, err := semantic.ParseKnowledgeSpec(targetKind, body, true)
 		return targetKind, targetSpec, err
 	})
+}
+
+func requirePublishedKnowledgeRef(ctx context.Context, tx pgx.Tx, workspace identity.WorkspaceID, ref semantic.KnowledgeReference) error {
+	asset, _ := identity.ParseAssetID(ref.AssetID)
+	revision, _ := identity.ParseRevisionID(ref.RevisionID)
+	release, _ := identity.ParseReleaseID(ref.ReleaseID)
+	var found bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM release_assets WHERE workspace_id=$1 AND release_id=$2 AND asset_id=$3 AND revision_id=$4)`, workspace.UUID(), release.UUID(), asset.UUID(), revision.UUID()).Scan(&found); err != nil {
+		return err
+	}
+	if !found {
+		return governance.ErrDependencyInvalid
+	}
+	return nil
+}
+
+// releasedAssetsTx loads every asset revision pinned by one release.
+func releasedAssetsTx(ctx context.Context, tx pgx.Tx, workspace identity.WorkspaceID, release identity.ReleaseID) ([]distribution.ReleasedAsset, error) {
+	rows, err := tx.Query(ctx, `SELECT a.id,r.id,a.namespace||'.'||a.key,a.asset_type,r.content FROM release_assets e JOIN semantic_assets a ON a.workspace_id=e.workspace_id AND a.id=e.asset_id JOIN asset_revisions r ON r.workspace_id=e.workspace_id AND r.id=e.revision_id AND r.asset_id=e.asset_id WHERE e.workspace_id=$1 AND e.release_id=$2 ORDER BY e.position`, workspace.UUID(), release.UUID())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	assets := []distribution.ReleasedAsset{}
+	for rows.Next() {
+		var id, revision pgtype.UUID
+		var address, kind string
+		var content []byte
+		if err := rows.Scan(&id, &revision, &address, &kind, &content); err != nil {
+			return nil, err
+		}
+		asset := distribution.ReleasedAsset{Address: address, AssetType: semantic.AssetType(kind), Content: content}
+		if asset.AssetID, err = identity.AssetIDFromUUIDBytes(id.Bytes); err != nil {
+			return nil, err
+		}
+		if asset.RevisionID, err = identity.RevisionIDFromUUIDBytes(revision.Bytes); err != nil {
+			return nil, err
+		}
+		assets = append(assets, asset)
+	}
+	return assets, rows.Err()
+}
+
+// vocabularyEntries is the conflict-check view of released assets. Content published before vocabulary existed is
+// not re-judged here; its own publication gate applied.
+func vocabularyEntries(assets []distribution.ReleasedAsset) []semantic.VocabularyEntry {
+	entries := []semantic.VocabularyEntry{}
+	for _, asset := range assets {
+		if entry, err := semantic.VocabularyEntryFromContent(asset.AssetID.String(), asset.AssetType, asset.Content); err == nil {
+			entries = append(entries, entry)
+		}
+	}
+	return entries
+}
+
+// checkReleaseVocabularyTx is the authoritative publication gate: within one release a term may name only one asset
+// of a type unless one side declares the other confusable. Only conflicts involving an asset this release changed
+// block it, so an overlap that predates the gate never stops unrelated publications.
+func checkReleaseVocabularyTx(ctx context.Context, tx pgx.Tx, workspace identity.WorkspaceID, release identity.ReleaseID, changed map[string]bool) error {
+	if len(changed) == 0 {
+		return nil
+	}
+	assets, err := releasedAssetsTx(ctx, tx, workspace, release)
+	if err != nil {
+		return governanceRepositoryError("load release vocabulary", err)
+	}
+	blocking := []semantic.VocabularyConflict{}
+	for _, conflict := range semantic.VocabularyConflicts(vocabularyEntries(assets)) {
+		if changed[conflict.Assets[0].AssetID] || changed[conflict.Assets[1].AssetID] {
+			blocking = append(blocking, conflict)
+		}
+	}
+	if len(blocking) > 0 {
+		return &governance.VocabularyConflictError{Conflicts: blocking}
+	}
+	return nil
 }

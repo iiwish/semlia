@@ -20,6 +20,7 @@ import {
 import type { Asset, AssetAuthoritySection, AssetType, AssetTypeSpec, EvidenceAuthority } from "./types";
 import { useOptionalSessionRuntime } from "./sessionRuntime";
 import { knowledgeReadiness } from "./knowledgeReadiness";
+import { vocabularyFrom } from "./knowledge";
 
 interface CreateAssetInput {
   scope?: string;
@@ -487,6 +488,11 @@ export function CatalogRuntimeProvider({ children }: { children: ReactNode }) {
   return <CatalogRuntimeContext.Provider value={value}>{children}</CatalogRuntimeContext.Provider>;
 }
 
+// useOptionalCatalogRuntime lets read-only views degrade outside a catalog workspace.
+export function useOptionalCatalogRuntime() {
+  return useContext(CatalogRuntimeContext);
+}
+
 export function useCatalogRuntime() {
   const value = useContext(CatalogRuntimeContext);
   if (!value) throw new Error("useCatalogRuntime must be used inside CatalogRuntimeProvider");
@@ -515,6 +521,13 @@ function projectSummary(workspaceId: string, item: CatalogAsset): Asset {
 
 function projectDetail(workspaceId: string, item: CatalogAssetDetail): Asset {
   return projectAsset(workspaceId, item, item);
+}
+
+// "spec_reference:spec.inputRef,spec.filterRefs" -> "由规格字段推导：inputRef、filterRefs"
+export function inferenceRuleLabel(rule: string) {
+  const [kind, fields = ""] = rule.split(":");
+  if (kind !== "spec_reference") return rule;
+  return `由规格字段推导：${fields.split(",").map((field) => field.replace(/^spec\./, "")).join("、")}`;
 }
 
 function authorityCount(section: AssetAuthoritySection | undefined, key: string): number | null {
@@ -547,9 +560,9 @@ function projectAsset(workspaceId: string, summary: CatalogAsset, detail: Catalo
       plane: record.relation.plane,
       assertionState: record.relation.assertionState,
       targetId: counterpartId,
-      targetName: counterpartId,
+      targetName: record.relation.counterpartTitle || counterpartId,
       direction: record.relation.direction,
-      evidence: "服务端未提供证据引用",
+      evidence: record.relation.inferenceRule ? inferenceRuleLabel(record.relation.inferenceRule) : "服务端未提供证据引用",
       release: record.releaseId ?? relationSection?.releaseId ?? "服务端未提供 release 基准",
     }];
   });
@@ -584,6 +597,7 @@ function projectAsset(workspaceId: string, summary: CatalogAsset, detail: Catalo
   return {
     id: summary.id,
     knowledgeSpec: (content.spec ?? {}) as Asset["knowledgeSpec"],
+    vocabulary: vocabularyFrom(content),
     detailLoaded: Boolean(detail),
     authoritySections,
     revision: !detail ? "版本待加载" : revision?.sequence ? `@${revision.sequence}` : "@0",

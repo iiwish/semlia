@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/iiwish/semlia/internal/application/jobs"
+	distributiondomain "github.com/iiwish/semlia/internal/domain/distribution"
 	domain "github.com/iiwish/semlia/internal/domain/governance"
 	"github.com/iiwish/semlia/internal/domain/semantic"
 	"github.com/iiwish/semlia/pkg/identity"
@@ -20,6 +21,10 @@ type ProductionValidationWork struct {
 	Rules            []domain.PolicyRule
 	ReferenceFailure string
 	BusinessRules    map[string]bool
+	// VocabularyConflicts previews the publication vocabulary gate per target local key.
+	VocabularyConflicts map[string][]semantic.VocabularyConflict
+	// SampleRecallFailures replays each target's sample questions through Ask retrieval.
+	SampleRecallFailures map[string][]distributiondomain.SampleRecallFailure
 }
 
 type ProductionCheckResult struct {
@@ -168,6 +173,12 @@ func EvaluateProductionValidation(work ProductionValidationWork, now time.Time) 
 						}
 						if _, err := semantic.ParseKnowledgeSpec(content.AssetType, content.Spec, true); err != nil {
 							findings = append(findings, blockerFinding(digest, "PRODUCTION_KNOWLEDGE_INCOMPLETE", "知识结构不完整："+err.Error()))
+						}
+						if conflicts := work.VocabularyConflicts[target.LocalKey]; len(conflicts) > 0 {
+							findings = append(findings, blockerFinding(digest, "PRODUCTION_VOCABULARY_CONFLICT", (&domain.VocabularyConflictError{Conflicts: conflicts}).Message()))
+						}
+						for _, failure := range work.SampleRecallFailures[target.LocalKey] {
+							findings = append(findings, blockerFinding(digest, "PRODUCTION_SAMPLE_QUESTION_NOT_RECALLED", sampleRecallMessage(failure)))
 						}
 					}
 				}
@@ -350,4 +361,17 @@ func productionCheckMessage(code string) string {
 		return message
 	}
 	return "production validation did not satisfy the required check"
+}
+
+// sampleRecallMessage names the author's own question and counts, never names, what retrieval missed.
+func sampleRecallMessage(failure distributiondomain.SampleRecallFailure) string {
+	if failure.Ambiguous {
+		return "典型问题「" + failure.Question + "」会被要求澄清：其中的说法指向多个同类资产。请改写问题，或调整别名与易混淆声明。"
+	}
+	for _, missing := range failure.Missing {
+		if missing == failure.AssetID {
+			return "典型问题「" + failure.Question + "」检索不到本资产。请在别名中补充问题里的说法，或改写问题。"
+		}
+	}
+	return fmt.Sprintf("典型问题「%s」检索不到 %d 项期望知识。请补充相关别名，或调整期望引用。", failure.Question, len(failure.Missing))
 }

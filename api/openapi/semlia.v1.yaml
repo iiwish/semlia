@@ -6023,6 +6023,16 @@ components:
         assertionState: {$ref: "#/components/schemas/RelationAssertionState"}
         subjectAssetId: {$ref: "#/components/schemas/SemanticAssetId"}
         objectAssetId: {$ref: "#/components/schemas/SemanticAssetId"}
+        counterpartTitle:
+          type: string
+          maxLength: 256
+          description: Display name of the asset at the other end, when the server resolved it.
+        inferenceRule:
+          type: string
+          maxLength: 160
+          description: >-
+            Present on inferred relations. "spec_reference:" followed by the comma separated spec fields the relation
+            was read from. Inferred relations are a projection of published specs and are not stored assertions.
     CatalogPhysicalBindingAuthority:
       type: object
       additionalProperties: false
@@ -8368,6 +8378,24 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ReleasedDefinition"
+        vocabularyMatches:
+          type: array
+          description: Question phrases bound to governed wording of knowledge the caller may read. Unsettled shared words are omitted; they are clarified instead.
+          items:
+            $ref: "#/components/schemas/AskVocabularyMatch"
+    AskVocabularyMatch:
+      type: object
+      additionalProperties: false
+      required: [text, assetId, name, assetType, via]
+      properties:
+        text: { type: string, minLength: 1, maxLength: 256, description: The normalized question phrase. }
+        assetId: { $ref: '#/components/schemas/ResourceId' }
+        name: { type: string, minLength: 1, maxLength: 256 }
+        assetType: { $ref: '#/components/schemas/SemanticAssetType' }
+        memberId: { type: string, pattern: '^[a-z][a-z0-9_]{0,63}$' }
+        memberName: { type: string, maxLength: 256 }
+        value: { type: string, maxLength: 64, description: Canonical category value the phrase maps to. }
+        via: { type: string, enum: [name, alias, member, member_alias, value, value_alias] }
     ConsumerId:
       type: string
       format: typeid
@@ -9062,6 +9090,63 @@ components:
         scope: { type: string, minLength: 1, maxLength: 4096, nullable: true }
         ownerPrincipalId: { $ref: '#/components/schemas/ResourceId' }
         spec: { $ref: '#/components/schemas/KnowledgeSpec' }
+        aliases: { $ref: '#/components/schemas/VocabularyTerms' }
+        includes: { $ref: '#/components/schemas/VocabularyBoundary' }
+        excludes: { $ref: '#/components/schemas/VocabularyBoundary' }
+        examples: { $ref: '#/components/schemas/VocabularyBoundary' }
+        confusableWith:
+          type: array
+          maxItems: 16
+          description: Neighbouring assets that people easily mistake for this one, each with how to tell them apart. Declaring either side accepts a shared alias.
+          items: { $ref: '#/components/schemas/VocabularyConfusion' }
+        sampleQuestions:
+          type: array
+          maxItems: 16
+          description: Typical questions this asset answers. Expected references are what retrieval must surface.
+          items: { $ref: '#/components/schemas/VocabularySampleQuestion' }
+    VocabularyTerms:
+      type: array
+      maxItems: 32
+      description: Other words people use for the asset. Within one release a term names at most one asset of a type unless one side declares the other confusable.
+      items: { type: string, minLength: 1, maxLength: 64 }
+    VocabularyBoundary:
+      type: array
+      maxItems: 32
+      items: { type: string, minLength: 1, maxLength: 256 }
+    VocabularyConfusion:
+      type: object
+      additionalProperties: false
+      required: [ref, distinction]
+      properties:
+        ref: { $ref: '#/components/schemas/KnowledgeReference' }
+        distinction: { type: string, minLength: 1, maxLength: 512 }
+    VocabularySampleQuestion:
+      type: object
+      additionalProperties: false
+      required: [question]
+      properties:
+        question: { type: string, minLength: 1, maxLength: 256 }
+        expects:
+          type: object
+          additionalProperties: false
+          required: [refs]
+          properties:
+            refs:
+              type: array
+              minItems: 1
+              maxItems: 8
+              items: { $ref: '#/components/schemas/KnowledgeReference' }
+    KnowledgeValueAlias:
+      type: object
+      additionalProperties: false
+      required: [value, aliases]
+      properties:
+        value: { type: string, minLength: 1, maxLength: 64, description: Canonical category value as stored in the data. }
+        aliases:
+          type: array
+          minItems: 1
+          maxItems: 16
+          items: { type: string, minLength: 1, maxLength: 64 }
     KnowledgeSpec:
       {
         "type": "object",
@@ -9306,6 +9391,23 @@ components:
           },
           "sourceFieldRef": {
             "$ref": "#/components/schemas/PhysicalReference"
+          },
+          "aliases": {
+            "type": "array",
+            "maxItems": 16,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            }
+          },
+          "valueAliases": {
+            "type": "array",
+            "maxItems": 64,
+            "description": "Business wording for canonical category values; string business object attributes only.",
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeValueAlias"
+            }
           }
         }
       }

@@ -218,17 +218,58 @@ WITH latest_pin AS (
     FROM join_objects
     ORDER BY release_sequence DESC, release_id DESC
     LIMIT 1
-), validation_counts AS (
-    SELECT count(DISTINCT run.id)::bigint AS run_count,
-           count(result.id) FILTER (WHERE result.severity = 'blocker')::bigint AS blocker_count,
-           count(result.id) FILTER (WHERE result.severity = 'warning')::bigint AS warning_count
+), introduced_release AS (
+    -- The release that first pinned the current revision; carried pins in later releases did not produce it.
+    SELECT release_asset.release_id
     FROM latest_pin
-    JOIN validation_runs AS run
-      ON run.workspace_id = $1
-     AND run.proposal_id = latest_pin.origin_proposal_id
-    LEFT JOIN validation_results AS result
-      ON result.workspace_id = run.workspace_id
-     AND result.validation_run_id = run.id
+    JOIN release_assets AS release_asset
+      ON release_asset.workspace_id = $1
+     AND release_asset.asset_id = $2
+     AND release_asset.revision_id = latest_pin.revision_id
+    JOIN releases AS release
+      ON release.workspace_id = release_asset.workspace_id AND release.id = release_asset.release_id
+    ORDER BY release.sequence ASC, release.id ASC
+    LIMIT 1
+), production_checks AS (
+    -- Production releases attribute each applied proposal to one sealed validation attempt.
+    SELECT production.proposal_id, production.operation_id, production.production_version, production.attempt_no,
+           check_result.value AS result
+    FROM introduced_release
+    JOIN release_proposals AS production
+      ON production.workspace_id = $1
+     AND production.release_id = introduced_release.release_id
+     AND production.role = 'applied'
+    JOIN proposals AS proposal
+      ON proposal.workspace_id = production.workspace_id
+     AND proposal.id = production.proposal_id
+     AND proposal.asset_id = $2
+    JOIN production_validation_seals AS seal
+      ON seal.workspace_id = production.workspace_id
+     AND seal.operation_id = production.operation_id
+     AND seal.production_version = production.production_version
+     AND seal.attempt_no = production.attempt_no
+    CROSS JOIN LATERAL jsonb_array_elements(seal.results_json) AS check_result(value)
+    WHERE check_result.value->'check'->>'proposalId' = production_typeid('prp', production.proposal_id)
+), validation_counts AS (
+    SELECT sum(run_count)::bigint AS run_count, sum(blocker_count)::bigint AS blocker_count,
+           sum(warning_count)::bigint AS warning_count
+    FROM (
+        SELECT count(DISTINCT run.id)::bigint AS run_count,
+               count(result.id) FILTER (WHERE result.severity = 'blocker')::bigint AS blocker_count,
+               count(result.id) FILTER (WHERE result.severity = 'warning')::bigint AS warning_count
+        FROM latest_pin
+        JOIN validation_runs AS run
+          ON run.workspace_id = $1
+         AND run.proposal_id = latest_pin.origin_proposal_id
+        LEFT JOIN validation_results AS result
+          ON result.workspace_id = run.workspace_id
+         AND result.validation_run_id = run.id
+        UNION ALL
+        SELECT count(*)::bigint,
+               COALESCE(sum((SELECT count(*) FROM jsonb_array_elements(production_checks.result->'findings') AS finding WHERE finding->>'Severity' = 'blocker')), 0)::bigint,
+               COALESCE(sum((SELECT count(*) FROM jsonb_array_elements(production_checks.result->'findings') AS finding WHERE finding->>'Severity' = 'warning')), 0)::bigint
+        FROM production_checks
+    ) AS counts
 ), current_release AS (
     SELECT release.id
     FROM releases AS release
@@ -587,6 +628,38 @@ WITH latest_pin AS (
       AND release_asset.asset_id = $6
     ORDER BY release.sequence DESC, release.id DESC
     LIMIT 1
+), introduced_release AS (
+    -- The release that first pinned the current revision; carried pins in later releases did not produce it.
+    SELECT release_asset.release_id
+    FROM latest_pin
+    JOIN release_assets AS release_asset
+      ON release_asset.workspace_id = $5
+     AND release_asset.asset_id = $6
+     AND release_asset.revision_id = latest_pin.revision_id
+    JOIN releases AS release
+      ON release.workspace_id = release_asset.workspace_id AND release.id = release_asset.release_id
+    ORDER BY release.sequence ASC, release.id ASC
+    LIMIT 1
+), production_checks AS (
+    -- Production releases attribute each applied proposal to one sealed validation attempt.
+    SELECT production.proposal_id, production.operation_id, production.production_version, production.attempt_no,
+           check_result.value AS result
+    FROM introduced_release
+    JOIN release_proposals AS production
+      ON production.workspace_id = $5
+     AND production.release_id = introduced_release.release_id
+     AND production.role = 'applied'
+    JOIN proposals AS proposal
+      ON proposal.workspace_id = production.workspace_id
+     AND proposal.id = production.proposal_id
+     AND proposal.asset_id = $6
+    JOIN production_validation_seals AS seal
+      ON seal.workspace_id = production.workspace_id
+     AND seal.operation_id = production.operation_id
+     AND seal.production_version = production.production_version
+     AND seal.attempt_no = production.attempt_no
+    CROSS JOIN LATERAL jsonb_array_elements(seal.results_json) AS check_result(value)
+    WHERE check_result.value->'check'->>'proposalId' = production_typeid('prp', production.proposal_id)
 ), effective_objects AS (
     SELECT DISTINCT ON (snapshot.object_type, snapshot.object_id)
            snapshot.object_type, snapshot.object_id, snapshot.version, snapshot.payload,
@@ -702,6 +775,16 @@ WITH latest_pin AS (
     JOIN validation_runs AS run
       ON run.workspace_id = $5 AND run.proposal_id = latest_pin.origin_proposal_id
     UNION ALL
+    -- A sealed production check has no row identity; derive a stable UUIDv7-shaped ID from its seal coordinates.
+    SELECT 'validation', 'validation_run',
+           (substr(digest, 1, 12) || '7' || substr(digest, 14, 3) || '8' || substr(digest, 18, 15))::uuid,
+           'production_validation_seals', latest_pin.release_id, latest_pin.release_sequence, 0,
+           production_checks.result->>'status', production_checks.result->'check'->>'validatorId',
+           production_checks.proposal_id::text, '{}'::jsonb
+    FROM latest_pin
+    CROSS JOIN production_checks
+    CROSS JOIN LATERAL (SELECT md5(production_checks.operation_id::text || ':' || production_checks.production_version || ':' || production_checks.attempt_no || ':' || production_checks.proposal_id::text || ':' || (production_checks.result->'check'->>'validatorId'))) AS derived(digest)
+    UNION ALL
     SELECT 'lineage', 'lineage', edge.id, 'lineage_edges', NULL, 0, 0, edge.edge_kind,
            edge.edge_kind, CASE WHEN edge.upstream_dataset_id IN (SELECT dataset_id FROM asset_datasets)
                                 THEN edge.downstream_dataset_id ELSE edge.upstream_dataset_id END::text,
@@ -808,6 +891,48 @@ func (q *Queries) ListCatalogAssetAuthorityRecords(ctx context.Context, arg List
 			&i.Details,
 			&i.TotalCount,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCatalogAssetRefsByID = `-- name: ListCatalogAssetRefsByID :many
+SELECT asset.id,
+       asset.asset_type,
+       COALESCE(NULLIF(revision.content->>'displayName', ''), revision.content->>'name', revision.content->>'title', asset.key)::text AS title
+FROM semantic_assets AS asset
+LEFT JOIN asset_revisions AS revision ON revision.id = asset.current_revision_id
+WHERE asset.workspace_id = $1
+  AND asset.id = ANY($2::uuid[])
+ORDER BY asset.id
+`
+
+type ListCatalogAssetRefsByIDParams struct {
+	WorkspaceID pgtype.UUID   `json:"workspace_id"`
+	AssetIds    []pgtype.UUID `json:"asset_ids"`
+}
+
+type ListCatalogAssetRefsByIDRow struct {
+	ID        pgtype.UUID `json:"id"`
+	AssetType string      `json:"asset_type"`
+	Title     string      `json:"title"`
+}
+
+func (q *Queries) ListCatalogAssetRefsByID(ctx context.Context, arg ListCatalogAssetRefsByIDParams) ([]ListCatalogAssetRefsByIDRow, error) {
+	rows, err := q.db.Query(ctx, listCatalogAssetRefsByID, arg.WorkspaceID, arg.AssetIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListCatalogAssetRefsByIDRow{}
+	for rows.Next() {
+		var i ListCatalogAssetRefsByIDRow
+		if err := rows.Scan(&i.ID, &i.AssetType, &i.Title); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -998,6 +1123,65 @@ func (q *Queries) ListCatalogAssets(ctx context.Context, arg ListCatalogAssetsPa
 			&i.Summary,
 			&i.UpdatedAt,
 			&i.SearchRank,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCatalogAssetsReferencingAsset = `-- name: ListCatalogAssetsReferencingAsset :many
+SELECT asset.id,
+       asset.asset_type,
+       COALESCE(NULLIF(revision.content->>'displayName', ''), revision.content->>'name', revision.content->>'title', asset.key)::text AS title,
+       revision.content
+FROM semantic_assets AS asset
+JOIN asset_revisions AS revision ON revision.id = asset.current_revision_id
+WHERE asset.workspace_id = $1
+  AND asset.id <> $2::uuid
+  AND jsonb_path_exists(revision.content, '$.spec.** ? (@.assetId == $target)', jsonb_build_object('target', $3::text))
+ORDER BY asset.id
+LIMIT $4
+`
+
+type ListCatalogAssetsReferencingAssetParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	AssetID     pgtype.UUID `json:"asset_id"`
+	AssetRef    string      `json:"asset_ref"`
+	PageLimit   int32       `json:"page_limit"`
+}
+
+type ListCatalogAssetsReferencingAssetRow struct {
+	ID        pgtype.UUID `json:"id"`
+	AssetType string      `json:"asset_type"`
+	Title     string      `json:"title"`
+	Content   []byte      `json:"content"`
+}
+
+// Assets whose current spec holds a reference to the target at any depth (expression trees included).
+func (q *Queries) ListCatalogAssetsReferencingAsset(ctx context.Context, arg ListCatalogAssetsReferencingAssetParams) ([]ListCatalogAssetsReferencingAssetRow, error) {
+	rows, err := q.db.Query(ctx, listCatalogAssetsReferencingAsset,
+		arg.WorkspaceID,
+		arg.AssetID,
+		arg.AssetRef,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListCatalogAssetsReferencingAssetRow{}
+	for rows.Next() {
+		var i ListCatalogAssetsReferencingAssetRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AssetType,
+			&i.Title,
+			&i.Content,
 		); err != nil {
 			return nil, err
 		}

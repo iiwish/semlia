@@ -38,8 +38,8 @@ func ReplayProductionChanges(target TargetDeclaration, baseline json.RawMessage,
 	for i := range target.Changes {
 		for _, value := range []*json.RawMessage{&target.Changes[i].BeforeValue, &target.Changes[i].AfterValue} {
 			if *value != nil {
-				if target.Changes[i].FieldPath == "spec" {
-					// Atomic knowledge specs retain their published and physical version pins.
+				if pinnedKnowledgeField(target.Changes[i].FieldPath) {
+					// Atomic knowledge specs and vocabulary retain their published and physical version pins.
 					*value, err = CanonicalJSON(*value)
 				} else {
 					*value, err = ResolveLocalReferences(*value, localIDs)

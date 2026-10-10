@@ -104,6 +104,10 @@ test('browser acceptance allows only supported desktop projects and explicit bou
   assert.equal(browserPlan('compact-desktop').project, 'compact-desktop');
   assert.equal(browserPlan('preflight').grep, '@preflight');
   assert.equal(browserPlan('ambiguous').grep, '@ambiguous');
+  assert.equal(browserPlan('vocabulary').grep, '@vocabulary');
+  assert.equal(browserPlan('vocabulary').project, undefined, 'vocabulary runs at both desktop sizes');
+  assert.equal(browserPlan('vocabulary').vocabularyHead, true);
+  assert.equal(browserPlan('desktop').vocabularyHead, undefined, 'other journeys keep the frozen baseline proof');
   assert.equal(browserPlan('desktop-resume-route-query-optional').repair, 'route-query-optional');
   assert.throws(() => browserPlan('mobile'));
   assert.throws(() => browserPlan('retry-until-pass'));

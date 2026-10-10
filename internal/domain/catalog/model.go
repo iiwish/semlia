@@ -85,6 +85,10 @@ type RelationAuthority struct {
 	AssertionState string
 	SubjectAssetID identity.AssetID
 	ObjectAssetID  identity.AssetID
+	// CounterpartTitle names the asset at the other end when the server resolved it.
+	CounterpartTitle string
+	// InferenceRule is set only on inferred relations that are projected from published specs.
+	InferenceRule string
 }
 
 type AuthorityRecord struct {
@@ -214,6 +218,19 @@ type Relation struct {
 	EvidenceArtifactID *identity.EvidenceID
 	SourceRevisionID   *identity.SourceRevisionID
 	CreatedAt          time.Time
+}
+
+// AssetRef is the least needed to name and type-check the other end of a relation.
+type AssetRef struct {
+	ID    identity.AssetID
+	Type  semantic.AssetType
+	Title string
+}
+
+// ReferencingAsset is an asset whose current spec holds a reference to another asset.
+type ReferencingAsset struct {
+	AssetRef
+	Content json.RawMessage
 }
 
 type DiscoveryFinding struct {

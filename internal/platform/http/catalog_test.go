@@ -213,6 +213,14 @@ func (repository *catalogRepository) ListCatalogRelations(context.Context, catal
 	return nil, nil
 }
 
+func (repository *catalogRepository) ListCatalogAssetRefs(context.Context, identity.WorkspaceID, []identity.AssetID) ([]catalogdomain.AssetRef, error) {
+	return nil, nil
+}
+
+func (repository *catalogRepository) ListCatalogAssetsReferencing(context.Context, identity.WorkspaceID, identity.AssetID, int) ([]catalogdomain.ReferencingAsset, error) {
+	return nil, nil
+}
+
 func (repository *catalogRepository) GetCatalogDiscoveryRun(context.Context, identity.WorkspaceID, identity.RunID) (catalogdomain.DiscoveryRun, error) {
 	return catalogdomain.DiscoveryRun{}, repository.getErr
 }

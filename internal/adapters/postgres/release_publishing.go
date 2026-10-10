@@ -350,6 +350,13 @@ func (store *Store) PublishRelease(
 			return governance.Release{}, err
 		}
 	}
+	changedAssets := map[string]bool{}
+	if proposal.TargetObjectType == governance.TargetSemanticAsset {
+		changedAssets[entries[0].AssetID.String()] = true
+	}
+	if err := checkReleaseVocabularyTx(ctx, tx, command.WorkspaceID, command.ReleaseID, changedAssets); err != nil {
+		return governance.Release{}, err
+	}
 	decidedAt := command.AppliedAt
 	releasedProposal, err := queries.TransitionProposal(ctx, dbgen.TransitionProposalParams{
 		WorkspaceID: workspaceID, ProposalID: proposalID, State: string(governance.ProposalReleased),

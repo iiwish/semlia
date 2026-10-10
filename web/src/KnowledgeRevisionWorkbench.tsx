@@ -16,14 +16,16 @@ import {
 
 import { useCan } from "./authorization";
 import { KnowledgeSpecEditor } from "./KnowledgeSpecEditor";
+import { KnowledgeVocabularyEditor } from "./KnowledgeVocabularyEditor";
+import { vocabularyProblems } from "./knowledgeVocabulary";
 import { KnowledgeSpecView } from "./KnowledgeSpecView";
 import { KnowledgeSourcePicker, type KnowledgeSourceMember } from "./KnowledgeSourcePicker";
 import { useCatalogRuntime } from "./catalogRuntime";
-import { knowledgeTypes, type KnowledgeSpec, type KnowledgeType } from "./knowledge";
+import { emptyVocabulary, knowledgeTypes, vocabularyFieldLabels, vocabularyFields, type KnowledgeSpec, type KnowledgeType, type KnowledgeVocabulary } from "./knowledge";
 import type { Asset, KnowledgeRevisionRequest, KnowledgeRevisionSubmission } from "./types";
 import { KnowledgeRevisionUncertainError } from "./knowledgeProductionRevision";
 
-type EditableKnowledgeField = "definition" | "expression" | "includes" | "excludes" | "disambiguation" | "relations";
+type EditableKnowledgeField = "definition" | "expression" | "vocabulary" | "includes" | "excludes" | "disambiguation" | "relations";
 
 interface KnowledgeFieldDescriptor {
   key: EditableKnowledgeField;
@@ -43,7 +45,8 @@ const knowledgeFields: KnowledgeFieldDescriptor[] = [
   { key: "relations", label: "本体关系", fieldPath: "ontology.relations", help: "每行声明一条候选关系，保留关系层、方向、predicate、目标语义地址和断言状态。", multiline: true, code: true },
 ];
 
-function initialFieldFor(fieldPath: string): EditableKnowledgeField {
+function requestedFieldFor(fieldPath: string): EditableKnowledgeField {
+  if (/vocabulary|aliases|examples|sample|confusable/.test(fieldPath)) return "vocabulary";
   if (fieldPath.startsWith("spec") || fieldPath.includes("binding")) return "expression";
   if (fieldPath.includes("includes")) return "includes";
   if (fieldPath.includes("excludes")) return "excludes";
@@ -52,10 +55,20 @@ function initialFieldFor(fieldPath: string): EditableKnowledgeField {
   return "definition";
 }
 
+// A typed knowledge object edits its definition, its type-specific spec and its business wording. The editor must
+// start on one of those, otherwise it renders the first field while typing into a hidden one and never sees it.
+function initialFieldFor(fieldPath: string, canonical: boolean): EditableKnowledgeField {
+  const requested = requestedFieldFor(fieldPath);
+  if (!canonical) return requested === "vocabulary" ? "definition" : requested;
+  if (requested === "expression" || requested === "vocabulary") return requested;
+  return ["includes", "excludes", "disambiguation"].includes(requested) ? "vocabulary" : "definition";
+}
+
 function fieldValues(asset: Asset): Record<EditableKnowledgeField, string> {
   return {
     definition: asset.revisionRecord.definition,
     expression: asset.revisionRecord.typeSpec.expression,
+    vocabulary: "",
     includes: asset.revisionRecord.includes.join("\n"),
     excludes: asset.revisionRecord.excludes.join("\n"),
     disambiguation: asset.wikiContext.disambiguationRules.join("\n"),
@@ -83,7 +96,7 @@ export function KnowledgeRevisionWorkbench({ asset: currentAsset, request, onCan
   const canPropose = useCan("asset.propose");
   const publishedValues = useMemo(() => fieldValues(asset), [asset]);
   const [draftValues, setDraftValues] = useState(() => fieldValues(asset));
-  const [activeField, setActiveField] = useState<EditableKnowledgeField>(() => initialFieldFor(request.fieldPath));
+  const [activeField, setActiveField] = useState<EditableKnowledgeField>(() => initialFieldFor(request.fieldPath, currentAsset.knowledgeSpec !== undefined));
   const [reason, setReason] = useState(request.context ?? "");
   const [checksRun, setChecksRun] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -95,14 +108,19 @@ export function KnowledgeRevisionWorkbench({ asset: currentAsset, request, onCan
   const locked = submitting || uncertain;
   const [error, setError] = useState("");
   const [draftSpec, setDraftSpec] = useState<KnowledgeSpec>(asset.knowledgeSpec ?? {});
+  const publishedVocabulary = useMemo(() => asset.vocabulary ?? emptyVocabulary(), [asset]);
+  const [draftVocabulary, setDraftVocabulary] = useState<KnowledgeVocabulary>(() => structuredClone(publishedVocabulary));
   const canonical = asset.knowledgeSpec !== undefined;
-  const fields = canonical ? [
+  const fields: KnowledgeFieldDescriptor[] = canonical ? [
     { ...knowledgeFields[0], fieldPath: "definition" },
     { ...knowledgeFields[1], label: "类型专属知识", fieldPath: "spec", help: "" },
+    { key: "vocabulary", label: "业务词汇", fieldPath: "vocabulary", help: "别名、口径边界、易混淆知识、典型问题，以及属性和取值的别名。" },
   ] : knowledgeFields;
   const descriptor = fields.find((field) => field.key === activeField) ?? fields[0];
+  const changedVocabulary = vocabularyFields.filter((field) => JSON.stringify(draftVocabulary[field]) !== JSON.stringify(publishedVocabulary[field]));
   const changedFields = fields.filter((field) => field.key === "expression" && canonical
     ? JSON.stringify(draftSpec) !== JSON.stringify(asset.knowledgeSpec)
+    : field.key === "vocabulary" ? changedVocabulary.length > 0
     : normalize(draftValues[field.key]) !== normalize(publishedValues[field.key]));
   const knowledgeType = (Object.keys(knowledgeTypes) as KnowledgeType[]).find((type) => knowledgeTypes[type] === asset.type)!;
   const selectedClaim = asset.claims.find((claim) => claim.claimId === request.claimId)
@@ -128,6 +146,11 @@ export function KnowledgeRevisionWorkbench({ asset: currentAsset, request, onCan
       setError("请记录修订原因，审核者需要理解为什么要改变当前知识。");
       return;
     }
+    const problems = canonical ? vocabularyProblems(draftVocabulary, draftSpec) : [];
+    if (problems.length > 0) {
+      setError(problems[0]);
+      return;
+    }
     setError("");
     setChecksRun(true);
     onNotify("预检通过：保存修订草稿后仍需确认业务口径并提交治理验证。");
@@ -136,7 +159,7 @@ export function KnowledgeRevisionWorkbench({ asset: currentAsset, request, onCan
   const submit = async () => {
     if (!canPropose || !checksRun || changedFields.length === 0 || !reason.trim() || pending.current) return;
     pending.current = true;
-    const labels = changedFields.map((field) => field.label);
+    const labels = changedFields.flatMap((field) => field.key === "vocabulary" ? changedVocabulary.map((name) => vocabularyFieldLabels[name]) : [field.label]);
     setSubmitting(true);
     setError("");
     try {
@@ -147,11 +170,17 @@ export function KnowledgeRevisionWorkbench({ asset: currentAsset, request, onCan
         title: `修订${asset.name}的${labels.join("、")}`,
         summary: `修订${labels.join("、")}，保留来源资料与已发布 ${asset.revision} 的不可变记录。`,
         reason: reason.trim(),
-        changes: changedFields.map((field) => ({
-          field: field.fieldPath,
-          before: canonical && field.key === "expression" ? asset.knowledgeSpec as Record<string, unknown> : publishedValues[field.key],
-          after: canonical && field.key === "expression" ? draftSpec as Record<string, unknown> : draftValues[field.key].trim(),
-        })),
+        changes: changedFields.flatMap((field): KnowledgeRevisionSubmission["changes"] => field.key === "vocabulary"
+          ? changedVocabulary.map((name) => ({
+            field: name,
+            before: publishedVocabulary[name].length ? publishedVocabulary[name] : undefined,
+            after: draftVocabulary[name].length ? draftVocabulary[name] : undefined,
+          }))
+          : [{
+            field: field.fieldPath,
+            before: canonical && field.key === "expression" ? asset.knowledgeSpec as Record<string, unknown> : publishedValues[field.key],
+            after: canonical && field.key === "expression" ? draftSpec as Record<string, unknown> : draftValues[field.key].trim(),
+          }]),
       };
       await onSubmit(frozenSubmission.current);
       if (!mounted.current) return;
@@ -193,9 +222,9 @@ export function KnowledgeRevisionWorkbench({ asset: currentAsset, request, onCan
           <header><div><span className="content-label">候选知识字段</span><h3>{descriptor.label}</h3><p>{descriptor.help}</p></div><code>{descriptor.fieldPath}</code></header>
           <section className="knowledge-published-value" aria-label={`${descriptor.label}当前发布值`}>
             <span><LockKeyhole size={13} />当前发布值 · {asset.revision}</span>
-            {canonical && activeField === "expression" ? <KnowledgeSpecView type={asset.type} spec={asset.knowledgeSpec} /> : descriptor.code ? <pre>{publishedValues[activeField]}</pre> : <p>{publishedValues[activeField] || "当前没有内容"}</p>}
+            {canonical && activeField === "expression" ? <KnowledgeSpecView type={asset.type} spec={asset.knowledgeSpec} /> : activeField === "vocabulary" ? <VocabularySummary vocabulary={publishedVocabulary} /> : descriptor.code ? <pre>{publishedValues[activeField]}</pre> : <p>{publishedValues[activeField] || "当前没有内容"}</p>}
           </section>
-          {canonical && activeField === "expression" ? <fieldset disabled={locked} style={{ display: "contents" }}>{knowledgeType === "data_asset" && <KnowledgeSourcePicker workspaceId={workspaceId} onMembers={setSourceMembers} />}<KnowledgeSpecEditor type={knowledgeType} workspaceId={workspaceId} members={sourceMembers} value={draftSpec} onChange={(spec) => { setDraftSpec(spec); setChecksRun(false); }} /></fieldset> : <label className="knowledge-candidate-field">
+          {canonical && activeField === "vocabulary" ? <fieldset disabled={locked} style={{ display: "contents" }}><KnowledgeVocabularyEditor type={knowledgeType} workspaceId={workspaceId} value={draftVocabulary} onChange={(value) => { setDraftVocabulary(value); setChecksRun(false); setError(""); }} spec={draftSpec} onSpecChange={(spec) => { setDraftSpec(spec); setChecksRun(false); setError(""); }} /></fieldset> : canonical && activeField === "expression" ? <fieldset disabled={locked} style={{ display: "contents" }}>{knowledgeType === "data_asset" && <KnowledgeSourcePicker workspaceId={workspaceId} onMembers={setSourceMembers} />}<KnowledgeSpecEditor type={knowledgeType} workspaceId={workspaceId} members={sourceMembers} value={draftSpec} onChange={(spec) => { setDraftSpec(spec); setChecksRun(false); }} /></fieldset> : <label className="knowledge-candidate-field">
             <span>候选值</span>
             <textarea disabled={locked} className={descriptor.code ? "knowledge-code-input" : undefined} aria-label={`${descriptor.label}候选值`} rows={activeField === "expression" ? 5 : 7} value={draftValues[activeField]} onChange={(event) => updateDraft(event.target.value)} />
           </label>}
@@ -231,6 +260,14 @@ export function KnowledgeRevisionWorkbench({ asset: currentAsset, request, onCan
       </footer>
     </section>
   );
+}
+
+function VocabularySummary({ vocabulary }: { vocabulary: KnowledgeVocabulary }) {
+  const rows = vocabularyFields.flatMap((field) => {
+    const values = field === "confusableWith" ? vocabulary.confusableWith.map((item) => item.distinction) : field === "sampleQuestions" ? vocabulary.sampleQuestions.map((item) => item.question) : vocabulary[field];
+    return values.length ? [[vocabularyFieldLabels[field], values.join("；")] as const] : [];
+  });
+  return rows.length ? <dl>{rows.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl> : <p>当前没有业务词汇</p>;
 }
 
 function StatusPill({ tone, children }: { tone: "info"; children: string }) {

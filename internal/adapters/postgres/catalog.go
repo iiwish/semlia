@@ -1057,3 +1057,63 @@ func createCatalogMutationEvents(ctx context.Context, queries *dbgen.Queries, ev
 	}
 	return nil
 }
+
+func (store *Store) ListCatalogAssetRefs(ctx context.Context, workspace identity.WorkspaceID, assets []identity.AssetID) ([]domain.AssetRef, error) {
+	if len(assets) == 0 {
+		return nil, nil
+	}
+	workspaceID, err := uuidValue(workspace)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]pgtype.UUID, 0, len(assets))
+	for _, asset := range assets {
+		id, encodeErr := uuidValue(asset)
+		if encodeErr != nil {
+			return nil, encodeErr
+		}
+		ids = append(ids, id)
+	}
+	rows, err := store.queries.ListCatalogAssetRefsByID(ctx, dbgen.ListCatalogAssetRefsByIDParams{WorkspaceID: workspaceID, AssetIds: ids})
+	if err != nil {
+		return nil, repositoryError("list catalog asset references", err)
+	}
+	result := make([]domain.AssetRef, 0, len(rows))
+	for _, row := range rows {
+		id, decodeErr := identity.AssetIDFromUUIDBytes(row.ID.Bytes)
+		if decodeErr != nil {
+			return nil, decodeErr
+		}
+		result = append(result, domain.AssetRef{ID: id, Type: semantic.AssetType(row.AssetType), Title: row.Title})
+	}
+	return result, nil
+}
+
+func (store *Store) ListCatalogAssetsReferencing(ctx context.Context, workspace identity.WorkspaceID, asset identity.AssetID, limit int) ([]domain.ReferencingAsset, error) {
+	workspaceID, err := uuidValue(workspace)
+	if err != nil {
+		return nil, err
+	}
+	assetID, err := uuidValue(asset)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := store.queries.ListCatalogAssetsReferencingAsset(ctx, dbgen.ListCatalogAssetsReferencingAssetParams{
+		WorkspaceID: workspaceID, AssetID: assetID, AssetRef: asset.String(), PageLimit: int32(limit),
+	})
+	if err != nil {
+		return nil, repositoryError("list catalog assets referencing asset", err)
+	}
+	result := make([]domain.ReferencingAsset, 0, len(rows))
+	for _, row := range rows {
+		id, decodeErr := identity.AssetIDFromUUIDBytes(row.ID.Bytes)
+		if decodeErr != nil {
+			return nil, decodeErr
+		}
+		result = append(result, domain.ReferencingAsset{
+			AssetRef: domain.AssetRef{ID: id, Type: semantic.AssetType(row.AssetType), Title: row.Title},
+			Content:  json.RawMessage(row.Content),
+		})
+	}
+	return result, nil
+}

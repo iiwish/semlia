@@ -9,7 +9,6 @@ import (
 
 	"github.com/iiwish/semlia/internal/domain/authorization"
 	d "github.com/iiwish/semlia/internal/domain/distribution"
-	"github.com/iiwish/semlia/internal/domain/semantic"
 	"github.com/iiwish/semlia/pkg/identity"
 )
 
@@ -17,16 +16,34 @@ type AskKnowledge struct {
 	Payload   json.RawMessage
 	Digest    string
 	ReleaseID identity.ReleaseID
+	// Catalog lists what the caller may ask about, by display name. It never reaches the model prompt and is not
+	// part of Digest, so it can be rebuilt on replay and cannot change what the model sees.
+	Catalog []AskCatalogEntry
+	// Ambiguities are question phrases that name several assets of one type with nothing to tell them apart. They
+	// are part of Digest; a caller clarifies them instead of asking the model to guess.
+	Ambiguities []d.AskAmbiguity
+	// Matches bind question phrases to governed wording of authorized assets; like Catalog they are evidence for the
+	// caller and are rebuilt deterministically on replay.
+	Matches []d.AskMatch
+}
+
+// AskCatalogEntry carries only authorized semantic names: no ids, addresses or physical locations.
+type AskCatalogEntry struct {
+	Type    string
+	Name    string
+	Members []string
 }
 
 // InterpretationContext discloses only authorized semantic names and members,
 // never physical locations, credentials or unpublished authoring content.
 func (s *Service) InterpretationContext(ctx context.Context, request ResolveRequest) (json.RawMessage, error) {
-	knowledge, err := s.AskKnowledge(ctx, request)
+	knowledge, err := s.AskKnowledge(ctx, request, "")
 	return knowledge.Payload, err
 }
 
-func (s *Service) AskKnowledge(ctx context.Context, request ResolveRequest) (AskKnowledge, error) {
+// AskKnowledge compiles the caller's authorized release view into ask cards and selects what the question needs.
+// Selection is deterministic, so recomputing it for the same question, release and grants yields the same digest.
+func (s *Service) AskKnowledge(ctx context.Context, request ResolveRequest, question string) (AskKnowledge, error) {
 	if err := request.Input.Context.Validate(); err != nil {
 		return AskKnowledge{}, err
 	}
@@ -42,50 +59,45 @@ func (s *Service) AskKnowledge(ctx context.Context, request ResolveRequest) (Ask
 		payload, _ := json.Marshal(map[string]any{"assets": []any{}, "refusal": refusal.Code})
 		return AskKnowledge{Payload: payload, Digest: fmt.Sprintf("sha256:%x", sha256.Sum256(payload))}, nil
 	}
-	snapshot.Assets = append([]d.ReleasedAsset(nil), snapshot.Assets...)
-	sort.Slice(snapshot.Assets, func(i, j int) bool { return snapshot.Assets[i].AssetID.String() < snapshot.Assets[j].AssetID.String() })
-	items := []any{}
-	bytesRemaining := 64 * 1024
-	for _, a := range snapshot.Assets {
-		if len(items) >= 128 {
-			break
-		}
+	assets := append([]d.ReleasedAsset(nil), snapshot.Assets...)
+	sort.Slice(assets, func(i, j int) bool { return assets[i].AssetID.String() < assets[j].AssetID.String() })
+	readable := []d.ReleasedAsset{}
+	for _, a := range assets {
 		_, refusal, err := s.resolveSelector(ctx, request, d.Selector{AssetID: &a.AssetID}, "any", snapshot.Assets)
 		if err != nil {
 			return AskKnowledge{}, err
 		}
-		if refusal != nil {
-			continue
+		if refusal == nil {
+			readable = append(readable, a)
 		}
-		var content struct {
-			Definition string                 `json:"definition"`
-			Spec       semantic.KnowledgeSpec `json:"spec"`
-		}
-		if json.Unmarshal(a.Content, &content) != nil {
-			continue
-		}
-		members := []map[string]string{}
-		for _, m := range content.Spec.Members {
-			if len(members) >= 64 {
-				break
-			}
-			members = append(members, map[string]string{"id": m.ID, "name": m.Name, "valueType": m.ValueType})
-		}
-		item := map[string]any{"assetId": a.AssetID.String(), "revisionId": a.RevisionID.String(), "address": a.Address, "name": a.Name, "type": a.AssetType, "definition": content.Definition, "members": members, "capability": content.Spec.Capability, "metricRefs": content.Spec.MetricRefs, "publicAttributeRefs": content.Spec.PublicAttributeRefs, "compatibleTermRefs": content.Spec.CompatibleTermRefs, "defaultTimeAttributeRef": content.Spec.DefaultTimeAttributeRef}
-		encoded, err := json.Marshal(item)
-		if err != nil {
-			return AskKnowledge{}, err
-		}
-		if len(encoded) > bytesRemaining {
-			continue
-		}
-		bytesRemaining -= len(encoded)
-		items = append(items, item)
 	}
-	stable, err := json.Marshal(map[string]any{"releaseId": snapshot.ReleaseID.String(), "manifestDigest": snapshot.ManifestDigest, "assets": items})
+	cards := d.CompileAskCards(readable)
+	catalog := []AskCatalogEntry{}
+	for _, card := range cards {
+		entry := AskCatalogEntry{Type: string(card.Type), Name: card.Name}
+		for _, m := range card.Members {
+			entry.Members = append(entry.Members, firstNonEmpty(m.Name, m.ID))
+		}
+		catalog = append(catalog, entry)
+	}
+	selection := d.SelectAskKnowledge(question, cards, d.DefaultAskBudget)
+	selected := map[string]any{"releaseId": snapshot.ReleaseID.String(), "assets": selection.Cards, "questionMatches": selection.Matches, "ambiguities": selection.Ambiguities, "coveringModels": selection.CoveringModels, "omittedAssets": selection.OmittedAssets}
+	selected["manifestDigest"] = snapshot.ManifestDigest
+	stable, err := json.Marshal(selected)
 	if err != nil {
 		return AskKnowledge{}, err
 	}
-	payload, err := json.Marshal(map[string]any{"releaseId": snapshot.ReleaseID.String(), "currentTime": s.clock.Now().UTC(), "assets": items})
-	return AskKnowledge{Payload: payload, Digest: fmt.Sprintf("sha256:%x", sha256.Sum256(stable)), ReleaseID: snapshot.ReleaseID}, err
+	delete(selected, "manifestDigest")
+	selected["currentTime"] = s.clock.Now().UTC()
+	payload, err := json.Marshal(selected)
+	return AskKnowledge{Payload: payload, Digest: fmt.Sprintf("sha256:%x", sha256.Sum256(stable)), ReleaseID: snapshot.ReleaseID, Catalog: catalog, Ambiguities: selection.Ambiguities, Matches: selection.Matches}, err
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }

@@ -62,7 +62,7 @@ it("keeps result rows ephemeral and reloads metadata without automatic execution
   view.unmount();
   const metadata = result(); metadata.availability = "metadata_only"; metadata.replay = true; delete metadata.rows; delete metadata.columns;
   vi.mocked(getExecution).mockResolvedValue(metadata);
-  render(<AskExecutionPanel workspaceId="wsp_a"/>);
+  render(<AskExecutionPanel workspaceId="wsp_a" restoreFinished/>);
   expect(await screen.findByText(/原始结果行未存储/)).toBeVisible();
   expect(screen.queryByText("sensitive-exact-value")).not.toBeInTheDocument();
   expect(executePlan).toHaveBeenCalledTimes(1);
@@ -94,4 +94,22 @@ it("can inspect and durably cancel a restored running execution without a plan",
   await waitFor(() => expect(cancelExecution).toHaveBeenCalledWith("wsp_a", "run_record"));
   expect(screen.getByRole("button", { name: "请求取消执行" })).toBeDisabled();
   expect(executePlan).not.toHaveBeenCalled();
+});
+
+it.each(["succeeded", "failed", "cancelled"] as const)("does not resurface a finished %s execution under an unrelated answer", async (state) => {
+  localStorage.setItem("semlia.execution.wsp_a", "run_record");
+  const finished = result(); finished.run.state = state; finished.availability = "metadata_only"; delete finished.rows;
+  vi.mocked(getExecution).mockResolvedValue(finished);
+  const { container } = render(<AskExecutionPanel workspaceId="wsp_a"/>);
+  await waitFor(() => expect(getExecution).toHaveBeenCalledWith("wsp_a", "run_record", expect.any(AbortSignal)));
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(container).toBeEmptyDOMElement();
+});
+
+it("still surfaces a restored execution whose outcome is unknown", async () => {
+  localStorage.setItem("semlia.execution.wsp_a", "run_record");
+  const unknown = result(); unknown.run.state = "unknown"; unknown.availability = "metadata_only"; delete unknown.rows;
+  vi.mocked(getExecution).mockResolvedValue(unknown);
+  render(<AskExecutionPanel workspaceId="wsp_a"/>);
+  expect(await screen.findByText("结果未知")).toBeVisible();
 });

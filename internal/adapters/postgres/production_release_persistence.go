@@ -82,6 +82,26 @@ func (s *Store) persistProductionReleaseTx(ctx context.Context, tx pgx.Tx, relea
 			return err
 		}
 	}
+	// Rollback restores a manifest that was already published and must stay available.
+	if release.RolledBackToReleaseID == nil {
+		priorAssets, _, err := domain.ParseProductionManifestJSON(manifest.BeforeManifestJSON)
+		if err != nil {
+			return err
+		}
+		prior := map[string]bool{}
+		for _, entry := range priorAssets {
+			prior[entry.AssetID.String()+"/"+entry.RevisionID.String()] = true
+		}
+		changed := map[string]bool{}
+		for _, entry := range release.Entries {
+			if !prior[entry.AssetID.String()+"/"+entry.RevisionID.String()] {
+				changed[entry.AssetID.String()] = true
+			}
+		}
+		if err := checkReleaseVocabularyTx(ctx, tx, release.WorkspaceID, release.ID, changed); err != nil {
+			return err
+		}
+	}
 	if err := q.InsertProductionCommand(ctx, dbgen.InsertProductionCommandParams{WorkspaceID: w, PrincipalID: actor, CommandKind: cmd.CommandKind, IdempotencyKey: cmd.IdempotencyKey, RequestDigest: cmd.RequestDigest, OperationID: op, OperationVersion: int32(cmd.OperationVersion), ResultKind: "release", ResultID: r, ResponseJson: cmd.ResponseJSON, CommittedAt: timestamp(cmd.CommittedAt)}); err != nil {
 		return governanceRepositoryError("record release command", err)
 	}

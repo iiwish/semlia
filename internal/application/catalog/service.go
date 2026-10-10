@@ -42,6 +42,10 @@ type Repository interface {
 	GetCatalogRevision(context.Context, identity.WorkspaceID, identity.AssetID, identity.RevisionID) (domain.Revision, error)
 	AppendCatalogRevision(context.Context, domain.AppendRevisionCommand) (domain.Revision, error)
 	ListCatalogRelations(context.Context, domain.ListRelationsQuery) ([]domain.Relation, error)
+	// ListCatalogAssetRefs names and types the given assets; unknown ids are simply absent.
+	ListCatalogAssetRefs(context.Context, identity.WorkspaceID, []identity.AssetID) ([]domain.AssetRef, error)
+	// ListCatalogAssetsReferencing returns assets whose current spec references the given asset.
+	ListCatalogAssetsReferencing(context.Context, identity.WorkspaceID, identity.AssetID, int) ([]domain.ReferencingAsset, error)
 	GetCatalogDiscoveryRun(context.Context, identity.WorkspaceID, identity.RunID) (domain.DiscoveryRun, error)
 }
 
@@ -466,10 +470,26 @@ func (service *Service) populateAuthorityRecordPages(
 		if action != "" && service.authorizer != nil && (!hasSectionAccess || !snapshot.Allows(action, resource)) {
 			continue
 		}
+		var subject *relationSubject
+		var visible func(identity.AssetID) bool
+		if section.Kind == "relations" {
+			subject = &relationSubject{ID: asset, Type: detail.Type}
+			if detail.CurrentRevision != nil {
+				subject.Content = detail.CurrentRevision.Content
+			}
+			visible = service.counterpartVisibility(snapshot, hasSectionAccess)
+		}
 		page, err := service.listAuthorityRecordPage(ctx, workspace, asset, section.Kind,
-			defaultAuthorityRecordLimit, nil)
+			defaultAuthorityRecordLimit, nil, subject, visible)
 		if err != nil {
 			return err
+		}
+		if section.Kind == "relations" {
+			if section.Values == nil {
+				section.Values = map[string]int64{}
+			}
+			section.Values["relationCount"] = page.Total
+			detail.RelationCount = int(page.Total)
 		}
 		section.Records, section.RecordsNextCursor = page.Items, page.NextCursor
 		redactAuthorityRecordEvidence(section.Records, service.authorizer == nil ||
@@ -507,6 +527,7 @@ func (service *Service) ListAuthorityRecords(
 		return AuthorityRecordPage{}, domain.ErrNotFound
 	}
 	evidenceAllowed := service.authorizer == nil
+	var visible func(identity.AssetID) bool
 	if service.authorizer != nil {
 		snapshotEvaluator, ok := service.authorizer.(authorizationapp.SnapshotEvaluator)
 		if !ok || decision.PrincipalID.IsZero() {
@@ -524,12 +545,24 @@ func (service *Service) ListAuthorityRecords(
 			return AuthorityRecordPage{}, domain.ErrNotFound
 		}
 		evidenceAllowed = snapshot.Allows(authz.ActionEvidenceRead, resource)
+		visible = service.counterpartVisibility(snapshot, true)
 	}
 	cursor, err := decodeAuthorityRecordCursor(request.Cursor, request.WorkspaceID, request.AssetID, request.Section)
 	if err != nil {
 		return AuthorityRecordPage{}, err
 	}
-	page, err := service.listAuthorityRecordPage(ctx, request.WorkspaceID, request.AssetID, request.Section, limit, cursor)
+	var subject *relationSubject
+	if request.Section == "relations" {
+		detail, detailErr := service.repository.GetCatalogAsset(ctx, request.WorkspaceID, request.AssetID)
+		if detailErr != nil {
+			return AuthorityRecordPage{}, detailErr
+		}
+		subject = &relationSubject{ID: request.AssetID, Type: detail.Type}
+		if detail.CurrentRevision != nil {
+			subject.Content = detail.CurrentRevision.Content
+		}
+	}
+	page, err := service.listAuthorityRecordPage(ctx, request.WorkspaceID, request.AssetID, request.Section, limit, cursor, subject, visible)
 	if err != nil {
 		return AuthorityRecordPage{}, err
 	}
@@ -555,7 +588,12 @@ func (service *Service) listAuthorityRecordPage(
 	section string,
 	limit int,
 	cursor *domain.AuthorityRecordCursor,
+	subject *relationSubject,
+	visible func(identity.AssetID) bool,
 ) (AuthorityRecordPage, error) {
+	if section == "relations" && subject != nil {
+		return service.listRelationRecordPage(ctx, workspace, *subject, visible, limit, cursor)
+	}
 	result, err := service.repository.ListCatalogAuthorityRecords(ctx, domain.ListAuthorityRecordsQuery{
 		WorkspaceID: workspace, AssetID: asset, Section: section, Limit: limit + 1, Cursor: cursor,
 	})
@@ -937,7 +975,7 @@ func decodeAuthorityRecordCursor(
 
 func authorityRecordPrefix(kind string) (identity.Prefix, bool) {
 	switch kind {
-	case "relation":
+	case "relation", relationDerivedKind:
 		return identity.Relation, true
 	case "physical_binding":
 		return identity.PhysicalBinding, true
@@ -980,4 +1018,16 @@ func ParseAssetID(value string) (identity.AssetID, error) {
 		return identity.AssetID{}, fmt.Errorf("%w: asset ID", domain.ErrInvalidArgument)
 	}
 	return id, nil
+}
+
+// counterpartVisibility limits projected relations to counterparts the caller may read, so a relation never reveals the
+// name of an asset the caller could not open. Without an authorizer everything is visible; when the access snapshot
+// is unavailable nothing is.
+func (service *Service) counterpartVisibility(snapshot authorizationapp.AccessSnapshot, snapshotAvailable bool) func(identity.AssetID) bool {
+	if service.authorizer == nil {
+		return nil
+	}
+	return func(asset identity.AssetID) bool {
+		return snapshotAvailable && snapshot.Allows(authz.ActionAssetRead, authz.Resource{Type: authz.ScopeAsset, ID: asset.UUID()})
+	}
 }
