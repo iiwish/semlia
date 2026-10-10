@@ -20,25 +20,32 @@ test("isolated identity and server-owned production workspace", async ({ page, c
   const versions = page.getByRole("group", { name: "知识版本筛选" });
   const rows = page.getByRole("button", { name: /^打开语义资产 / });
   const unavailable = page.getByText("版本筛选暂不可用，当前显示全部版本。", { exact: true });
-  await expect(rows).toHaveCount(catalog.items.length);
   if (catalog.items.length === 0) {
+    await expect(rows).toHaveCount(0);
     await expect(versions.getByRole("button", { name: "草稿 0", exact: true })).toBeEnabled();
     await expect(versions.getByRole("button", { name: "草稿 0", exact: true })).toHaveAttribute("aria-pressed", "true");
     await expect(versions.getByRole("button", { name: "正式版 0", exact: true })).toBeEnabled();
     await expect(versions.getByRole("button", { name: "全部 0", exact: true })).toHaveAttribute("aria-pressed", "false");
     await expect(unavailable).toHaveCount(0);
   } else {
-    await expect(versions.getByRole("button", { name: `全部 ${catalog.items.length}`, exact: true })).toHaveAttribute("aria-pressed", "true");
-    for (const name of ["草稿 待确认", "正式版 待确认"]) {
-      await expect(versions.getByRole("button", { name, exact: true })).toBeDisabled();
-      await expect(versions.getByRole("button", { name, exact: true })).toHaveAttribute("aria-pressed", "false");
-    }
-    await expect(unavailable).toBeVisible();
+    // Each row reads its own detail, so publication states settle and the requested drafts section applies; the
+    // directory must not stay on placeholders or fall back to an unfiltered list.
+    const all = versions.getByRole("button", { name: `全部 ${catalog.items.length}`, exact: true });
+    const drafts = versions.getByRole("button", { name: /^草稿 \d+$/ });
+    const published = versions.getByRole("button", { name: /^正式版 \d+$/ });
+    await expect(all).toBeEnabled();
+    await expect(drafts).toBeEnabled();
+    await expect(drafts).toHaveAttribute("aria-pressed", "true");
+    await expect(all).toHaveAttribute("aria-pressed", "false");
+    await expect(unavailable).toHaveCount(0);
+    const count = async (button: typeof drafts) => Number((await button.textContent())?.match(/\d+/)?.[0]);
+    const draftCount = await count(drafts);
+    expect(draftCount + await count(published)).toBe(catalog.items.length);
+    await expect(rows).toHaveCount(draftCount);
+    if (draftCount === 0) await expect(page.getByText("没有匹配知识资产", { exact: true })).toBeVisible();
     for (const row of await rows.all()) {
-      await expect(row).toContainText("发布状态待加载");
-      await expect(row).toContainText("就绪度待加载");
-      await expect(row).not.toContainText(/未发布|@0|0\/6|项需关注|门禁通过/);
-      await expect(row.getByRole("progressbar")).toHaveCount(0);
+      await expect(row).not.toContainText(/发布状态待加载|就绪度待加载/);
+      await expect(row.getByRole("progressbar")).toHaveCount(1);
     }
   }
   const records = await context.request.get(`/api/v1/workspaces/${bootstrap.workspaceId}/production-operations`);
