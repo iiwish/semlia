@@ -2,7 +2,7 @@ module github.com/iiwish/semlia
 
 go 1.26.0
 
-toolchain go1.26.6
+toolchain go1.26.9
 
 tool (
 	github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
@@ -23,6 +23,7 @@ require (
 	github.com/golang-migrate/migrate/v4 v4.19.1
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.10.0
+	github.com/modelcontextprotocol/go-sdk v1.7.0
 	github.com/oapi-codegen/runtime v1.1.2
 	github.com/pganalyze/pg_query_go/v6 v6.2.2
 	github.com/robfig/cron/v3 v3.0.1
@@ -36,11 +37,12 @@ require (
 	go.opentelemetry.io/otel/sdk v1.44.0
 	go.opentelemetry.io/otel/trace v1.44.0
 	go.yaml.in/yaml/v3 v3.0.5
+	golang.org/x/crypto v0.57.0
 	golang.org/x/oauth2 v0.36.0
-	golang.org/x/text v0.41.0
-	golang.org/x/crypto v0.55.0
-	golang.org/x/sys v0.47.0
+	golang.org/x/sys v0.48.0
+	golang.org/x/text v0.42.0
 	google.golang.org/protobuf v1.36.11
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -126,7 +128,6 @@ require (
 	github.com/moby/sys/user v0.4.1 // indirect
 	github.com/moby/sys/userns v0.1.0 // indirect
 	github.com/moby/term v0.5.2 // indirect
-	github.com/modelcontextprotocol/go-sdk v1.7.0 // indirect
 	github.com/ncruces/go-sqlite3 v0.32.0 // indirect
 	github.com/ncruces/julianday v1.0.0 // indirect
 	github.com/oapi-codegen/oapi-codegen/v2 v2.8.0 // indirect
@@ -185,9 +186,9 @@ require (
 	go.uber.org/zap v1.27.0 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.2 // indirect
 	golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f // indirect
-	golang.org/x/mod v0.40.0 // indirect
-	golang.org/x/net v0.58.0 // indirect
-	golang.org/x/sync v0.22.0 // indirect
+	golang.org/x/mod v0.41.0 // indirect
+	golang.org/x/net v0.60.0 // indirect
+	golang.org/x/sync v0.23.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	golang.org/x/tools v0.49.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260526163538-3dc84a4a5aaa // indirect
@@ -195,5 +196,4 @@ require (
 	google.golang.org/grpc v1.83.2 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

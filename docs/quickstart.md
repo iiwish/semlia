@@ -6,7 +6,7 @@ The default development path runs a native Go server, worker and Vite against an
 
 ## 1. Tools and Repository
 
-Install the exact versions in `.tool-versions`: Go 1.26.6, Node.js 24.15.0 and pnpm 11.1.3, plus Git and GNU Make. The repository doctor and full integration gates also require a running Docker-compatible engine with Compose; OrbStack is suitable on macOS. Database administration requires an authorized PostgreSQL client or operator.
+Install the exact versions in `.tool-versions`: Go 1.26.9, Node.js 24.15.0 and pnpm 11.1.3, plus Git and GNU Make. The repository doctor and full integration gates also require a running Docker-compatible engine with Compose; OrbStack is suitable on macOS. Database administration requires an authorized PostgreSQL client or operator.
 
 ```bash
 git clone https://github.com/iiwish/semlia.git

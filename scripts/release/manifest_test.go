@@ -23,14 +23,14 @@ func TestSBOMNormalizationPreservesEvidence(t *testing.T) {
 func TestReleaseRejectsUnpinnedToolchain(t *testing.T) {
 	directory := t.TempDir()
 	goPath := filepath.Join(directory, "go")
-	stub := "#!/bin/sh\ncase \"$*\" in\n'mod edit -json') printf '{\"Toolchain\":\"go1.26.6\"}' ;;\n'env GOVERSION') printf go1.26.3 ;;\n*) printf test ;;\nesac\n"
+	stub := "#!/bin/sh\ncase \"$*\" in\n'mod edit -json') printf '{\"Toolchain\":\"go1.26.9\"}' ;;\n'env GOVERSION') printf go1.26.3 ;;\n*) printf test ;;\nesac\n"
 	if err := os.WriteFile(goPath, []byte(stub), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	command := exec.Command("bash", "build.sh")
 	command.Env = append(os.Environ(), "GO="+goPath, "SEMLIA_RELEASE_DIR="+filepath.Join(directory, "release"))
 	output, err := command.CombinedOutput()
-	if err == nil || !strings.Contains(string(output), "Release requires go1.26.6") {
+	if err == nil || !strings.Contains(string(output), "Release requires go1.26.9") {
 		t.Fatalf("unpinned toolchain was not rejected: %v\n%s", err, output)
 	}
 }

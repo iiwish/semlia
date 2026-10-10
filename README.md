@@ -69,7 +69,7 @@ The supported product is desktop Web at **1024px or wider**, verified at 1440x90
 
 ## Quick Start
 
-Install the versions pinned in `.tool-versions`: Go 1.26.6, Node.js 24.15.0, pnpm 11.1.3, plus Git and GNU Make.
+Install the versions pinned in `.tool-versions`: Go 1.26.9, Node.js 24.15.0, pnpm 11.1.3, plus Git and GNU Make.
 
 Follow the [complete quickstart](docs/quickstart.md) to configure an **existing PostgreSQL 18** instance, an owned database/role and protected local configuration. Explicitly migrate and create the first ordinary account before startup:
 

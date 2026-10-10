@@ -69,7 +69,7 @@ dbt / 业务文档        血缘 + Provenance       绑定 + 契约             
 
 ## 快速开始
 
-安装 `.tool-versions` 固定的 Go 1.26.6、Node.js 24.15.0、pnpm 11.1.3，以及 Git 和 GNU Make。
+安装 `.tool-versions` 固定的 Go 1.26.9、Node.js 24.15.0、pnpm 11.1.3，以及 Git 和 GNU Make。
 
 先按[完整快速入门](docs/quickstart.md)配置**已有 PostgreSQL 18**、专用数据库与角色、受保护本地配置，再显式迁移和建立普通账号：
 
