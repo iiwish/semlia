@@ -42,6 +42,7 @@ const (
 	ArtifactKindDbtManifest ArtifactKind = "dbt_manifest"
 	ArtifactKindMarkdown    ArtifactKind = "markdown"
 	ArtifactKindSql         ArtifactKind = "sql"
+	ArtifactKindSqlite      ArtifactKind = "sqlite"
 	ArtifactKindXlsx        ArtifactKind = "xlsx"
 )
 
@@ -57,6 +58,8 @@ func (e ArtifactKind) Valid() bool {
 	case ArtifactKindMarkdown:
 		return true
 	case ArtifactKindSql:
+		return true
+	case ArtifactKindSqlite:
 		return true
 	case ArtifactKindXlsx:
 		return true
@@ -112,6 +115,7 @@ const (
 	ArtifactSetSourceKindDbtBundle ArtifactSetSourceKind = "dbt_bundle"
 	ArtifactSetSourceKindFile      ArtifactSetSourceKind = "file"
 	ArtifactSetSourceKindSqlBundle ArtifactSetSourceKind = "sql_bundle"
+	ArtifactSetSourceKindSqlite    ArtifactSetSourceKind = "sqlite"
 )
 
 // Valid indicates whether the value is a known member of the ArtifactSetSourceKind enum.
@@ -123,6 +127,8 @@ func (e ArtifactSetSourceKind) Valid() bool {
 		return true
 	case ArtifactSetSourceKindSqlBundle:
 		return true
+	case ArtifactSetSourceKindSqlite:
+		return true
 	default:
 		return false
 	}
@@ -133,6 +139,7 @@ const (
 	Dbt           ArtifactSourceConnectionAdapterKind = "dbt"
 	FileCatalog   ArtifactSourceConnectionAdapterKind = "file_catalog"
 	PostgresqlSql ArtifactSourceConnectionAdapterKind = "postgresql_sql"
+	SqliteCatalog ArtifactSourceConnectionAdapterKind = "sqlite_catalog"
 )
 
 // Valid indicates whether the value is a known member of the ArtifactSourceConnectionAdapterKind enum.
@@ -144,6 +151,8 @@ func (e ArtifactSourceConnectionAdapterKind) Valid() bool {
 		return true
 	case PostgresqlSql:
 		return true
+	case SqliteCatalog:
+		return true
 	default:
 		return false
 	}
@@ -154,6 +163,7 @@ const (
 	ArtifactSourceConnectionSourceKindDbtBundle ArtifactSourceConnectionSourceKind = "dbt_bundle"
 	ArtifactSourceConnectionSourceKindFile      ArtifactSourceConnectionSourceKind = "file"
 	ArtifactSourceConnectionSourceKindSqlBundle ArtifactSourceConnectionSourceKind = "sql_bundle"
+	ArtifactSourceConnectionSourceKindSqlite    ArtifactSourceConnectionSourceKind = "sqlite"
 )
 
 // Valid indicates whether the value is a known member of the ArtifactSourceConnectionSourceKind enum.
@@ -164,6 +174,8 @@ func (e ArtifactSourceConnectionSourceKind) Valid() bool {
 	case ArtifactSourceConnectionSourceKindFile:
 		return true
 	case ArtifactSourceConnectionSourceKindSqlBundle:
+		return true
+	case ArtifactSourceConnectionSourceKindSqlite:
 		return true
 	default:
 		return false
@@ -2885,6 +2897,7 @@ const (
 	PublicArtifactKindDbtCatalog  PublicArtifactKind = "dbt_catalog"
 	PublicArtifactKindDbtManifest PublicArtifactKind = "dbt_manifest"
 	PublicArtifactKindMarkdown    PublicArtifactKind = "markdown"
+	PublicArtifactKindSqlite      PublicArtifactKind = "sqlite"
 	PublicArtifactKindXlsx        PublicArtifactKind = "xlsx"
 )
 
@@ -2898,6 +2911,8 @@ func (e PublicArtifactKind) Valid() bool {
 	case PublicArtifactKindDbtManifest:
 		return true
 	case PublicArtifactKindMarkdown:
+		return true
+	case PublicArtifactKindSqlite:
 		return true
 	case PublicArtifactKindXlsx:
 		return true
@@ -11366,6 +11381,8 @@ func (t SourceConnection) ValueByDiscriminator() (interface{}, error) {
 	case "postgresql":
 		return t.AsPostgreSQLSourceConnection()
 	case "sql_bundle":
+		return t.AsArtifactSourceConnection()
+	case "sqlite":
 		return t.AsArtifactSourceConnection()
 	default:
 		return nil, errors.New("unknown discriminator value: " + discriminator)

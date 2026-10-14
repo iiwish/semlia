@@ -254,6 +254,7 @@ function mediaTypeFor(kind: PublicArtifactKind, declared: string) {
   if (kind === "markdown") return "text/markdown";
   if (kind === "xlsx") return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
   if (kind === "dbt_manifest" || kind === "dbt_catalog") return "application/json";
+  if (kind === "sqlite") return "application/vnd.sqlite3";
   return declared;
 }
 

@@ -12,6 +12,7 @@ import (
 	executionapp "github.com/iiwish/semlia/internal/application/execution"
 	dist "github.com/iiwish/semlia/internal/domain/distribution"
 	d "github.com/iiwish/semlia/internal/domain/execution"
+	"github.com/iiwish/semlia/internal/domain/sourcekind"
 	"github.com/iiwish/semlia/pkg/identity"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -36,8 +37,9 @@ func (store *Store) CheckExecutionSource(ctx context.Context, w identity.Workspa
 		err := store.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM source_connections s
     JOIN physical_datasets d ON d.workspace_id=s.workspace_id AND d.source_connection_id=s.id
     JOIN physical_dataset_revisions dr ON dr.workspace_id=d.workspace_id AND dr.physical_dataset_id=d.id AND dr.id=d.current_revision_id
-    WHERE s.workspace_id=$1 AND s.id=$2 AND s.status='active' AND s.adapter_kind='postgresql_catalog'
-      AND s.normalized_locator=$3 AND d.id=$4 AND dr.id=$5 AND dr.source_revision_id=$6)`, w.UUID(), r.SourceID, r.SourceLocator, r.DatasetID, r.DatasetRevisionID, r.SourceRevisionID).Scan(&active)
+    WHERE s.workspace_id=$1 AND s.id=$2 AND s.status='active' AND s.adapter_kind=ANY($7::text[]) AND s.adapter_kind=$8
+      AND s.normalized_locator=$3 AND d.id=$4 AND dr.id=$5 AND dr.source_revision_id=$6)`, w.UUID(), r.SourceID, r.SourceLocator, r.DatasetID, r.DatasetRevisionID, r.SourceRevisionID,
+			sourcekind.ExecutableAdapters(), r.AdapterKind).Scan(&active)
 		if err != nil {
 			return errExecutionStore
 		}
@@ -46,6 +48,27 @@ func (store *Store) CheckExecutionSource(ctx context.Context, w identity.Workspa
 		}
 	}
 	return nil
+}
+
+// SQLiteRevisionArtifact returns the uploaded database file that produced the
+// given source revision, so execution reads exactly the data a plan was built on.
+func (store *Store) SQLiteRevisionArtifact(ctx context.Context, w identity.WorkspaceID, sourceID, sourceRevisionID string) (string, int64, error) {
+	var digest string
+	var size int64
+	err := store.pool.QueryRow(ctx, `SELECT a.content_sha256, a.byte_size FROM discovery_runs r
+    JOIN source_connections s ON s.workspace_id=r.workspace_id AND s.id=r.source_connection_id
+    JOIN discovery_run_artifacts p ON p.workspace_id=r.workspace_id AND p.discovery_run_id=r.id
+    JOIN source_artifacts a ON a.workspace_id=p.workspace_id AND a.id=p.source_artifact_id
+    WHERE r.workspace_id=$1 AND r.source_connection_id=$2::uuid AND r.source_revision_id=$3::uuid
+      AND s.source_kind='sqlite' AND s.status='active' AND a.artifact_kind='sqlite'
+    ORDER BY r.created_at DESC, r.id DESC LIMIT 1`, w.UUID(), sourceID, sourceRevisionID).Scan(&digest, &size)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", 0, d.ErrNotConfigured
+	}
+	if err != nil {
+		return "", 0, errExecutionStore
+	}
+	return digest, size, nil
 }
 
 func executionUUID(s string) any {

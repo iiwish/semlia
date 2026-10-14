@@ -70,7 +70,7 @@ function ScopedExecutionPanel({ workspaceId, plan, active, restoreFinished }: { 
   const enabled = plan?.executionStatus === "requires_execution_validation";
   const stateLabels = { running: "执行中", succeeded: "已完成", failed: "执行失败", cancelled: "已取消", unknown: "结果未知" };
   return <section className="ask-execution" aria-label="只读查询执行">
-    <header><strong>只读查询</strong>{result && <span>{stateLabels[result.run.state]}</span>}
+    <header><strong>只读查询</strong>{result && <span className={`execution-state-badge execution-state-${result.run.state}`}>{stateLabels[result.run.state]}</span>}
       {enabled && result?.run.state !== "running" && <button type="button" className="secondary-button" disabled={busy} onClick={() => void execute()}>{busy ? <LoaderCircle size={14} /> : pendingKey ? <RefreshCw size={14} /> : <Play size={14} />}{pendingKey ? "重试同一执行请求" : result ? "重新执行" : "执行只读查询"}</button>}
       {result?.run.state === "running" && <><button type="button" className="icon-button" disabled={busy} aria-label="核对执行状态" title="核对执行状态" onClick={() => void inspect()}><RefreshCw size={14}/></button><button type="button" className="icon-button" disabled={busy || result.run.cancelRequested} aria-label="请求取消执行" title="请求取消执行" onClick={() => void inspect(true)}><Square size={14}/></button></>}
       {busy && <button type="button" className="icon-button" aria-label="取消查询" title="取消查询" onClick={() => request.current?.abort()}><Square size={14} /></button>}

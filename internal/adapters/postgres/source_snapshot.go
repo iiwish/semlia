@@ -121,6 +121,10 @@ func declaredRunSnapshot(ctx context.Context, tx pgx.Tx, workspace, run pgtype.U
 			}
 		case "dbt_bundle":
 			snapshot.DeclareCoverage("dbt", strings.Join(paths, ";"))
+		case "sqlite":
+			for _, path := range paths {
+				snapshot.DeclareCoverage(domain.PathCoverageKey("sqlite", path), path)
+			}
 		case "file":
 			snapshot.AdapterKind = "file_" + artifactKind
 			for _, path := range paths {

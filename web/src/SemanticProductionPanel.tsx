@@ -195,7 +195,20 @@ export function SemanticProductionPanel({ workspaceId, principalId, identityKey,
   };
 
   return <KnowledgeWorkspaceContext.Provider value={workspaceId}><section className="view production-workspace" aria-label="知识确认">
-    <header className="production-heading"><div>{(onBack || detail || draft) && <button ref={firstFocus} className="ingestion-back" onClick={onBack ?? backToRecords}><ArrowLeft size={15} />{onBack ? backLabel : "返回整理记录"}</button>}<h2>{candidate?.title ?? primaryTitle ?? (operationId ? "知识确认" : "草稿与整理")}</h2><span className="production-muted">{detail ? `v${detail.version} · ${progressLabels[detail.summary.progress]}` : candidate ? "来源候选 · 尚未发布" : "知识整理与审核记录"}</span></div><div className="production-actions"><button className="icon-button" title="核对服务器状态" aria-label="核对服务器状态" disabled={runtime.busy || runtime.loading} onClick={() => void runtime.refresh()}><RefreshCw size={16} /></button>{draft && <button className="primary-button" disabled={!canSave} onClick={() => void save()}><Save size={15} />{detail ? "保存纠正版本" : "保存知识草稿"}</button>}</div></header>
+    <header className="production-heading">
+      <div className="production-heading-main">
+        {(onBack || detail || draft) && <button ref={firstFocus} className="ingestion-back" onClick={onBack ?? backToRecords}><ArrowLeft size={14} />{onBack ? backLabel : "返回整理记录"}</button>}
+        <div className="production-heading-title-row">
+          <h2>{candidate?.title ?? primaryTitle ?? (operationId ? "知识确认" : "草稿与整理")}</h2>
+          {candidate && <span className="production-badge">{candidate.candidateKind === "data_asset" ? "数据资产候选" : candidate.candidateKind}</span>}
+          <span className="production-muted">{detail ? `v${detail.version} · ${progressLabels[detail.summary.progress]}` : candidate ? "来源候选 · 尚未发布" : "知识整理与审核记录"}</span>
+        </div>
+      </div>
+      <div className="production-actions">
+        <button className="icon-button" title="核对服务器状态" aria-label="核对服务器状态" disabled={runtime.busy || runtime.loading} onClick={() => void runtime.refresh()}><RefreshCw size={16} /></button>
+        {draft && <button className="primary-button" disabled={!canSave} onClick={() => void save()}><Save size={15} />{detail ? "保存纠正版本" : "保存知识草稿"}</button>}
+      </div>
+    </header>
     {runtime.error && <div className="production-alert" role="alert">{runtime.error}{runtime.uncertain && <button className="secondary-button" disabled={runtime.busy} onClick={() => void runtime.retry()}><RotateCcw size={14} />重试同一请求</button>}</div>}
     {runtime.notice && <p role="status" className="production-notice">{runtime.notice}</p>}
     {revisionContext && <section className="production-notice" aria-label="未确认的修订上下文"><h3>修订原因与回答依据（未确认）</h3><p>{revisionContext}</p></section>}
@@ -205,12 +218,152 @@ export function SemanticProductionPanel({ workspaceId, principalId, identityKey,
     {legacyNotice && <p className="production-notice">{legacyNotice.message}{legacyNotice.proposalId && <button className="ingestion-link" onClick={() => onOpenProposal(legacyNotice.proposalId)}>打开旧提案<ChevronRight size={14} /></button>}</p>}
     {runtime.loading && !detail && <p role="status"><LoaderCircle className="is-spinning" size={16} />正在核对生产状态</p>}
     {!detail && !draft && <>
-      {runtime.items.length > 0 && <section className="production-records" aria-label="可恢复的生产记录">{runtime.items.map((item) => <button className="production-record" key={item.id} disabled={runtime.busy} onClick={() => void runtime.open(item.id)}><FileCheck2 size={18} /><span><strong>{item.title || "未命名知识"}</strong><small>{progressLabels[item.progress]} · v{item.currentVersion} · {item.targetCount} 个对象 · {new Date(item.updatedAt).toLocaleString("zh-CN")}</small><small title={item.id}>记录 …{item.id.slice(-8)}</small></span><ChevronRight size={16} /></button>)}</section>}
+      {runtime.items.length > 0 && <section className="production-records-section" aria-label="可恢复的生产记录">
+        <div className="production-records-header">
+          <h3>可恢复的知识整理记录</h3>
+          <p className="production-muted">该候选已有正在进行或暂存的生产草稿，点击可继续编辑：</p>
+        </div>
+        <div className="production-records">{runtime.items.map((item) => <button className="production-record" key={item.id} disabled={runtime.busy} onClick={() => void runtime.open(item.id)}><FileCheck2 size={18} /><span><strong>{item.title || "未命名知识"}</strong><small>{progressLabels[item.progress]} · v{item.currentVersion} · {item.targetCount} 个对象 · {new Date(item.updatedAt).toLocaleString("zh-CN")}</small><small title={item.id}>记录 …{item.id.slice(-8)}</small></span><ChevronRight size={16} /></button>)}</div>
+      </section>}
       {runtime.nextCursor && <button className="secondary-button" onClick={() => void runtime.loadMore()}>更多生产记录</button>}
       {!runtime.loading && !runtime.error && !runtime.items.length && !candidateId && <p className="production-empty">暂无待确认知识{onOpenSources && <button className="secondary-button" onClick={onOpenSources}><Database size={16} />查看接入候选</button>}</p>}
-      {candidate && !runtime.items.length && <section className="production-start"><h3>候选建模</h3><p className="production-muted">{candidate.candidateKind} · {candidate.status === "pending" ? "待处理" : candidate.status === "converted" ? "已有提案" : "已忽略"}</p><button className="primary-button" disabled={candidate.status !== "pending" || sourceLoading || Boolean(sourceError) || runtime.loading || runtime.busy || runtime.uncertain || Boolean(runtime.error) || !permissions.edit} onClick={start}><Plus size={16} />整理为知识</button>{candidate.proposalId && <button className="secondary-button" onClick={() => onOpenProposal(candidate.proposalId!)}>打开已有提案</button>}{candidate.status === "pending" && <details><summary>忽略此候选</summary><label className="production-field"><span>忽略依据</span><textarea aria-label="忽略依据" value={dismissReason} disabled={runtime.busy || runtime.uncertain || Boolean(legacyNotice)} onChange={(event) => setDismissReason(event.target.value)} /></label><button className="secondary-button" disabled={!permissions.edit || runtime.loading || runtime.busy || runtime.uncertain || Boolean(runtime.error) || Boolean(legacyNotice) || !dismissReason.trim()} onClick={dismissCandidate}><X size={14} />忽略候选</button></details>}</section>}
+      {candidate && !runtime.items.length && <section className="production-candidate-hub">
+        <div className="production-hub-col production-hub-decision">
+          <article className="production-hub-card production-meta-card">
+            <div className="production-card-header">
+              <span className="production-card-eyebrow">物理源元数据</span>
+              <h3>{candidate.title}</h3>
+            </div>
+            <dl className="production-meta-grid">
+              <div>
+                <dt>限定名称</dt>
+                <dd title={typeof candidate.proposalInput.qualifiedName === "string" ? candidate.proposalInput.qualifiedName : ""}>
+                  <code>{typeof candidate.proposalInput.qualifiedName === "string" ? candidate.proposalInput.qualifiedName : candidate.title}</code>
+                </dd>
+              </div>
+              <div>
+                <dt>候选类型</dt>
+                <dd><span className="production-badge">{candidate.candidateKind === "data_asset" ? "数据资产候选" : candidate.candidateKind}</span></dd>
+              </div>
+              <div>
+                <dt>当前状态</dt>
+                <dd>
+                  <span className={`production-status-tag is-${candidate.status}`}>
+                    {candidate.status === "pending" ? "待处理" : candidate.status === "converted" ? "已有提案" : "已忽略"}
+                  </span>
+                </dd>
+              </div>
+              <div>
+                <dt>来源连接</dt>
+                <dd><code>{candidate.sourceConnectionId}</code></dd>
+              </div>
+            </dl>
+          </article>
+
+          <article className="production-hub-card production-action-card">
+            <div className="production-card-header">
+              <span className="production-card-eyebrow">业务语义资产生产</span>
+              <h3>候选建模</h3>
+            </div>
+            <p className="production-card-desc">
+              将该物理表纳入受治理的语义知识库。点击后将初始化治理草稿并展开编辑表单，引导您补充业务定义、设置适用范围与计算口径，经自动合规校验后发布为企业语义资产。
+            </p>
+            <div className="production-blueprint-box">
+              <span className="production-blueprint-title">待生成知识模型预设</span>
+              <dl className="production-blueprint-grid">
+                <div>
+                  <dt>目标资产名称</dt>
+                  <dd><strong>{candidate.title}</strong></dd>
+                </div>
+                <div>
+                  <dt>建议资产地址</dt>
+                  <dd><code>{typeof candidate.proposalInput.qualifiedName === "string" ? candidate.proposalInput.qualifiedName : `semantic.${candidate.title}`}</code></dd>
+                </div>
+                <div>
+                  <dt>绑定物理数据源</dt>
+                  <dd><code>{candidate.sourceConnectionId}</code></dd>
+                </div>
+                <div>
+                  <dt>生产治理步骤</dt>
+                  <dd>业务定义 → 规则口径 → 校验发布</dd>
+                </div>
+              </dl>
+            </div>
+            <div className="production-card-actions">
+              <button className="primary-button" disabled={candidate.status !== "pending" || sourceLoading || Boolean(sourceError) || runtime.loading || runtime.busy || runtime.uncertain || Boolean(runtime.error) || !permissions.edit} onClick={start}>
+                <Plus size={16} />整理为知识
+              </button>
+              {candidate.proposalId && <button className="secondary-button" onClick={() => onOpenProposal(candidate.proposalId!)}>打开已有提案</button>}
+            </div>
+          </article>
+
+          {candidate.status === "pending" && <article className="production-hub-card production-dismiss-card">
+            <details>
+              <summary>忽略此候选</summary>
+              <p className="production-card-desc">若该物理表属于临时宽表、测试日志或无需纳入业务语义治理，请登记依据后忽略。</p>
+              <label className="production-field">
+                <span>忽略依据</span>
+                <textarea aria-label="忽略依据" placeholder="请输入忽略该候选的具体依据或原因说明..." value={dismissReason} disabled={runtime.busy || runtime.uncertain || Boolean(legacyNotice)} onChange={(event) => setDismissReason(event.target.value)} />
+              </label>
+              <div className="production-card-actions">
+                <button className="secondary-button" disabled={!permissions.edit || runtime.loading || runtime.busy || runtime.uncertain || Boolean(runtime.error) || Boolean(legacyNotice) || !dismissReason.trim()} onClick={dismissCandidate}>
+                  <X size={14} />忽略候选
+                </button>
+              </div>
+            </details>
+          </article>}
+        </div>
+
+        <div className="production-hub-col production-hub-evidence">
+          <section className="production-hub-card production-source-board" aria-label="固定来源依据">
+            <header className="production-board-header">
+              <div className="production-board-title">
+                <Database size={16} />
+                <h4>固定来源依据</h4>
+                <span className="production-board-count">{snapshots.length} 个快照 · {members.length} 个已加载成员</span>
+              </div>
+              {sourceLoading && <span role="status" className="production-status-loading"><LoaderCircle className="is-spinning" size={13} />正在读取来源</span>}
+            </header>
+            {sourceError && <div role="alert" className="production-alert">{sourceError}<button onClick={() => setSourceRetry((value) => value + 1)}>重试来源读取</button></div>}
+
+            {snapshots.length > 0 && <div className="production-source-pins">
+              {snapshots.map((snapshot) => <article key={snapshot.id}>
+                <strong>{snapshot.historyQuality === "verified" ? "历史可验证" : "历史不可验证"} · {snapshot.coverageStatus === "complete" ? "覆盖完整" : "覆盖不完整"}</strong>
+                <code>{snapshot.id}</code>
+                <small>{snapshot.coverage.map((unit) => `${unit.key}: ${unit.status}`).join(" · ")}</small>
+                {cursors[snapshot.id] && <button className="secondary-button" disabled={sourceLoading} onClick={() => void loadMoreMembers(snapshot)}>加载更多来源成员</button>}
+              </article>)}
+            </div>}
+
+            <div className="production-schema-block">
+              <div className="production-schema-header">
+                <h5>物理结构与已识别成员</h5>
+                <small className="production-muted">共 {members.length} 项</small>
+              </div>
+              {members.length > 0 ? (
+                <div className="production-member-list">
+                  {members.map((member) => <div key={memberKey(member)}>
+                    <span className={`production-member-kind is-${member.kind}`}>{member.kind === "dataset" ? "数据集" : "字段"}</span>
+                    <strong>{member.name}</strong>
+                    <small>{member.locator}</small>
+                  </div>)}
+                </div>
+              ) : (
+                <div className="production-empty-members">
+                  {sourceLoading ? "正在解析物理成员结构..." : "暂无已加载的物理成员"}
+                </div>
+              )}
+            </div>
+
+            {candidate && <details className="production-raw-evidence">
+              <summary>候选原始依据</summary>
+              <pre>{JSON.stringify({ sourceRevisionId: candidate.sourceRevisionId, proposalInput: candidate.proposalInput, evidence: candidate.evidence }, null, 2)}</pre>
+            </details>}
+          </section>
+        </div>
+      </section>}
     </>}
-    {(candidateId || detail) && <section className="production-source" aria-label="固定来源依据"><button className="production-source-toggle" aria-expanded={sourceExpanded} onClick={() => setSourceExpanded((value) => !value)}><Database size={16} /><span>固定来源依据<strong>{snapshots.length} 个快照 · {members.length} 个已加载成员</strong></span><ChevronRight size={15} /></button>{sourceLoading && <span role="status">正在读取来源</span>}{sourceError && <div role="alert" className="production-alert">{sourceError}<button onClick={() => setSourceRetry((value) => value + 1)}>重试来源读取</button></div>}{sourceExpanded && <><div className="production-source-pins">{snapshots.map((snapshot) => <article key={snapshot.id}><strong>{snapshot.historyQuality === "verified" ? "历史可验证" : "历史不可验证"} · {snapshot.coverageStatus === "complete" ? "覆盖完整" : "覆盖不完整"}</strong><code>{snapshot.id}</code><small>{snapshot.coverage.map((unit) => `${unit.key}: ${unit.status}`).join(" · ")}</small>{cursors[snapshot.id] && <button className="secondary-button" disabled={sourceLoading} onClick={() => void loadMoreMembers(snapshot)}>加载更多来源成员</button>}</article>)}</div><div className="production-member-list">{members.map((member) => <div key={memberKey(member)}><span>{member.kind}</span><strong>{member.name}</strong><small>{member.locator}</small></div>)}</div>{candidate && <details><summary>候选原始依据</summary><pre>{JSON.stringify({ sourceRevisionId: candidate.sourceRevisionId, proposalInput: candidate.proposalInput, evidence: candidate.evidence }, null, 2)}</pre></details>}</>}</section>}
+    {(draft || detail || runtime.items.length > 0) && (candidateId || detail) && <section className="production-source" aria-label="固定来源依据"><button className="production-source-toggle" aria-expanded={sourceExpanded} onClick={() => setSourceExpanded((value) => !value)}><Database size={16} /><span>固定来源依据<strong>{snapshots.length} 个快照 · {members.length} 个已加载成员</strong></span><ChevronRight size={15} /></button>{sourceLoading && <span role="status">正在读取来源</span>}{sourceError && <div role="alert" className="production-alert">{sourceError}<button onClick={() => setSourceRetry((value) => value + 1)}>重试来源读取</button></div>}{sourceExpanded && <><div className="production-source-pins">{snapshots.map((snapshot) => <article key={snapshot.id}><strong>{snapshot.historyQuality === "verified" ? "历史可验证" : "历史不可验证"} · {snapshot.coverageStatus === "complete" ? "覆盖完整" : "覆盖不完整"}</strong><code>{snapshot.id}</code><small>{snapshot.coverage.map((unit) => `${unit.key}: ${unit.status}`).join(" · ")}</small>{cursors[snapshot.id] && <button className="secondary-button" disabled={sourceLoading} onClick={() => void loadMoreMembers(snapshot)}>加载更多来源成员</button>}</article>)}</div><div className="production-member-list">{members.map((member) => <div key={memberKey(member)}><span>{member.kind}</span><strong>{member.name}</strong><small>{member.locator}</small></div>)}</div>{candidate && <details><summary>候选原始依据</summary><pre>{JSON.stringify({ sourceRevisionId: candidate.sourceRevisionId, proposalInput: candidate.proposalInput, evidence: candidate.evidence }, null, 2)}</pre></details>}</>}</section>}
     {draft && <>
       <section className="knowledge-next-actions" aria-label="待补充内容">
         {draft.targets.filter((target) => target.kind === "semantic_asset").map((target) => {

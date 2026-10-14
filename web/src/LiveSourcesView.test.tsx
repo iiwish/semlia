@@ -463,6 +463,23 @@ describe("real source and candidate workspace", () => {
     expect(await screen.findByRole("region", { name: "运行记录详情" })).toBeVisible();
   });
 
+  it("synchronizes action notice when queued run completes", async () => {
+    const user = userEvent.setup();
+    const queuedRun = { ...run, id: "run_sync_test", status: "queued" as const };
+    const completedRun = { ...queuedRun, status: "succeeded" as const, adapterVersion: "v1", findings: [] };
+    mocks.startSourceRun.mockResolvedValue(queuedRun);
+    mocks.getDiscoveryRun.mockResolvedValue(completedRun);
+    render(<LiveSourcesView focusIndex={0} runDetailBackRequestEpoch={0} onRunDetailOpenChange={() => {}} onOpenProposal={() => {}} />);
+    await user.click(await screen.findByRole("button", { name: `启动发现 ${source.name}` }));
+    expect(await screen.findByText(/发现任务已创建，排队中/)).toBeVisible();
+
+    // 轮询或状态变更触发后，通知自动同步为已完成
+    await waitFor(() => {
+      expect(screen.getByText(/发现任务已完成/)).toBeVisible();
+    }, { timeout: 4000 });
+    expect(screen.queryByText(/排队中/)).not.toBeInTheDocument();
+  });
+
   it("shows connection-test progress and supports menu keyboard navigation", async () => {
     const user = userEvent.setup();
     let complete!: () => void;
@@ -716,6 +733,24 @@ describe("real source and candidate workspace", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("refresh unavailable");
   });
 
+  it("uploads a SQLite database file as a single sqlite artifact", async () => {
+    const set = { id: "ars_sqlite", sourceId: "src_sqlite", sourceKind: "sqlite", setDigest: "sha256:sqlite", members: [], createdAt: source.createdAt };
+    mocks.stageArtifact.mockResolvedValue({ id: "art_sqlite", kind: "sqlite", status: "validated" });
+    mocks.finalizeArtifactSet.mockResolvedValue(set);
+    const user = userEvent.setup();
+    renderView();
+    await screen.findByText(source.name);
+    await user.click(screen.getByRole("button", { name: "导入文件" }));
+    await user.type(screen.getByLabelText("来源名称"), "Retail Lab");
+    await user.selectOptions(screen.getByLabelText("工件类型"), "sqlite");
+    expect(screen.getByLabelText("上传工件")).toHaveAttribute("accept", ".sqlite,.sqlite3,.db");
+    expect(screen.getByLabelText("上传工件")).not.toHaveAttribute("multiple");
+    await user.upload(screen.getByLabelText("上传工件"), new File(["SQLite format 3"], "retail_lab.sqlite"));
+    await user.click(screen.getByRole("button", { name: "校验并保存来源" }));
+    expect(await screen.findByRole("dialog", { name: "持久工件集合" })).toHaveTextContent("ars_sqlite");
+    expect(mocks.stageArtifact).toHaveBeenCalledWith(workspaceId, expect.any(File), "sqlite", expect.any(String), undefined);
+  });
+
   it("registers configured-root SQL paths without browser upload", async () => {
     mocks.registerSQL.mockResolvedValue({ id: "ars_sql", sourceId: "src_sql", sourceKind: "sql_bundle", setDigest: "sha256:sql", members: [], createdAt: source.createdAt });
     const user = userEvent.setup();
@@ -812,5 +847,19 @@ describe("real source and candidate workspace", () => {
     await act(async () => { tick?.(); });
     expect(await screen.findByRole("button", { name: `查看语义候选 ${candidate.title}` })).toBeVisible();
     interval.mockRestore();
+  });
+
+  it("renders non-intrusive floating toast that can be manually dismissed", async () => {
+    const user = userEvent.setup();
+    mocks.testSourceConnection.mockResolvedValueOnce(undefined);
+    renderView();
+    await user.click(await screen.findByRole("button", { name: `更多操作 ${source.name}` }));
+    await user.click(screen.getByRole("menuitem", { name: "测试连接" }));
+    const toast = await screen.findByRole("status");
+    expect(toast).toHaveTextContent("Alpha Warehouse：连接测试通过。");
+    expect(toast).toHaveClass("source-toast-notice");
+    const closeBtn = screen.getByRole("button", { name: "关闭操作结果" });
+    await user.click(closeBtn);
+    expect(screen.queryByText("Alpha Warehouse：连接测试通过。")).not.toBeInTheDocument();
   });
 });

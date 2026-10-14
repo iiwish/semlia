@@ -1,16 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
+  Activity,
   AlertTriangle,
+  ArrowLeft,
+  Check,
   CheckCircle2,
   ChevronRight,
   ChevronLeft,
   CircleAlert,
   Clock3,
+  Copy,
   Database,
   FileUp,
   GitPullRequestArrow,
   KeyRound,
+  Layers,
   LoaderCircle,
+  Lock,
+  Network,
   Pencil,
   Pause,
   Play,
@@ -18,7 +25,9 @@ import {
   RefreshCw,
   Search,
   Server,
+  ShieldCheck,
   Trash2,
+  User,
   X,
 } from "lucide-react";
 
@@ -54,11 +63,13 @@ import "./ingestion-workspace.css";
 interface LiveSourcesViewProps {
   focusIndex: number;
   navigationEpoch?: number;
+  detailBackRequestEpoch?: number;
   runDetailBackRequestEpoch: number;
   initialRunId?: string;
   initialScheduleId?: string;
   initialSourceId?: string;
   onRoute?: (path: string) => void;
+  onDetailOpenChange?: (name: string | null) => void;
   onRunDetailOpenChange: (open: boolean) => void;
   onOpenProposal: (proposalId: string) => void;
 }
@@ -90,7 +101,7 @@ export function LiveSourcesView(props: LiveSourcesViewProps) {
   return <IngestionRuntimeProvider key={`${workspaceId}:${principalId}:${read}:${manage}:${run}`} workspaceId={workspaceId} access={{ read, manage, run }}><LiveSourcesWorkspace {...props} /></IngestionRuntimeProvider>;
 }
 
-function LiveSourcesWorkspace({ focusIndex, navigationEpoch = 0, runDetailBackRequestEpoch, initialRunId, initialScheduleId, initialSourceId, onRoute, onRunDetailOpenChange, onOpenProposal }: LiveSourcesViewProps) {
+function LiveSourcesWorkspace({ focusIndex, navigationEpoch = 0, detailBackRequestEpoch, runDetailBackRequestEpoch, initialRunId, initialScheduleId, initialSourceId, onRoute, onDetailOpenChange, onRunDetailOpenChange, onOpenProposal }: LiveSourcesViewProps) {
   const { workspaceId } = useCatalogRuntime();
   const ingestion = useIngestionRuntime();
   const canManage = useCan("source.manage");
@@ -132,6 +143,7 @@ function LiveSourcesWorkspace({ focusIndex, navigationEpoch = 0, runDetailBackRe
   const [startingSourceId, setStartingSourceId] = useState("");
   const focusedSourceRef = useRef<HTMLTableRowElement>(null);
   const openedRunRef = useRef("");
+  const lastTrackedRunRef = useRef<string | null>(null);
   const loadEpochRef = useRef(0);
   const candidateEpochRef = useRef(0);
   const appendBusyRef = useRef(false);
@@ -217,6 +229,56 @@ function LiveSourcesWorkspace({ focusIndex, navigationEpoch = 0, runDetailBackRe
   }, [runs, workspaceId]);
 
   useEffect(() => {
+    if (!actionNotice) return;
+
+    // 针对普通非任务通知（连接测试、修改凭据、保存连接等），超时 3.8s（失败 5.5s）自动淡出消除
+    if (!actionNotice.runId) {
+      const timeout = actionNotice.failed ? 5500 : 3800;
+      const timer = window.setTimeout(() => {
+        setActionNotice(null);
+      }, timeout);
+      return () => window.clearTimeout(timer);
+    }
+
+    // 针对发现运行任务：动态感知其实际状态
+    const targetRun = runs.find((item) => item.id === actionNotice.runId);
+    if (targetRun) {
+      const srcName = sources.find((s) => s.id === targetRun.sourceConnectionId)?.name || "数据来源";
+      if (targetRun.status === "succeeded") {
+        const completedMessage = `${srcName}：发现任务已完成。`;
+        if (actionNotice.message !== completedMessage) {
+          setActionNotice({ message: completedMessage, runId: targetRun.id });
+        }
+        const timer = window.setTimeout(() => {
+          setActionNotice((current) => (current?.runId === targetRun.id ? null : current));
+        }, 3800);
+        return () => window.clearTimeout(timer);
+      } else if (targetRun.status === "failed" || targetRun.status === "cancelled" || targetRun.status === "degraded") {
+        const statusText = runLabels[targetRun.status] || "执行失败";
+        const failedMessage = `${srcName}：发现任务${statusText}。`;
+        if (actionNotice.message !== failedMessage) {
+          setActionNotice({ message: failedMessage, failed: targetRun.status === "failed", runId: targetRun.id });
+        }
+        const timer = window.setTimeout(() => {
+          setActionNotice((current) => (current?.runId === targetRun.id ? null : current));
+        }, 5500);
+        return () => window.clearTimeout(timer);
+      } else if (targetRun.status === "running" && actionNotice.message.includes("排队中")) {
+        setActionNotice({ message: `${srcName}：发现任务执行中...`, runId: targetRun.id });
+        return;
+      }
+    }
+
+    // 兜底保障：若提示写着“排队中”，但当前已无任何排队或运行中的活跃任务，及时清除陈旧提示
+    if (actionNotice.message.includes("排队中")) {
+      const hasActive = runs.some((r) => r.status === "queued" || r.status === "running");
+      if (!hasActive && runs.length > 0) {
+        setActionNotice(null);
+      }
+    }
+  }, [actionNotice, runs, sources]);
+
+  useEffect(() => {
     if (navigationEpochRef.current === navigationEpoch) return;
     navigationEpochRef.current = navigationEpoch;
     setSelectedRunId("");
@@ -226,6 +288,15 @@ function LiveSourcesWorkspace({ focusIndex, navigationEpoch = 0, runDetailBackRe
     setSourceDetailTab("概览");
     setSourceDialog(null);
   }, [navigationEpoch]);
+
+  const detailBackEpochRef = useRef(detailBackRequestEpoch ?? 0);
+  useEffect(() => {
+    if (detailBackRequestEpoch === undefined || detailBackEpochRef.current === detailBackRequestEpoch) return;
+    detailBackEpochRef.current = detailBackRequestEpoch;
+    setDetailSourceId("");
+    setSourceDetailTab("概览");
+    onRoute?.(sourceRoute());
+  }, [detailBackRequestEpoch, onRoute]);
 
   useEffect(() => {
     if (backEpochRef.current === runDetailBackRequestEpoch) return;
@@ -239,6 +310,16 @@ function LiveSourcesWorkspace({ focusIndex, navigationEpoch = 0, runDetailBackRe
     onRunDetailOpenChange(Boolean(selectedRunId));
     return () => onRunDetailOpenChange(false);
   }, [onRunDetailOpenChange, selectedRunId]);
+
+  useEffect(() => {
+    if (detailSourceId && !selectedRunId) {
+      const active = sources.find((source) => source.id === detailSourceId);
+      onDetailOpenChange?.(active?.name ?? "数据来源");
+    } else {
+      onDetailOpenChange?.(null);
+    }
+    return () => onDetailOpenChange?.(null);
+  }, [detailSourceId, onDetailOpenChange, selectedRunId, sources]);
 
   useEffect(() => {
     if (selectedRunId) openedRunRef.current = selectedRunId;
@@ -376,6 +457,7 @@ function LiveSourcesWorkspace({ focusIndex, navigationEpoch = 0, runDetailBackRe
     setActionNotice(null);
     try {
       const run = await startSourceRun(workspaceId, source.id, idempotencyKey("discovery", source.id));
+      lastTrackedRunRef.current = run.id;
       setRuns((current) => [run, ...current.filter((item) => item.id !== run.id)]);
       setRunTab("runs");
       setActionNotice({ message: `${source.name}：发现任务已创建，${runLabels[run.status]}。`, runId: run.id });
@@ -386,6 +468,27 @@ function LiveSourcesWorkspace({ focusIndex, navigationEpoch = 0, runDetailBackRe
       setStartingSourceId("");
     }
   };
+
+  const activeToast = useMemo(() => {
+    if (testingSourceId) {
+      const targetName = sources.find((s) => s.id === testingSourceId)?.name ?? testingSourceId;
+      return {
+        message: `正在测试 ${targetName} 的连接…`,
+        spinning: true,
+        failed: false,
+        runId: undefined,
+      };
+    }
+    if (actionNotice) {
+      return {
+        message: actionNotice.message,
+        spinning: false,
+        failed: actionNotice.failed,
+        runId: actionNotice.runId,
+      };
+    }
+    return null;
+  }, [actionNotice, testingSourceId, sources]);
 
   if (selectedCandidate) return <CandidateDialog candidate={selectedCandidate} onClose={() => { setSelectedCandidate(null); refresh(); }} onOpenProposal={onOpenProposal} onRoute={onRoute} />;
   if (focusIndex === 1) return <ScheduleWorkspace key={navigationEpoch} sources={sources} runs={runs} candidates={candidates} onOpenProposal={onOpenProposal} loading={state === "loading"} sourceError={error} onRefresh={refresh} sourceCursor={sourceCursor} loadingMoreSources={loadingMore} onLoadMoreSources={() => void loadMoreSources()} initialScheduleId={initialScheduleId} onRoute={onRoute} />;
@@ -434,8 +537,6 @@ function LiveSourcesWorkspace({ focusIndex, navigationEpoch = 0, runDetailBackRe
           <button className="secondary-button" type="button" disabled={!canManage} onClick={() => setImportTarget("new")}><FileUp size={15} />导入文件</button>
         </div>
       </header>
-      {testingSourceId && <div className="source-action-notice" role="status"><LoaderCircle className="is-spinning" size={16} /><span>正在测试 {sourceName(testingSourceId)} 的连接…</span></div>}
-      {actionNotice && <div className={`source-action-notice${actionNotice.failed ? " is-danger" : ""}`} role={actionNotice.failed ? "alert" : "status"}>{actionNotice.failed ? <CircleAlert size={16} /> : <CheckCircle2 size={16} />}<span>{actionNotice.message}</span>{actionNotice.runId && <button type="button" className="secondary-button" onClick={() => { setSelectedRunId(actionNotice.runId!); onRoute?.(sourceRunRoute(actionNotice.runId!)); }}>查看运行<ChevronRight size={14} /></button>}<button className="icon-button" type="button" aria-label="关闭操作结果" onClick={() => setActionNotice(null)}><X size={14} /></button></div>}
       {error && state !== "error" && <div className="source-inline-notice" role="status"><AlertTriangle size={15} /><span>{error}</span><button type="button" aria-label="关闭提示" onClick={() => setError("")}><X size={14} /></button></div>}
       {state === "error" && <LoadFailure message={error} onRetry={refresh} />}
       {ingestion.refreshWarning && <p role="status">服务端已保存；列表刷新失败：{ingestion.refreshWarning}</p>}
@@ -466,8 +567,8 @@ function LiveSourcesWorkspace({ focusIndex, navigationEpoch = 0, runDetailBackRe
                     data-source-id={source.id}
                     onOpen={() => { setDetailSourceId(source.id); onRoute?.(sourceRoute(source.id)); }}
                   >
-                    <TableCell><span className="source-primary"><span className="source-mark">{source.sourceKind === "postgresql" ? <Server size={18} /> : <FileUp size={18} />}</span><span><TableOpenButton id={`source-open-${source.id}`} aria-label={`查看来源 ${source.name}`} title={source.name} onClick={() => { setDetailSourceId(source.id); onRoute?.(sourceRoute(source.id)); }}><strong>{source.name}</strong></TableOpenButton><small title={source.sourceKind === "postgresql" ? `${source.host}:${source.port}/${source.database}` : sourceKindLabel(source)}>{sourceKindLabel(source)}{source.sourceKind === "postgresql" ? ` · ${source.database}` : ""}</small></span></span></TableCell>
-                    <TableCell className="source-status">{source.sourceKind !== "postgresql" ? "文件来源" : testingSourceId === source.id ? "检查中" : testResult[source.id] ? <span className={testResult[source.id].ok ? "is-success" : "is-danger"}>{testResult[source.id].message}</span> : <span className="table-secondary">本次会话未检查</span>}</TableCell>
+                    <TableCell><span className="source-primary"><span className="source-mark">{source.sourceKind === "postgresql" ? <Server size={18} /> : source.sourceKind === "sqlite" ? <Database size={18} /> : <FileUp size={18} />}</span><span><TableOpenButton id={`source-open-${source.id}`} aria-label={`查看来源 ${source.name}`} title={source.name} onClick={() => { setDetailSourceId(source.id); onRoute?.(sourceRoute(source.id)); }}><strong>{source.name}</strong></TableOpenButton><small title={source.sourceKind === "postgresql" ? `${source.host}:${source.port}/${source.database}` : sourceKindLabel(source)}>{sourceKindLabel(source)}{source.sourceKind === "postgresql" ? ` · ${source.database}` : ""}</small></span></span></TableCell>
+                    <TableCell className="source-status">{source.sourceKind === "sqlite" ? "数据库文件" : source.sourceKind !== "postgresql" ? "文件来源" : testingSourceId === source.id ? "检查中" : testResult[source.id] ? <span className={testResult[source.id].ok ? "is-success" : "is-danger"}>{testResult[source.id].message}</span> : <span className="table-secondary">本次会话未检查</span>}</TableCell>
                     <TableCell><LatestSourceRun runs={runs.filter((run) => run.sourceConnectionId === source.id)} onOpen={(id) => { setSelectedRunId(id); onRoute?.(sourceRunRoute(id)); }} /></TableCell>
                     <TableCell className="source-status"><span className={`health-label source-health-${source.status}`}><i />{sourceStatusLabel(source.status)}</span></TableCell>
                     <TableCell className="source-row-actions-cell">
@@ -505,6 +606,7 @@ function LiveSourcesWorkspace({ focusIndex, navigationEpoch = 0, runDetailBackRe
       </div>
       {detailSourceId && <SourceWorkspace
         source={sources.find((source) => source.id === detailSourceId)}
+        hostedBreadcrumb={Boolean(onDetailOpenChange)}
         tab={sourceDetailTab} onTabChange={setSourceDetailTab}
         runs={runs.filter((run) => run.sourceConnectionId === detailSourceId)} candidates={candidates}
         testResult={testResult[detailSourceId]} busy={Boolean(startingSourceId || testingSourceId)} canManage={canManage} canRun={canRun}
@@ -518,12 +620,49 @@ function LiveSourcesWorkspace({ focusIndex, navigationEpoch = 0, runDetailBackRe
         onUpdateArtifact={(source) => setImportTarget(source)} onRefresh={refresh}
         hasMoreRuns={Boolean(runCursors[detailSourceId])} onMoreRuns={() => void loadSourceRunsForDetail(detailSourceId)}
       />}
-      {detailSourceId && actionNotice && <div className="source-action-notice" role={actionNotice.failed ? "alert" : "status"}><span>{actionNotice.message}</span>{actionNotice.runId && <button className="secondary-button" onClick={() => { setSelectedRunId(actionNotice.runId!); onRoute?.(sourceRunRoute(actionNotice.runId!)); }}>查看运行<ChevronRight size={14} /></button>}</div>}
       {detailSourceId && error && <p role="alert">{error}</p>}
       {importTarget && <ArtifactImportDialog source={importTarget === "new" ? undefined : importTarget} onClose={() => setImportTarget(null)} onSaved={(value) => { setArtifactDetail(value); setImportTarget(null); refresh(); }} />}
       {artifactDetail && <ArtifactSetDialog value={artifactDetail} onClose={() => setArtifactDetail(null)} />}
       {sourceDialog && <SourceDialog mode={sourceDialog.mode} source={sourceDialog.source} workspaceId={workspaceId} onClose={() => setSourceDialog(null)} onSaved={(saved) => { setSources((current) => [saved, ...current.filter((item) => item.id !== saved.id)]); setSourcePageItems((current) => [saved, ...current.filter((item) => item.id !== saved.id)].slice(0, sourcePageSize)); setSourceTotal((current) => current + (sources.some((item) => item.id === saved.id) ? 0 : 1)); setTestResult((current) => { const next = { ...current }; delete next[saved.id]; return next; }); if (sourceDialog.mode === "create") { setDetailSourceId(saved.id); setSourceDetailTab("概览"); } setSourceDialog(null); setError(""); setActionNotice({ message: `${saved.name}：${sourceDialog.mode === "credential" ? "凭据已更新" : "连接已保存"}。` }); }} />}
       {deleteTarget && <ConfirmDelete source={deleteTarget} workspaceId={workspaceId} onClose={() => setDeleteTarget(null)} onDeleted={() => { setSources((current) => current.filter((item) => item.id !== deleteTarget.id)); setSourcePageItems((current) => current.filter((item) => item.id !== deleteTarget.id)); setSourceTotal((current) => Math.max(0, current - 1)); setRuns((current) => current.filter((item) => item.sourceConnectionId !== deleteTarget.id)); setActionNotice({ message: `${deleteTarget.name}：连接已删除。` }); setDeleteTarget(null); }} />}
+      {activeToast && (
+        <aside
+          className={`source-toast-notice source-action-notice${activeToast.failed ? " is-danger" : ""}`}
+          role={activeToast.failed ? "alert" : "status"}
+          aria-live="polite"
+        >
+          {activeToast.spinning ? (
+            <LoaderCircle className="is-spinning" size={16} />
+          ) : activeToast.failed ? (
+            <CircleAlert size={16} />
+          ) : (
+            <CheckCircle2 size={16} />
+          )}
+          <span>{activeToast.message}</span>
+          {activeToast.runId && (
+            <button
+              type="button"
+              className="secondary-button toast-action-button"
+              onClick={() => {
+                setSelectedRunId(activeToast.runId!);
+                onRoute?.(sourceRunRoute(activeToast.runId!));
+              }}
+            >
+              查看运行<ChevronRight size={14} />
+            </button>
+          )}
+          {!activeToast.spinning && (
+            <button
+              className="icon-button toast-close-button"
+              type="button"
+              aria-label="关闭操作结果"
+              onClick={() => setActionNotice(null)}
+            >
+              <X size={14} />
+            </button>
+          )}
+        </aside>
+      )}
     </section>
   );
 }
@@ -532,6 +671,7 @@ function SourceDialog({ mode, source, workspaceId, onClose, onSaved }: { mode: "
   const closeRef = useRef<HTMLButtonElement>(null);
   const [name, setName] = useState(source?.name ?? "");
   const postgres = source?.sourceKind === "postgresql" ? source : undefined;
+  const artifactSource = source && source.sourceKind !== "postgresql" ? source : undefined;
   const [host, setHost] = useState(postgres?.host ?? "");
   const [port, setPort] = useState(String(postgres?.port ?? 5432));
   const [database, setDatabase] = useState(postgres?.database ?? "");
@@ -559,9 +699,29 @@ function SourceDialog({ mode, source, workspaceId, onClose, onSaved }: { mode: "
       if (mode === "credential" && source) {
         saved = await rotateSourceCredential(workspaceId, source.id, password, source.version);
       } else if (mode === "edit" && source) {
-        saved = await updateSource(workspaceId, source.id, { name: name.trim(), status, artifactPaths: splitPaths(artifactPaths), expectedVersion: source.version });
+        let currentVersion = source.version;
+        if (password.trim()) {
+          const rotated = await rotateSourceCredential(workspaceId, source.id, password.trim(), currentVersion);
+          currentVersion = rotated.version;
+          saved = rotated;
+        }
+        saved = await updateSource(workspaceId, source.id, {
+          name: name.trim(),
+          status,
+          artifactPaths: splitPaths(artifactPaths),
+          expectedVersion: currentVersion,
+        });
       } else {
-        saved = await createSource(workspaceId, { name: name.trim(), host: host.trim(), port: Number(port), database: database.trim(), username: username.trim(), password, sslMode, artifactPaths: splitPaths(artifactPaths) });
+        saved = await createSource(workspaceId, {
+          name: name.trim(),
+          host: host.trim(),
+          port: Number(port),
+          database: database.trim(),
+          username: username.trim(),
+          password,
+          sslMode,
+          artifactPaths: splitPaths(artifactPaths),
+        });
       }
       setPassword("");
       onSaved(saved);
@@ -579,12 +739,48 @@ function SourceDialog({ mode, source, workspaceId, onClose, onSaved }: { mode: "
       <section className="review-dialog source-live-dialog" role="dialog" aria-modal="true" aria-labelledby="source-live-dialog-title">
         <header><div><span className="panel-kicker">受保护来源</span><h2 id="source-live-dialog-title">{title}</h2></div><button ref={closeRef} className="icon-button" type="button" aria-label="关闭连接配置" onClick={onClose}><X size={18} /></button></header>
         <div className="dialog-body source-live-form">
-          {mode === "credential" ? <><div className="source-secret-boundary"><KeyRound size={18} /><span><strong>凭据只写</strong><small>Semlia 不会回显或预填旧密码。保存后输入会立即清空。</small></span></div><label className="field-span-2"><span>新密码</span><input type="password" autoComplete="new-password" aria-label="新密码" value={password} onChange={(event) => setPassword(event.target.value)} /></label></> : <>
-            <label className="field-span-2"><span>连接名称</span><input aria-label="连接名称" value={name} onChange={(event) => setName(event.target.value)} /></label>
-            {mode === "create" && <><label><span>主机</span><input aria-label="主机" value={host} onChange={(event) => setHost(event.target.value)} /></label><label><span>端口</span><input aria-label="端口" inputMode="numeric" value={port} onChange={(event) => setPort(event.target.value)} /></label><label><span>数据库</span><input aria-label="数据库" value={database} onChange={(event) => setDatabase(event.target.value)} /></label><label><span>只读用户名</span><input aria-label="只读用户名" value={username} onChange={(event) => setUsername(event.target.value)} /></label><label><span>SSL 模式</span><select aria-label="SSL 模式" value={sslMode} onChange={(event) => setSSLMode(event.target.value as CreateSourceRequest["sslMode"])}><option value="require">require</option><option value="verify-ca">verify-ca</option><option value="verify-full">verify-full</option><option value="disable">disable</option></select></label><label><span>密码</span><input type="password" autoComplete="new-password" aria-label="密码" value={password} onChange={(event) => setPassword(event.target.value)} /></label></>}
-            {mode === "edit" && <label><span>状态</span><select aria-label="连接状态" value={status} onChange={(event) => setStatus(event.target.value as SourceConnection["status"])}><option value="active">启用</option><option value="paused">暂停</option></select></label>}
-            {(mode === "create" || postgres) && <label className="field-span-2"><span>版本化 SQL 路径 <small>可选，每行一个</small></span><textarea aria-label="版本化 SQL 路径" value={artifactPaths} onChange={(event) => setArtifactPaths(event.target.value)} placeholder="models/orders.sql" /></label>}
-          </>}
+          {mode === "credential" && (
+            <>
+              <div className="source-secret-boundary"><KeyRound size={18} /><span><strong>凭据只写</strong><small>Semlia 不会回显或预填旧密码。保存后输入会立即清空。</small></span></div>
+              <label className="field-span-2"><span>新密码</span><input type="password" autoComplete="new-password" aria-label="新密码" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
+            </>
+          )}
+          {mode === "create" && (
+            <>
+              <label className="field-span-2"><span>连接名称</span><input aria-label="连接名称" value={name} onChange={(event) => setName(event.target.value)} /></label>
+              <label><span>主机</span><input aria-label="主机" value={host} onChange={(event) => setHost(event.target.value)} /></label>
+              <label><span>端口</span><input aria-label="端口" inputMode="numeric" value={port} onChange={(event) => setPort(event.target.value)} /></label>
+              <label><span>数据库</span><input aria-label="数据库" value={database} onChange={(event) => setDatabase(event.target.value)} /></label>
+              <label><span>只读用户名</span><input aria-label="只读用户名" value={username} onChange={(event) => setUsername(event.target.value)} /></label>
+              <label><span>SSL 模式</span><select aria-label="SSL 模式" value={sslMode} onChange={(event) => setSSLMode(event.target.value as CreateSourceRequest["sslMode"])}><option value="require">require</option><option value="verify-ca">verify-ca</option><option value="verify-full">verify-full</option><option value="disable">disable</option></select></label>
+              <label><span>密码</span><input type="password" autoComplete="new-password" aria-label="密码" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
+              <label className="field-span-2"><span>版本化 SQL 路径 <small>可选，每行一个</small></span><textarea aria-label="版本化 SQL 路径" value={artifactPaths} onChange={(event) => setArtifactPaths(event.target.value)} placeholder="models/orders.sql" /></label>
+            </>
+          )}
+          {mode === "edit" && postgres && (
+            <>
+              <label><span>连接名称</span><input aria-label="连接名称" value={name} onChange={(event) => setName(event.target.value)} /></label>
+              <label><span>运行状态</span><select aria-label="连接状态" value={status} onChange={(event) => setStatus(event.target.value as SourceConnection["status"])}><option value="active">启用</option><option value="paused">暂停</option></select></label>
+              <label><span>主机 <small>已绑定</small></span><input aria-label="主机" value={host} disabled readOnly title="物理连接标识不可变更" /></label>
+              <label><span>端口 <small>已绑定</small></span><input aria-label="端口" value={port} disabled readOnly title="物理连接标识不可变更" /></label>
+              <label><span>数据库 <small>已绑定</small></span><input aria-label="数据库" value={database} disabled readOnly title="物理连接标识不可变更" /></label>
+              <label><span>只读用户名 <small>已绑定</small></span><input aria-label="只读用户名" value={username} disabled readOnly title="物理连接标识不可变更" /></label>
+              <label><span>SSL 模式 <small>已绑定</small></span><input aria-label="SSL 模式" value={sslMode} disabled readOnly /></label>
+              <label><span>轮换新密码 <small>可选，留空保持不变</small></span><input type="password" autoComplete="new-password" aria-label="新密码" placeholder="留空保持当前密码不变" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
+              <div className="source-edit-identity-note field-span-2">
+                <Lock size={13} />
+                <span>物理拓扑标识（主机/端口/库名）已绑定已有元数据快照与血缘资产；如需迁移至新库请新建连接。若密码已变更可直接在此输入新密码轮换保存。</span>
+              </div>
+              <label className="field-span-2"><span>版本化 SQL 路径 <small>可选，每行一个</small></span><textarea aria-label="版本化 SQL 路径" value={artifactPaths} onChange={(event) => setArtifactPaths(event.target.value)} placeholder="models/orders.sql" /></label>
+            </>
+          )}
+          {mode === "edit" && !postgres && (
+            <>
+              <label className="field-span-2"><span>来源名称</span><input aria-label="连接名称" value={name} onChange={(event) => setName(event.target.value)} /></label>
+              <label><span>运行状态</span><select aria-label="连接状态" value={status} onChange={(event) => setStatus(event.target.value as SourceConnection["status"])}><option value="active">启用</option><option value="paused">暂停</option></select></label>
+              <label><span>活跃工件集合</span><input aria-label="工件集合" value={artifactSource?.activeArtifactSetId ?? "未绑定"} disabled readOnly /></label>
+            </>
+          )}
           {error && <div className="source-form-error" role="alert"><CircleAlert size={15} /><span>{error}</span></div>}
         </div>
         <footer><span /><div><button className="secondary-button" type="button" onClick={onClose}>取消</button><button className="primary-button" type="button" disabled={!valid || saving} onClick={() => void save()}>{saving ? <LoaderCircle className="is-spinning" size={15} /> : mode === "credential" ? <KeyRound size={15} /> : <Database size={15} />}{saving ? "正在保存" : mode === "credential" ? "保存新凭据" : "保存连接"}</button></div></footer>
@@ -626,15 +822,44 @@ function CandidateList({ candidates, sourceName, onOpen }: { candidates: Semanti
   </Table></TableViewport>;
 }
 function RunDetail({ detail, error, sourceName, onRetry, candidates = [], onOpenCandidate, onBack, backLabel = "返回运行记录" }: { detail: DiscoveryRun | null; error: string; sourceName: string; onRetry: () => void; candidates?: SemanticCandidate[]; onOpenCandidate?: (candidate: SemanticCandidate) => void; onBack?: () => void; backLabel?: string }) {
-  if (!detail) return <section className="view source-live-view ingestion-detail" aria-label="运行记录详情">{onBack && <button className="ingestion-back" onClick={onBack}><ChevronLeft size={16} />{backLabel}</button>}{error ? <LoadFailure message={error} onRetry={onRetry} /> : <Loading label="正在读取运行详情" />}</section>;
+  if (!detail) return <section className="view source-live-view ingestion-detail run-detail-page" aria-label="运行记录详情">{onBack && <button type="button" className="sr-only" onClick={onBack}>{backLabel}</button>}{error ? <LoadFailure message={error} onRetry={onRetry} /> : <Loading label="正在读取运行详情" />}</section>;
   const active = detail.status === "running" || detail.status === "queued";
-  return <section className="view source-live-view ingestion-detail" aria-label="运行记录详情">
-    {onBack && <button className="ingestion-back" onClick={onBack}><ChevronLeft size={16} />{backLabel}</button>}
-    <header className="ingestion-object-heading"><div><span className="panel-kicker">发现运行 · {formatTime(detail.createdAt)}</span><h2>{sourceName}</h2></div><span className={`source-run-state source-run-${detail.status}`}>{active ? <LoaderCircle className="is-spinning" size={15} /> : <CheckCircle2 size={15} />}{runLabels[detail.status]}</span></header>
-    <div className="ingestion-summary-grid" aria-label="发现结果摘要">{Object.entries(detail.stats).filter(([key, value]) => key !== "findings" && typeof value === "number").map(([key, value]) => <article key={key}><span>{statLabel(key)}</span><strong>{String(value)}</strong></article>)}<article><span>诊断项</span><strong>{detail.findings.length}</strong></article><article><span>完成时间</span><strong className="is-time">{detail.completedAt ? formatTime(detail.completedAt) : active ? "进行中" : "未记录"}</strong></article></div>
+  const hasFindings = detail.findings.length > 0 || Boolean(detail.errorCode);
+
+  return <section className="view source-live-view ingestion-detail run-detail-page" aria-label="运行记录详情">
+    {onBack && <button type="button" className="sr-only" onClick={onBack}>{backLabel}</button>}
+    <header className="run-detail-header">
+      <div className="run-detail-meta-line">
+        <span className="panel-kicker">发现运行 · {formatTime(detail.createdAt)}</span>
+        {sourceName && <>
+          <span className="run-detail-meta-divider" aria-hidden="true">/</span>
+          <h2 className="run-detail-source-badge">{sourceName}</h2>
+        </>}
+      </div>
+      <span className={`source-run-state source-run-${detail.status}`}>{active ? <LoaderCircle className="is-spinning" size={14} /> : <CheckCircle2 size={14} />}{runLabels[detail.status]}</span>
+    </header>
+
+    <div className="run-detail-summary-strip" aria-label="发现结果摘要">
+      {Object.entries(detail.stats).filter(([key, value]) => key !== "findings" && typeof value === "number").map(([key, value]) => <article key={key}><span>{statLabel(key)}</span><strong>{String(value)}</strong></article>)}
+      <article><span>诊断项</span><strong>{detail.findings.length}</strong></article>
+      <article><span>完成时间</span><strong className="is-time">{detail.completedAt ? formatTime(detail.completedAt) : active ? "进行中" : "未记录"}</strong></article>
+    </div>
+
+    {hasFindings && <section className="source-run-findings-banner ingestion-section" aria-label="诊断与警告">
+      <header className="source-run-findings-header">
+        <div className="source-run-findings-title">
+          <CircleAlert size={15} />
+          <h3>诊断与警告</h3>
+          <span className="findings-count-badge">{detail.findings.length} 项</span>
+        </div>
+      </header>
+      {detail.errorCode && <div className="source-run-error"><CircleAlert size={15} /><strong>{detail.errorCode}</strong></div>}
+      {detail.findings.length > 0 && <div className="source-run-findings-list">
+        {detail.findings.map((finding) => <article key={`${finding.sequence}-${finding.code}`} className="finding-card"><span className={`finding-severity finding-${finding.severity}`}>{finding.severity}</span><span className="finding-detail-text"><strong>{finding.code}</strong><small>{finding.locator || "全局"}</small></span><code>{JSON.stringify(finding.details)}</code></article>)}
+      </div>}
+    </section>}
+
     <RunCandidates key={`${detail.id}:${detail.sourceRevisionId ?? ""}:${detail.status}`} detail={detail} updates={candidates} onOpen={onOpenCandidate} />
-    <section className="source-run-findings ingestion-section"><header><h3>诊断与警告</h3><span>{detail.findings.length} 项</span></header>{detail.errorCode && <div className="source-run-error"><CircleAlert size={16} /><strong>{detail.errorCode}</strong></div>}{detail.findings.length ? detail.findings.map((finding) => <article key={`${finding.sequence}-${finding.code}`}><span className={`finding-severity finding-${finding.severity}`}>{finding.severity}</span><span><strong>{finding.code}</strong><small>{finding.locator || "全局"}</small></span><code>{JSON.stringify(finding.details)}</code></article>) : <p className="ingestion-muted">{active ? "运行尚未结束" : "本次运行未记录诊断项"}</p>}</section>
-    <details className="ingestion-technical"><summary>运行与来源标识</summary><dl className="ingestion-metadata"><dt>运行 ID</dt><dd><code>{detail.id}</code></dd><dt>来源版本</dt><dd><code>{detail.sourceRevisionId ?? "尚未生成"}</code></dd><dt>适配器</dt><dd>{detail.adapterVersion}</dd><dt>开始时间</dt><dd>{formatTime(detail.startedAt ?? detail.createdAt)}</dd></dl></details>
     {error && <LoadFailure message={error} onRetry={onRetry} />}
   </section>;
 }
@@ -646,8 +871,11 @@ function RunCandidates({ detail, updates, onOpen }: { detail: DiscoveryRun; upda
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
+  const [pageSize, setPageSize] = useState(50);
+  const [pageIndex, setPageIndex] = useState(0);
   const controllerRef = useRef<AbortController | null>(null);
   const busyRef = useRef(false);
+
   useEffect(() => {
     const controller = new AbortController();
     controllerRef.current = controller;
@@ -657,6 +885,7 @@ function RunCandidates({ detail, updates, onOpen }: { detail: DiscoveryRun; upda
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [workspaceId, detail.sourceConnectionId, retry]);
+
   const loadMore = async () => {
     if (!cursor || busyRef.current) return;
     busyRef.current = true;
@@ -668,15 +897,88 @@ function RunCandidates({ detail, updates, onOpen }: { detail: DiscoveryRun; upda
     } catch (reason) { if (!signal?.aborted) setError(messageFor(reason, "更多运行候选读取失败。")); }
     finally { busyRef.current = false; if (!signal?.aborted) setLoading(false); }
   };
+
   const related = mergeById(items, updates.filter((candidate) => candidate.status !== "pending"))
     .filter((candidate) => candidate.sourceConnectionId === detail.sourceConnectionId && (candidate.discoveryRunId === detail.id || Boolean(detail.sourceRevisionId && candidate.sourceRevisionId === detail.sourceRevisionId)));
   const active = ["queued", "running"].includes(detail.status);
-  return <section className="ingestion-section" aria-label="关联候选"><header><div><h3>来源版本的语义候选</h3><span>{`已加载 ${related.length} 项 · 尚未发布为语义事实`}</span></div></header>
-    {loading && <Loading label="正在读取运行候选" />}
+  const open = onOpen ?? (() => {});
+
+  const total = related.length;
+  const maxPageIndex = Math.max(0, Math.ceil(total / pageSize) - 1);
+  const safePageIndex = cursor ? pageIndex : Math.min(pageIndex, maxPageIndex);
+  const rangeStart = total === 0 ? 0 : safePageIndex * pageSize + 1;
+  const rangeEnd = total === 0 ? 0 : Math.min((safePageIndex + 1) * pageSize, total);
+  const visibleItems = related.slice(safePageIndex * pageSize, (safePageIndex + 1) * pageSize);
+  const hasNextPage = (safePageIndex + 1) * pageSize < total || Boolean(cursor);
+
+  const handleNextPage = async () => {
+    if ((safePageIndex + 1) * pageSize < total) {
+      setPageIndex((prev) => prev + 1);
+      return;
+    }
+    if (cursor) {
+      await loadMore();
+      setPageIndex((prev) => prev + 1);
+    }
+  };
+
+  return <section className="ingestion-section run-candidates-section" aria-label="关联候选">
+    {loading && !related.length && <Loading label="正在读取运行候选" />}
     {error && <LoadFailure message={error} onRetry={() => { setLoading(true); setError(""); setRetry((value) => value + 1); }} />}
-    {related.length > 0 && <div className="ingestion-candidate-grid">{related.map((candidate) => <button className="ingestion-candidate-card" key={candidate.id} onClick={() => onOpen?.(candidate)}><GitPullRequestArrow size={18} /><span><strong>{candidate.title}</strong><small>{candidateLabels[candidate.status]} · {candidate.discoveryRunId === detail.id ? "本次发现" : "同一来源版本的已有候选"}</small></span><ChevronRight size={15} /></button>)}</div>}
-    {!loading && !error && !related.length && <Empty icon={<GitPullRequestArrow size={19} />} title={active ? "等待发现结果" : cursor ? "已加载结果中暂无关联候选" : "暂无关联候选"} detail="" />}
-    {cursor && <button className="secondary-button" disabled={loading} onClick={() => void loadMore()}>加载更多候选</button>}
+    {!error && (!loading || related.length > 0) && <TablePanel className="source-table-panel run-candidates-table-panel">
+      <TableViewport className="ingestion-results-table">
+        <Table className="source-data-table" aria-label="关联候选">
+          <TableHeader>
+            <TableRow>
+              <TableHead>候选对象</TableHead>
+              <TableHead>候选状态</TableHead>
+              <TableHead>版本快照</TableHead>
+              <TableHead>提取时间</TableHead>
+              <TableHead>操作</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {visibleItems.map((candidate) => <TableRow key={candidate.id}>
+              <TableCell>
+                <span className="source-primary">
+                  <span className="source-mark"><GitPullRequestArrow size={16} /></span>
+                  <span>
+                    <TableOpenButton aria-label={`查看语义候选 ${candidate.title}`} title={candidate.title} onClick={() => open(candidate)}>
+                      <strong>{candidate.title}</strong>
+                    </TableOpenButton>
+                  </span>
+                </span>
+              </TableCell>
+              <TableCell><span className={`source-status-badge source-status-${candidate.status}`}>{candidateLabels[candidate.status] ?? candidate.status}</span></TableCell>
+              <TableCell><code title={candidate.sourceRevisionId}>{shortId(candidate.sourceRevisionId)}</code></TableCell>
+              <TableCell><time>{formatTime(candidate.createdAt)}</time></TableCell>
+              <TableCell>
+                <button type="button" className="ghost-button icon-text-button" onClick={() => open(candidate)}>查看候选</button>
+              </TableCell>
+            </TableRow>)}
+            {!loading && !related.length && <TableRow><TableCell colSpan={5}><Empty icon={<GitPullRequestArrow size={19} />} title={active ? "等待发现结果" : cursor ? "已加载结果中暂无关联候选" : "暂无关联候选"} detail="" /></TableCell></TableRow>}
+          </TableBody>
+        </Table>
+      </TableViewport>
+      <TableFooter>
+        <span className="source-table-summary">{total === 0 ? "共 0 个候选" : `显示 ${rangeStart}-${rangeEnd}，共 ${total} 个候选`}</span>
+        <label className="source-page-size">
+          <span>每页</span>
+          <select aria-label="每页行数" value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setPageIndex(0); }}>
+            <option value={25}>25</option>
+            <option value={50}>50</option>
+            <option value={100}>100</option>
+          </select>
+          <span>行</span>
+        </label>
+        <div className="source-pagination" aria-label="候选分页">
+          <button className="icon-button" type="button" aria-label="上一页候选" title="上一页" disabled={safePageIndex === 0 || loading} onClick={() => setPageIndex((prev) => Math.max(0, prev - 1))}><ChevronLeft size={15} /></button>
+          <span>第 {safePageIndex + 1} 页</span>
+          <button className="icon-button" type="button" aria-label="下一页候选" title="下一页" disabled={!hasNextPage || loading} onClick={() => void handleNextPage()}><ChevronRight size={15} /></button>
+        </div>
+        {cursor && <button type="button" className="sr-only" onClick={() => void loadMore()}>加载更多候选</button>}
+      </TableFooter>
+    </TablePanel>}
   </section>;
 }
 
@@ -692,7 +994,7 @@ function CandidateDialog({ candidate, onClose, onOpenProposal, onRoute }: { cand
 function ArtifactImportDialog({ source, onClose, onSaved }: { source?: SourceConnection; onClose: () => void; onSaved: (value: ArtifactSet) => void }) {
   const runtime = useIngestionRuntime();
   const [name, setName] = useState(source?.name ?? "");
-  const [kind, setKind] = useState<"file" | "sql_bundle" | "dbt_bundle">(source && source.sourceKind !== "postgresql" ? source.sourceKind : "file");
+  const [kind, setKind] = useState<"file" | "sqlite" | "sql_bundle" | "dbt_bundle">(source && source.sourceKind !== "postgresql" ? source.sourceKind : "file");
   const [files, setFiles] = useState<File[]>([]);
   const [paths, setPaths] = useState("");
   const [busy, setBusy] = useState(false);
@@ -711,8 +1013,8 @@ function ArtifactImportDialog({ source, onClose, onSaved }: { source?: SourceCon
   return <IngestionDialog title={source ? "更新来源工件" : "导入文件"} onClose={onClose} busy={busy}>
     <div className="source-live-form">
       <label className="field-span-2"><span>来源名称</span><input aria-label="来源名称" value={name} onChange={(event) => setName(event.target.value)} /></label>
-      <label className="field-span-2"><span>工件类型</span><select aria-label="工件类型" disabled={Boolean(source)} value={kind} onChange={(event) => { setKind(event.target.value as typeof kind); setFiles([]); setError(""); }}><option value="file">CSV / XLSX / Markdown</option><option value="sql_bundle">版本化 SQL</option><option value="dbt_bundle">dbt manifest / catalog</option></select></label>
-      {kind === "sql_bundle" ? <label className="field-span-2"><span>配置根目录内 SQL 路径</span><textarea aria-label="配置根目录内 SQL 路径" placeholder="models/orders.sql" value={paths} onChange={(event) => setPaths(event.target.value)} /></label> : <label className="field-span-2"><span>{kind === "dbt_bundle" ? "manifest.json 与可选 catalog.json" : "CSV、XLSX 或 Markdown 文件"}</span><input key={kind} type="file" multiple aria-label="上传工件" accept={kind === "dbt_bundle" ? ".json" : ".csv,.xlsx,.md"} onChange={(event) => { setFiles(Array.from(event.target.files ?? [])); setError(""); }} /></label>}
+      <label className="field-span-2"><span>工件类型</span><select aria-label="工件类型" disabled={Boolean(source)} value={kind} onChange={(event) => { setKind(event.target.value as typeof kind); setFiles([]); setError(""); }}><option value="file">CSV / XLSX / Markdown</option><option value="sqlite">SQLite 数据库文件</option><option value="sql_bundle">版本化 SQL</option><option value="dbt_bundle">dbt manifest / catalog</option></select></label>
+      {kind === "sql_bundle" ? <label className="field-span-2"><span>配置根目录内 SQL 路径</span><textarea aria-label="配置根目录内 SQL 路径" placeholder="models/orders.sql" value={paths} onChange={(event) => setPaths(event.target.value)} /></label> : <label className="field-span-2"><span>{kind === "dbt_bundle" ? "manifest.json 与可选 catalog.json" : kind === "sqlite" ? "一个 SQLite 数据库文件（.sqlite、.sqlite3 或 .db）" : "CSV、XLSX 或 Markdown 文件"}</span><input key={kind} type="file" multiple={kind !== "sqlite"} aria-label="上传工件" accept={kind === "dbt_bundle" ? ".json" : kind === "sqlite" ? ".sqlite,.sqlite3,.db" : ".csv,.xlsx,.md"} onChange={(event) => { setFiles(Array.from(event.target.files ?? [])); setError(""); }} /></label>}
       {files.length > 0 && <ul className="ingestion-file-preview field-span-2">{files.map((file, index) => <li key={`${file.name}:${index}`}><strong>{file.name}</strong><span>{file.size.toLocaleString()} bytes</span></li>)}</ul>}
       {error && <p className="source-form-error field-span-2" role="alert">{error}</p>}
     </div>
@@ -720,8 +1022,20 @@ function ArtifactImportDialog({ source, onClose, onSaved }: { source?: SourceCon
   </IngestionDialog>;
 }
 
-function artifactKind(file: File, sourceKind: "file" | "dbt_bundle"): PublicArtifactKind {
+function artifactSourceText(kind: SourceConnection["sourceKind"]) {
+  return {
+    sqlite: { type: "SQLite 数据库文件", scope: "表、视图、字段、主键与外键（只读打开）" },
+    sql_bundle: { type: "版本化 SQL", scope: "SQL 视图定义与血缘解析" },
+    dbt_bundle: { type: "dbt manifest / catalog", scope: "dbt 模型、来源与依赖关系" },
+  }[kind as string] ?? { type: "CSV / XLSX / Markdown 文件", scope: "表格工作表与 Markdown 规范结构提取" };
+}
+
+function artifactKind(file: File, sourceKind: "file" | "sqlite" | "dbt_bundle"): PublicArtifactKind {
   const name = file.name.toLowerCase();
+  if (sourceKind === "sqlite") {
+    if (/\.(sqlite3?|db)$/.test(name)) return "sqlite";
+    throw new Error("SQLite 来源需要 .sqlite、.sqlite3 或 .db 文件。");
+  }
   if (sourceKind === "dbt_bundle") {
     if (name === "manifest.json") return "dbt_manifest";
     if (name === "catalog.json") return "dbt_catalog";
@@ -813,7 +1127,7 @@ function ScheduleWorkspace({ sources, runs = [], candidates = [], loading, sourc
   return <section className={`view source-live-view source-list-page schedule-list-page${embedded ? " ingestion-embedded" : ""}`} aria-label="接入计划">
     <header className="source-commandbar"><div className="source-tabs" role="tablist" aria-label="计划类型"><button type="button" role="tab" aria-selected="true"><Clock3 size={15} />全部计划 <span>{visibleSchedules.length}</span></button></div><div className="source-command-actions"><label className="connection-search"><Search size={15} /><input type="search" aria-label="搜索接入计划" placeholder="搜索来源、计划或时区" value={scheduleQuery} onChange={(event) => setScheduleQuery(event.target.value)} /></label><button className="secondary-button" title="刷新" aria-label="刷新计划" onClick={() => { onRefresh(); sourceIds.forEach((sourceId) => { void loadSchedules(sourceId).catch(() => undefined); }); if (selectedId) void loadOccurrences(selectedId).catch(() => undefined); }}><RefreshCw size={15} />刷新</button><button className="primary-button" disabled={!sources.length || !runtime.access.manage || !runtime.access.run} title={!sources.length ? "需要先创建来源" : "需要 source.manage 与 ingestion.run 权限"} onClick={() => setEditing("new")}><Plus size={15} />新建计划</button></div></header>
     {loading && <Loading label="正在读取来源" />}
-    <div className="ingestion-filterbar"><select aria-label="计划状态" value={scheduleStatus} onChange={(event) => setScheduleStatus(event.target.value)}><option value="">全部状态</option><option value="enabled">已启用</option><option value="paused">已暂停</option></select></div>
+    <div className="ingestion-filterbar"><label className="schedule-filter-select-label"><select aria-label="计划状态" value={scheduleStatus} onChange={(event) => setScheduleStatus(event.target.value)}><option value="">全部状态</option><option value="enabled">已启用</option><option value="paused">已暂停</option></select></label><div className="schedule-stats-pills"><span className="stats-pill is-active"><i />已启用 {visibleSchedules.filter((s) => s.schedule.enabled).length}</span><span className="stats-pill is-paused"><i />已暂停 {visibleSchedules.filter((s) => !s.schedule.enabled).length}</span></div></div>
     {sourceCursor && <button className="secondary-button" disabled={loadingMoreSources} onClick={onLoadMoreSources}>加载更多来源</button>}
     {(sourceError || error) && <p role="alert">{error || sourceError}</p>}
     {runtime.refreshWarning && <p role="status">服务端已保存；列表刷新失败：{runtime.refreshWarning}</p>}
@@ -843,15 +1157,149 @@ function ScheduleWorkspace({ sources, runs = [], candidates = [], loading, sourc
     {schedulePages.map(({ sourceId, source, page }) => <div key={`${sourceId}-pagination`}>{page?.appendError && <p role="alert">{source.name}：{page.appendError}</p>}{page?.nextCursor && <button className="secondary-button" disabled={page.loadingMore} onClick={() => void runtime.loadMoreSchedules(sourceId)}>加载更多计划 · {source.name}</button>}</div>)}
     </div></TableFooter></TablePanel>
     {selectedId && <IngestionDialog title="接入计划详情" onClose={() => { setSelectedId(""); onRoute?.(sourceRoute(undefined, "schedules")); }}>
-      <div className="list-detail-heading"><span className="source-mark"><Clock3 size={20} /></span><div><h3>{selectedSchedule?.sourceName ?? "来源不可用"}</h3><span>{selectedSchedule ? scheduleSummary(selectedSchedule.schedule.expression) : ""} · {selectedSchedule?.schedule.timezone}</span></div></div>
-      <dl className="ingestion-metadata list-detail-metadata"><dt>计划状态</dt><dd>{selectedSchedule ? selectedSchedule.schedule.enabled ? "已启用" : "已暂停" : "不可用"}</dd><dt>下次执行</dt><dd>{selectedSchedule?.schedule.nextRunAt ? formatTime(selectedSchedule.schedule.nextRunAt) : "未安排"}</dd><dt>错过执行时</dt><dd>{selectedSchedule?.schedule.misfirePolicy === "skip" ? "跳过" : "合并补跑一次"}</dd></dl>
-      {selectedSchedule && <div className="ingestion-dialog-footer"><button className="secondary-button" disabled={!runtime.access.manage || Boolean(busy)} onClick={() => { setEditing(selectedSchedule.schedule); setSelectedId(""); }}><Pencil size={15} />编辑计划</button><button className="secondary-button" disabled={!runtime.access.manage || (!selectedSchedule.schedule.enabled && !runtime.access.run) || Boolean(busy)} onClick={() => void act(selectedSchedule.schedule, () => selectedSchedule.schedule.enabled ? runtime.pauseSchedule(selectedSchedule.schedule) : runtime.resumeSchedule(selectedSchedule.schedule))}>{selectedSchedule.schedule.enabled ? <Pause size={15} /> : <Play size={15} />}{selectedSchedule.schedule.enabled ? "暂停计划" : "恢复计划"}</button></div>}
-      {error && <p role="alert">{error}</p>}
-      <section className="ingestion-occurrences" aria-label="计划执行记录"><h3>执行记录</h3>{occurrences?.status.state === "loading" && <Loading label="正在读取执行记录" />}{occurrences?.status.error && <LoadFailure message={occurrences.status.error} onRetry={() => void loadOccurrences(selectedId).catch(() => undefined)} />}{occurrences?.status.state === "empty" && <p>暂无执行记录</p>}{occurrences?.items.map((occurrence) => <article key={occurrence.id}><span>{formatTime(occurrence.eligibleAt)}<small className="table-secondary">{occurrence.triggerKind === "run_now" ? "手动触发" : "定时触发"}</small></span><OccurrenceResult occurrence={occurrence} runs={runs} />{(occurrence.discoveryRunId || occurrence.runtimeRunId) && <button className="ingestion-link" onClick={() => openScheduleRun(occurrence.discoveryRunId ?? occurrence.runtimeRunId!)}>打开运行<ChevronRight size={14} /></button>}</article>)}{occurrences?.appendError && <p role="alert">{occurrences.appendError}</p>}{occurrences?.nextCursor && <button className="secondary-button" disabled={occurrences.loadingMore} onClick={() => void runtime.loadMoreOccurrences(selectedId)}>加载更多执行记录</button>}</section>
-      <details className="ingestion-technical"><summary>计划标识与 Cron</summary><dl className="ingestion-metadata"><dt>计划 ID</dt><dd><code>{selectedId}</code></dd><dt>Cron</dt><dd><code>{selectedSchedule?.schedule.expression}</code></dd><dt>版本</dt><dd>{selectedSchedule?.schedule.version}</dd></dl></details>
+      <div className="schedule-overview-strip">
+        <div className="schedule-overview-left">
+          <div className="schedule-overview-icon"><Clock3 size={20} /></div>
+          <div className="schedule-overview-cluster">
+            <div className="schedule-overview-title-line">
+              <h3>{selectedSchedule?.sourceName ?? "来源不可用"}</h3>
+              {selectedSchedule && (
+                <span className={`schedule-status-badge is-${selectedSchedule.schedule.enabled ? "enabled" : "paused"}`}>
+                  <span className="status-dot" />
+                  {selectedSchedule.schedule.enabled ? "已启用" : "已暂停"}
+                </span>
+              )}
+            </div>
+            <p className="schedule-overview-meta">
+              <span>{selectedSchedule ? scheduleSummary(selectedSchedule.schedule.expression) : ""}</span>
+              <span>·</span>
+              <span>{selectedSchedule?.schedule.timezone}</span>
+              <span>·</span>
+              <span>版本 v{selectedSchedule?.schedule.version}</span>
+            </p>
+          </div>
+        </div>
+        {selectedSchedule && (
+          <div className="schedule-action-bar">
+            <button
+              className="is-primary"
+              type="button"
+              disabled={!runtime.access.run || Boolean(busy)}
+              title={!runtime.access.run ? "需要 ingestion.run 权限" : "立即运行此接入计划"}
+              onClick={() => void act(selectedSchedule.schedule, async () => { await runtime.runScheduleNow(selectedSchedule.schedule); })}
+            >
+              {busy === selectedSchedule.schedule.id ? <LoaderCircle className="is-spinning" size={13} /> : <Play size={13} />}
+              <span>{busy === selectedSchedule.schedule.id ? "运行中" : "立即运行"}</span>
+            </button>
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={!runtime.access.manage || Boolean(busy)}
+              onClick={() => { setEditing(selectedSchedule.schedule); setSelectedId(""); }}
+            >
+              <Pencil size={13} />
+              <span>编辑计划</span>
+            </button>
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={!runtime.access.manage || (!selectedSchedule.schedule.enabled && !runtime.access.run) || Boolean(busy)}
+              onClick={() => void act(selectedSchedule.schedule, () => selectedSchedule.schedule.enabled ? runtime.pauseSchedule(selectedSchedule.schedule) : runtime.resumeSchedule(selectedSchedule.schedule))}
+            >
+              {selectedSchedule.schedule.enabled ? <Pause size={13} /> : <Play size={13} />}
+              <span>{selectedSchedule.schedule.enabled ? "暂停计划" : "恢复计划"}</span>
+            </button>
+          </div>
+        )}
+      </div>
+
+      <dl className="schedule-metrics-strip">
+        <div className="schedule-metric-box">
+          <dt>计划状态</dt>
+          <dd>
+            <strong>{selectedSchedule ? selectedSchedule.schedule.enabled ? "已启用" : "已暂停" : "不可用"}</strong>
+            <small>调度规则版本 v{selectedSchedule?.schedule.version ?? 1}</small>
+          </dd>
+        </div>
+        <div className="schedule-metric-box">
+          <dt>下次执行</dt>
+          <dd>
+            <strong>{selectedSchedule?.schedule.nextRunAt ? formatTime(selectedSchedule.schedule.nextRunAt) : "未安排"}</strong>
+            <small>{selectedSchedule?.schedule.timezone}</small>
+          </dd>
+        </div>
+        <div className="schedule-metric-box">
+          <dt>错过执行时</dt>
+          <dd>
+            <strong>{selectedSchedule?.schedule.misfirePolicy === "skip" ? "跳过" : "合并补跑一次"}</strong>
+            <small>{selectedSchedule?.schedule.misfirePolicy === "skip" ? "离线不积压任务" : "恢复后补跑单次"}</small>
+          </dd>
+        </div>
+      </dl>
+
+      {error && <p role="alert" className="source-form-error">{error}</p>}
+
+      <section className="ingestion-occurrences schedule-occurrences-section" aria-label="计划执行记录">
+        <div className="occurrences-section-header">
+          <h4>执行记录</h4>
+          {occurrences?.items && occurrences.items.length > 0 && (
+            <span className="occurrences-count-tag">{occurrences.items.length} 次调度</span>
+          )}
+        </div>
+        {occurrences?.status.state === "loading" && <Loading label="正在读取执行记录" />}
+        {occurrences?.status.error && <LoadFailure message={occurrences.status.error} onRetry={() => void loadOccurrences(selectedId).catch(() => undefined)} />}
+        {occurrences?.status.state === "empty" && (
+          <div className="schedule-occurrences-empty">
+            <Clock3 size={20} className="empty-icon" />
+            <p>暂无执行记录</p>
+            <small>当前接入计划尚未到达计划触发时机，或未手动执行。可点击右上角「立即运行」进行测试。</small>
+          </div>
+        )}
+        {occurrences?.items && occurrences.items.length > 0 && (
+          <div className="schedule-occurrences-list">
+            {occurrences.items.map((occurrence) => (
+              <article key={occurrence.id} className="schedule-occurrence-card">
+                <div className="occurrence-time-cluster">
+                  <span className="occurrence-time">{formatTime(occurrence.eligibleAt)}</span>
+                  <span className="occurrence-trigger-badge">{occurrence.triggerKind === "run_now" ? "手动触发" : "定时触发"}</span>
+                </div>
+                <div className="occurrence-status">
+                  <OccurrenceResult occurrence={occurrence} runs={runs} />
+                </div>
+                {(occurrence.discoveryRunId || occurrence.runtimeRunId) && (
+                  <button className="ingestion-link occurrence-run-btn" onClick={() => openScheduleRun(occurrence.discoveryRunId ?? occurrence.runtimeRunId!)}>
+                    打开运行<ChevronRight size={14} />
+                  </button>
+                )}
+              </article>
+            ))}
+          </div>
+        )}
+        {occurrences?.appendError && <p role="alert">{occurrences.appendError}</p>}
+        {occurrences?.nextCursor && <button className="secondary-button" disabled={occurrences.loadingMore} onClick={() => void runtime.loadMoreOccurrences(selectedId)}>加载更多执行记录</button>}
+      </section>
+
+      <details className="ingestion-technical schedule-technical-details">
+        <summary>计划标识与 Cron</summary>
+        <dl className="ingestion-metadata technical-dl">
+          <dt>计划 ID</dt>
+          <dd><code>{selectedId}</code></dd>
+          <dt>Cron</dt>
+          <dd><code>{selectedSchedule?.schedule.expression}</code> <span className="cron-hint">({selectedSchedule ? scheduleSummary(selectedSchedule.schedule.expression) : ""})</span></dd>
+          <dt>版本</dt>
+          <dd><code>v{selectedSchedule?.schedule.version}</code></dd>
+        </dl>
+      </details>
     </IngestionDialog>}
     {editing && <ScheduleDialog sources={sources} sourceId={editing === "new" ? newSourceId : editing.sourceId} schedule={editing === "new" ? undefined : editing} onClose={() => setEditing(null)} />}
-    {deleting && <IngestionDialog title="删除接入计划" onClose={() => setDeleting(null)} busy={busy === deleting.id}><p>删除此计划后，历史执行记录继续保留。</p>{error && <p role="alert">{error}</p>}<footer><span /><button className="danger-button" disabled={busy === deleting.id} onClick={() => void act(deleting, async () => { await runtime.deleteSchedule(deleting); setDeleting(null); })}><Trash2 size={15} />确认删除计划</button></footer></IngestionDialog>}
+    {deleting && <IngestionDialog title="删除接入计划" onClose={() => setDeleting(null)} busy={busy === deleting.id}>
+      <div className="schedule-delete-warning">
+        <p>确认要删除此接入计划吗？</p>
+        <small>删除此计划后，定时调度将立即停止。历史执行记录与已发现的元数据资产将继续保留。</small>
+      </div>
+      {error && <p role="alert" className="source-form-error">{error}</p>}
+      <footer className="schedule-dialog-actions"><button className="secondary-button" disabled={busy === deleting.id} onClick={() => setDeleting(null)}>取消</button><button className="danger-button" disabled={busy === deleting.id} onClick={() => void act(deleting, async () => { await runtime.deleteSchedule(deleting); setDeleting(null); })}><Trash2 size={15} />确认删除计划</button></footer>
+    </IngestionDialog>}
   </section>;
 }
 
@@ -893,9 +1341,17 @@ function ScheduleDialog({ sources, sourceId, schedule, onClose }: { sources: Sou
       <label><span>时区</span><input list="ingestion-timezones" aria-label="IANA 时区" value={timezone} onChange={(event) => setTimezone(event.target.value)} /><datalist id="ingestion-timezones"><option value="Asia/Shanghai" /><option value="UTC" /><option value="Asia/Tokyo" /><option value="America/New_York" /><option value="Europe/London" /></datalist></label>
       <label><span>错过执行</span><select aria-label="错过执行" value={misfirePolicy} onChange={(event) => setMisfirePolicy(event.target.value as typeof misfirePolicy)}><option value="skip">跳过</option><option value="run_once">合并补跑一次</option></select></label>
       <div className="ingestion-schedule-preview field-span-2"><Clock3 size={18} /><span><strong>{scheduleSummary(expression)}</strong><small>{timezone}</small></span></div>
-      {schedule && <label className="schedule-enabled-field field-span-2"><input type="checkbox" aria-label="启用计划" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} /><span>启用计划</span></label>}
+      {schedule && (
+        <label className="schedule-enabled-card field-span-2">
+          <input type="checkbox" aria-label="启用计划" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />
+          <span>
+            <strong>启用计划</strong>
+            <small>开启定时接入，到达计划时刻将自动触发元数据采集发现</small>
+          </span>
+        </label>
+      )}
       {error && <p role="alert" className="source-form-error field-span-2">{error}</p>}
-    </fieldset><footer className="schedule-dialog-actions"><button className="secondary-button" disabled={busy} onClick={onClose}>取消</button><button className="primary-button" disabled={busy || !selectedSourceId || !expression.trim() || !timezone.trim() || (mode !== "custom" && !time) || !runtime.access.manage || (enabled && !runtime.access.run)} onClick={() => void save()}><Clock3 size={15} />{busy ? "正在保存" : schedule ? "保存计划" : "保存并启用计划"}</button></footer>
+    </fieldset><footer className="schedule-dialog-actions"><button className="secondary-button" disabled={busy} onClick={onClose}>取消</button><button className="primary-button" disabled={busy || !selectedSourceId || !expression.trim() || !timezone.trim() || (mode !== "custom" && !time) || !runtime.access.manage || (enabled && !runtime.access.run)} onClick={() => void save()}><Clock3 size={15} />{busy ? "正在保存..." : schedule ? "保存计划" : "保存并启用计划"}</button></footer>
   </IngestionDialog>;
 }
 
@@ -970,8 +1426,42 @@ function IngestionDialog({ title, children, onClose, busy = false }: { title: st
   return <div className="dialog-backdrop" role="presentation"><section ref={ref} className="review-dialog source-live-dialog ingestion-dialog" role="dialog" aria-modal="true" aria-label={title}><header><h2>{title}</h2><button className="icon-button" aria-label={`关闭${title}`} disabled={busy} onClick={onClose}><X size={18} /></button></header><div className="dialog-body">{children}</div></section></div>;
 }
 
-function SourceWorkspace({ source, runs, candidates, testResult, busy, canManage, canRun, onClose, onTest, onStart, onEdit, onOpenRun, onOpenProposal, onOpenArtifact, onUpdateArtifact, onRefresh, hasMoreRuns, onMoreRuns, tab, onTabChange }: {
-  source?: SourceConnection; runs: SourceDiscoveryRun[]; candidates: SemanticCandidate[]; testResult?: { ok: boolean; message: string }; busy: boolean; canManage: boolean; canRun: boolean;
+function cleanIdentifier(value: string | undefined): { label: string; raw: string; hasHash: boolean } {
+  if (!value) return { label: "-", raw: "-", hasHash: false };
+  const hashMatch = /_([a-f0-9]{12,})/i.exec(value);
+  if (hashMatch) {
+    const cleaned = value.replace(/_[a-f0-9]{12,}/i, "");
+    return { label: cleaned || value, raw: value, hasHash: true };
+  }
+  return { label: value, raw: value, hasHash: false };
+}
+
+function CopyablePill({ text, label, title }: { text: string; label?: string; title?: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (navigator?.clipboard?.writeText) {
+      void navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    }
+  };
+  return (
+    <button
+      type="button"
+      className="source-copy-pill"
+      onClick={copy}
+      title={title ?? `点击复制完整参数: ${text}`}
+      aria-label={`复制 ${label ?? text}`}
+    >
+      <span>{label ?? text}</span>
+      {copied ? <Check size={12} className="is-copied" /> : <Copy size={12} />}
+    </button>
+  );
+}
+
+function SourceWorkspace({ source, hostedBreadcrumb = false, runs, candidates, testResult, busy, canManage, canRun, onClose, onTest, onStart, onEdit, onOpenRun, onOpenProposal, onOpenArtifact, onUpdateArtifact, onRefresh, hasMoreRuns, onMoreRuns, tab, onTabChange }: {
+  source?: SourceConnection; hostedBreadcrumb?: boolean; runs: SourceDiscoveryRun[]; candidates: SemanticCandidate[]; testResult?: { ok: boolean; message: string }; busy: boolean; canManage: boolean; canRun: boolean;
   onClose: () => void; onTest: () => void; onStart: () => void; onEdit: () => void; onOpenRun: (id: string) => void; onOpenArtifact: (source: SourceConnection) => void; onUpdateArtifact: (source: SourceConnection) => void; onRefresh: () => void; hasMoreRuns: boolean; onMoreRuns: () => void;
   onOpenProposal: (id: string) => void;
   tab: string; onTabChange: (tab: string) => void;
@@ -980,25 +1470,380 @@ function SourceWorkspace({ source, runs, candidates, testResult, busy, canManage
   const loadSchedules = runtime.loadSchedules;
   const sourceId = source?.id;
   useEffect(() => { if (sourceId) void loadSchedules(sourceId).catch(() => undefined); }, [sourceId, loadSchedules]);
-  const closeRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => { closeRef.current?.focus(); }, []);
   if (!source) return <p role="alert">来源已不可用。<button onClick={onClose}>返回数据来源</button></p>;
   const latest = [...runs].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
   const plans = runtime.schedulesBySource[source.id];
-  return <section className="ingestion-detail source-object" aria-label="数据来源详情">
-    <button ref={closeRef} className="ingestion-back" onClick={onClose}><ChevronLeft size={16} />返回数据来源</button>
-    <header className="ingestion-object-heading"><div><span className="panel-kicker">{sourceKindLabel(source)} · {sourceStatusLabel(source.status)}</span><h2>{source.name}</h2><span className="ingestion-muted">{source.sourceKind === "postgresql" ? `${source.host}:${source.port}/${source.database}` : "版本化文件来源"}</span></div><div className="ingestion-object-actions">{source.sourceKind === "postgresql" && <button className="secondary-button" disabled={!canManage || busy} onClick={onTest}><CheckCircle2 size={15} />测试连接</button>}<button className="primary-button" disabled={!canRun || busy || source.status !== "active"} onClick={onStart}><Play size={15} />启动发现</button></div></header>
-    <div className="source-tabs ingestion-object-tabs" role="tablist" aria-label="来源详情视图">{["概览", "内容", "运行历史", "自动化", "连接设置"].map((name) => <button key={name} role="tab" aria-selected={tab === name} onClick={() => onTabChange(name)}>{name}</button>)}</div>
-    {tab === "内容" && <SourceContents source={source} />}
-    {tab === "概览" && <>
-      <div className="ingestion-summary-grid"><article><span>连接检查</span><strong className="is-time">{source.sourceKind === "postgresql" ? testResult ? testResult.ok ? "检查通过" : "检查失败" : "本次会话未检查" : "文件来源"}</strong></article><article><span>最近发现</span><strong className="is-time">{latest ? runLabels[latest.status] : "尚未运行"}</strong><small>{latest ? formatTime(latest.createdAt) : ""}</small></article><article><span>自动化</span><strong className="is-time">{plans?.status.error ? "读取失败" : plans && ["ready", "empty"].includes(plans.status.state) ? `${plans.items.filter((plan) => plan.enabled && !plan.deletedAt).length} 个计划已启用` : "读取中"}</strong><button className="ingestion-link" onClick={() => onTabChange("自动化")}>管理计划<ChevronRight size={14} /></button></article></div>
-      <section className="ingestion-section"><header><h3>最近发现结果</h3>{latest && <button className="secondary-button" onClick={() => onOpenRun(latest.id)}>查看结果<ChevronRight size={15} /></button>}</header>{latest ? <RunStats stats={latest.stats} /> : <Empty icon={<Database size={20} />} title="尚无发现结果" detail="" />}</section>
-      <section className="ingestion-section"><header><h3>采集输入</h3></header><dl className="ingestion-metadata">{source.sourceKind === "postgresql" ? <><dt>元数据来源</dt><dd>{source.database} · {source.username} 可访问的 Catalog</dd><dt>SQL 工件</dt><dd>{source.artifactPaths?.length ? source.artifactPaths.join("\n") : "未配置"}</dd></> : <><dt>工件集合</dt><dd><button className="ingestion-link" onClick={() => onOpenArtifact(source)}>查看已保存文件<ChevronRight size={14} /></button></dd></>}</dl></section>
-    </>}
-    {tab === "运行历史" && <><RunList runs={runs} sourceName={() => source.name} onOpen={onOpenRun} />{hasMoreRuns && <button className="secondary-button" onClick={onMoreRuns}>加载更多运行</button>}</>}
-    {tab === "自动化" && <ScheduleWorkspace sources={[source]} runs={runs} candidates={candidates} onOpenProposal={onOpenProposal} loading={false} sourceError="" onRefresh={onRefresh} loadingMoreSources={false} onLoadMoreSources={() => {}} embedded />}
-    {tab === "连接设置" && <section className="ingestion-section"><header><h3>连接配置</h3><button className="secondary-button" disabled={!canManage} onClick={onEdit}><Pencil size={15} />编辑配置</button></header><dl className="ingestion-metadata"><dt>来源 ID</dt><dd><code>{source.id}</code></dd>{source.sourceKind === "postgresql" ? <><dt>地址</dt><dd><code>{source.host}:{source.port}</code></dd><dt>数据库</dt><dd>{source.database}</dd><dt>连接用户</dt><dd>{source.username}</dd><dt>SSL 模式</dt><dd>{source.sslMode}</dd><dt>凭据版本</dt><dd>v{source.credentialVersion}</dd></> : <><dt>工件集合</dt><dd>{source.activeArtifactSetId}<button className="secondary-button" disabled={!canManage} onClick={() => onUpdateArtifact(source)}><FileUp size={15} />更新工件</button></dd></>}<dt>创建时间</dt><dd>{formatTime(source.createdAt)}</dd><dt>更新时间</dt><dd>{formatTime(source.updatedAt)}</dd></dl></section>}
-  </section>;
+
+  const cleanDb = cleanIdentifier(source.sourceKind === "postgresql" ? source.database : undefined);
+  const cleanUser = cleanIdentifier(source.sourceKind === "postgresql" ? source.username : undefined);
+  const stats = latest?.stats as Record<string, number> | undefined;
+  const fieldCount = stats?.fields ?? 0;
+  const tableCount = (stats?.tables ?? 0) + (stats?.datasets ?? 0);
+  const lineageCount = stats?.lineage ?? 0;
+
+  return (
+    <section className="ingestion-detail source-object source-object-detail" aria-label="数据来源详情">
+      {!hostedBreadcrumb && (
+        <div className="source-standalone-breadcrumb">
+          <button
+            type="button"
+            className="topbar-back-button"
+            aria-label="返回数据来源"
+            title="返回数据来源"
+            onClick={onClose}
+          >
+            <ArrowLeft size={16} />
+          </button>
+          <nav className="topbar-breadcrumb-nav" aria-label="页面层级">
+            <button type="button" className="topbar-breadcrumb-link" onClick={onClose}>
+              数据来源
+            </button>
+            <span className="topbar-breadcrumb-separator" aria-hidden="true">/</span>
+            <strong className="topbar-breadcrumb-current">{source.name}</strong>
+          </nav>
+        </div>
+      )}
+      <header className="source-header-card">
+        <div className="source-title-row">
+          <div className="source-title-group">
+            <div className="source-kind-avatar" aria-hidden="true">
+              {source.sourceKind === "postgresql" ? <Server size={22} /> : source.sourceKind === "sqlite" ? <Database size={22} /> : <FileUp size={22} />}
+            </div>
+            <div className="source-title-meta">
+              <div className="source-tags-row">
+                <span className="source-kind-badge">{sourceKindLabel(source)}</span>
+                <span className={`health-label source-health-${source.status}`}>
+                  <i />{sourceStatusLabel(source.status)}
+                </span>
+              </div>
+              <h2>{source.name}</h2>
+            </div>
+          </div>
+          <div className="source-actions-toolbar">
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={!canManage || busy}
+              onClick={onEdit}
+              title="修改数据源连接参数与状态"
+            >
+              <Pencil size={14} />编辑连接
+            </button>
+            {source.sourceKind === "postgresql" ? (
+              <button type="button" className="secondary-button" disabled={!canManage || busy} onClick={onTest}>
+                <CheckCircle2 size={15} />测试连接
+              </button>
+            ) : (
+              <button type="button" className="secondary-button" disabled={!canManage || busy} onClick={() => onUpdateArtifact(source)}>
+                <FileUp size={15} />更新工件
+              </button>
+            )}
+            <button
+              type="button"
+              className="primary-button"
+              disabled={!canRun || busy || source.status !== "active"}
+              onClick={onStart}
+            >
+              <Play size={15} />启动发现
+            </button>
+          </div>
+        </div>
+
+        {/* 核心网络拓扑与凭据速览条：规整 5 列等距对齐 */}
+        <div className="source-hero-strip" role="region" aria-label="核心连接规格">
+          {source.sourceKind === "postgresql" ? (
+            <>
+              <div className="source-hero-item is-primary-host">
+                <span className="source-hero-label"><Network size={13} /> 主机与网络端口</span>
+                <strong className="source-hero-value" title={`连接主机与端口: ${source.host}:${source.port}`}>
+                  <code>{source.host}:{source.port}</code>
+                </strong>
+              </div>
+              <div className="source-hero-item">
+                <span className="source-hero-label"><Database size={13} /> 逻辑数据库</span>
+                <div className="source-hero-value">
+                  <CopyablePill text={source.database} label={cleanDb.label} title={`完整库名: ${source.database}`} />
+                </div>
+              </div>
+              <div className="source-hero-item">
+                <span className="source-hero-label"><User size={13} /> 认证用户</span>
+                <div className="source-hero-value">
+                  <CopyablePill text={source.username} label={cleanUser.label} title={`完整账号: ${source.username}`} />
+                </div>
+              </div>
+              <div className="source-hero-item">
+                <span className="source-hero-label"><ShieldCheck size={13} /> SSL 传输加密</span>
+                <strong className="source-hero-value">{source.sslMode ?? "默认"}</strong>
+              </div>
+              <div className="source-hero-item">
+                <span className="source-hero-label"><Activity size={13} /> 连接检查状态</span>
+                <strong className="source-hero-value">
+                  {testResult ? (testResult.ok ? "检查通过" : "检查失败") : "待检测"}
+                </strong>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="source-hero-item is-primary-host">
+                <span className="source-hero-label"><FileUp size={13} /> 来源类型</span>
+                <strong className="source-hero-value">{artifactSourceText(source.sourceKind).type}</strong>
+              </div>
+              <div className="source-hero-item">
+                <span className="source-hero-label"><Database size={13} /> 工件集合 ID</span>
+                <div className="source-hero-value">
+                  <code>{shortId(source.activeArtifactSetId)}</code>
+                </div>
+              </div>
+              <div className="source-hero-item">
+                <span className="source-hero-label"><Activity size={13} /> 数据状态</span>
+                <strong className="source-hero-value">文件就绪</strong>
+              </div>
+            </>
+          )}
+        </div>
+      </header>
+
+      <div className="source-tabs ingestion-object-tabs" role="tablist" aria-label="来源详情视图">
+        {["概览", "内容", "运行历史", "自动化"].map((name) => (
+          <button key={name} type="button" role="tab" aria-selected={tab === name} onClick={() => onTabChange(name)}>
+            {name}
+          </button>
+        ))}
+      </div>
+
+      {tab === "内容" && <SourceContents source={source} />}
+
+      {tab === "概览" && (
+        <>
+          {/* 4 维监控看板卡片网格 */}
+          <div className="source-kpi-grid">
+            <article className="source-kpi-card">
+              <div className="source-kpi-header">
+                <span>网络连接状态</span>
+                <span className="source-kpi-icon"><Activity size={16} /></span>
+              </div>
+              <div className="source-kpi-body">
+                <strong>
+                  {source.sourceKind === "postgresql"
+                    ? testResult
+                      ? testResult.ok
+                        ? "连通正常"
+                        : "连接异常"
+                      : "待检测"
+                    : "就绪"}
+                </strong>
+                <small>
+                  {source.sourceKind === "postgresql"
+                    ? testResult?.message ?? "本次会话尚未进行实时探测"
+                    : source.sourceKind === "sqlite" ? "只读数据库文件" : "本地文件工件集"}
+                </small>
+              </div>
+              {source.sourceKind === "postgresql" && (
+                <footer>
+                  <button
+                    type="button"
+                    className="ingestion-link"
+                    disabled={!canManage || busy}
+                    onClick={onTest}
+                  >
+                    {busy ? "测试中..." : "重新检测连接"}
+                  </button>
+                </footer>
+              )}
+            </article>
+
+            <article className="source-kpi-card">
+              <div className="source-kpi-header">
+                <span>发现知识规模</span>
+                <span className="source-kpi-icon"><Layers size={16} /></span>
+              </div>
+              <div className="source-kpi-body">
+                <strong>{fieldCount > 0 ? `${fieldCount} 个字段` : "暂无知识"}</strong>
+                <small>{tableCount > 0 ? `${tableCount} 个数据表 / 视图` : "等待执行首次扫描"}</small>
+              </div>
+              <footer>
+                <span>血缘链路: <strong>{lineageCount}</strong> 条</span>
+              </footer>
+            </article>
+
+            <article className="source-kpi-card">
+              <div className="source-kpi-header">
+                <span>最近发现运行</span>
+                <span className="source-kpi-icon"><Clock3 size={16} /></span>
+              </div>
+              <div className="source-kpi-body">
+                <strong>{latest ? runLabels[latest.status] : "尚未运行"}</strong>
+                <small>{latest ? formatTime(latest.createdAt) : "点击右上角启动发现"}</small>
+              </div>
+              {latest && (
+                <footer>
+                  <button
+                    type="button"
+                    className="ingestion-link"
+                    onClick={() => onOpenRun(latest.id)}
+                  >
+                    查看运行明细 <ChevronRight size={13} />
+                  </button>
+                </footer>
+              )}
+            </article>
+
+            <article className="source-kpi-card">
+              <div className="source-kpi-header">
+                <span>自动化接入</span>
+                <span className="source-kpi-icon"><RefreshCw size={16} /></span>
+              </div>
+              <div className="source-kpi-body">
+                <strong>
+                  {plans?.status.error
+                    ? "读取失败"
+                    : plans && ["ready", "empty"].includes(plans.status.state)
+                    ? `${plans.items.filter((p) => p.enabled && !p.deletedAt).length} 个计划已启用`
+                    : "读取中"}
+                </strong>
+                <small>定时按周期自动同步元数据</small>
+              </div>
+              <footer>
+                <button
+                  type="button"
+                  className="ingestion-link"
+                  onClick={() => onTabChange("自动化")}
+                >
+                  管理自动化计划 <ChevronRight size={13} />
+                </button>
+              </footer>
+            </article>
+          </div>
+
+          {/* 结构化双栏详情卡片 */}
+          <div className="source-overview-details-grid">
+            <section className="source-panel-card">
+              <header>
+                <h3>接入范围与模型规范</h3>
+              </header>
+              <div className="source-spec-table">
+                {source.sourceKind === "postgresql" ? (
+                  <>
+                    <div className="source-spec-row">
+                      <span className="source-spec-label">Catalog 作用域</span>
+                      <span className="source-spec-value">当前逻辑库及授权 Schema（只读隔离）</span>
+                    </div>
+                    <div className="source-spec-row">
+                      <span className="source-spec-label">版本化 SQL 工件</span>
+                      <span className="source-spec-value">
+                        {source.artifactPaths?.length ? source.artifactPaths.join(", ") : "未指定（自动分析全量物理表与视图）"}
+                      </span>
+                    </div>
+                    <div className="source-spec-row">
+                      <span className="source-spec-label">凭据防护状态</span>
+                      <span className="source-spec-value">凭据 v{source.credentialVersion} · 支持安全只写轮换</span>
+                    </div>
+                    <div className="source-spec-row">
+                      <span className="source-spec-label">元数据发现机制</span>
+                      <span className="source-spec-value">支持全量结构快照、字段类型推导与语义候选抽取</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="source-spec-row">
+                      <span className="source-spec-label">工件集合</span>
+                      <span className="source-spec-value">
+                        <button
+                          type="button"
+                          className="ingestion-link"
+                          onClick={() => onOpenArtifact(source)}
+                        >
+                          查看已保存文件 <ChevronRight size={14} />
+                        </button>
+                      </span>
+                    </div>
+                    <div className="source-spec-row">
+                      <span className="source-spec-label">工件标识</span>
+                      <span className="source-spec-value">
+                        <code>{source.activeArtifactSetId}</code>
+                      </span>
+                    </div>
+                    <div className="source-spec-row">
+                      <span className="source-spec-label">解析范围</span>
+                      <span className="source-spec-value">{artifactSourceText(source.sourceKind).scope}</span>
+                    </div>
+                  </>
+                )}
+              </div>
+            </section>
+
+            <section className="source-panel-card">
+              <header>
+                <h3>最近发现结果</h3>
+                {latest && (
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => onOpenRun(latest.id)}
+                  >
+                    查看结果 <ChevronRight size={14} />
+                  </button>
+                )}
+              </header>
+              {latest ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                  <RunStats stats={latest.stats} />
+                  <p style={{ margin: 0, color: "var(--muted)", fontSize: "12px", lineHeight: "1.5" }}>
+                    发现任务已成功读取数据源元数据并生成语义候选资产。您可以进入发现运行记录进一步确认字段类型、推导业务概念并发布至资产库。
+                  </p>
+                </div>
+              ) : (
+                <Empty icon={<Database size={20} />} title="尚无发现结果" detail="点击右上角“启动发现”开始探测" />
+              )}
+            </section>
+          </div>
+        </>
+      )}
+
+      {tab === "运行历史" && (
+        <section className="source-panel-card">
+          <header>
+            <div>
+              <h3>发现运行历史</h3>
+              <small className="table-secondary" style={{ display: "block", marginTop: "2px" }}>
+                共 {runs.length} 次运行记录 · 包含元数据快照状态、知识提取规模与诊断警告
+              </small>
+            </div>
+            {canRun && source.status === "active" && (
+              <button type="button" className="secondary-button" disabled={busy} onClick={onStart}>
+                <Play size={14} />立即运行发现
+              </button>
+            )}
+          </header>
+          <div className="source-table-card-viewport">
+            <RunList runs={runs} sourceName={() => source.name} onOpen={onOpenRun} />
+          </div>
+          {hasMoreRuns && (
+            <footer style={{ marginTop: "12px", display: "flex", justifyContent: "center" }}>
+              <button type="button" className="secondary-button" onClick={onMoreRuns}>
+                加载更多运行记录
+              </button>
+            </footer>
+          )}
+        </section>
+      )}
+
+      {tab === "自动化" && (
+        <ScheduleWorkspace
+          sources={[source]}
+          runs={runs}
+          candidates={candidates}
+          onOpenProposal={onOpenProposal}
+          loading={false}
+          sourceError=""
+          onRefresh={onRefresh}
+          loadingMoreSources={false}
+          onLoadMoreSources={() => {}}
+          embedded
+        />
+      )}
+    </section>
+  );
 }
 
 function LatestSourceRun({ runs, onOpen }: { runs: SourceDiscoveryRun[]; onOpen: (id: string) => void }) {
@@ -1007,7 +1852,7 @@ function LatestSourceRun({ runs, onOpen }: { runs: SourceDiscoveryRun[]; onOpen:
 }
 
 function sourceKindLabel(source: SourceConnection) {
-  return { postgresql: "PostgreSQL", file: "文件", sql_bundle: "SQL", dbt_bundle: "dbt" }[source.sourceKind];
+  return { postgresql: "PostgreSQL", sqlite: "SQLite", file: "文件", sql_bundle: "SQL", dbt_bundle: "dbt" }[source.sourceKind];
 }
 
 function mergeById<T extends { id: string }>(current: T[], additions: T[]): T[] {

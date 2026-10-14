@@ -69,6 +69,9 @@ func (p *Postgres) Execute(parent context.Context, w identity.WorkspaceID, q d.C
 	if !l.Valid() {
 		return fail("EXECUTION_LIMITS_INVALID")
 	}
+	if q.Dialect != "" && q.Dialect != (d.PostgreSQL{}).Name() {
+		return fail("EXECUTION_NOT_CONFIGURED")
+	}
 	env := p.references[w.String()+"/"+q.SourceID]
 	if env == "" {
 		return fail("EXECUTION_NOT_CONFIGURED")

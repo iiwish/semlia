@@ -150,7 +150,7 @@ func (s *Service) Execute(ctx context.Context, r Request) (d.Result, error) {
 	}
 	now := s.now().UTC()
 	deadline, _ := ctx.Deadline()
-	run := d.Run{ID: id.String(), WorkspaceID: r.WorkspaceID.String(), QueryID: resolved.Query.ID.String(), PlanID: r.PlanID.String(), PlanDigest: r.PlanDigest, PrincipalID: decision.PrincipalID.String(), Channel: r.Channel, SourceID: query.SourceID, SourceRevisionID: query.SourceRevisionID, AdapterVersion: d.CompilerVersion, IdempotencyKey: r.IdempotencyKey, State: "running", StartedAt: now, Deadline: deadline.Add(5 * time.Second), TraceID: r.TraceID}
+	run := d.Run{ID: id.String(), WorkspaceID: r.WorkspaceID.String(), QueryID: resolved.Query.ID.String(), PlanID: r.PlanID.String(), PlanDigest: r.PlanDigest, PrincipalID: decision.PrincipalID.String(), Channel: r.Channel, SourceID: query.SourceID, SourceRevisionID: query.SourceRevisionID, AdapterVersion: query.AdapterVersion, IdempotencyKey: r.IdempotencyKey, State: "running", StartedAt: now, Deadline: deadline.Add(5 * time.Second), TraceID: r.TraceID}
 	run.PolicyVersion, run.TimeoutMS, run.MaxRows, run.MaxBytes = settings.Version, limits.Timeout.Milliseconds(), limits.MaxRows, limits.MaxBytes
 	if resolved.Query.ConsumerID != nil {
 		run.ConsumerID = resolved.Query.ConsumerID.String()

@@ -645,7 +645,15 @@ function OperationsGate({ children }: { children: ReactNode }) {
   return <section className="view settings-view audit-runtime-view" aria-label="审计与运行"><div className="operations-access-boundary"><LockKeyhole size={22} /><span><strong>没有审计与运行权限</strong>需要审计读取、运行读取或运行管理能力。</span></div></section>;
 }
 
-function Topbar({ view, contextLabel, onNewConversation, onRenameContext, onBack, backLabel = "返回" }: { view: ViewId; contextLabel?: string; onNewConversation: () => void; onRenameContext?: (title: string) => void; onBack?: () => void; backLabel?: string }) {
+function Topbar({ view, contextLabel, breadcrumb, onNewConversation, onRenameContext, onBack, backLabel = "返回" }: {
+  view: ViewId;
+  contextLabel?: string;
+  breadcrumb?: { parent: string; current: string; onParentClick?: () => void };
+  onNewConversation: () => void;
+  onRenameContext?: (title: string) => void;
+  onBack?: () => void;
+  backLabel?: string;
+}) {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [draftTitle, setDraftTitle] = useState(contextLabel ?? "");
   const titleInputRef = useRef<HTMLInputElement>(null);
@@ -668,7 +676,19 @@ function Topbar({ view, contextLabel, onNewConversation, onRenameContext, onBack
 
   return (
     <header className="topbar">
-      <div className="workspace-breadcrumb">{onBack && <button className="topbar-back-button" type="button" aria-label={backLabel} title={backLabel} onClick={onBack}><ArrowLeft size={16} /></button>}{contextLabel && (onRenameContext ? (isEditingTitle ? <input ref={titleInputRef} className="workspace-title-input" aria-label="编辑会话标题" value={draftTitle} onChange={(event) => setDraftTitle(event.target.value)} onBlur={commitTitle} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); commitTitle(); } if (event.key === "Escape") { event.preventDefault(); cancelTitle(); } }} /> : <button className="workspace-title-button" type="button" aria-label={`编辑会话标题：${contextLabel}`} onClick={() => setIsEditingTitle(true)}>{contextLabel}</button>) : <strong>{contextLabel}</strong>)}{view === "ask" && <span className="session-only-label">仅本次会话</span>}</div>
+      <div className="workspace-breadcrumb">
+        {onBack && <button className="topbar-back-button" type="button" aria-label={backLabel} title={backLabel} onClick={onBack}><ArrowLeft size={16} /></button>}
+        {breadcrumb ? (
+          <nav className="topbar-breadcrumb-nav" aria-label="页面层级">
+            <button type="button" className="topbar-breadcrumb-link" onClick={breadcrumb.onParentClick ?? onBack}>{breadcrumb.parent}</button>
+            <span className="topbar-breadcrumb-separator" aria-hidden="true">/</span>
+            <strong className="topbar-breadcrumb-current">{breadcrumb.current}</strong>
+          </nav>
+        ) : (
+          contextLabel && (onRenameContext ? (isEditingTitle ? <input ref={titleInputRef} className="workspace-title-input" aria-label="编辑会话标题" value={draftTitle} onChange={(event) => setDraftTitle(event.target.value)} onBlur={commitTitle} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); commitTitle(); } if (event.key === "Escape") { event.preventDefault(); cancelTitle(); } }} /> : <button className="workspace-title-button" type="button" aria-label={`编辑会话标题：${contextLabel}`} onClick={() => setIsEditingTitle(true)}>{contextLabel}</button>) : <strong>{contextLabel}</strong>)
+        )}
+        {view === "ask" && <span className="session-only-label">仅本次会话</span>}
+      </div>
       <div className="topbar-actions">
         <CatalogDataNotice />
         <SessionAccountControl />
@@ -2623,6 +2643,8 @@ function ProductApplication({ session }: { session?: CapabilitySession }) {
   const [contextSelectionEpoch, setContextSelectionEpoch] = useState(0);
   const [sourceRunDetailOpen, setSourceRunDetailOpen] = useState(false);
   const [sourceRunBackRequestEpoch, setSourceRunBackRequestEpoch] = useState(0);
+  const [sourceDetailName, setSourceDetailName] = useState<string | null>(null);
+  const [sourceDetailBackRequestEpoch, setSourceDetailBackRequestEpoch] = useState(0);
   const [sourceInitialSourceId, setSourceInitialSourceId] = useState<string | undefined>(initialDeepLink.sourceId ?? undefined);
   const [sourceInitialScheduleId, setSourceInitialScheduleId] = useState<string | undefined>(initialDeepLink.sourceScheduleId ?? undefined);
   const [sourceInitialRunId, setSourceInitialRunId] = useState<string | undefined>(initialDeepLink.sourceRunId ?? undefined);
@@ -3169,14 +3191,36 @@ function ProductApplication({ session }: { session?: CapabilitySession }) {
       <ActivityRail view={navigationView} onChange={navigate} />
       {showContextPanel && <ContextPanel view={navigationView} activeIndex={navigationIndex} width={contextPanelWidth} activeWorkbenchTask={workbench.selectedItem} workbenchItems={[]} askConversationTitles={askConversationTitles} conversationSearchRequestEpoch={conversationSearchRequestEpoch} releasesItems={releaseContextItems} onSelect={selectContext} onOpenWorkbenchTask={openWorkbenchItem} onOpenCatalogSearch={openCatalogSearch} onOpenWorkbenchSearch={openWorkbenchSearch} onCollapse={() => setContextPanelOpen(false)} onResize={setContextPanelWidth} />}
       <div className="workspace">
-        <Topbar key={`${view}-${contextLabel ?? ""}`} view={view} contextLabel={contextLabel} onNewConversation={() => { setAskSessionKey((key) => key + 1); setContextIndex(0); }} onRenameContext={view === "ask" ? renameConversationTitle : undefined} onBack={compatibilityTarget ? () => { setCompatibilityTarget(null); closeWorkbenchItem(); } : view === "overview" && workbench.selectedItemId ? () => closeWorkbenchItem() : view === "assets" && assetDetailRequest ? () => { setKnowledgeRevisionRequest(null); setAssetDetailRequest(false); setAssetDetailBackRequestEpoch((epoch) => epoch + 1); writeProductRoute(assetRoute()); } : view === "sources" && contextIndex === 2 && sourceRunDetailOpen ? () => setSourceRunBackRequestEpoch((epoch) => epoch + 1) : view === "releases" && contextIndex === 2 ? () => navigate("overview", productionInboxScope) : view === "releases" && releaseDetailOpen ? backFromVersionDetail : undefined} backLabel={view === "overview" ? "返回待办" : view === "assets" ? "返回知识目录" : view === "releases" ? releaseOrigin === "audit" ? "返回审计与运行" : contextIndex === 2 || versionDetailRequest.key?.startsWith("candidate:") ? "返回待办" : "返回发布记录" : "返回运行记录"} />
+        <Topbar
+          key={`${view}-${contextLabel ?? ""}-${sourceDetailName ?? ""}`}
+          view={view}
+          contextLabel={contextLabel}
+          onNewConversation={() => { setAskSessionKey((key) => key + 1); setContextIndex(0); }}
+          onRenameContext={view === "ask" ? renameConversationTitle : undefined}
+          onBack={compatibilityTarget ? () => { setCompatibilityTarget(null); closeWorkbenchItem(); }
+            : view === "overview" && workbench.selectedItemId ? () => closeWorkbenchItem()
+            : view === "assets" && assetDetailRequest ? () => { setKnowledgeRevisionRequest(null); setAssetDetailRequest(false); setAssetDetailBackRequestEpoch((epoch) => epoch + 1); writeProductRoute(assetRoute()); }
+            : view === "sources" && contextIndex === 0 && sourceDetailName ? () => setSourceDetailBackRequestEpoch((epoch) => epoch + 1)
+            : view === "sources" && contextIndex === 2 && sourceRunDetailOpen ? () => setSourceRunBackRequestEpoch((epoch) => epoch + 1)
+            : view === "releases" && contextIndex === 2 ? () => navigate("overview", productionInboxScope)
+            : view === "releases" && releaseDetailOpen ? backFromVersionDetail : undefined}
+          backLabel={view === "overview" ? "返回待办"
+            : view === "assets" ? "返回知识目录"
+            : view === "sources" && contextIndex === 0 && sourceDetailName ? "返回数据来源"
+            : view === "releases" ? releaseOrigin === "audit" ? "返回审计与运行" : contextIndex === 2 || versionDetailRequest.key?.startsWith("candidate:") ? "返回待办" : "返回发布记录" : "返回运行记录"}
+          breadcrumb={view === "sources" && contextIndex === 0 && sourceDetailName ? {
+            parent: "数据来源",
+            current: sourceDetailName,
+            onParentClick: () => setSourceDetailBackRequestEpoch((epoch) => epoch + 1),
+          } : undefined}
+        />
         <main ref={workspaceRef} className="workspace-canvas">
           <SessionAuthorizationNotice />
           {revisionSaveState.unknown && <div className="production-alert" role="alert">上次修订的保存结果未确认。<button type="button" className="secondary-button" disabled={revisionSaveState.busy || !session?.capabilities.includes("asset.propose")} onClick={() => { const command = revisionCommand.current; if (command) void submitKnowledgeRevision(command.submission).catch((error: unknown) => showToast(error instanceof Error ? error.message : "保存结果仍未确认。")); }}>核对上次修订保存</button></div>}
 
           {(view === "settings") && contextIndex === 2 && <SurfaceBoundaryNotice title="持久化索引" detail="重建使用已发布知识与固定模型配置；完整校验后生效，失败或取消保留当前索引。" />}
           {(view === "ask" || askVisited) && <AskView key={`${workspaceId}:${askSessionKey}`} hidden={view !== "ask"} workspaceId={workspaceId} noPublishedKnowledge={governance.releasesState === "ready" && governance.releases.length === 0} onOpenKnowledge={() => navigate("releases")} onOpenEvidence={openAssetEvidence} onStartRevision={openAnswerRevision} />}
-          {view === "sources" && ((<LiveSourcesView navigationEpoch={contextSelectionEpoch} focusIndex={contextIndex} runDetailBackRequestEpoch={sourceRunBackRequestEpoch} initialRunId={sourceInitialRunId} initialScheduleId={sourceInitialScheduleId} initialSourceId={sourceInitialSourceId} onRoute={writeProductRoute} onRunDetailOpenChange={setSourceRunDetailOpen} onOpenProposal={openCandidateVersionById} />))}
+          {view === "sources" && ((<LiveSourcesView navigationEpoch={contextSelectionEpoch} focusIndex={contextIndex} detailBackRequestEpoch={sourceDetailBackRequestEpoch} runDetailBackRequestEpoch={sourceRunBackRequestEpoch} initialRunId={sourceInitialRunId} initialScheduleId={sourceInitialScheduleId} initialSourceId={sourceInitialSourceId} onRoute={writeProductRoute} onDetailOpenChange={setSourceDetailName} onRunDetailOpenChange={setSourceRunDetailOpen} onOpenProposal={openCandidateVersionById} />))}
           {view === "overview" && compatibilityTarget && <CompatibilityImpactView workspaceId={workspaceId} consumerId={compatibilityTarget.consumerId} bindingId={compatibilityTarget.bindingId} queryId={compatibilityTarget.queryId} />}
           {view === "overview" && !compatibilityTarget && !workbench.selectedItemId && <UnifiedInbox key={inboxViewKey} initialViewState={inboxViews[inboxViewKey]} onRememberView={rememberInboxView} focusScopeRequestEpoch={inboxScopeRequestEpoch} onScopeChange={(scope) => { setInboxScopeRequestEpoch((epoch) => epoch + 1); navigate("overview", scope === "initiated" ? 1 : scope === "done" ? 2 : 0); }} workspaceId={workspaceId} principalId={session?.principalId} scope={contextIndex === 1 ? "initiated" : contextIndex === 2 ? "done" : "pending"} onOpenOperation={openKnowledgeAction} onOpenTask={openWorkbenchItem} onOpenReviews={() => { setProductionInboxScope(contextIndex); setView("releases"); setContextIndex(2); setVersionDetailRequest((current) => ({ key: null, epoch: current.epoch + 1 })); writeProductRoute(workReviewsRoute(contextIndex === 1 ? "initiated" : contextIndex === 2 ? "done" : "pending")); }} focusSearchRequestEpoch={workbenchSearchRequestEpoch} />}
           {view === "overview" && !compatibilityTarget && workbench.selectedItemId && <WorkbenchDetailView onOpenTarget={openWorkbenchTarget} onOpenReleaseRecord={openReleaseRecord} />}

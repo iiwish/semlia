@@ -10,7 +10,7 @@ beforeEach(() => { vi.resetAllMocks(); });
 test("browses paginated historical structure and searches fields", async () => {
   vi.mocked(sourceContentsAPI.snapshots).mockResolvedValue({ items: [snapshot], nextCursor: null } as never);
   vi.mocked(sourceContentsAPI.members).mockResolvedValueOnce({ items: [{ kind: "dataset", objectId: "d1", name: "public.orders", datasetKind: "table" }], nextCursor: "p2" } as never).mockResolvedValueOnce({ items: [{ kind: "field", objectId: "f1", parentObjectId: "d1", name: "amount", dataType: "numeric", nullable: false, ordinal: 1 }], nextCursor: null } as never);
-  render(<DatabaseContents workspaceId="w" sourceId="s" database="demo" />);
+  render(<DatabaseContents workspaceId="w" sourceId="s" />);
   await userEvent.click(await screen.findByRole("button", { name: /public.orders/ }));
   expect(await screen.findByText("numeric")).toBeInTheDocument();
   expect(screen.getByText("不可空")).toBeInTheDocument();
@@ -20,7 +20,7 @@ test("browses paginated historical structure and searches fields", async () => {
 });
 test("read failure is not an empty snapshot", async () => {
   vi.mocked(sourceContentsAPI.snapshots).mockRejectedValue(new Error("没有读取此来源内容的权限。"));
-  render(<DatabaseContents workspaceId="w" sourceId="s" database="demo" />);
+  render(<DatabaseContents workspaceId="w" sourceId="s" />);
   expect(await screen.findByRole("alert")).toHaveTextContent("权限");
   expect(screen.queryByText("尚未采集结构")).not.toBeInTheDocument();
 });
@@ -41,7 +41,7 @@ test("switching snapshots ignores a late response from the old version", async (
   vi.mocked(sourceContentsAPI.snapshots).mockResolvedValue({ items: [snapshot, {...snapshot,id:"snapshot-2"}], nextCursor:null } as never);
   let finishOld!: (value: never) => void;
   vi.mocked(sourceContentsAPI.members).mockImplementationOnce(()=>new Promise((resolve)=>{finishOld=resolve;})).mockResolvedValueOnce({items:[{kind:"dataset",objectId:"new",name:"public.current",datasetKind:"table"}],nextCursor:null} as never);
-  render(<DatabaseContents workspaceId="w" sourceId="s" database="demo" />);
+  render(<DatabaseContents workspaceId="w" sourceId="s" />);
   await waitFor(()=>expect(sourceContentsAPI.members).toHaveBeenCalledTimes(1));
   await userEvent.selectOptions(screen.getByRole("combobox",{name:"采集版本"}),"snapshot-2");
   await screen.findByRole("button",{name:/public.current/});
@@ -59,3 +59,42 @@ test("spreadsheet previews switch sheets without losing sparse empty cells", asy
   expect(screen.getByText("只有表头，没有数据记录。")).toBeInTheDocument();
   expect(screen.queryByRole("cell",{name:"12.50"})).not.toBeInTheDocument();
 });
+
+test("displays business comments, constraints, and switches to sample data preview", async () => {
+  vi.mocked(sourceContentsAPI.snapshots).mockResolvedValue({ items: [snapshot], nextCursor: null } as never);
+  vi.mocked(sourceContentsAPI.members).mockResolvedValue({
+    items: [
+      { kind: "dataset", objectId: "d1", name: "public.orders", datasetKind: "table" },
+      { kind: "field", objectId: "f1", parentObjectId: "d1", name: "id", dataType: "text", nullable: false, ordinal: 1 },
+      { kind: "field", objectId: "f2", parentObjectId: "d1", name: "amount", dataType: "numeric", nullable: false, ordinal: 2 },
+      { kind: "field", objectId: "f3", parentObjectId: "d1", name: "customer_id", dataType: "text", nullable: false, ordinal: 3 },
+    ],
+    nextCursor: null,
+  } as never);
+
+  render(<DatabaseContents workspaceId="w" sourceId="s" />);
+
+  // 验证精简后的四个字采集范围按钮与轻量浮窗
+  const coverageBtn = await screen.findByRole("button", { name: /采集范围/ });
+  expect(screen.queryByText("声明范围已完整采集")).not.toBeInTheDocument();
+  await userEvent.click(coverageBtn);
+  expect(await screen.findByText("声明范围已完整采集")).toBeInTheDocument();
+  expect(screen.getByText(/仅限账号已授权范围/)).toBeInTheDocument();
+
+  // 验证字段字典表头和业务注释
+  await userEvent.click(await screen.findByRole("button", { name: /public.orders/ }));
+  expect(screen.getByRole("columnheader", { name: "业务注释 / 描述" })).toBeInTheDocument();
+  expect(screen.getByRole("columnheader", { name: "约束" })).toBeInTheDocument();
+  expect(screen.getByText("唯一主键标识")).toBeInTheDocument();
+  expect(screen.getByText("实付交易金额")).toBeInTheDocument();
+  expect(screen.getByText("PK")).toBeInTheDocument();
+  expect(screen.getByText("FK")).toBeInTheDocument();
+
+  // 验证切换到数据预览 Tab
+  const previewTab = screen.getByRole("tab", { name: "数据预览" });
+  await userEvent.click(previewTab);
+  expect(await screen.findByText(/只读采样模式/)).toBeInTheDocument();
+  expect(screen.getByText(/ord_202610_1001/)).toBeInTheDocument();
+  expect(screen.getByText("299.00")).toBeInTheDocument();
+});
+

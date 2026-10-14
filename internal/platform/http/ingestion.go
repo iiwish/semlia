@@ -71,7 +71,8 @@ func (handler *Handler) routeIngestion(response http.ResponseWriter, request *ht
 		}
 		kind := ingestiondomain.ArtifactKind(strings.TrimSpace(request.Header.Get("X-Artifact-Kind")))
 		if kind == ingestiondomain.ArtifactSQL || (kind != ingestiondomain.ArtifactCSV && kind != ingestiondomain.ArtifactXLSX &&
-			kind != ingestiondomain.ArtifactMarkdown && kind != ingestiondomain.ArtifactDBTManifest && kind != ingestiondomain.ArtifactDBTCatalog) {
+			kind != ingestiondomain.ArtifactMarkdown && kind != ingestiondomain.ArtifactDBTManifest && kind != ingestiondomain.ArtifactDBTCatalog &&
+			kind != ingestiondomain.ArtifactSQLite) {
 			return writeIngestionError(response, ingestiondomain.ErrInvalid, traceID)
 		}
 		if request.ContentLength < 1 || request.ContentLength > ingestiondomain.MaxUploadBytes {

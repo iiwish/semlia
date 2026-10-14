@@ -16,6 +16,7 @@ import (
 	domain "github.com/iiwish/semlia/internal/domain/discovery"
 	ingestiondomain "github.com/iiwish/semlia/internal/domain/ingestion"
 	operationsdomain "github.com/iiwish/semlia/internal/domain/operations"
+	"github.com/iiwish/semlia/internal/domain/sourcekind"
 	"github.com/iiwish/semlia/pkg/identity"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -467,7 +468,13 @@ VALUES ($1,$2,$3,$4,3,$5,$6,$7,$5,$5)`, jobID, workspaceID, application.Discover
 		timestamp(command.CreatedAt), jobIdempotencyKey, command.TraceID); err != nil {
 		return domain.Run{}, sourceRepositoryError("enqueue discovery job", err)
 	}
-	adapterVersion := map[string]string{"postgresql": "postgresql_catalog/" + LiveVersion, "file": "file_catalog/1.0.0", "sql_bundle": "postgresql_sql/1.0.0", "dbt_bundle": "dbt/1.0.0"}[sourceKind]
+	adapterVersion := ""
+	if kind, ok := sourcekind.Lookup(sourceKind); ok {
+		adapterVersion = kind.AdapterKind + "/" + kind.AdapterVersion
+		if kind.Ingestion == sourcekind.Live {
+			adapterVersion = kind.AdapterKind + "/" + LiveVersion
+		}
+	}
 	row := tx.QueryRow(ctx, `INSERT INTO discovery_runs
 (id, workspace_id, source_connection_id, adapter_version, status, credential_version, artifact_set_id,
 	 request_fingerprint, source_input_fingerprint, source_config, job_id, requested_by, trace_id, created_at, updated_at)

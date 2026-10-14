@@ -31,10 +31,15 @@ func (l Limits) Valid() bool {
 }
 
 type Compiled struct {
+	// Dialect names the engine the SQL was rendered for (see sourcekind).
+	Dialect string
+	// AdapterVersion identifies the compiler and dialect recorded on runs.
+	AdapterVersion   string
 	Guards           []string
 	SQL              string
 	Args             []any
 	Columns          []string
+	ColumnTypes      []string
 	SourceID         string
 	SourceRevisionID string
 	SourceLocator    string
