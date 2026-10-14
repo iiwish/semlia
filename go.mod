@@ -24,6 +24,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/modelcontextprotocol/go-sdk v1.7.0
+	github.com/ncruces/go-sqlite3 v0.32.0
 	github.com/oapi-codegen/runtime v1.1.2
 	github.com/pganalyze/pg_query_go/v6 v6.2.2
 	github.com/robfig/cron/v3 v3.0.1
@@ -128,7 +129,6 @@ require (
 	github.com/moby/sys/user v0.4.1 // indirect
 	github.com/moby/sys/userns v0.1.0 // indirect
 	github.com/moby/term v0.5.2 // indirect
-	github.com/ncruces/go-sqlite3 v0.32.0 // indirect
 	github.com/ncruces/julianday v1.0.0 // indirect
 	github.com/oapi-codegen/oapi-codegen/v2 v2.8.0 // indirect
 	github.com/oasdiff/oasdiff v1.28.0 // indirect

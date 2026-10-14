@@ -11,6 +11,7 @@ import (
 
 	application "github.com/iiwish/semlia/internal/application/ingestion"
 	domain "github.com/iiwish/semlia/internal/domain/ingestion"
+	"github.com/iiwish/semlia/internal/domain/sourcekind"
 	"github.com/iiwish/semlia/pkg/identity"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -555,7 +556,10 @@ func (store *Store) FinalizeArtifactSet(ctx context.Context, command application
 	sourceID, _ := uuidValue(command.Set.SourceConnectionID)
 	setID, _ := uuidValue(command.Set.ID)
 	creatorID, _ := uuidValue(command.Set.CreatedByPrincipalID)
-	adapterKind := map[string]string{"file": "file_catalog", "sql_bundle": "postgresql_sql", "dbt_bundle": "dbt"}[command.Set.SourceKind]
+	adapterKind := sourcekind.AdapterKind(command.Set.SourceKind)
+	if adapterKind == "" || sourcekind.IsLive(command.Set.SourceKind) {
+		return domain.ArtifactSet{}, domain.ErrInvalid
+	}
 	locator := "artifact-set:" + command.Set.ID.String()
 	if command.ExpectedSourceVersion == nil {
 		if _, err := tx.Exec(ctx, `INSERT INTO source_connections
@@ -798,16 +802,7 @@ WHERE workspace_id=$1 AND id=$2 AND status IN ('active','paused') FOR UPDATE`, w
 }
 
 func artifactKindMatchesSource(kind domain.ArtifactKind, sourceKind string) bool {
-	switch sourceKind {
-	case "file":
-		return kind == domain.ArtifactCSV || kind == domain.ArtifactXLSX || kind == domain.ArtifactMarkdown
-	case "sql_bundle":
-		return kind == domain.ArtifactSQL
-	case "dbt_bundle":
-		return kind == domain.ArtifactDBTManifest || kind == domain.ArtifactDBTCatalog
-	default:
-		return false
-	}
+	return sourcekind.Accepts(sourceKind, string(kind))
 }
 
 func artifactSourceIDString(value *identity.SourceConnectionID) string {

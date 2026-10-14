@@ -134,7 +134,7 @@ function Pending() { return <p className="content-pending" role="status"><Loader
 
 export function SourceContents({ source }: { source: SourceConnection }) {
   const { workspaceId } = useCatalogRuntime();
-  return source.sourceKind === "postgresql"
+  return source.sourceKind === "postgresql" || source.sourceKind === "sqlite"
     ? <DatabaseContents key={`${workspaceId}:${source.id}`} workspaceId={workspaceId} sourceId={source.id} />
     : source.activeArtifactSetId ? <ArtifactContents key={`${workspaceId}:${source.activeArtifactSetId}`} workspaceId={workspaceId} setId={source.activeArtifactSetId} /> : <p role="status">尚未保存来源文件。</p>;
 }

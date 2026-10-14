@@ -64,7 +64,7 @@ func TestMigrationLifecycleAndTenantSchema(t *testing.T) {
 	if err := migrator.Up(); err != nil {
 		t.Fatalf("upgrade empty database: %v", err)
 	}
-	assertVersion(t, migrator, 33, true)
+	assertVersion(t, migrator, 34, true)
 	if err := migrator.Up(); err != nil {
 		t.Fatalf("repeat upgrade: %v", err)
 	}
@@ -93,7 +93,7 @@ func TestMigrationLifecycleAndTenantSchema(t *testing.T) {
 	if strings.Join(firstInventory, ",") != strings.Join(wantTables, ",") {
 		t.Fatalf("table inventory = %v, want %v", firstInventory, wantTables)
 	}
-	t.Logf("%s migration version 33 inventory: %v", postgresImage, firstInventory)
+	t.Logf("%s migration version 34 inventory: %v", postgresImage, firstInventory)
 	assertTenantForeignKeys(t, pool)
 
 	if err := migrator.Down(); err != nil {
@@ -332,7 +332,7 @@ func TestPostgres17MigrationLifecycle(t *testing.T) {
 	if err := migrator.Up(); err != nil {
 		t.Fatalf("PostgreSQL 17 upgrade: %v", err)
 	}
-	assertVersion(t, migrator, 33, true)
+	assertVersion(t, migrator, 34, true)
 	pool, err := pgstore.Open(ctx, url)
 	if err != nil {
 		t.Fatal(err)
@@ -808,7 +808,7 @@ func TestPopulatedM1UpgradeAndRollbackPreserveRegistryRows(t *testing.T) {
 	if err := migrator.Up(); err != nil {
 		t.Fatalf("re-upgrade populated M1: %v", err)
 	}
-	assertVersion(t, migrator, 33, true)
+	assertVersion(t, migrator, 34, true)
 	store := pgstore.NewStore(pool)
 	detail, err := store.GetCatalogAsset(ctx, workspaceID, assetID)
 	if err != nil {

@@ -27,17 +27,21 @@ func Compile(p d.ResolvedSemanticPlan) (Compiled, error) {
 		return Compiled{}, ErrInvalidPlan
 	}
 	q := Compiled{}
+	var dialect Dialect
 	relations := map[string]d.ExecutionRelation{}
 	aliases := map[string]string{}
 	for i, r := range ir.Relations {
-		if r.DatasetID == "" || r.SourceID == "" || r.SourceRevisionID == "" || r.AdapterKind != "postgresql_catalog" || !identifier(r.Schema) || !identifier(r.Relation) || relations[r.DatasetID].DatasetID != "" {
+		relationDialect, executable := DialectFor(r.AdapterKind)
+		if r.DatasetID == "" || r.SourceID == "" || r.SourceRevisionID == "" || !executable || !identifier(r.Schema) || !identifier(r.Relation) || relations[r.DatasetID].DatasetID != "" {
 			return q, ErrInvalidPlan
 		}
 		if i == 0 {
+			dialect = relationDialect
+			q.Dialect, q.AdapterVersion = dialect.Name(), dialect.AdapterVersion()
 			q.SourceID = r.SourceID
 			q.SourceRevisionID = r.SourceRevisionID
 			q.SourceLocator = r.SourceLocator
-		} else if q.SourceID != r.SourceID || q.SourceRevisionID != r.SourceRevisionID || q.SourceLocator != r.SourceLocator {
+		} else if q.SourceID != r.SourceID || q.SourceRevisionID != r.SourceRevisionID || q.SourceLocator != r.SourceLocator || q.Dialect != relationDialect.Name() {
 			return q, ErrInvalidPlan
 		}
 		relations[r.DatasetID] = r
@@ -51,7 +55,7 @@ func Compile(p d.ResolvedSemanticPlan) (Compiled, error) {
 		}
 		for _, f := range r.Fields {
 			if f.FieldID == field && identifier(f.Name) {
-				typ := fieldType(f.DataType)
+				typ := dialect.FieldType(f.DataType)
 				return boundField{sql: pgx.Identifier{aliases[dataset], f.Name}.Sanitize(), typ: typ, dataset: dataset}, typ != ""
 			}
 		}
@@ -163,7 +167,7 @@ func Compile(p d.ResolvedSemanticPlan) (Compiled, error) {
 		if e.Op == "divide" {
 			rhs = "NULLIF(" + rhs + ", 0)"
 		}
-		return boundField{sql: "(" + left.sql + "::numeric " + op + " " + rhs + ")", typ: "numeric", dataset: left.dataset, aggregate: "derived"}, nil
+		return boundField{sql: "(" + dialect.Numeric(left.sql) + " " + op + " " + rhs + ")", typ: "numeric", dataset: left.dataset, aggregate: "derived"}, nil
 	}
 	for id := range calculations {
 		if _, err := metric(id, 0); err != nil {
@@ -198,6 +202,7 @@ func Compile(p d.ResolvedSemanticPlan) (Compiled, error) {
 		}
 		selectSQL = append(selectSQL, f.sql+" AS "+pgx.Identifier{name}.Sanitize())
 		q.Columns = append(q.Columns, name)
+		q.ColumnTypes = append(q.ColumnTypes, f.typ)
 		selected[f.sql] = true
 	}
 	for _, s := range p.Grouping {
@@ -208,6 +213,7 @@ func Compile(p d.ResolvedSemanticPlan) (Compiled, error) {
 		selectSQL = append(selectSQL, f.sql+" AS "+pgx.Identifier{name}.Sanitize())
 		groupSQL = append(groupSQL, f.sql)
 		q.Columns = append(q.Columns, name)
+		q.ColumnTypes = append(q.ColumnTypes, f.typ)
 		selected[f.sql] = true
 	}
 	relationSQL := func(id string) string {
@@ -278,8 +284,8 @@ func Compile(p d.ResolvedSemanticPlan) (Compiled, error) {
 		}
 	}
 	bind := func(v any, typ string) string {
-		q.Args = append(q.Args, v)
-		return fmt.Sprintf("$%d::%s", len(q.Args), typ)
+		q.Args = append(q.Args, dialect.Value(v, typ))
+		return dialect.Placeholder(len(q.Args), typ)
 	}
 	where, having := excludedFields, []string{}
 	periodSQL, periodFieldSQL := "", ""
@@ -293,17 +299,12 @@ func Compile(p d.ResolvedSemanticPlan) (Compiled, error) {
 		default:
 			return q, ErrInvalidPlan
 		}
-		value := f.sql
-		if f.typ == "timestamptz" {
-			value += " AT TIME ZONE 'UTC'"
-		} else if f.typ == "date" {
-			value += "::timestamp"
-		}
-		periodSQL = "date_trunc('" + p.TimeRange.Granularity + "', " + value + ")"
+		periodSQL = dialect.Period(f.sql, f.typ, p.TimeRange.Granularity)
 		periodFieldSQL = f.sql
 		selectSQL = append(selectSQL, periodSQL+" AS "+pgx.Identifier{name + ".period"}.Sanitize())
 		groupSQL = append(groupSQL, periodSQL)
 		q.Columns = append(q.Columns, name+".period")
+		q.ColumnTypes = append(q.ColumnTypes, "timestamp")
 		selected[periodSQL] = true
 	}
 	var predicate func(*semantic.KnowledgeExpression, int) (string, error)
@@ -346,11 +347,7 @@ func Compile(p d.ResolvedSemanticPlan) (Compiled, error) {
 				if field.typ != "date" && field.typ != "timestamp" && field.typ != "timestamptz" {
 					return "", ErrInvalidPlan
 				}
-				period := periodSQL
-				if field.typ == "timestamptz" {
-					period = "(" + period + " AT TIME ZONE 'UTC')"
-				}
-				return "(" + field.sql + " " + op + " " + period + ")", nil
+				return dialect.ComparePeriod(field.sql, field.typ, op, periodSQL), nil
 			}
 			switch field.typ {
 			case "date":
@@ -369,7 +366,7 @@ func Compile(p d.ResolvedSemanticPlan) (Compiled, error) {
 		if !ok {
 			return "", ErrInvalidPlan
 		}
-		return "(" + field.sql + " " + op + " " + bind(typed, field.typ) + ")", nil
+		return "(" + dialect.Compare(field.sql, op, bind(typed, field.typ), field.typ) + ")", nil
 	}
 	for _, expression := range ir.Predicates {
 		clause, err := predicate(expression, 0)
@@ -418,8 +415,10 @@ func Compile(p d.ResolvedSemanticPlan) (Compiled, error) {
 					return q, ErrInvalidPlan
 				}
 				value = "%" + strings.NewReplacer("\\", "\\\\", "%", "\\%", "_", "\\_").Replace(value.(string)) + "%"
+				clause = dialect.Contains(f.sql, bind(value, f.typ))
+			} else {
+				clause = dialect.Compare(f.sql, op, bind(value, f.typ), f.typ)
 			}
-			clause = f.sql + " " + op + " " + bind(value, f.typ)
 		}
 		if f.aggregate != "" {
 			having = append(having, clause)
@@ -432,7 +431,7 @@ func Compile(p d.ResolvedSemanticPlan) (Compiled, error) {
 		if !ok || f.aggregate != "" || (f.typ != "date" && f.typ != "timestamp" && f.typ != "timestamptz") || !p.TimeRange.From.Before(p.TimeRange.To) {
 			return q, ErrInvalidPlan
 		}
-		where = append(where, f.sql+" >= "+bind(p.TimeRange.From, f.typ), f.sql+" < "+bind(p.TimeRange.To, f.typ))
+		where = append(where, dialect.Compare(f.sql, ">=", bind(p.TimeRange.From, f.typ), f.typ), dialect.Compare(f.sql, "<", bind(p.TimeRange.To, f.typ), f.typ))
 	}
 	q.SQL = "SELECT " + strings.Join(selectSQL, ", ") + " FROM " + from
 	if len(where) > 0 {

@@ -567,8 +567,8 @@ function LiveSourcesWorkspace({ focusIndex, navigationEpoch = 0, detailBackReque
                     data-source-id={source.id}
                     onOpen={() => { setDetailSourceId(source.id); onRoute?.(sourceRoute(source.id)); }}
                   >
-                    <TableCell><span className="source-primary"><span className="source-mark">{source.sourceKind === "postgresql" ? <Server size={18} /> : <FileUp size={18} />}</span><span><TableOpenButton id={`source-open-${source.id}`} aria-label={`查看来源 ${source.name}`} title={source.name} onClick={() => { setDetailSourceId(source.id); onRoute?.(sourceRoute(source.id)); }}><strong>{source.name}</strong></TableOpenButton><small title={source.sourceKind === "postgresql" ? `${source.host}:${source.port}/${source.database}` : sourceKindLabel(source)}>{sourceKindLabel(source)}{source.sourceKind === "postgresql" ? ` · ${source.database}` : ""}</small></span></span></TableCell>
-                    <TableCell className="source-status">{source.sourceKind !== "postgresql" ? "文件来源" : testingSourceId === source.id ? "检查中" : testResult[source.id] ? <span className={testResult[source.id].ok ? "is-success" : "is-danger"}>{testResult[source.id].message}</span> : <span className="table-secondary">本次会话未检查</span>}</TableCell>
+                    <TableCell><span className="source-primary"><span className="source-mark">{source.sourceKind === "postgresql" ? <Server size={18} /> : source.sourceKind === "sqlite" ? <Database size={18} /> : <FileUp size={18} />}</span><span><TableOpenButton id={`source-open-${source.id}`} aria-label={`查看来源 ${source.name}`} title={source.name} onClick={() => { setDetailSourceId(source.id); onRoute?.(sourceRoute(source.id)); }}><strong>{source.name}</strong></TableOpenButton><small title={source.sourceKind === "postgresql" ? `${source.host}:${source.port}/${source.database}` : sourceKindLabel(source)}>{sourceKindLabel(source)}{source.sourceKind === "postgresql" ? ` · ${source.database}` : ""}</small></span></span></TableCell>
+                    <TableCell className="source-status">{source.sourceKind === "sqlite" ? "数据库文件" : source.sourceKind !== "postgresql" ? "文件来源" : testingSourceId === source.id ? "检查中" : testResult[source.id] ? <span className={testResult[source.id].ok ? "is-success" : "is-danger"}>{testResult[source.id].message}</span> : <span className="table-secondary">本次会话未检查</span>}</TableCell>
                     <TableCell><LatestSourceRun runs={runs.filter((run) => run.sourceConnectionId === source.id)} onOpen={(id) => { setSelectedRunId(id); onRoute?.(sourceRunRoute(id)); }} /></TableCell>
                     <TableCell className="source-status"><span className={`health-label source-health-${source.status}`}><i />{sourceStatusLabel(source.status)}</span></TableCell>
                     <TableCell className="source-row-actions-cell">
@@ -994,7 +994,7 @@ function CandidateDialog({ candidate, onClose, onOpenProposal, onRoute }: { cand
 function ArtifactImportDialog({ source, onClose, onSaved }: { source?: SourceConnection; onClose: () => void; onSaved: (value: ArtifactSet) => void }) {
   const runtime = useIngestionRuntime();
   const [name, setName] = useState(source?.name ?? "");
-  const [kind, setKind] = useState<"file" | "sql_bundle" | "dbt_bundle">(source && source.sourceKind !== "postgresql" ? source.sourceKind : "file");
+  const [kind, setKind] = useState<"file" | "sqlite" | "sql_bundle" | "dbt_bundle">(source && source.sourceKind !== "postgresql" ? source.sourceKind : "file");
   const [files, setFiles] = useState<File[]>([]);
   const [paths, setPaths] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1013,8 +1013,8 @@ function ArtifactImportDialog({ source, onClose, onSaved }: { source?: SourceCon
   return <IngestionDialog title={source ? "更新来源工件" : "导入文件"} onClose={onClose} busy={busy}>
     <div className="source-live-form">
       <label className="field-span-2"><span>来源名称</span><input aria-label="来源名称" value={name} onChange={(event) => setName(event.target.value)} /></label>
-      <label className="field-span-2"><span>工件类型</span><select aria-label="工件类型" disabled={Boolean(source)} value={kind} onChange={(event) => { setKind(event.target.value as typeof kind); setFiles([]); setError(""); }}><option value="file">CSV / XLSX / Markdown</option><option value="sql_bundle">版本化 SQL</option><option value="dbt_bundle">dbt manifest / catalog</option></select></label>
-      {kind === "sql_bundle" ? <label className="field-span-2"><span>配置根目录内 SQL 路径</span><textarea aria-label="配置根目录内 SQL 路径" placeholder="models/orders.sql" value={paths} onChange={(event) => setPaths(event.target.value)} /></label> : <label className="field-span-2"><span>{kind === "dbt_bundle" ? "manifest.json 与可选 catalog.json" : "CSV、XLSX 或 Markdown 文件"}</span><input key={kind} type="file" multiple aria-label="上传工件" accept={kind === "dbt_bundle" ? ".json" : ".csv,.xlsx,.md"} onChange={(event) => { setFiles(Array.from(event.target.files ?? [])); setError(""); }} /></label>}
+      <label className="field-span-2"><span>工件类型</span><select aria-label="工件类型" disabled={Boolean(source)} value={kind} onChange={(event) => { setKind(event.target.value as typeof kind); setFiles([]); setError(""); }}><option value="file">CSV / XLSX / Markdown</option><option value="sqlite">SQLite 数据库文件</option><option value="sql_bundle">版本化 SQL</option><option value="dbt_bundle">dbt manifest / catalog</option></select></label>
+      {kind === "sql_bundle" ? <label className="field-span-2"><span>配置根目录内 SQL 路径</span><textarea aria-label="配置根目录内 SQL 路径" placeholder="models/orders.sql" value={paths} onChange={(event) => setPaths(event.target.value)} /></label> : <label className="field-span-2"><span>{kind === "dbt_bundle" ? "manifest.json 与可选 catalog.json" : kind === "sqlite" ? "一个 SQLite 数据库文件（.sqlite、.sqlite3 或 .db）" : "CSV、XLSX 或 Markdown 文件"}</span><input key={kind} type="file" multiple={kind !== "sqlite"} aria-label="上传工件" accept={kind === "dbt_bundle" ? ".json" : kind === "sqlite" ? ".sqlite,.sqlite3,.db" : ".csv,.xlsx,.md"} onChange={(event) => { setFiles(Array.from(event.target.files ?? [])); setError(""); }} /></label>}
       {files.length > 0 && <ul className="ingestion-file-preview field-span-2">{files.map((file, index) => <li key={`${file.name}:${index}`}><strong>{file.name}</strong><span>{file.size.toLocaleString()} bytes</span></li>)}</ul>}
       {error && <p className="source-form-error field-span-2" role="alert">{error}</p>}
     </div>
@@ -1022,8 +1022,20 @@ function ArtifactImportDialog({ source, onClose, onSaved }: { source?: SourceCon
   </IngestionDialog>;
 }
 
-function artifactKind(file: File, sourceKind: "file" | "dbt_bundle"): PublicArtifactKind {
+function artifactSourceText(kind: SourceConnection["sourceKind"]) {
+  return {
+    sqlite: { type: "SQLite 数据库文件", scope: "表、视图、字段、主键与外键（只读打开）" },
+    sql_bundle: { type: "版本化 SQL", scope: "SQL 视图定义与血缘解析" },
+    dbt_bundle: { type: "dbt manifest / catalog", scope: "dbt 模型、来源与依赖关系" },
+  }[kind as string] ?? { type: "CSV / XLSX / Markdown 文件", scope: "表格工作表与 Markdown 规范结构提取" };
+}
+
+function artifactKind(file: File, sourceKind: "file" | "sqlite" | "dbt_bundle"): PublicArtifactKind {
   const name = file.name.toLowerCase();
+  if (sourceKind === "sqlite") {
+    if (/\.(sqlite3?|db)$/.test(name)) return "sqlite";
+    throw new Error("SQLite 来源需要 .sqlite、.sqlite3 或 .db 文件。");
+  }
   if (sourceKind === "dbt_bundle") {
     if (name === "manifest.json") return "dbt_manifest";
     if (name === "catalog.json") return "dbt_catalog";
@@ -1495,7 +1507,7 @@ function SourceWorkspace({ source, hostedBreadcrumb = false, runs, candidates, t
         <div className="source-title-row">
           <div className="source-title-group">
             <div className="source-kind-avatar" aria-hidden="true">
-              {source.sourceKind === "postgresql" ? <Server size={22} /> : <FileUp size={22} />}
+              {source.sourceKind === "postgresql" ? <Server size={22} /> : source.sourceKind === "sqlite" ? <Database size={22} /> : <FileUp size={22} />}
             </div>
             <div className="source-title-meta">
               <div className="source-tags-row">
@@ -1574,7 +1586,7 @@ function SourceWorkspace({ source, hostedBreadcrumb = false, runs, candidates, t
             <>
               <div className="source-hero-item is-primary-host">
                 <span className="source-hero-label"><FileUp size={13} /> 来源类型</span>
-                <strong className="source-hero-value">本地工件 / SQL 文件</strong>
+                <strong className="source-hero-value">{artifactSourceText(source.sourceKind).type}</strong>
               </div>
               <div className="source-hero-item">
                 <span className="source-hero-label"><Database size={13} /> 工件集合 ID</span>
@@ -1623,7 +1635,7 @@ function SourceWorkspace({ source, hostedBreadcrumb = false, runs, candidates, t
                 <small>
                   {source.sourceKind === "postgresql"
                     ? testResult?.message ?? "本次会话尚未进行实时探测"
-                    : "本地文件工件集"}
+                    : source.sourceKind === "sqlite" ? "只读数据库文件" : "本地文件工件集"}
                 </small>
               </div>
               {source.sourceKind === "postgresql" && (
@@ -1753,7 +1765,7 @@ function SourceWorkspace({ source, hostedBreadcrumb = false, runs, candidates, t
                     </div>
                     <div className="source-spec-row">
                       <span className="source-spec-label">解析范围</span>
-                      <span className="source-spec-value">表格工作表与 Markdown 规范结构提取</span>
+                      <span className="source-spec-value">{artifactSourceText(source.sourceKind).scope}</span>
                     </div>
                   </>
                 )}
@@ -1840,7 +1852,7 @@ function LatestSourceRun({ runs, onOpen }: { runs: SourceDiscoveryRun[]; onOpen:
 }
 
 function sourceKindLabel(source: SourceConnection) {
-  return { postgresql: "PostgreSQL", file: "文件", sql_bundle: "SQL", dbt_bundle: "dbt" }[source.sourceKind];
+  return { postgresql: "PostgreSQL", sqlite: "SQLite", file: "文件", sql_bundle: "SQL", dbt_bundle: "dbt" }[source.sourceKind];
 }
 
 function mergeById<T extends { id: string }>(current: T[], additions: T[]): T[] {

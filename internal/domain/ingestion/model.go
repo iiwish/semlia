@@ -49,11 +49,12 @@ const (
 	ArtifactSQL         ArtifactKind = "sql"
 	ArtifactDBTManifest ArtifactKind = "dbt_manifest"
 	ArtifactDBTCatalog  ArtifactKind = "dbt_catalog"
+	ArtifactSQLite      ArtifactKind = "sqlite"
 )
 
 func (kind ArtifactKind) Valid() bool {
 	switch kind {
-	case ArtifactCSV, ArtifactXLSX, ArtifactMarkdown, ArtifactSQL, ArtifactDBTManifest, ArtifactDBTCatalog:
+	case ArtifactCSV, ArtifactXLSX, ArtifactMarkdown, ArtifactSQL, ArtifactDBTManifest, ArtifactDBTCatalog, ArtifactSQLite:
 		return true
 	default:
 		return false

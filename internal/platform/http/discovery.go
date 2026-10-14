@@ -8,6 +8,7 @@ import (
 	discoveryapp "github.com/iiwish/semlia/internal/application/discovery"
 	"github.com/iiwish/semlia/internal/domain/authorization"
 	domain "github.com/iiwish/semlia/internal/domain/discovery"
+	"github.com/iiwish/semlia/internal/domain/sourcekind"
 	"github.com/iiwish/semlia/pkg/identity"
 )
 
@@ -274,9 +275,8 @@ type candidateDecisionRequest struct {
 }
 
 func sourceResponse(item domain.Source) map[string]any {
-	adapters := map[string]string{"postgresql": "postgresql_catalog", "file": "file_catalog", "sql_bundle": "postgresql_sql", "dbt_bundle": "dbt"}
 	result := map[string]any{"id": item.ID.String(), "name": item.Name, "sourceKind": item.Kind,
-		"adapterKind": adapters[item.Kind], "status": item.Status, "version": item.Version,
+		"adapterKind": sourcekind.AdapterKind(item.Kind), "status": item.Status, "version": item.Version,
 		"createdAt": item.CreatedAt.UTC(), "updatedAt": item.UpdatedAt.UTC()}
 	if item.Kind == "postgresql" {
 		result["host"], result["port"], result["database"] = item.Host, item.Port, item.Database

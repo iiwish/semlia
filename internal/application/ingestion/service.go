@@ -636,6 +636,9 @@ func validMediaName(kind domain.ArtifactKind, mediaType, name string) bool {
 		return name == "manifest.json" && mediaType == "application/json"
 	case domain.ArtifactDBTCatalog:
 		return name == "catalog.json" && mediaType == "application/json"
+	case domain.ArtifactSQLite:
+		return (extension == ".sqlite" || extension == ".sqlite3" || extension == ".db") &&
+			(mediaType == "application/vnd.sqlite3" || mediaType == "application/x-sqlite3" || mediaType == "application/octet-stream")
 	default:
 		return false
 	}
@@ -687,6 +690,9 @@ func classifySet(kinds map[domain.ArtifactKind]int, count int) (string, domain.A
 				return "file", kind, nil
 			}
 		}
+	}
+	if count == 1 && kinds[domain.ArtifactSQLite] == 1 {
+		return "sqlite", domain.ArtifactSQLite, nil
 	}
 	if count >= 1 && kinds[domain.ArtifactSQL] == count && count <= 200 {
 		return "sql_bundle", domain.ArtifactSQL, nil

@@ -77,6 +77,8 @@ bash scripts/dev/account.sh reset-local-password founder@example.com
 
 SQL 证据路径相对于 `SEMLIA_SOURCE_ARTIFACT_ROOT`，禁止路径穿越与符号链接。server 和 worker 使用同一受保护内容副本。
 
+SQLite 来源通过上传单个数据库文件（`.sqlite`、`.sqlite3`、`.db`，最大 50 MB）创建，不需要凭据或执行配置。文件经完整性检查后作为不可变工件保存；发现与执行都通过内存中的只读 VFS 打开同一份字节，开启 `query_only` 并关闭 `trusted_schema`，不会生成日志文件或修改上传内容。执行固定到计划所依据的来源修订对应的文件，并且只允许普通表，不允许视图或虚拟表。来源类型在 `internal/domain/sourcekind` 统一登记，新增连接器从这里声明采集方式、可接受的工件和执行方言。
+
 ## 合成演示数据
 
 收敛版 1.0 的订单、客户、五类知识与模型验收使用独立专属环境，见 [T001](../evidence/V1-T001/summary.md) 至 [T004](../evidence/V1-T004/summary.md)。验收脚本需要匹配的私有 owner/marker 回执，不是通用安装器。不要直接对未知数据库运行老演示种子或将演示工作区当作生产资料。

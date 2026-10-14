@@ -3217,9 +3217,9 @@ export interface components {
             maxDepth: number;
         };
         /** @enum {string} */
-        ArtifactKind: "csv" | "xlsx" | "markdown" | "sql" | "dbt_manifest" | "dbt_catalog";
+        ArtifactKind: "csv" | "xlsx" | "markdown" | "sql" | "dbt_manifest" | "dbt_catalog" | "sqlite";
         /** @enum {string} */
-        PublicArtifactKind: "csv" | "xlsx" | "markdown" | "dbt_manifest" | "dbt_catalog";
+        PublicArtifactKind: "csv" | "xlsx" | "markdown" | "dbt_manifest" | "dbt_catalog" | "sqlite";
         /** @enum {string} */
         ArtifactStatus: "uploaded" | "validated" | "rejected" | "consumed";
         /** @enum {string} */
@@ -3275,7 +3275,7 @@ export interface components {
             id: components["schemas"]["ArtifactSetId"];
             sourceId: components["schemas"]["SourceConnectionId"];
             /** @enum {string} */
-            sourceKind: "file" | "sql_bundle" | "dbt_bundle";
+            sourceKind: "file" | "sql_bundle" | "dbt_bundle" | "sqlite";
             setDigest: string;
             members: components["schemas"]["ArtifactSetMember"][];
             createdAt: components["schemas"]["Timestamp"];
@@ -3414,9 +3414,9 @@ export interface components {
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
-            sourceKind: "file" | "sql_bundle" | "dbt_bundle";
+            sourceKind: "file" | "sql_bundle" | "dbt_bundle" | "sqlite";
             /** @enum {string} */
-            adapterKind: "file_catalog" | "postgresql_sql" | "dbt";
+            adapterKind: "file_catalog" | "postgresql_sql" | "dbt" | "sqlite_catalog";
             activeArtifactSetId: components["schemas"]["ArtifactSetId"];
             /** @enum {string} */
             status: "active" | "paused" | "deleted";
@@ -8382,6 +8382,7 @@ export interface operations {
                 "text/markdown": string;
                 "application/json": string;
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                "application/vnd.sqlite3": string;
             };
         };
         responses: {

@@ -21,6 +21,7 @@ import (
 	fileartifact "github.com/iiwish/semlia/internal/adapters/discovery/files"
 	postgreslive "github.com/iiwish/semlia/internal/adapters/discovery/postgreslive"
 	postgresdiscovery "github.com/iiwish/semlia/internal/adapters/discovery/postgresql"
+	sqliteartifact "github.com/iiwish/semlia/internal/adapters/discovery/sqlite"
 	embeddingadapter "github.com/iiwish/semlia/internal/adapters/embedding"
 	executionadapter "github.com/iiwish/semlia/internal/adapters/execution"
 	"github.com/iiwish/semlia/internal/adapters/gitcontent"
@@ -52,6 +53,7 @@ import (
 	"github.com/iiwish/semlia/internal/platform/config"
 	httpapi "github.com/iiwish/semlia/internal/platform/http"
 	webui "github.com/iiwish/semlia/internal/platform/web"
+	"github.com/iiwish/semlia/pkg/identity"
 	"go.opentelemetry.io/otel/sdk/trace"
 )
 
@@ -434,7 +436,24 @@ func ingestionAdapters() map[ingestiondomain.ArtifactKind]discoverydomain.Adapte
 		ingestiondomain.ArtifactCSV: fileartifact.CSV(), ingestiondomain.ArtifactXLSX: fileartifact.XLSX(),
 		ingestiondomain.ArtifactMarkdown: fileartifact.Markdown(), ingestiondomain.ArtifactSQL: postgresdiscovery.Adapter{},
 		ingestiondomain.ArtifactDBTManifest: dbtartifact.Adapter{}, ingestiondomain.ArtifactDBTCatalog: dbtartifact.Catalog(),
+		ingestiondomain.ArtifactSQLite: sqliteartifact.Adapter{},
 	}
+}
+
+// sqliteExecutionFiles resolves the uploaded SQLite file pinned to a source
+// revision from the catalog and opens it from the artifact store.
+type sqliteExecutionFiles struct {
+	store     *pgstore.Store
+	artifacts ingestiondomain.ArtifactStore
+}
+
+func (files sqliteExecutionFiles) SQLiteRevisionArtifact(ctx context.Context, workspace identity.WorkspaceID, sourceID, sourceRevisionID string) (executionadapter.SQLiteArtifact, error) {
+	digest, size, err := files.store.SQLiteRevisionArtifact(ctx, workspace, sourceID, sourceRevisionID)
+	return executionadapter.SQLiteArtifact{ContentDigest: digest, ByteSize: size}, err
+}
+
+func (files sqliteExecutionFiles) Open(ctx context.Context, workspace identity.WorkspaceID, digest string) (io.ReadCloser, error) {
+	return files.artifacts.Open(ctx, workspace, digest)
 }
 
 func newWorkerOwner() (string, error) {
@@ -583,7 +602,8 @@ func serve(ctx context.Context, cfg config.Config, output io.Writer) error {
 		if cfg.ExecutionAllowPlaintext {
 			executionAdapter.WithLocalPlaintext()
 		}
-		executionService := executionapp.NewService(catalogStore, distributionService, authorizer, executionAdapter, executiondomain.DefaultLimits())
+		executionRouter := executionadapter.NewRouter(executionAdapter, executionadapter.NewSQLite(sqliteExecutionFiles{store: catalogStore, artifacts: artifactStore}))
+		executionService := executionapp.NewService(catalogStore, distributionService, authorizer, executionRouter, executiondomain.DefaultLimits())
 		options = append(options, httpapi.WithExecution(executionService))
 		options = append(options, httpapi.WithMachineIdentity(identityapp.NewMachineService(catalogStore, authorizer, time.Now)))
 		options = append(options, httpapi.WithMCP(mcpadapter.NewHandler(distributionService, executionService)))

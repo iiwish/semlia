@@ -2762,6 +2762,8 @@ paths:
             schema: {type: string, format: binary, maxLength: 52428800}
           application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
             schema: {type: string, format: binary, maxLength: 52428800}
+          application/vnd.sqlite3:
+            schema: {type: string, format: binary, maxLength: 52428800}
       responses:
         "201":
           description: Durable staged artifact metadata; raw bytes are never returned.
@@ -6226,10 +6228,10 @@ components:
           maximum: 3
     ArtifactKind:
       type: string
-      enum: [csv, xlsx, markdown, sql, dbt_manifest, dbt_catalog]
+      enum: [csv, xlsx, markdown, sql, dbt_manifest, dbt_catalog, sqlite]
     PublicArtifactKind:
       type: string
-      enum: [csv, xlsx, markdown, dbt_manifest, dbt_catalog]
+      enum: [csv, xlsx, markdown, dbt_manifest, dbt_catalog, sqlite]
     ArtifactStatus:
       type: string
       enum: [uploaded, validated, rejected, consumed]
@@ -6300,7 +6302,7 @@ components:
       properties:
         id: {$ref: "#/components/schemas/ArtifactSetId"}
         sourceId: {$ref: "#/components/schemas/SourceConnectionId"}
-        sourceKind: {type: string, enum: [file, sql_bundle, dbt_bundle]}
+        sourceKind: {type: string, enum: [file, sql_bundle, dbt_bundle, sqlite]}
         setDigest: {type: string, pattern: "^sha256:[0-9a-f]{64}$"}
         members:
           type: array
@@ -6437,6 +6439,7 @@ components:
           file: "#/components/schemas/ArtifactSourceConnection"
           sql_bundle: "#/components/schemas/ArtifactSourceConnection"
           dbt_bundle: "#/components/schemas/ArtifactSourceConnection"
+          sqlite: "#/components/schemas/ArtifactSourceConnection"
     SourceConnectionPage:
       type: object
       additionalProperties: false
@@ -6476,8 +6479,8 @@ components:
       properties:
         id: {$ref: "#/components/schemas/SourceConnectionId"}
         name: {type: string, minLength: 1, maxLength: 120}
-        sourceKind: {type: string, enum: [file, sql_bundle, dbt_bundle]}
-        adapterKind: {type: string, enum: [file_catalog, postgresql_sql, dbt]}
+        sourceKind: {type: string, enum: [file, sql_bundle, dbt_bundle, sqlite]}
+        adapterKind: {type: string, enum: [file_catalog, postgresql_sql, dbt, sqlite_catalog]}
         activeArtifactSetId: {$ref: "#/components/schemas/ArtifactSetId"}
         status: {type: string, enum: [active, paused, deleted]}
         version: {type: integer, format: int64, minimum: 1}

@@ -733,6 +733,24 @@ describe("real source and candidate workspace", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("refresh unavailable");
   });
 
+  it("uploads a SQLite database file as a single sqlite artifact", async () => {
+    const set = { id: "ars_sqlite", sourceId: "src_sqlite", sourceKind: "sqlite", setDigest: "sha256:sqlite", members: [], createdAt: source.createdAt };
+    mocks.stageArtifact.mockResolvedValue({ id: "art_sqlite", kind: "sqlite", status: "validated" });
+    mocks.finalizeArtifactSet.mockResolvedValue(set);
+    const user = userEvent.setup();
+    renderView();
+    await screen.findByText(source.name);
+    await user.click(screen.getByRole("button", { name: "导入文件" }));
+    await user.type(screen.getByLabelText("来源名称"), "Retail Lab");
+    await user.selectOptions(screen.getByLabelText("工件类型"), "sqlite");
+    expect(screen.getByLabelText("上传工件")).toHaveAttribute("accept", ".sqlite,.sqlite3,.db");
+    expect(screen.getByLabelText("上传工件")).not.toHaveAttribute("multiple");
+    await user.upload(screen.getByLabelText("上传工件"), new File(["SQLite format 3"], "retail_lab.sqlite"));
+    await user.click(screen.getByRole("button", { name: "校验并保存来源" }));
+    expect(await screen.findByRole("dialog", { name: "持久工件集合" })).toHaveTextContent("ars_sqlite");
+    expect(mocks.stageArtifact).toHaveBeenCalledWith(workspaceId, expect.any(File), "sqlite", expect.any(String), undefined);
+  });
+
   it("registers configured-root SQL paths without browser upload", async () => {
     mocks.registerSQL.mockResolvedValue({ id: "ars_sql", sourceId: "src_sql", sourceKind: "sql_bundle", setDigest: "sha256:sql", members: [], createdAt: source.createdAt });
     const user = userEvent.setup();
