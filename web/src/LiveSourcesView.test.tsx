@@ -463,6 +463,23 @@ describe("real source and candidate workspace", () => {
     expect(await screen.findByRole("region", { name: "运行记录详情" })).toBeVisible();
   });
 
+  it("synchronizes action notice when queued run completes", async () => {
+    const user = userEvent.setup();
+    const queuedRun = { ...run, id: "run_sync_test", status: "queued" as const };
+    const completedRun = { ...queuedRun, status: "succeeded" as const, adapterVersion: "v1", findings: [] };
+    mocks.startSourceRun.mockResolvedValue(queuedRun);
+    mocks.getDiscoveryRun.mockResolvedValue(completedRun);
+    render(<LiveSourcesView focusIndex={0} runDetailBackRequestEpoch={0} onRunDetailOpenChange={() => {}} onOpenProposal={() => {}} />);
+    await user.click(await screen.findByRole("button", { name: `启动发现 ${source.name}` }));
+    expect(await screen.findByText(/发现任务已创建，排队中/)).toBeVisible();
+
+    // 轮询或状态变更触发后，通知自动同步为已完成
+    await waitFor(() => {
+      expect(screen.getByText(/发现任务已完成/)).toBeVisible();
+    }, { timeout: 4000 });
+    expect(screen.queryByText(/排队中/)).not.toBeInTheDocument();
+  });
+
   it("shows connection-test progress and supports menu keyboard navigation", async () => {
     const user = userEvent.setup();
     let complete!: () => void;
@@ -812,5 +829,19 @@ describe("real source and candidate workspace", () => {
     await act(async () => { tick?.(); });
     expect(await screen.findByRole("button", { name: `查看语义候选 ${candidate.title}` })).toBeVisible();
     interval.mockRestore();
+  });
+
+  it("renders non-intrusive floating toast that can be manually dismissed", async () => {
+    const user = userEvent.setup();
+    mocks.testSourceConnection.mockResolvedValueOnce(undefined);
+    renderView();
+    await user.click(await screen.findByRole("button", { name: `更多操作 ${source.name}` }));
+    await user.click(screen.getByRole("menuitem", { name: "测试连接" }));
+    const toast = await screen.findByRole("status");
+    expect(toast).toHaveTextContent("Alpha Warehouse：连接测试通过。");
+    expect(toast).toHaveClass("source-toast-notice");
+    const closeBtn = screen.getByRole("button", { name: "关闭操作结果" });
+    await user.click(closeBtn);
+    expect(screen.queryByText("Alpha Warehouse：连接测试通过。")).not.toBeInTheDocument();
   });
 });
