@@ -94,6 +94,9 @@ export function runtimeEnvironment(repo, root, state, secrets, parent = process.
   for (const name of ['databasePassword', 'readerPassword', 'secretKey']) if (!/^[a-f0-9]{64}$/.test(secrets[name])) throw new Error('Invalid protected secret');
   const env = Object.fromEntries(['PATH', 'HOME', 'TMPDIR', 'LANG', 'LC_ALL'].filter(key => parent[key]).map(key => [key, parent[key]]));
   const source = state.workspace && state.sourceId ? [{ workspaceId: state.workspace.id, sourceId: state.sourceId, dsnEnv: 'SEMLIA_EXECUTION_DSN_V1' }] : [];
+  const allowUnsafeSource = parent.SEMLIA_DISCOVERY_ALLOW_UNSAFE_SOURCE === 'true' ||
+    (existsSync(join(repo, '.semlia/native.env')) && readFileSync(join(repo, '.semlia/native.env'), 'utf8').includes('SEMLIA_DISCOVERY_ALLOW_UNSAFE_SOURCE=true')) ||
+    existsSync(join(root, 'allow-unsafe-source')) ? 'true' : 'false';
   return {
     ...env, SEMLIA_ENV: 'development', SEMLIA_AUTH_MODE: 'password', SEMLIA_LOCAL_UAT_IDENTITIES: 'false',
     SEMLIA_HTTP_ADDR: `127.0.0.1:${state.apiPort}`,
@@ -103,7 +106,7 @@ export function runtimeEnvironment(repo, root, state, secrets, parent = process.
     SEMLIA_SOURCE_ARTIFACT_ROOT: join(root, 'inputs'), SEMLIA_ARTIFACT_ROOT: join(root, 'artifacts'),
     SEMLIA_ARTIFACT_STORE: 'local', SEMLIA_WORKER_CONFIGURED: 'true', SEMLIA_MIGRATIONS_PATH: join(repo, 'migrations'),
     SEMLIA_SEMANTIC_PRODUCTION_ENABLED: 'true', SEMLIA_PRODUCTION_GENERATION_GRANTS: '[]',
-    SEMLIA_EXECUTION_ALLOW_PLAINTEXT: 'true', SEMLIA_DISCOVERY_ALLOW_UNSAFE_SOURCE: 'false',
+    SEMLIA_EXECUTION_ALLOW_PLAINTEXT: 'true', SEMLIA_DISCOVERY_ALLOW_UNSAFE_SOURCE: allowUnsafeSource,
     SEMLIA_EXECUTION_SOURCES: JSON.stringify(source),
     SEMLIA_EXECUTION_DSN_V1: `postgresql://${state.owner}_reader:${secrets.readerPassword}@127.0.0.1:${state.database.port}/${state.owner}_source?sslmode=disable`,
     SEMLIA_V1_MODEL_SECRET: secrets.modelSecret ?? '', SEMLIA_VITE_API_TARGET: `http://127.0.0.1:${state.apiPort}`,
