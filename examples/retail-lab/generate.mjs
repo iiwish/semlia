@@ -1,7 +1,7 @@
 // Deterministic generator for the Retail Lab synthetic dataset.
 // Every name, store, member and transaction is fictional. Money is computed in
 // integer cents and rendered as numeric(12,2) yuan so expected answers are exact.
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deflateRawSync } from 'node:zlib';
@@ -517,10 +517,18 @@ function dbtFiles() {
   return { 'dbt/manifest.json': JSON.stringify(manifest, null, 2) + '\n', 'dbt/catalog.json': JSON.stringify(catalog, null, 2) + '\n' };
 }
 
+// The SQL-bundle source needs the base tables its views read from; reuse the
+// CREATE TABLE statements of db/schema.sql so both stay identical.
+function tableDefinitions(root) {
+  const schema = readFileSync(join(root, 'db/schema.sql'), 'utf8');
+  const tables = schema.match(/^CREATE TABLE [\s\S]*?^\);$/gm);
+  return '-- Base tables read by sql/mart views. Generated from db/schema.sql; do not edit.\n\n' + tables.join('\n\n') + '\n';
+}
+
 export function writeAll(root) {
   const data = generate();
   const expected = expectedAnswers(data);
-  const outputs = { 'db/seed.sql': renderSeed(data), ...knowledgeFiles(data), ...dbtFiles(),
+  const outputs = { 'db/seed.sql': renderSeed(data), 'sql/retail/tables.sql': tableDefinitions(root), ...knowledgeFiles(data), ...dbtFiles(),
     'expected/answers.json': JSON.stringify({ version: data.version, seed: data.seed, cutoff: CUTOFF, answers: expected }, null, 2) + '\n' };
   for (const [path, content] of Object.entries(outputs)) {
     mkdirSync(dirname(join(root, path)), { recursive: true });

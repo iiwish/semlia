@@ -7,7 +7,7 @@
 | 路径 | 内容 | 在 Semlia 中的用法 |
 | --- | --- | --- |
 | `db/schema.sql`、`db/seed.sql` | `retail`（交易与主数据）、`legacy`（已废弃旧日报）、`mart`（分析视图）三个 schema，约 1.2 万订单、2.9 万订单行、812 笔退款，时间范围 2026-01 至 2026-09 | 新建 **PostgreSQL** 来源 |
-| `sql/mart/*.sql` | 6 个 `CREATE VIEW` 文件，体现口径与血缘 | **版本化 SQL** 来源，或作为 PostgreSQL 来源的 SQL 证据路径 |
+| `sql/mart/*.sql`、`sql/retail/tables.sql` | 6 个 `CREATE VIEW` 文件体现口径与血缘；基础表定义由生成器从 `db/schema.sql` 提取 | **版本化 SQL** 来源，或作为 PostgreSQL 来源的 SQL 证据路径 |
 | `docs/*.md` | 业务概览、指标口径手册、术语表、数据字典、会员、退款、门店区域、对齐会纪要、样例问法、数据质量问题 | **CSV / XLSX / Markdown** 来源（每个来源一个文件） |
 | `files/*.csv`、`files/business-glossary.xlsx` | 门店主数据、门店目标、指标清单；术语、字段值映射、指标清单三个 Sheet | 同上 |
 | `dbt/manifest.json`、`dbt/catalog.json` | 5 个模型、7 个 source，manifest v12 / catalog v1 | **dbt manifest / catalog** 来源 |
@@ -53,7 +53,7 @@ node examples/retail-lab/load.mjs down
 
 1. **PostgreSQL 来源**：主机 `127.0.0.1`、端口 `5433`、数据库 `semlia_retail_lab`、用户 `retail_lab_reader`、SSL `disable`。发现结果应为 14 张表和 7 个视图，并带主键、外键。
 2. **文档来源**：逐个上传 `docs/` 和 `files/` 下的文件。
-3. **版本化 SQL 来源**：先把 `sql/` 复制到服务端 `SEMLIA_SOURCE_ARTIFACT_ROOT` 下（本地 native 环境为 `.semlia/native/content`），再填写相对路径，例如 `retail-lab/sql/mart/valid_orders.sql`。
+3. **版本化 SQL 来源**：先把 `sql/` 复制到服务端 `SEMLIA_SOURCE_ARTIFACT_ROOT` 下（本地 native 环境为 `.semlia/native/content/retail-lab/`），再填写 `sql/mart/` 下 6 个视图和 `sql/retail/tables.sql` 的相对路径。基础表定义必须一起登记，否则视图血缘的上游无法解析，发现结果会是降级。
 4. **dbt 来源**：同时上传 `dbt/manifest.json` 和 `dbt/catalog.json`。
 5. **Ask 执行**（可选）：建好 PostgreSQL 来源后，按 `load.mjs info` 打印的内容，把 `SEMLIA_EXECUTION_DSN_RETAIL_LAB`、`SEMLIA_EXECUTION_SOURCES` 和 `SEMLIA_EXECUTION_ALLOW_PLAINTEXT=true` 写入受保护的服务端配置。执行适配器只允许查询普通表，参考 SQL 因此全部基于 `retail.*`。
 

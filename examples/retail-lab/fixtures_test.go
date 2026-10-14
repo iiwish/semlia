@@ -61,6 +61,21 @@ func TestSQLBundleYieldsViewsAndLineageWithoutFindings(t *testing.T) {
 	if len(snapshot.Datasets) != 7 || len(snapshot.Lineage) == 0 || len(snapshot.Findings) != 0 {
 		t.Fatalf("datasets=%d lineage=%d findings=%+v", len(snapshot.Datasets), len(snapshot.Lineage), snapshot.Findings)
 	}
+	// Registered together, the views and their base tables resolve every lineage endpoint.
+	contents["sql/retail/tables.sql"] = read(t, "sql/retail/tables.sql")
+	bundle, err := (postgresql.Adapter{}).Discover(context.Background(), input(contents))
+	if err != nil || len(bundle.Datasets) != 21 || len(bundle.Findings) != 0 {
+		t.Fatalf("bundle datasets=%d findings=%+v err=%v", len(bundle.Datasets), bundle.Findings, err)
+	}
+	keys := map[string]bool{}
+	for _, dataset := range bundle.Datasets {
+		keys[dataset.ExternalKey] = true
+	}
+	for _, edge := range bundle.Lineage {
+		if !keys[edge.UpstreamExternalKey] {
+			t.Fatalf("unresolved upstream %s", edge.UpstreamExternalKey)
+		}
+	}
 	schema, err := (postgresql.Adapter{}).Discover(context.Background(), input(map[string][]byte{"db/schema.sql": read(t, "db/schema.sql")}))
 	if err != nil || len(schema.Datasets) != 14 {
 		t.Fatalf("schema datasets=%d err=%v", len(schema.Datasets), err)
