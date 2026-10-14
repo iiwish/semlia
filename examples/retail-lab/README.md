@@ -13,7 +13,7 @@
 | `dbt/manifest.json`、`dbt/catalog.json` | 5 个模型、7 个 source，manifest v12 / catalog v1 | **dbt manifest / catalog** 来源 |
 | `expected/questions.json`、`expected/answers.json` | 14 道标准题、参考 SQL 和期望结果 | 检查 Ask 回答是否正确 |
 | `generate.mjs` | 确定性生成器（固定种子），重新生成上述数据文件 | |
-| `load.mjs`、`sqlite.mjs` | 建库、核对、清理、导出 SQLite | |
+| `load.mjs`、`sqlite.mjs` | 建库、核对、清理、导出 SQLite | 生成的 `.sqlite` 可作为 **SQLite** 来源上传 |
 
 ## 快速开始
 
@@ -80,13 +80,19 @@ node examples/retail-lab/load.mjs down
 
 完整问法见 `docs/08-sample-questions.md`。
 
-## SQLite 副本
+## SQLite 版本
 
 ```bash
 node examples/retail-lab/load.mjs sqlite
 ```
 
-生成 `db/retail_lab.sqlite`（约 5 MB，已被 gitignore）。schema 被展平为表名（`retail.orders` 变为 `orders`，`legacy.rpt_daily_sales` 变为 `legacy_rpt_daily_sales`），时间以 `+08` 文本保存，布尔值为 0/1，金额为 SQLite 浮点数。Semlia 目前还没有 SQLite 连接器，这个副本留给后续的多数据源支持。
+生成 `db/retail_lab.sqlite`（约 5 MB，已被 gitignore）。在 Semlia 中选择“导入文件 → SQLite 数据库文件”上传即可，不需要数据库服务或账号；发现结果为 14 张表及其主键和外键，已发布的分析模型可以直接对这个文件执行只读查询。
+
+与 PostgreSQL 版本的差异：
+
+- schema 被展平：`retail.orders` 变为 `main.orders`，`legacy.rpt_daily_sales` 变为 `main.legacy_rpt_daily_sales`；没有 `mart` 视图。
+- 列保留 PostgreSQL 风格的声明类型（`numeric(12,2)`、`timestamptz`、`boolean`），Semlia 据此识别字段类型。
+- 时间以带 `+08:00` 偏移的文本保存，布尔值为 0/1，金额是 SQLite 浮点数（结果按 15 位有效数字输出）。
 
 ## 重新生成与校验
 

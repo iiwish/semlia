@@ -1,6 +1,8 @@
 // Build a portable SQLite copy of Retail Lab from db/schema.sql and db/seed.sql.
 // Schemas are flattened: retail.orders -> orders, legacy.rpt_daily_sales -> legacy_rpt_daily_sales.
-// Timestamps stay as '+08' text so lexical comparison matches time order; booleans become 0/1.
+// Declared types keep their PostgreSQL names so the catalog reports meaningful
+// types; timestamps are stored as text with a full '+08:00' offset, which SQLite's
+// date functions understand, and booleans become 0/1.
 import { spawnSync } from 'node:child_process';
 import { readFileSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -13,17 +15,16 @@ export function sqliteSchema() {
   return flatten(readFileSync(join(here, 'db/schema.sql'), 'utf8'))
     .replace(/^CREATE SCHEMA .*$/gm, '')
     .replace(/^COMMENT ON [\s\S]*?;$/gm, '')
-    .replace(/\bbigserial\b/g, 'INTEGER')
-    .replace(/\btimestamptz\b/g, 'TEXT')
-    .replace(/\bnumeric\(\d+,\d+\)/g, 'NUMERIC')
-    .replace(/\bboolean\b/g, 'INTEGER')
-    .replace(/\bdate\b(?= NOT NULL| PRIMARY|,|\n)/g, 'TEXT');
+    .replace(/\bbigserial PRIMARY KEY\b/g, 'INTEGER PRIMARY KEY')
+    // PostgreSQL primary keys are implicitly NOT NULL; SQLite only enforces that for INTEGER PRIMARY KEY.
+    .replace(/\b(text|bigint|integer) PRIMARY KEY\b/g, '$1 NOT NULL PRIMARY KEY');
 }
 
 export function sqliteSeed() {
   return flatten(readFileSync(join(here, 'db/seed.sql'), 'utf8'))
     .replace(/^SET LOCAL .*$/gm, '')
     .replace(/^SELECT setval\(.*$/gm, '')
+    .replace(/'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\+08'/g, "'$1+08:00'")
     .replace(/, true(?=[,)])/g, ', 1').replace(/, false(?=[,)])/g, ', 0');
 }
 
