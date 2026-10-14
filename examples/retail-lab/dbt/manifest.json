@@ -1,0 +1,297 @@
+{
+  "metadata": {
+    "dbt_schema_version": "https://schemas.getdbt.com/dbt/manifest/v12.json",
+    "dbt_version": "1.9.0",
+    "generated_at": "2026-10-01T00:00:00Z",
+    "project_name": "retail_lab"
+  },
+  "nodes": {
+    "model.retail_lab.stg_valid_orders": {
+      "database": "semlia_retail_lab",
+      "schema": "analytics",
+      "name": "stg_valid_orders",
+      "resource_type": "model",
+      "package_name": "retail_lab",
+      "path": "staging/stg_valid_orders.sql",
+      "original_file_path": "models/staging/stg_valid_orders.sql",
+      "unique_id": "model.retail_lab.stg_valid_orders",
+      "fqn": [
+        "retail_lab",
+        "staging",
+        "stg_valid_orders"
+      ],
+      "alias": "stg_valid_orders",
+      "checksum": {
+        "name": "sha256",
+        "checksum": "stg_valid_orders"
+      },
+      "raw_code": "select o.order_id, o.member_id, o.store_id, o.channel_code, o.order_type,\n       o.paid_at, (o.paid_at at time zone 'Asia/Shanghai')::date as paid_date,\n       o.goods_amount, o.paid_amount - o.shipping_fee as goods_paid_amount\nfrom {{ source('retail', 'orders') }} o\nwhere o.paid_at is not null and o.order_type <> 'test' and o.status <> 'cancelled'",
+      "depends_on": {
+        "nodes": [
+          "source.retail_lab.retail.orders"
+        ]
+      }
+    },
+    "model.retail_lab.stg_order_refunds": {
+      "database": "semlia_retail_lab",
+      "schema": "analytics",
+      "name": "stg_order_refunds",
+      "resource_type": "model",
+      "package_name": "retail_lab",
+      "path": "staging/stg_order_refunds.sql",
+      "original_file_path": "models/staging/stg_order_refunds.sql",
+      "unique_id": "model.retail_lab.stg_order_refunds",
+      "fqn": [
+        "retail_lab",
+        "staging",
+        "stg_order_refunds"
+      ],
+      "alias": "stg_order_refunds",
+      "checksum": {
+        "name": "sha256",
+        "checksum": "stg_order_refunds"
+      },
+      "raw_code": "select order_id, sum(refund_amount - shipping_refund) as refund_goods_amount\nfrom {{ source('retail', 'refunds') }}\nwhere status = 'succeeded'\ngroup by order_id",
+      "depends_on": {
+        "nodes": [
+          "source.retail_lab.retail.refunds"
+        ]
+      }
+    },
+    "model.retail_lab.fct_order_net_sales": {
+      "database": "semlia_retail_lab",
+      "schema": "analytics",
+      "name": "fct_order_net_sales",
+      "resource_type": "model",
+      "package_name": "retail_lab",
+      "path": "marts/fct_order_net_sales.sql",
+      "original_file_path": "models/marts/fct_order_net_sales.sql",
+      "unique_id": "model.retail_lab.fct_order_net_sales",
+      "fqn": [
+        "retail_lab",
+        "marts",
+        "fct_order_net_sales"
+      ],
+      "alias": "fct_order_net_sales",
+      "checksum": {
+        "name": "sha256",
+        "checksum": "fct_order_net_sales"
+      },
+      "raw_code": "select v.*, coalesce(r.refund_goods_amount, 0) as refund_goods_amount,\n       v.goods_paid_amount - coalesce(r.refund_goods_amount, 0) as net_sales\nfrom {{ ref('stg_valid_orders') }} v\nleft join {{ ref('stg_order_refunds') }} r on r.order_id = v.order_id",
+      "depends_on": {
+        "nodes": [
+          "model.retail_lab.stg_valid_orders",
+          "model.retail_lab.stg_order_refunds"
+        ]
+      }
+    },
+    "model.retail_lab.fct_region_daily_sales": {
+      "database": "semlia_retail_lab",
+      "schema": "analytics",
+      "name": "fct_region_daily_sales",
+      "resource_type": "model",
+      "package_name": "retail_lab",
+      "path": "marts/fct_region_daily_sales.sql",
+      "original_file_path": "models/marts/fct_region_daily_sales.sql",
+      "unique_id": "model.retail_lab.fct_region_daily_sales",
+      "fqn": [
+        "retail_lab",
+        "marts",
+        "fct_region_daily_sales"
+      ],
+      "alias": "fct_region_daily_sales",
+      "checksum": {
+        "name": "sha256",
+        "checksum": "fct_region_daily_sales"
+      },
+      "raw_code": "select f.paid_date, s.region_code, count(*) as paid_orders,\n       sum(f.goods_amount) as gmv, sum(f.net_sales) as net_sales\nfrom {{ ref('fct_order_net_sales') }} f\njoin {{ source('retail', 'stores') }} s on s.store_id = f.store_id\ngroup by 1, 2",
+      "depends_on": {
+        "nodes": [
+          "model.retail_lab.fct_order_net_sales",
+          "source.retail_lab.retail.stores"
+        ]
+      }
+    },
+    "model.retail_lab.fct_member_activity": {
+      "database": "semlia_retail_lab",
+      "schema": "analytics",
+      "name": "fct_member_activity",
+      "resource_type": "model",
+      "package_name": "retail_lab",
+      "path": "marts/fct_member_activity.sql",
+      "original_file_path": "models/marts/fct_member_activity.sql",
+      "unique_id": "model.retail_lab.fct_member_activity",
+      "fqn": [
+        "retail_lab",
+        "marts",
+        "fct_member_activity"
+      ],
+      "alias": "fct_member_activity",
+      "checksum": {
+        "name": "sha256",
+        "checksum": "fct_member_activity"
+      },
+      "raw_code": "select member_id, min(paid_at) as first_paid_at, max(paid_at) as last_paid_at, count(*) as paid_orders\nfrom {{ ref('stg_valid_orders') }}\nwhere member_id is not null and order_type = 'normal'\ngroup by member_id",
+      "depends_on": {
+        "nodes": [
+          "model.retail_lab.stg_valid_orders"
+        ]
+      }
+    }
+  },
+  "sources": {
+    "source.retail_lab.retail.orders": {
+      "database": "semlia_retail_lab",
+      "schema": "retail",
+      "name": "orders",
+      "resource_type": "source",
+      "package_name": "retail_lab",
+      "path": "models/staging/sources.yml",
+      "original_file_path": "models/staging/sources.yml",
+      "unique_id": "source.retail_lab.retail.orders",
+      "fqn": [
+        "retail_lab",
+        "staging",
+        "retail",
+        "orders"
+      ],
+      "source_name": "retail",
+      "source_description": "星禾零售交易库（虚构）",
+      "loader": "semlia-retail-lab",
+      "identifier": "orders"
+    },
+    "source.retail_lab.retail.order_items": {
+      "database": "semlia_retail_lab",
+      "schema": "retail",
+      "name": "order_items",
+      "resource_type": "source",
+      "package_name": "retail_lab",
+      "path": "models/staging/sources.yml",
+      "original_file_path": "models/staging/sources.yml",
+      "unique_id": "source.retail_lab.retail.order_items",
+      "fqn": [
+        "retail_lab",
+        "staging",
+        "retail",
+        "order_items"
+      ],
+      "source_name": "retail",
+      "source_description": "星禾零售交易库（虚构）",
+      "loader": "semlia-retail-lab",
+      "identifier": "order_items"
+    },
+    "source.retail_lab.retail.refunds": {
+      "database": "semlia_retail_lab",
+      "schema": "retail",
+      "name": "refunds",
+      "resource_type": "source",
+      "package_name": "retail_lab",
+      "path": "models/staging/sources.yml",
+      "original_file_path": "models/staging/sources.yml",
+      "unique_id": "source.retail_lab.retail.refunds",
+      "fqn": [
+        "retail_lab",
+        "staging",
+        "retail",
+        "refunds"
+      ],
+      "source_name": "retail",
+      "source_description": "星禾零售交易库（虚构）",
+      "loader": "semlia-retail-lab",
+      "identifier": "refunds"
+    },
+    "source.retail_lab.retail.stores": {
+      "database": "semlia_retail_lab",
+      "schema": "retail",
+      "name": "stores",
+      "resource_type": "source",
+      "package_name": "retail_lab",
+      "path": "models/staging/sources.yml",
+      "original_file_path": "models/staging/sources.yml",
+      "unique_id": "source.retail_lab.retail.stores",
+      "fqn": [
+        "retail_lab",
+        "staging",
+        "retail",
+        "stores"
+      ],
+      "source_name": "retail",
+      "source_description": "星禾零售交易库（虚构）",
+      "loader": "semlia-retail-lab",
+      "identifier": "stores"
+    },
+    "source.retail_lab.retail.members": {
+      "database": "semlia_retail_lab",
+      "schema": "retail",
+      "name": "members",
+      "resource_type": "source",
+      "package_name": "retail_lab",
+      "path": "models/staging/sources.yml",
+      "original_file_path": "models/staging/sources.yml",
+      "unique_id": "source.retail_lab.retail.members",
+      "fqn": [
+        "retail_lab",
+        "staging",
+        "retail",
+        "members"
+      ],
+      "source_name": "retail",
+      "source_description": "星禾零售交易库（虚构）",
+      "loader": "semlia-retail-lab",
+      "identifier": "members"
+    },
+    "source.retail_lab.retail.products": {
+      "database": "semlia_retail_lab",
+      "schema": "retail",
+      "name": "products",
+      "resource_type": "source",
+      "package_name": "retail_lab",
+      "path": "models/staging/sources.yml",
+      "original_file_path": "models/staging/sources.yml",
+      "unique_id": "source.retail_lab.retail.products",
+      "fqn": [
+        "retail_lab",
+        "staging",
+        "retail",
+        "products"
+      ],
+      "source_name": "retail",
+      "source_description": "星禾零售交易库（虚构）",
+      "loader": "semlia-retail-lab",
+      "identifier": "products"
+    },
+    "source.retail_lab.retail.product_categories": {
+      "database": "semlia_retail_lab",
+      "schema": "retail",
+      "name": "product_categories",
+      "resource_type": "source",
+      "package_name": "retail_lab",
+      "path": "models/staging/sources.yml",
+      "original_file_path": "models/staging/sources.yml",
+      "unique_id": "source.retail_lab.retail.product_categories",
+      "fqn": [
+        "retail_lab",
+        "staging",
+        "retail",
+        "product_categories"
+      ],
+      "source_name": "retail",
+      "source_description": "星禾零售交易库（虚构）",
+      "loader": "semlia-retail-lab",
+      "identifier": "product_categories"
+    }
+  },
+  "macros": {},
+  "docs": {},
+  "exposures": {},
+  "metrics": {},
+  "groups": {},
+  "selectors": {},
+  "disabled": {},
+  "parent_map": {},
+  "child_map": {},
+  "group_map": {},
+  "saved_queries": {},
+  "semantic_models": {},
+  "unit_tests": {}
+}

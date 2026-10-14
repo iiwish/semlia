@@ -1,0 +1,437 @@
+{
+  "metadata": {
+    "dbt_schema_version": "https://schemas.getdbt.com/dbt/catalog/v1.json",
+    "dbt_version": "1.9.0",
+    "generated_at": "2026-10-01T00:00:00Z"
+  },
+  "nodes": {
+    "model.retail_lab.stg_valid_orders": {
+      "metadata": {
+        "type": "VIEW",
+        "schema": "analytics",
+        "name": "stg_valid_orders"
+      },
+      "columns": {
+        "order_id": {
+          "name": "order_id",
+          "index": 1,
+          "type": "bigint"
+        },
+        "member_id": {
+          "name": "member_id",
+          "index": 2,
+          "type": "bigint"
+        },
+        "store_id": {
+          "name": "store_id",
+          "index": 3,
+          "type": "text"
+        },
+        "channel_code": {
+          "name": "channel_code",
+          "index": 4,
+          "type": "text"
+        },
+        "order_type": {
+          "name": "order_type",
+          "index": 5,
+          "type": "text"
+        },
+        "paid_at": {
+          "name": "paid_at",
+          "index": 6,
+          "type": "timestamp with time zone"
+        },
+        "paid_date": {
+          "name": "paid_date",
+          "index": 7,
+          "type": "date"
+        },
+        "goods_amount": {
+          "name": "goods_amount",
+          "index": 8,
+          "type": "numeric"
+        },
+        "goods_paid_amount": {
+          "name": "goods_paid_amount",
+          "index": 9,
+          "type": "numeric"
+        }
+      },
+      "stats": {}
+    },
+    "model.retail_lab.stg_order_refunds": {
+      "metadata": {
+        "type": "VIEW",
+        "schema": "analytics",
+        "name": "stg_order_refunds"
+      },
+      "columns": {
+        "order_id": {
+          "name": "order_id",
+          "index": 1,
+          "type": "bigint"
+        },
+        "refund_goods_amount": {
+          "name": "refund_goods_amount",
+          "index": 2,
+          "type": "numeric"
+        }
+      },
+      "stats": {}
+    },
+    "model.retail_lab.fct_order_net_sales": {
+      "metadata": {
+        "type": "VIEW",
+        "schema": "analytics",
+        "name": "fct_order_net_sales"
+      },
+      "columns": {
+        "order_id": {
+          "name": "order_id",
+          "index": 1,
+          "type": "bigint"
+        },
+        "member_id": {
+          "name": "member_id",
+          "index": 2,
+          "type": "bigint"
+        },
+        "store_id": {
+          "name": "store_id",
+          "index": 3,
+          "type": "text"
+        },
+        "paid_date": {
+          "name": "paid_date",
+          "index": 4,
+          "type": "date"
+        },
+        "goods_amount": {
+          "name": "goods_amount",
+          "index": 5,
+          "type": "numeric"
+        },
+        "goods_paid_amount": {
+          "name": "goods_paid_amount",
+          "index": 6,
+          "type": "numeric"
+        },
+        "refund_goods_amount": {
+          "name": "refund_goods_amount",
+          "index": 7,
+          "type": "numeric"
+        },
+        "net_sales": {
+          "name": "net_sales",
+          "index": 8,
+          "type": "numeric"
+        }
+      },
+      "stats": {}
+    },
+    "model.retail_lab.fct_region_daily_sales": {
+      "metadata": {
+        "type": "VIEW",
+        "schema": "analytics",
+        "name": "fct_region_daily_sales"
+      },
+      "columns": {
+        "paid_date": {
+          "name": "paid_date",
+          "index": 1,
+          "type": "date"
+        },
+        "region_code": {
+          "name": "region_code",
+          "index": 2,
+          "type": "text"
+        },
+        "paid_orders": {
+          "name": "paid_orders",
+          "index": 3,
+          "type": "bigint"
+        },
+        "gmv": {
+          "name": "gmv",
+          "index": 4,
+          "type": "numeric"
+        },
+        "net_sales": {
+          "name": "net_sales",
+          "index": 5,
+          "type": "numeric"
+        }
+      },
+      "stats": {}
+    },
+    "model.retail_lab.fct_member_activity": {
+      "metadata": {
+        "type": "VIEW",
+        "schema": "analytics",
+        "name": "fct_member_activity"
+      },
+      "columns": {
+        "member_id": {
+          "name": "member_id",
+          "index": 1,
+          "type": "bigint"
+        },
+        "first_paid_at": {
+          "name": "first_paid_at",
+          "index": 2,
+          "type": "timestamp with time zone"
+        },
+        "last_paid_at": {
+          "name": "last_paid_at",
+          "index": 3,
+          "type": "timestamp with time zone"
+        },
+        "paid_orders": {
+          "name": "paid_orders",
+          "index": 4,
+          "type": "bigint"
+        }
+      },
+      "stats": {}
+    }
+  },
+  "sources": {
+    "source.retail_lab.retail.orders": {
+      "metadata": {
+        "type": "BASE TABLE",
+        "schema": "retail",
+        "name": "orders"
+      },
+      "columns": {
+        "order_id": {
+          "name": "order_id",
+          "index": 1,
+          "type": "bigint"
+        },
+        "member_id": {
+          "name": "member_id",
+          "index": 2,
+          "type": "bigint"
+        },
+        "store_id": {
+          "name": "store_id",
+          "index": 3,
+          "type": "text"
+        },
+        "channel_code": {
+          "name": "channel_code",
+          "index": 4,
+          "type": "text"
+        },
+        "order_type": {
+          "name": "order_type",
+          "index": 5,
+          "type": "text"
+        },
+        "status": {
+          "name": "status",
+          "index": 6,
+          "type": "text"
+        },
+        "paid_at": {
+          "name": "paid_at",
+          "index": 7,
+          "type": "timestamp with time zone"
+        },
+        "goods_amount": {
+          "name": "goods_amount",
+          "index": 8,
+          "type": "numeric"
+        },
+        "paid_amount": {
+          "name": "paid_amount",
+          "index": 9,
+          "type": "numeric"
+        },
+        "shipping_fee": {
+          "name": "shipping_fee",
+          "index": 10,
+          "type": "numeric"
+        }
+      },
+      "stats": {}
+    },
+    "source.retail_lab.retail.order_items": {
+      "metadata": {
+        "type": "BASE TABLE",
+        "schema": "retail",
+        "name": "order_items"
+      },
+      "columns": {
+        "order_id": {
+          "name": "order_id",
+          "index": 1,
+          "type": "bigint"
+        },
+        "line_no": {
+          "name": "line_no",
+          "index": 2,
+          "type": "integer"
+        },
+        "sku_id": {
+          "name": "sku_id",
+          "index": 3,
+          "type": "text"
+        },
+        "quantity": {
+          "name": "quantity",
+          "index": 4,
+          "type": "integer"
+        },
+        "line_amount": {
+          "name": "line_amount",
+          "index": 5,
+          "type": "numeric"
+        },
+        "unit_cost": {
+          "name": "unit_cost",
+          "index": 6,
+          "type": "numeric"
+        }
+      },
+      "stats": {}
+    },
+    "source.retail_lab.retail.refunds": {
+      "metadata": {
+        "type": "BASE TABLE",
+        "schema": "retail",
+        "name": "refunds"
+      },
+      "columns": {
+        "refund_id": {
+          "name": "refund_id",
+          "index": 1,
+          "type": "bigint"
+        },
+        "order_id": {
+          "name": "order_id",
+          "index": 2,
+          "type": "bigint"
+        },
+        "status": {
+          "name": "status",
+          "index": 3,
+          "type": "text"
+        },
+        "refund_amount": {
+          "name": "refund_amount",
+          "index": 4,
+          "type": "numeric"
+        },
+        "shipping_refund": {
+          "name": "shipping_refund",
+          "index": 5,
+          "type": "numeric"
+        }
+      },
+      "stats": {}
+    },
+    "source.retail_lab.retail.stores": {
+      "metadata": {
+        "type": "BASE TABLE",
+        "schema": "retail",
+        "name": "stores"
+      },
+      "columns": {
+        "store_id": {
+          "name": "store_id",
+          "index": 1,
+          "type": "text"
+        },
+        "region_code": {
+          "name": "region_code",
+          "index": 2,
+          "type": "text"
+        },
+        "store_type": {
+          "name": "store_type",
+          "index": 3,
+          "type": "text"
+        }
+      },
+      "stats": {}
+    },
+    "source.retail_lab.retail.members": {
+      "metadata": {
+        "type": "BASE TABLE",
+        "schema": "retail",
+        "name": "members"
+      },
+      "columns": {
+        "member_id": {
+          "name": "member_id",
+          "index": 1,
+          "type": "bigint"
+        },
+        "tier": {
+          "name": "tier",
+          "index": 2,
+          "type": "text"
+        },
+        "is_employee": {
+          "name": "is_employee",
+          "index": 3,
+          "type": "boolean"
+        }
+      },
+      "stats": {}
+    },
+    "source.retail_lab.retail.products": {
+      "metadata": {
+        "type": "BASE TABLE",
+        "schema": "retail",
+        "name": "products"
+      },
+      "columns": {
+        "sku_id": {
+          "name": "sku_id",
+          "index": 1,
+          "type": "text"
+        },
+        "category_id": {
+          "name": "category_id",
+          "index": 2,
+          "type": "integer"
+        },
+        "is_private_label": {
+          "name": "is_private_label",
+          "index": 3,
+          "type": "boolean"
+        }
+      },
+      "stats": {}
+    },
+    "source.retail_lab.retail.product_categories": {
+      "metadata": {
+        "type": "BASE TABLE",
+        "schema": "retail",
+        "name": "product_categories"
+      },
+      "columns": {
+        "category_id": {
+          "name": "category_id",
+          "index": 1,
+          "type": "integer"
+        },
+        "parent_id": {
+          "name": "parent_id",
+          "index": 2,
+          "type": "integer"
+        },
+        "category_name": {
+          "name": "category_name",
+          "index": 3,
+          "type": "text"
+        }
+      },
+      "stats": {}
+    }
+  },
+  "errors": null
+}
